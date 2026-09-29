@@ -35,3 +35,6 @@ lerna-debug.log*
 # Firebase
 .firebase
 firebase-debug.log
+
+# ZIP files
+*.zip
