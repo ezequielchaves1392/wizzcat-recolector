@@ -1,5 +1,21 @@
 import { WarehouseItem } from '../types';
 
+function formatNumber(num: number): string {
+  const floored = Math.floor(num);
+  if (floored >= 1e9) return (floored / 1e9).toFixed(2) + ' B';
+  if (floored >= 1e6) return (floored / 1e6).toFixed(2) + ' M';
+  if (floored >= 1e3) return (floored / 1e3).toFixed(2) + ' K';
+  return floored.toString();
+}
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
 // Sistema de modal de confirmación
 function showConfirmModal(message: string, onConfirm: () => void) {
   // Crear overlay
@@ -103,19 +119,19 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
         const selectedItem = selectedItemId ? warehouse.find((i: WarehouseItem) => i.id === selectedItemId) : null;
 
         container.innerHTML = `
-            <div class="w-screen h-dvh app-bg flex flex-col items-center p-4 md:p-6 font-sans select-none overflow-hidden">
+            <div class="fixed inset-0 app-bg flex flex-col items-center p-3 md:p-4 font-sans select-none overflow-hidden">
                 <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[var(--accent)]/10 via-[var(--bg-app)] to-[var(--bg-app)] pointer-events-none"></div>
                 
-                <div class="relative z-10 max-w-6xl w-full flex flex-col gap-4 my-auto max-h-full">
+                <div class="relative z-10 max-w-6xl w-full flex flex-col gap-3 md:gap-4 h-full min-h-0">
                     <!-- Header -->
                     <div class="flex items-center justify-between flex-shrink-0">
                         <button id="back-btn" class="px-4 py-2 card-glass border border-[var(--border-color)] rounded-xl text-xs font-mono accent-text hover:border-[var(--accent)] transition cursor-pointer">
-                            ← Volver al Comando
+                            ← Volver a la Base
                         </button>
                         <div class="flex items-center gap-4">
                             <div class="text-right">
                                 <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Nanitas</div>
-                                <div id="warehouse-nanites" class="text-lg font-bold accent-text font-['Orbitron']">${Math.floor(state.nanites).toString()}</div>
+                                <div id="warehouse-nanites" class="text-lg font-bold accent-text font-['Orbitron']">${formatNumber(state.nanites)}</div>
                             </div>
                             <h2 class="text-base md:text-xl font-['Orbitron'] font-black accent-text tracking-wider text-right">📦 ALMACÉN CENTRAL</h2>
                         </div>
@@ -146,11 +162,11 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                         <div class="flex flex-wrap gap-2">
                             <button data-filter="all" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'all' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}">Todos</button>
                             <button data-filter="weapon" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'weapon' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}">Recolectores</button>
-                            <button data-filter="companion" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'companion' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Compañeros</button>
+                            <button data-filter="companion" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'companion' ? 'accent-bg text-white' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Compañeros</button>
                             <button data-filter="crate" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'crate' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Cajas</button>
                             <button data-filter="key" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'key' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Llaves</button>
                             <button data-filter="crystal" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'crystal' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Cristales</button>
-                            <button data-filter="consumable" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'consumable' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Consumibles</button>
+                            <button data-filter="consumable" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'consumable' ? 'accent-bg text-white' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Consumibles</button>
                         </div>
                         <div class="flex gap-2">
                             <button id="stack-btn" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)] transition-all cursor-pointer">
@@ -258,9 +274,6 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 <button id="action-equip" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
                     ${item.equipped ? 'Desequipar' : 'Equipar'}
                 </button>
-                <button id="action-upgrade" class="w-full py-2 bg-cyan-600 text-white font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-cyan-500 transition cursor-pointer">
-                    Mejorar (1 💎)
-                </button>
             `;
         } else if (item.type === 'companion') {
             const isActive = state.activeCompanions.includes(item.id);
@@ -276,9 +289,16 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 </button>
             `;
         } else if (item.type === 'consumable') {
+            const isExpander = item.name.includes('Expansor');
+            const isAfkCard = item.name.includes('AFK');
+            const isClickCard = item.name.includes('Click');
+            let useLabel = 'Usar';
+            if (isExpander) useLabel = 'Usar (+1 slot)';
+            else if (isAfkCard) useLabel = 'Usar (10 min AFK)';
+            else if (isClickCard) useLabel = 'Usar (buff click)';
             actionButtons = `
                 <button id="action-use" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-                    Usar
+                    ${useLabel}
                 </button>
             `;
         } else if (item.type === 'crystal') {
@@ -299,6 +319,11 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 <div class="border-t border-[var(--border-color)] pt-3">
                     <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
                     <div class="text-xs font-mono text-[var(--text-main)]">${item.details || 'Sin descripción'}</div>
+                    ${item.type === 'consumable' && (item.name.includes('Click x2') || item.name.includes('Click x3') || item.name.includes('AFK')) ? `
+                    <div class="mt-2 text-[10px] font-mono text-[var(--text-muted)]">
+                        <span class="buff-timer" data-buff="${item.name.includes('Click x2') ? 'clickX2' : item.name.includes('Click x3') ? 'clickX3' : 'afk'}">Tiempo restante: --</span>
+                    </div>
+                    ` : ''}
                 </div>
 
                 ${item.level ? `
@@ -340,14 +365,16 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
     function stackItems(items: WarehouseItem[]): WarehouseItem[] {
         const stacked: WarehouseItem[] = [];
         const stackMap = new Map<string, WarehouseItem>();
+        const MAX_STACK = 100;
 
         for (const item of items) {
             if (item.stackable) {
                 const existing = stackMap.get(item.id);
                 if (existing) {
-                    existing.stackCount = (existing.stackCount || 1) + (item.stackCount || 1);
+                    // Acumular hasta el máximo de 100
+                    existing.stackCount = Math.min((existing.stackCount || 1) + (item.stackCount || 1), MAX_STACK);
                 } else {
-                    const newItem = { ...item, stackCount: item.stackCount || 1 };
+                    const newItem = { ...item, stackCount: Math.min(item.stackCount || 1, MAX_STACK) };
                     stackMap.set(item.id, newItem);
                     stacked.push(newItem);
                 }
@@ -488,7 +515,29 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 // Usar consumible
                 showConfirmModal(`¿Usar ${item.name}?`, () => {
                     const now = Date.now();
-                    if (item.name.includes('Clics')) {
+                    if (item.name.includes('Expansor')) {
+                        // Expansor de almacén - verificar si está al máximo
+                        if (state.warehouseCapacity >= 20) {
+                            showConfirmModal('⚠️ Almacén al máximo (20 slots). No puedes usar el Expansor. Véndelo o espera a tener espacio.', () => {});
+                            return;
+                        }
+                        state.warehouseCapacity += 1;
+                    } else if (item.name.includes('AFK')) {
+                        // Tarjeta AFK
+                        if (state.afkCards >= 3) {
+                            showConfirmModal('Ya tienes el máximo de tarjetas AFK (3).', () => {});
+                            return;
+                        }
+                        state.afkCards += 1;
+                    } else if (item.name.includes('Click x2')) {
+                        // Tarjeta Click x2 - acumulable hasta 30 min
+                        const currentExpires = Math.max(now, state.buffs.clickX2ExpiresAt);
+                        state.buffs.clickX2ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);
+                    } else if (item.name.includes('Click x3')) {
+                        // Tarjeta Click x3 - acumulable hasta 30 min
+                        const currentExpires = Math.max(now, state.buffs.clickX3ExpiresAt);
+                        state.buffs.clickX3ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);
+                    } else if (item.name.includes('Clics')) {
                         state.buffs.clickBoostExpiresAt = now + 30 * 60 * 1000;
                     } else if (item.name.includes('Pasivo')) {
                         state.buffs.passiveBoostExpiresAt = now + 60 * 60 * 1000;
@@ -522,8 +571,27 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 showConfirmModal('No puedes vender el último de este tipo. Debes tener al menos uno en el almacén.', () => {});
                 return;
             }
-            const price = item.sellPrice || 0;
-            showConfirmModal(`¿Vender ${item.name} por ${price} nanitas?`, () => {
+            // Precio de venta = 1/4 del precio original, ajustado por calidad del item
+            const originalPrice = item.sellPrice || 0;
+            let price = Math.floor(originalPrice / 4);
+            
+            // Ajustar precio según qué tan buena fue la estadística del item
+            if (item.tier) {
+                const tierRanges: Record<number, [number, number]> = {
+                    1: [1, 5], 2: [5, 10], 3: [10, 15], 4: [15, 20], 5: [20, 25],
+                    6: [25, 30], 7: [30, 35], 8: [35, 40], 9: [40, 45], 10: [45, 50]
+                };
+                const range = tierRanges[item.tier];
+                if (range) {
+                    const [min, max] = range;
+                    const power = item.power || item.details?.match(/\+(\d+)/)?.[1] || min;
+                    const qualityRatio = (power - min) / (max - min); // 0 = peor, 1 = mejor
+                    // Ajustar precio: peor stats = -50%, mejores stats = +100%
+                    price = Math.floor(price * (0.5 + qualityRatio * 1.5));
+                }
+            }
+            
+            showConfirmModal(`¿Vender ${item.name} por ${formatNumber(price)} nanitas?`, () => {
                 state.nanites += price;
                 if (item.stackCount && item.stackCount > 1) {
                     item.stackCount -= 1;
@@ -531,7 +599,6 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                     state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== item.id);
                 }
                 game.updateState(state);
-                showConfirmModal(`¡Vendido! +${price} nanitas`, () => {});
                 selectedItemId = null;
                 renderTemplate();
             });
@@ -576,8 +643,23 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
         const nanitesEl = container.querySelector('#warehouse-nanites');
         if (nanitesEl) {
             const currentState = game.getState();
-            nanitesEl.textContent = Math.floor(currentState.nanites).toString();
+            nanitesEl.textContent = formatNumber(currentState.nanites);
         }
+        // Actualizar tooltips de buffs
+        const buffTimers = container.querySelectorAll('.buff-timer');
+        buffTimers.forEach((el) => {
+            const buffType = el.getAttribute('data-buff');
+            const state = game.getState();
+            let remaining = 0;
+            if (buffType === 'clickX2') remaining = Math.max(0, state.buffs.clickX2ExpiresAt - Date.now());
+            else if (buffType === 'clickX3') remaining = Math.max(0, state.buffs.clickX3ExpiresAt - Date.now());
+            else if (buffType === 'afk') remaining = state.afkCards * 10 * 60 * 1000; // AFK no expira, muestra tiempo total
+            if (buffType === 'afk') {
+                el.textContent = `Tarjetas AFK: ${state.afkCards}/3`;
+            } else {
+                el.textContent = `Tiempo restante: ${formatTime(remaining)}`;
+            }
+        });
     }, 1000);
 
     // Limpiar intervalo cuando se sale del almacén

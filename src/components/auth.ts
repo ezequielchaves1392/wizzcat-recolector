@@ -10,7 +10,7 @@ import {
 import { getSavedTheme, setTheme } from '../theme';
 import { showConfirmModal } from '../utils/modal';
 
-export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any) => void) {
+export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, username?: string) => void) {
   container.innerHTML = `
     <div class="w-screen h-dvh app-bg flex flex-col items-center justify-center p-4 font-sans select-none overflow-hidden">
       <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[var(--accent)]/10 via-[var(--bg-app)] to-[var(--bg-app)] pointer-events-none"></div>
@@ -144,7 +144,19 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any) =
         await updateProfile(creds.user, { displayName: username });
         // Avisar que se creó el usuario y está ingresando
         showConfirmModal('¡Cuenta creada exitosamente! Ingresando al sistema...', () => {
-          onLoginSuccess(creds.user);
+          // Guardar username en sessionStorage para usar después del reload
+          sessionStorage.setItem('pending_username', username);
+          // Recargar la página solo una vez para asegurar que todo se cargue correctamente
+          if (!sessionStorage.getItem('game_reloaded')) {
+            sessionStorage.setItem('game_reloaded', '1');
+            onLoginSuccess(creds.user, username);
+            setTimeout(() => {
+              location.reload();
+            }, 300);
+          } else {
+            sessionStorage.removeItem('game_reloaded');
+            onLoginSuccess(creds.user, username);
+          }
         });
       } else {
         const creds = await signInWithEmailAndPassword(auth, email, password);

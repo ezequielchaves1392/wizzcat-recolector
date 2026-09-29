@@ -1,8 +1,51 @@
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-const SAVE_VERSION = 4;
+function formatNumber(num: number): string {
+  const floored = Math.floor(num);
+  if (floored >= 1e9) return (floored / 1e9).toFixed(2) + ' B';
+  if (floored >= 1e6) return (floored / 1e6).toFixed(2) + ' M';
+  if (floored >= 1e3) return (floored / 1e3).toFixed(2) + ' K';
+  return floored.toString();
+}
+
+function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  // Usar modal de confirmación en lugar de toast flash
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
+  overlay.id = 'toast-modal-overlay';
+  const modal = document.createElement('div');
+  const colors = {
+    success: 'border-emerald-500/40 text-emerald-300',
+    error: 'border-red-500/40 text-red-300',
+    info: 'border-blue-500/40 text-blue-300'
+  };
+  modal.className = `card-glass border rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4 ${colors[type]}`;
+  const messageEl = document.createElement('p');
+  messageEl.className = 'text-sm font-mono text-center';
+  messageEl.textContent = message;
+  const btn = document.createElement('button');
+  btn.className = 'py-2.5 accent-bg text-slate-950 font-[\'Orbitron\'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer';
+  btn.textContent = 'Aceptar';
+  btn.addEventListener('click', () => overlay.remove());
+  modal.appendChild(messageEl);
+  modal.appendChild(btn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  // Cerrar con Escape
+  const handleEscape = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+}
+
+const SAVE_VERSION = 6;
 const MAX_BUFF_DURATION_MS = 8 * 60 * 60 * 1000;
+const MAX_CARD_BUFF_DURATION_MS = 30 * 60 * 1000; // Máximo 30 minutos para buffs de tarjetas
+const MAX_STACK_SIZE = 100;
 
 export const COLLECTOR_BASE_COSTS = {
   blaster: 20,
@@ -19,23 +62,149 @@ export const STORE_ITEMS = {
   epicCrate: { cost: 4500, label: 'Caja Épica' },
   legendaryCrate: { cost: 18000, label: 'Caja Legendaria' },
   clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clics x2 (30m)' },
-  passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 + Excepción AFK (1h)' }
+  passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 + Excepción AFK (1h)' },
+  // Nuevos items
+  backpackExpander: { cost: 20000, label: 'Expansor de Almacén (+1 slot)' },
+  companionSlot1: { cost: 50000, label: 'Slot de Compañero 1' },
+  companionSlot2: { cost: 200000, label: 'Slot de Compañero 2' },
+  afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
+  clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
+  clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },
+  companionCardT1: { cost: 2000, label: 'Compañero Tier 1' },
+  companionCardT2: { cost: 4000, label: 'Compañero Tier 2' },
+  companionCardT3: { cost: 8000, label: 'Compañero Tier 3' },
+  companionCardT4: { cost: 16000, label: 'Compañero Tier 4' },
+  companionCardT5: { cost: 32000, label: 'Compañero Tier 5' },
+  companionCardT6: { cost: 64000, label: 'Compañero Tier 6' },
+  companionCardT7: { cost: 128000, label: 'Compañero Tier 7' },
+  companionCardT8: { cost: 256000, label: 'Compañero Tier 8' },
+  companionCardT9: { cost: 512000, label: 'Compañero Tier 9' },
+  companionCardT10: { cost: 1024000, label: 'Compañero Tier 10' },
+  weaponCardT1: { cost: 1000, label: 'Arma Tier 1' },
+  weaponCardT2: { cost: 2000, label: 'Arma Tier 2' },
+  weaponCardT3: { cost: 4000, label: 'Arma Tier 3' },
+  weaponCardT4: { cost: 8000, label: 'Arma Tier 4' },
+  weaponCardT5: { cost: 16000, label: 'Arma Tier 5' },
+  weaponCardT6: { cost: 32000, label: 'Arma Tier 6' },
+  weaponCardT7: { cost: 64000, label: 'Arma Tier 7' },
+  weaponCardT8: { cost: 128000, label: 'Arma Tier 8' },
+  weaponCardT9: { cost: 256000, label: 'Arma Tier 9' },
+  weaponCardT10: { cost: 512000, label: 'Arma Tier 10' }
 };
 
 export const COMPANION_SLOT_COSTS = [0, 1000, 5000, 20000, 75000];
 
-export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaused?: boolean) => void) {
+// Sistema de Tiers para compañeros y armas
+export const TIER_SYSTEM = {
+  // Rango de clicks/seg por tier: [min, max]
+  ranges: {
+    1: [1, 5],
+    2: [5, 10],
+    3: [10, 15],
+    4: [15, 20],
+    5: [20, 25],
+    6: [25, 30],
+    7: [30, 35],
+    8: [35, 40],
+    9: [40, 45],
+    10: [45, 50]
+  },
+  // Nombres de compañeros por tier (de base a imponente)
+  companionNames: {
+    1: ['Dron Explorador', 'Dron Centinela', 'Dron Mensajero'],
+    2: ['Cazador Nocturno', 'Rastreador Fantasma', 'Explorador Estelar'],
+    3: ['Guerrero Mecánico', 'Titán de Acero', 'Coloso de Batalla'],
+    4: ['Señor de la Guerra', 'Destruyente Imperial', 'Aniquilador Prime'],
+    5: ['Avatar del Caos', 'Heraldo del Vacío', 'Portador del Trueno'],
+    6: ['Supremo Estratega', 'Maestro de Batallas', 'General Supremo'],
+    7: ['Forjador de Mundos', 'Creador de Imperios', 'Arquitecto Cósmico'],
+    8: ['Devorador de Estrellas', 'Señor del Tiempo', 'Amo del Espacio'],
+    9: ['Entidad Primordial', 'Ser Trascendente', 'Conciencia Universal'],
+    10: ['Dios de la Guerra', 'El Omnipotente', 'El Infinito']
+  },
+  // Nombres de armas por tier
+  weaponNames: {
+    1: ['Blaster Láser', 'Pistola de Plasma', 'Rifle de Pulso'],
+    2: ['Cañón de Partículas', 'Lanzador de Energía', 'Desintegrador Táctico'],
+    3: ['Aniquilador Cuántico', 'Devorador de Materia', 'Coloso de Fuego'],
+    4: ['Guadaña del Vacío', 'Maldición Estelar', 'Juicio Final'],
+    5: ['Apocalipsis', 'Armagedón', 'Ragnarök'],
+    6: ['Excalibur', 'Mjolnir', 'Gungnir'],
+    7: ['Lanza del Destino', 'Espada del Crepúsculo', 'Hacha del Caos'],
+    8: ['Corte del Tiempo', 'Filo del Infinito', 'Navaja Cósmica'],
+    9: ['Arma del Apocalipsis', 'Instrumento de la Muerte', 'Herencia de los Dioses'],
+    10: ['El Principio y El Fin', 'La Última Palabra', 'El Todo y La Nada']
+  },
+  // Rareza por tier
+  rarityByTier: {
+    1: 'Común',
+    2: 'Común',
+    3: 'Raro',
+    4: 'Raro',
+    5: 'Épico',
+    6: 'Épico',
+    7: 'Legendario',
+    8: 'Legendario',
+    9: 'Mítico',
+    10: 'Divino'
+  }
+};
+
+// Función para generar un compañero aleatorio por tier
+export function generateCompanionByTier(tier: number): { id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier: number } {
+  const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
+  const power = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+  const names = TIER_SYSTEM.companionNames[tier as keyof typeof TIER_SYSTEM.companionNames] || ['Dron Explorador'];
+  const name = names[Math.floor(Math.random() * names.length)];
+  const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
+  
+  return {
+    id: `comp_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name,
+    type: 'click',
+    power,
+    rarity,
+    tier
+  };
+}
+
+// Función para generar un arma aleatoria por tier
+export function generateWeaponByTier(tier: number): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number } {
+  const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
+  const power = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+  const names = TIER_SYSTEM.weaponNames[tier as keyof typeof TIER_SYSTEM.weaponNames] || ['Blaster Láser'];
+  const name = names[Math.floor(Math.random() * names.length)];
+  const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
+  
+  return {
+    id: `weapon_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name,
+    type: 'weapon',
+    details: `Daño: +${power}`,
+    rarity,
+    tier,
+    level: 0
+  };
+}
+
+export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaused?: boolean) => void, username?: string) {
   const baseCompanion = {
     id: 'companion_base_001',
     name: 'Dron Explorador',
-    type: 'passive' as const,
+    type: 'click' as const,
     power: 1,
     rarity: 'Común'
   };
 
+  // Bonus especial para usuarios de prueba
+  const displayName = user.displayName || username || '';
+  const isBlanquician = displayName.toLowerCase() === 'blanquician';
+  const isAdmin = displayName.toLowerCase() === 'admin';
+  const initialNanites = (isBlanquician || isAdmin) ? 100000000 : 0;
+
   let state = {
     saveVersion: SAVE_VERSION,
-    nanites: 0,
+    nanites: initialNanites,
     passiveIncome: 0,
     totalClicks: 0,
     totalInfraestructure: 0,
@@ -44,6 +213,8 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     upgradeCrystals: 5,
     warehouseCapacity: 15,
     maxCompanionSlots: 1,
+    afkCards: 0, // Tarjetas AFK acumuladas (máx 3)
+    afkExpiresAt: 0, // Tiempo de expiración del buff AFK (10 min por tarjeta)
     crates: {
       common: 2,
       rare: 0,
@@ -55,15 +226,17 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       plasmaCannon: { level: 0, equipped: false },
       quantumDisruptor: { level: 0, equipped: false }
     },
-    companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string }>,
+    companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number }>,
     activeCompanions: [] as string[],
     warehouse: [
       { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Daño: +1', rarity: 'Común' },
       { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: '+1/s', rarity: 'Común' }
-    ] as Array<{ id: string; name: string; type: string; details: string; rarity: string }>,
+    ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
     buffs: {
       clickBoostExpiresAt: 0,
-      passiveBoostExpiresAt: 0
+      passiveBoostExpiresAt: 0,
+      clickX2ExpiresAt: 0, // Tarjeta Click x2 (30s)
+      clickX3ExpiresAt: 0  // Tarjeta Click x3 (30s)
     }
   };
 
@@ -97,9 +270,12 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       state.companions = data.companions ?? [];
       state.activeCompanions = data.activeCompanions ?? [];
       state.warehouse = data.warehouse ?? [];
+      state.afkCards = data.afkCards ?? 0;
       state.buffs = {
         clickBoostExpiresAt: data.buffs?.clickBoostExpiresAt ?? 0,
-        passiveBoostExpiresAt: data.buffs?.passiveBoostExpiresAt ?? 0
+        passiveBoostExpiresAt: data.buffs?.passiveBoostExpiresAt ?? 0,
+        clickX2ExpiresAt: data.buffs?.clickX2ExpiresAt ?? 0,
+        clickX3ExpiresAt: data.buffs?.clickX3ExpiresAt ?? 0
       };
       // Asegurar que el recolector equipado tenga level definido
       Object.values(state.collectors).forEach((c: any) => {
@@ -120,6 +296,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         upgradeCrystals: state.upgradeCrystals,
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
+        afkCards: state.afkCards,
         crates: state.crates,
         collectors: state.collectors,
         companions: state.companions,
@@ -201,7 +378,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
   function calculateMultiplier() {
     let multiplier = 1;
-    if (Date.now() < state.buffs.clickBoostExpiresAt) {
+    const now = Date.now();
+    if (now < state.buffs.clickBoostExpiresAt) {
+      multiplier = 2;
+    }
+    if (now < state.buffs.clickX3ExpiresAt) {
+      multiplier = 3;
+    } else if (now < state.buffs.clickX2ExpiresAt) {
       multiplier = 2;
     }
     return multiplier;
@@ -222,6 +405,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         upgradeCrystals: state.upgradeCrystals,
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
+        afkCards: state.afkCards,
         crates: state.crates,
         collectors: state.collectors,
         companions: state.companions,
@@ -247,7 +431,10 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
   const handleVisibilityChange = () => {
     if (document.hidden) {
-      isAfk = true;
+      // Solo marcar AFK si no hay tarjetas AFK activas
+      if (state.afkCards <= 0) {
+        isAfk = true;
+      }
     } else {
       const elapsed = Date.now() - lastActiveTimestamp;
       isAfk = elapsed > AFK_THRESHOLD_MS;
@@ -260,17 +447,20 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     if (e && e instanceof KeyboardEvent && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
       return;
     }
-    lastActiveTimestamp = Date.now();
-    if (isAfk) {
-      isAfk = false;
-      // Activar estado de espera de click para retomar pasivos
-      awaitingClickAfterAfk = true;
-      onUpdate(state, false);
+    // Solo actualizar timestamp con click real (no con mousemove)
+    if (e && e.type === 'click') {
+      lastActiveTimestamp = Date.now();
+      if (isAfk) {
+        isAfk = false;
+        // Activar estado de espera de click para retomar pasivos
+        awaitingClickAfterAfk = true;
+        onUpdate(state, false);
+      }
     }
   };
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('mousemove', handleUserActivity);
+  window.addEventListener('mousemove', () => { lastActiveTimestamp = Date.now(); });
   window.addEventListener('keydown', handleUserActivity);
   window.addEventListener('click', handleUserActivity);
 
@@ -285,11 +475,31 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   // Estado para manejar el regreso del AFK
   let awaitingClickAfterAfk = false;
 
+  // Intervalo de 1 segundo para clicks de compañeros y actualización de nanitas
+  const companionClickInterval = setInterval(() => {
+    const now = Date.now();
+    
+    // Sumar clicks de compañeros click
+    let companionClickPower = 0;
+    state.activeCompanions.forEach((compId: string) => {
+      const comp = state.companions.find((c: any) => c.id === compId);
+      if (comp && comp.type === 'click') {
+        companionClickPower += comp.power;
+      }
+    });
+    
+    if (companionClickPower > 0) {
+      state.nanites += companionClickPower;
+      onUpdate(state, false);
+    }
+  }, 1000);
+
   const gameInterval = setInterval(() => {
     recalculatePassiveIncome();
     const now = Date.now();
     const hasPassiveBuffActive = now < state.buffs.passiveBoostExpiresAt;
-    const isEffectivelyAfk = isAfk && !hasPassiveBuffActive;
+    const hasAfkCards = state.afkCards > 0;
+    const isEffectivelyAfk = isAfk && !hasPassiveBuffActive && !hasAfkCards;
 
     if (isEffectivelyAfk) {
       onUpdate(state, true);
@@ -306,7 +516,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       // Sumar fracción del ingreso pasivo para animación fluida
       state.nanites += state.passiveIncome / TICKS_PER_SECOND;
     }
-    onUpdate(state, isAfk && hasPassiveBuffActive);
+    onUpdate(state, isAfk && (hasPassiveBuffActive || hasAfkCards));
   }, TICK_RATE_MS);
 
   return {
@@ -408,9 +618,17 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       if (index > -1) {
         state.activeCompanions.splice(index, 1);
       } else {
+        // Verificar si hay espacio disponible
         if (state.activeCompanions.length < state.maxCompanionSlots) {
+          // Insertar en el primer slot vacío (mantener orden)
           state.activeCompanions.push(compId);
+          state.activeCompanions.sort((a, b) => {
+            const compA = state.companions.find((c: any) => c.id === a);
+            const compB = state.companions.find((c: any) => c.id === b);
+            return (compA?.tier || 0) - (compB?.tier || 0);
+          });
         } else {
+          // No hay espacio, no se puede equipar
           return false;
         }
       }
@@ -442,14 +660,15 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       // Desequipar todos los recolectores del state
       Object.values(state.collectors).forEach((c: any) => c.equipped = false);
 
-      // Determinar el tipo de recolector basado en el nombre
+      // Determinar el tipo de recolector basado en el nombre o tier
       const itemName = (item as any).name.toLowerCase();
+      const itemTier = (item as any).tier || 0;
       let collectorKey = '';
-      if (itemName.includes('blaster')) {
+      if (itemName.includes('blaster') || itemName.includes('láser') || itemName.includes('laser')) {
         collectorKey = 'blaster';
-      } else if (itemName.includes('plasma')) {
+      } else if (itemName.includes('plasma') || itemName.includes('cañon') || itemName.includes('canon')) {
         collectorKey = 'plasmaCannon';
-      } else if (itemName.includes('quantum') || itemName.includes('disruptor')) {
+      } else if (itemName.includes('quantum') || itemName.includes('disruptor') || itemName.includes('aniquilador') || itemName.includes('devorador') || itemName.includes('coloso') || itemName.includes('guadaña') || itemName.includes('maldición') || itemName.includes('juicio') || itemName.includes('apocalipsis') || itemName.includes('armagedón') || itemName.includes('ragnarök') || itemName.includes('excalibur') || itemName.includes('mjolnir') || itemName.includes('gungnir') || itemName.includes('lanza') || itemName.includes('espada') || itemName.includes('hacha') || itemName.includes('corte') || itemName.includes('filo') || itemName.includes('navaja') || itemName.includes('arma del apocalipsis') || itemName.includes('instrumento') || itemName.includes('herencia') || itemName.includes('principio') || itemName.includes('palabra') || itemName.includes('todo')) {
         collectorKey = 'quantumDisruptor';
       }
 
@@ -461,12 +680,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
           (item as any).equipped = true;
           // Actualizar el nivel del recolector para que coincida con el item
           collector.level = (item as any).level || collector.level;
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return true;
         }
       }
 
-      onUpdate(state, isAfk);
-      saveToFirebase();
-      return true;
+      return false;
     },
     equipCompanion: (compId: string) => {
       handleUserActivity();
@@ -489,6 +709,16 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       handleUserActivity();
       const item = STORE_ITEMS[itemKey];
       if (!item || state.nanites < item.cost) return false;
+
+      // Validar mochila llena (excepto para items que no ocupan espacio como slots)
+      const needsWarehouseSpace = !['companionSlot1', 'companionSlot2', 'backpackExpander'].includes(itemKey as string);
+      if (needsWarehouseSpace && state.warehouse.length >= state.warehouseCapacity) {
+        showToast('⚠️ Almacén lleno. No puedes comprar más items.', 'error');
+        return false;
+      }
+
+      // Confirmar compra
+      showToast(`✅ Comprado: ${item.label} por ${formatNumber(item.cost)} nanitas`, 'success');
 
       state.nanites -= item.cost;
 
@@ -515,6 +745,109 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         const currentExpires = Math.max(now, state.buffs.passiveBoostExpiresAt);
         state.buffs.passiveBoostExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_BUFF_DURATION_MS);
         recalculatePassiveIncome();
+      } else if (itemKey === 'backpackExpander') {
+        // El expansor se guarda en el almacén como consumible, no se aplica directamente
+        if (state.warehouse.length < state.warehouseCapacity) {
+          state.warehouse.push({
+            id: `expander_${Date.now()}`,
+            name: 'Expansor de Almacén',
+            type: 'consumable',
+            details: 'Aumenta el almacén +1 slot (máx 20)',
+            rarity: 'Raro',
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          });
+        }
+      } else if (itemKey === 'companionSlot1') {
+        // Solo se puede comprar una vez (cuando tienes 1 slot)
+        if (state.maxCompanionSlots !== 1) return false;
+        state.maxCompanionSlots += 1;
+      } else if (itemKey === 'companionSlot2') {
+        // Solo se puede comprar una vez (cuando tienes 2 slots)
+        if (state.maxCompanionSlots !== 2) return false;
+        state.maxCompanionSlots += 1;
+      } else if (itemKey === 'afkCard') {
+        if (state.afkCards >= 3) return false;
+        state.afkCards += 1;
+      } else if (itemKey === 'clickX2Card') {
+        const now = Date.now();
+        const currentExpires = Math.max(now, state.buffs.clickX2ExpiresAt);
+        state.buffs.clickX2ExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_CARD_BUFF_DURATION_MS);
+        // Guardar en almacén como consumible
+        if (state.warehouse.length < state.warehouseCapacity) {
+          state.warehouse.push({
+            id: `clickx2_${Date.now()}`,
+            name: 'Tarjeta Click x2',
+            type: 'consumable',
+            details: 'Otorga x2 al click base por 30 segundos',
+            rarity: 'Raro',
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          });
+        }
+      } else if (itemKey === 'clickX3Card') {
+        const now = Date.now();
+        const currentExpires = Math.max(now, state.buffs.clickX3ExpiresAt);
+        state.buffs.clickX3ExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_CARD_BUFF_DURATION_MS);
+        // Guardar en almacén como consumible
+        if (state.warehouse.length < state.warehouseCapacity) {
+          state.warehouse.push({
+            id: `clickx3_${Date.now()}`,
+            name: 'Tarjeta Click x3',
+            type: 'consumable',
+            details: 'Otorga x3 al click base por 30 segundos',
+            rarity: 'Épico',
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          });
+        }
+      } else if (itemKey.startsWith('companionCardT')) {
+        const tier = parseInt(itemKey.replace('companionCardT', ''));
+        const comp = generateCompanionByTier(tier);
+        state.companions.push(comp);
+        if (state.warehouse.length < state.warehouseCapacity) {
+          state.warehouse.push({
+            id: comp.id,
+            name: comp.name,
+            type: 'companion',
+            details: `+${comp.power} Clics/s`,
+            rarity: comp.rarity,
+            tier: comp.tier,
+            sellPrice: Math.floor(item.cost / 4)
+          });
+        }
+      } else if (itemKey.startsWith('weaponCardT')) {
+        const tier = parseInt(itemKey.replace('weaponCardT', ''));
+        const weapon = generateWeaponByTier(tier);
+        if (state.warehouse.length < state.warehouseCapacity) {
+          state.warehouse.push({
+            ...weapon,
+            sellPrice: Math.floor(item.cost / 4)
+          });
+        }
+      } else if ((itemKey as string) === 'afkCard') {
+        if (state.afkCards >= 3) return false;
+        state.afkCards += 1;
+        // Establecer tiempo de expiración (10 min por tarjeta, acumulable hasta 30 min)
+        const now = Date.now();
+        const currentExpires = Math.max(now, state.afkExpiresAt);
+        state.afkExpiresAt = Math.min(currentExpires + 10 * 60 * 1000, now + 30 * 60 * 1000);
+        // Guardar en almacén como consumible
+        if (state.warehouse.length < state.warehouseCapacity) {
+          state.warehouse.push({
+            id: `afk_${Date.now()}`,
+            name: 'Tarjeta AFK',
+            type: 'consumable',
+            details: 'Permite juego sin pestaña activa por 10 min (acumulable x3)',
+            rarity: 'Raro',
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          });
+        }
       }
 
       onUpdate(state, isAfk);
