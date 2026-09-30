@@ -24,7 +24,7 @@
 // ==========================================================================
 
 import { ic } from './icons';
-import { pageShell, mountInto, statStrip, emptyState, sectionHead } from './pageShell';
+import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
 import { successChance, baseSuccessChance, AFFIX_BY_ID } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -43,11 +43,11 @@ interface ForgeUIState {
 const ui: ForgeUIState = { selected: [], stones: 0, nano: false, tier: 0 };
 
 /** Punto de entrada. Re-monta la página conservando la selección. */
-export function renderForgePage(container: HTMLElement, game: any, onBack: () => void) {
-  draw(container, game, onBack);
+export function renderForgePage(container: HTMLElement, game: any, onBack: () => void, onHome?: () => void, go?: (r: any) => void) {
+  draw(container, game, onBack, onHome, go);
 }
 
-function draw(container: HTMLElement, game: any, onBack: () => void) {
+function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: () => void, go?: (r: any) => void) {
   const state = game.getState();
   const unlocked = (state.nodeLevels?.blueprint || 0) > 0;
   const info = game.getForgeInfo();
@@ -262,6 +262,9 @@ function draw(container: HTMLElement, game: any, onBack: () => void) {
     subtitle: unlocked ? 'Fusión, autoría y potencial' : 'Bloqueada · necesitas 1 ◆',
     icon: 'anvil',
     onBack,
+    onHome,
+    activeRoute: 'forja',
+    state,
     actions: unlocked ? `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
                    text-[11px] font-mono text-cyan-300">
@@ -269,6 +272,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void) {
       </span>` : ''
   }, body));
 
+  wireNav(root, { back: onBack, home: onHome, go });
   wire(root, game, onBack);
 }
 
@@ -308,8 +312,6 @@ function wire(container: HTMLElement, game: any, onBack: () => void) {
       .filter(Boolean) as any[];
     return { weapons, selected };
   };
-
-  container.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
 
   container.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;

@@ -13,7 +13,7 @@
 // ==========================================================================
 
 import { ic } from './icons';
-import { pageShell, mountInto, statStrip, sectionHead } from './pageShell';
+import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShell';
 import { COSMETICS, COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { formatNumber } from '../utils/format';
@@ -89,7 +89,9 @@ export function renderProfilePage(
   container: HTMLElement,
   game: any,
   onBack: () => void,
-  onGoPrestige: () => void
+  onGoPrestige: () => void,
+  onHome?: () => void,
+  go?: (r: any) => void
 ) {
   const state = game.getState();
   const achievements = game.getAchievements() as any[];
@@ -297,18 +299,21 @@ export function renderProfilePage(
     title: 'Perfil',
     subtitle: 'Identidad, cosméticos y logros',
     icon: 'user',
-    onBack
+    onBack,
+    onHome,
+    activeRoute: 'perfil',
+    state
   }, body));
 
   // --- Eventos ---
-  root.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
+  wireNav(root, { back: onBack, home: onHome, go });
   root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
 
   root.querySelectorAll<HTMLElement>('[data-cos-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       sfx.nav();
       ui.tab = btn.dataset.cosTab as 'title' | 'frame' | 'banner';
-      renderProfilePage(container, game, onBack, onGoPrestige);
+      renderProfilePage(container, game, onBack, onGoPrestige, onHome, go);
     });
   });
 
@@ -323,7 +328,7 @@ export function renderProfilePage(
       }
       sfx.equip();
       game.equipCosmetic(tab, cosId);
-      renderProfilePage(container, game, onBack, onGoPrestige);
+      renderProfilePage(container, game, onBack, onGoPrestige, onHome, go);
     });
   });
 }

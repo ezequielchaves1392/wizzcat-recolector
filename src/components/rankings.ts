@@ -16,7 +16,7 @@
 // ==========================================================================
 
 import { ic } from '../ui/icons';
-import { pageShell, mountInto, emptyState } from '../ui/pageShell';
+import { pageShell, mountInto, wireNav, emptyState } from '../ui/pageShell';
 import { getTopRankings, type LeaderboardEntry } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
@@ -25,7 +25,9 @@ import { rarityClass } from './crateLoot';
 export function renderRankings(
   container: HTMLElement,
   currentUser: any,
-  onBack: () => void
+  onBack: () => void,
+  onHome?: () => void,
+  go?: (r: any) => void
 ) {
   const meId = currentUser?.uid ?? currentUser?.userId;
 
@@ -33,14 +35,18 @@ export function renderRankings(
     title: 'Ranking global',
     subtitle: 'Puntuación = nanitas + logros + firmas',
     icon: 'trophy',
-    onBack
+    onBack,
+    onHome,
+    // 'ranking' no esta en la barra, asi que se pinta la barra sin pestana
+    // activa. El jugador sigue pudiendo salir desde ahi con un gesto.
+    activeRoute: 'ranking'
   }, `
     <div class="flex flex-col gap-2" id="rank-body">
       ${skeleton()}
     </div>
   `));
 
-  root.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
+  wireNav(root, { back: onBack, home: onHome, go });
 
   const body = root.querySelector('#rank-body')!;
 

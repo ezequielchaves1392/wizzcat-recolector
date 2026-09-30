@@ -28,7 +28,7 @@
 import { showToast } from '../utils/toast';
 import { formatNumber } from '../utils/format';
 import { ic } from '../ui/icons';
-import { pageShell, mountInto, sectionHead } from '../ui/pageShell';
+import { pageShell, mountInto, wireNav, sectionHead } from '../ui/pageShell';
 import { showConfirmModal } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
 import { sfx } from '../utils/audio';
@@ -70,12 +70,21 @@ export function renderWarehouseTab(
   container: HTMLElement,
   game: any,
   onBack: () => void,
-  onStateChange?: () => void
+  onStateChange?: () => void,
+  onHome?: () => void,
+  go?: (r: any) => void
 ) {
-  draw(container, game, onBack, onStateChange);
+  draw(container, game, onBack, onStateChange, onHome, go);
 }
 
-function draw(container: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void) {
+function draw(
+  container: HTMLElement,
+  game: any,
+  onBack: () => void,
+  onStateChange?: () => void,
+  onHome?: () => void,
+  go?: (r: any) => void
+) {
   const state = game.getState();
   const warehouse = (state.warehouse || []) as any[];
   const capacity = game.getCapacity?.() ?? state.warehouseCapacity ?? 15;
@@ -143,43 +152,61 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onStateChan
   }
 
   const body = `
-    ${sectionHead('Almacén', 'warehouse', `
-      <div class="flex items-center gap-2">
-        <span class="text-[10px] font-mono tabular ${warehouse.length >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
-          ${warehouse.length}/${capacity}
-        </span>
-        <span class="text-[10px] font-mono accent-text tabular hidden sm:inline">${formatNumber(state.nanites)} ◆</span>
-      </div>
-    `)}
+    <!--
+      Dos columnas a partir de lg. Antes el panel de detalle era un overlay
+      fixed que en escritorio se convertia en un hijo mas del contenedor en
+      columna: caia DEBAJO de la rejilla, pegado a la esquina inferior
+      derecha y flotando sobre el vacio. Ahora es una columna de verdad.
+    -->
+    <div class="flex flex-col lg:flex-row lg:gap-4 lg:items-start">
 
-    <div class="flex flex-wrap items-center gap-1.5 mb-3">
-      ${([
-        { id: 'all', label: 'Todo' },
-        { id: 'weapon', label: 'Recolectores' },
-        { id: 'companion', label: 'Compañeros' },
-        { id: 'otros', label: 'Otros' }
-      ]).map(f => `
-        <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition
-                       ${ui.filter === f.id ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
-                data-filter="${f.id}">${f.label}</button>
-      `).join('')}
-      <select id="wh-sort"
-        class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
-        <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Mi orden</option>
-        <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
-        <option value="rarity" ${ui.sort === 'rarity' ? 'selected' : ''}>Rareza</option>
-        <option value="tier" ${ui.sort === 'tier' ? 'selected' : ''}>Tier</option>
-        <option value="name" ${ui.sort === 'name' ? 'selected' : ''}>Nombre</option>
-      </select>
+      <div class="min-w-0 flex-1">
+        ${sectionHead('Almacén', 'warehouse', `
+          <span class="text-[10px] font-mono tabular ${warehouse.length >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
+            ${warehouse.length}/${capacity} ranuras
+          </span>
+        `)}
+
+        <div class="flex flex-wrap items-center gap-1.5 mb-3">
+          ${([
+            { id: 'all', label: 'Todo' },
+            { id: 'weapon', label: 'Recolectores' },
+            { id: 'companion', label: 'Compañeros' },
+            { id: 'otros', label: 'Otros' }
+          ]).map(f => `
+            <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition
+                           ${ui.filter === f.id ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}"
+                    data-filter="${f.id}">${f.label}</button>
+          `).join('')}
+          <select id="wh-sort" aria-label="Ordenar"
+            class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
+            <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Mi orden</option>
+            <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
+            <option value="rarity" ${ui.sort === 'rarity' ? 'selected' : ''}>Rareza</option>
+            <option value="tier" ${ui.sort === 'tier' ? 'selected' : ''}>Tier</option>
+            <option value="name" ${ui.sort === 'name' ? 'selected' : ''}>Nombre</option>
+          </select>
+        </div>
+
+        <div class="inv-grid mb-2" id="inv-grid">${cells.join('')}</div>
+
+        <p class="text-[9px] text-[var(--text-muted)] text-center leading-relaxed mt-3">
+          Arrastra una celda sobre otra para reordenar. Toca para ver detalles.
+        </p>
+      </div>
+
+      <aside class="hidden lg:block w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-2">
+        ${selected
+          ? detailPanel(selected, state, game)
+          : `<div class="card-glass border rounded-2xl p-6 flex flex-col items-center gap-2 text-center">
+               <span class="text-[var(--text-muted)] opacity-30 [&>span>svg]:w-9 [&>span>svg]:h-9">${ic('eye')}</span>
+               <span class="text-[11px] font-mono text-[var(--text-muted)] leading-relaxed">
+                 Selecciona un item de la rejilla para ver su descripcion
+               </span>
+             </div>`}
+      </aside>
     </div>
 
-    <div class="inv-grid mb-2" id="inv-grid">${cells.join('')}</div>
-
-    <p class="text-[9px] text-[var(--text-muted)] text-center leading-relaxed">
-      Arrastra una celda sobre otra para reordenar. Toca para ver detalles.
-    </p>
-
-    <!-- Hoja de detalle -->
     ${selected ? detailSheet(selected, state, game) : ''}
   `;
 
@@ -187,14 +214,47 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onStateChan
     title: 'Almacén',
     subtitle: 'Arrastra para reordenar · toca para inspeccionar',
     icon: 'warehouse',
-    onBack
+    onBack,
+    onHome,
+    activeRoute: 'almacen',
+    state
   }, body));
 
+  wireNav(root, { back: onBack, home: onHome, go });
   wire(root, game, onBack, onStateChange);
 }
 
 /** Hoja de detalle. En móvil va abajo con arrastre de salida; en escritorio, arriba. */
 function detailSheet(item: any, state: any, game: any): string {
+  return `
+    <div class="fixed inset-0 z-[60] lg:hidden flex items-end justify-center pointer-events-none">
+      <div class="absolute inset-0 bg-black/55 pointer-events-auto" data-act="close"></div>
+      <div class="relative card-glass-elevated w-full rounded-t-2xl pointer-events-auto
+                  p-4 max-h-[78dvh] overflow-y-auto overscroll-contain animate-rise-in"
+           style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+        ${detailContent(item, state, game)}
+      </div>
+    </div>
+  `;
+}
+
+/** Panel de detalle fijo en la columna derecha, solo en escritorio. */
+function detailPanel(item: any, state: any, game: any): string {
+  return `
+    <div class="card-glass border rounded-2xl p-4 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain">
+      ${detailContent(item, state, game)}
+    </div>
+  `;
+}
+
+/**
+ * Contenido del detalle, compartido por la hoja móvil y el panel de escritorio.
+ *
+ * Antes eran dos plantillas casi idénticas que se desincronizaron: el botón de
+ * cerrar solo existía en una, y el panel de escritorio no tenía forma de
+ * cerrarse. Un solo origen para el contenido hace que eso no vuelva a pasar.
+ */
+function detailContent(item: any, state: any, game: any): string {
   const isWeapon = item.type === 'weapon';
   const isCompanion = item.type === 'companion';
   const isEquipped = (isWeapon && item.equipped) || (isCompanion && state.activeCompanions.includes(item.id));
@@ -215,16 +275,6 @@ function detailSheet(item: any, state: any, game: any): string {
   const valuation = isWeapon ? valuationBreakdown(item) : [];
 
   return `
-    <div class="fixed inset-0 z-[60] lg:static lg:z-auto lg:bg-transparent lg:p-0
-                flex items-end lg:items-start justify-center lg:justify-end pointer-events-none">
-
-      <div class="absolute inset-0 bg-black/55 lg:hidden pointer-events-auto" data-act="close"></div>
-
-      <div class="relative card-glass-elevated w-full lg:w-80 rounded-t-2xl lg:rounded-2xl pointer-events-auto
-                  p-4 max-h-[76dvh] lg:max-h-[calc(100dvh-8rem)] overflow-y-auto overscroll-contain
-                  animate-rise-in lg:animate-none"
-           style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
-
         <div class="flex items-start gap-2.5 mb-3">
           <span class="ring-${raritySlug(item.rarity)} w-11 h-11 rounded-xl grid place-items-center
                        flex-shrink-0 ${rarityClass(item.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">
@@ -241,8 +291,8 @@ function detailSheet(item: any, state: any, game: any): string {
               ${item.potential ? `<span class="text-[10px] text-amber-400">${'★'.repeat(item.potential)}</span>` : ''}
             </div>
           </div>
-          <button class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0
-                         lg:hidden" data-act="close" aria-label="Cerrar">
+          <button class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
+                  data-act="close" title="Cerrar detalle" aria-label="Cerrar detalle">
             <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
           </button>
         </div>
@@ -333,8 +383,6 @@ function detailSheet(item: any, state: any, game: any): string {
         </div>
 
         ${isEquipped ? `<p class="text-[9px] text-amber-400 text-center mt-2">Desequípalo para venderlo o mejorarlo.</p>` : ''}
-      </div>
-    </div>
   `;
 }
 

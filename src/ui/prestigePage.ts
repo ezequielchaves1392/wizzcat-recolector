@@ -18,7 +18,7 @@
 // ==========================================================================
 
 import { ic } from './icons';
-import { pageShell, mountInto, statStrip } from './pageShell';
+import { pageShell, mountInto, wireNav, statStrip } from './pageShell';
 import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META } from '../data/tree';
 import { canBuyNode, nextCores, treeCompletion, PRESTIGE_MIN_NANITES } from '../data/prestige';
 import { formatNumber } from '../utils/format';
@@ -84,7 +84,9 @@ function weight(key: keyof PassiveBonuses, value: number): number {
 export function renderPrestigePage(
   container: HTMLElement,
   game: any,
-  onBack: () => void
+  onBack: () => void,
+  onHome?: () => void,
+  go?: (r: any) => void
 ) {
   const state = game.getState();
   const bonus: PassiveBonuses = state.bonus;
@@ -247,6 +249,9 @@ export function renderPrestigePage(
     subtitle: 'Núcleos y árbol de pasivas',
     icon: 'recycle',
     onBack,
+    onHome,
+    activeRoute: 'perfil',
+    state,
     actions: `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
                    text-[11px] font-mono accent-text"
@@ -256,12 +261,11 @@ export function renderPrestigePage(
     `
   }, body));
 
+  wireNav(root, { back: onBack, home: onHome, go });
   wireEvents(root, game, onBack, state);
 }
 
 function wireEvents(container: HTMLElement, game: any, onBack: () => void, state: any) {
-  container.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
-
   // --- Reciclar ---
   container.querySelector('#recycle-btn')?.addEventListener('click', () => {
     const gained = nextCores({

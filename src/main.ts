@@ -142,10 +142,22 @@ function renderRoute(route: Route) {
   // El DOM del HUD de buffs se recrea, así que hay que invalidar la marca
   resetBuffHud();
 
+  /**
+   * Volver. Se intenta el historial y, si ya no queda nada, se cae a la base:
+   * la base es el único sitio donde siempre se puede estar, así que nunca
+   * puede haber un "atrás" que no lleve a ninguna parte.
+   */
   const goBack = () => {
     sfx.nav();
     if (!router.back()) router.goTo('base');
-    else renderRoute(router.current);
+    renderRoute(router.current);
+  };
+
+  /** Ir a la base ignorando el historial. Es el botón de "inicio" de escritorio. */
+  const goHome = () => {
+    sfx.nav();
+    router.goTo('base');
+    renderRoute(router.current);
   };
 
   const go = (r: Route) => {
@@ -161,22 +173,22 @@ function renderRoute(route: Route) {
     case 'almacen':
       renderWarehouseTab(app, activeGameInstance, goBack, () => {
         updateUI(activeGameInstance.getState(), activeGameInstance.isAfk());
-      });
+      }, goHome, go);
       break;
     case 'forja':
-      renderForgePage(app, activeGameInstance, goBack);
+      renderForgePage(app, activeGameInstance, goBack, goHome, go);
       break;
     case 'tienda':
-      renderStoreTab(app, activeGameInstance, goBack);
+      renderStoreTab(app, activeGameInstance, goBack, goHome);
       break;
     case 'perfil':
-      renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'));
+      renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'), goHome, go);
       break;
     case 'ranking':
-      renderRankings(app, activeUser, goBack);
+      renderRankings(app, activeUser, goBack, goHome);
       break;
     case 'prestigio':
-      renderPrestigePage(app, activeGameInstance, goBack);
+      renderPrestigePage(app, activeGameInstance, goBack, goHome, go);
       break;
   }
 }
