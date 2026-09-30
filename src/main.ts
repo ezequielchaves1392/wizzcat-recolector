@@ -2,15 +2,141 @@ import './style.css';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
-import { createGameLoop, COLLECTOR_BASE_COSTS, STORE_ITEMS } from './gameLoop';
+import { createGameLoop, COLLECTOR_BASE_COSTS, STORE_ITEMS, type BuffKey } from './gameLoop';
 import { renderWarehouseTab } from './components/warehouse';
 import { renderRankings } from './components/rankings';
 import { renderStoreTab } from './components/store';
 
 import { applyTheme, getSavedTheme, setTheme, type ThemeName } from './theme';
+import { showConfirmModal } from './utils/modal';
 
 const app = document.querySelector('#app') as HTMLElement;
 let activeGameInstance: any = null;
+
+// Definición de los buffs con duración. Las clases van escritas enteras para que
+// el generador de Tailwind las detecte.
+const BUFF_DEFS: Array<{
+  key: BuffKey;
+  icon: string;
+  label: string;
+  tag?: string;
+  durationMs: number;
+  accent: string;
+  bar: string;
+  getExpires: (state: any) => number;
+}> = [
+  {
+    key: 'clickBoost', icon: '⚡', label: 'Clics x2', durationMs: 30 * 60 * 1000,
+    accent: 'border-emerald-500/50 text-emerald-500 dark:text-emerald-400',
+    bar: 'bg-emerald-400',
+    getExpires: (s) => s.buffs.clickBoostExpiresAt
+  },
+  {
+    key: 'clickX2', icon: '⚡', label: 'Clics x2', tag: 'tarjeta', durationMs: 30 * 1000,
+    accent: 'border-cyan-500/50 text-cyan-500 dark:text-cyan-400',
+    bar: 'bg-cyan-400',
+    getExpires: (s) => s.buffs.clickX2ExpiresAt
+  },
+  {
+    key: 'clickX3', icon: '⚡', label: 'Clics x3', tag: 'tarjeta', durationMs: 30 * 1000,
+    accent: 'border-purple-500/50 text-purple-500 dark:text-purple-400',
+    bar: 'bg-purple-400',
+    getExpires: (s) => s.buffs.clickX3ExpiresAt
+  },
+  {
+    key: 'passiveBoost', icon: '🛡️', label: 'Pasivo x2', durationMs: 60 * 60 * 1000,
+    accent: 'border-blue-500/50 text-blue-500 dark:text-blue-400',
+    bar: 'bg-blue-400',
+    getExpires: (s) => s.buffs.passiveBoostExpiresAt
+  },
+  {
+    key: 'afk', icon: '🎴', label: 'AFK', durationMs: 30 * 60 * 1000,
+    accent: 'border-amber-500/50 text-amber-500 dark:text-amber-400',
+    bar: 'bg-amber-400',
+    getExpires: (s) => s.afkExpiresAt
+  }
+];
+
+const buffHudBuilt = { done: false };
+
+// Crea las tarjetas una sola vez y luego solo parchea el contador. Si se
+// reescribiera el innerHTML en cada tick, el clic en la X se perdería porque el
+// nodo cambia entre mousedown y mouseup.
+function buildBuffCard(def: typeof BUFF_DEFS[number]) {
+  return `
+    <div data-buff="${def.key}" class="hidden card-glass border ${def.accent} rounded-xl pl-2 pr-1 py-1 flex items-center gap-1.5 flex-shrink-0">
+      <span class="text-[11px] leading-none">${def.icon}</span>
+      <span class="flex flex-col gap-1">
+        <span class="flex items-baseline gap-1.5 leading-none whitespace-nowrap">
+          <span class="text-[11px] font-mono font-bold">${def.label}</span>
+          ${def.tag ? `<span class="text-[8px] font-mono uppercase tracking-wider opacity-60">${def.tag}</span>` : ''}
+          <span data-role="time" class="text-[10px] font-mono tabular-nums opacity-80">0:00</span>
+        </span>
+        <span class="h-[3px] w-full rounded-full bg-black/40 overflow-hidden block">
+          <span data-role="bar" class="block h-full rounded-full ${def.bar} transition-[width] duration-500 ease-linear" style="width:100%"></span>
+        </span>
+      </span>
+      <button data-cancel="${def.key}" title="Cancelar buff" aria-label="Cancelar ${def.label}" class="w-4 h-4 flex items-center justify-center rounded-md text-[11px] leading-none opacity-50 hover:opacity-100 hover:bg-white/10 transition cursor-pointer">✕</button>
+    </div>
+  `;
+}
+
+function renderBuffHud(state: any, now: number) {
+  const hud = document.querySelector('#active-buffs-hud');
+  const hudMobile = document.querySelector('#buffs-hud-mobile');
+  if (!hud) return;
+
+  if (!buffHudBuilt.done) {
+    const cards = BUFF_DEFS.map(buildBuffCard).join('') + `
+      <div data-buff="global" class="hidden card-glass border border-sky-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-sky-500 dark:text-sky-400 flex-shrink-0 whitespace-nowrap">
+        ✖ Global x<span data-role="value">1</span>
+      </div>
+    `;
+    hud.innerHTML = cards;
+    if (hudMobile) hudMobile.innerHTML = cards;
+    buffHudBuilt.done = true;
+  }
+
+  for (const def of BUFF_DEFS) {
+    const remaining = Math.max(0, def.getExpires(state) - now);
+    const timeText = formatCountdown(remaining);
+    const width = `${Math.max(0, Math.min(100, (remaining / def.durationMs) * 100))}%`;
+
+    // Se parchea el mismo valor en las dos copias (desktop y menú móvil)
+    for (const root of [hud, hudMobile]) {
+      if (!root) continue;
+      const card = root.querySelector(`[data-buff="${def.key}"]`);
+      if (!card) continue;
+      card.classList.toggle('hidden', remaining <= 0);
+      if (remaining <= 0) continue;
+      const timeEl = card.querySelector('[data-role="time"]');
+      if (timeEl) timeEl.textContent = timeText;
+      const barEl = card.querySelector('[data-role="bar"]') as HTMLElement | null;
+      if (barEl) barEl.style.width = width;
+    }
+  }
+
+  // El multiplicador global no es un consumible: se muestra, no se cancela
+  const mult = Number(state.passiveMultiplier) || 1;
+  for (const root of [hud, hudMobile]) {
+    if (!root) continue;
+    const globalCard = root.querySelector('[data-buff="global"]');
+    if (!globalCard) continue;
+    globalCard.classList.toggle('hidden', mult <= 1);
+    const valueEl = globalCard.querySelector('[data-role="value"]');
+    if (valueEl) valueEl.textContent = mult.toFixed(2).replace(/\.?0+$/, '');
+  }
+}
+
+// mm:ss, o h:mm:ss a partir de una hora
+function formatCountdown(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
 
 // Aplicar tema guardado (o por defecto cyber-dark)
 applyTheme(getSavedTheme());
@@ -48,6 +174,12 @@ async function initGame(user: any, username?: string) {
     updateUI(state, isAfk);
   }, username);
 
+  // Handle de depuración solo en dev: permite inspeccionar y probar el estado
+  // desde la consola. Se elimina del build de producción.
+  if (import.meta.env.DEV) {
+    (window as any).__cyberforge = activeGameInstance;
+  }
+
   // Esperar a que el DOM esté completamente listo antes de renderizar
   requestAnimationFrame(() => {
     renderGameLayout(user, activeGameInstance);
@@ -79,8 +211,8 @@ function renderGameLayout(user: any, game: any) {
           </div>
         </div>
 
-        <!-- HUD de Buffs y Compañeros -->
-        <div id="active-buffs-hud" class="flex items-center gap-2 flex-wrap justify-center"></div>
+        <!-- HUD de Buffs: una sola fila con scroll, nunca crece el header -->
+        <div id="active-buffs-hud" class="hidden md:flex items-center gap-1.5 flex-nowrap min-w-0 flex-1 max-w-full overflow-x-auto py-0.5"></div>
 
         <div class="hidden md:flex items-center gap-2 flex-wrap justify-center">
           <select id="theme-selector" class="app-bg border border-[var(--border-color)] rounded-xl px-3 py-2 text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
@@ -122,6 +254,7 @@ function renderGameLayout(user: any, game: any) {
               </svg>
             </button>
           </div>
+          <div id="buffs-hud-mobile" class="flex flex-col gap-1.5 empty:hidden"></div>
           <select id="theme-selector-mobile" class="app-bg border border-[var(--border-color)] rounded-xl px-3 py-2.5 text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
             <option value="cyber-dark">🌙 Cyber Dark</option>
             <option value="synthwave">🌸 Synthwave</option>
@@ -205,6 +338,25 @@ function renderGameLayout(user: any, game: any) {
       </footer>
     </div>
   `;
+
+  // Cancelación de buffs por delegación de eventos: las tarjetas se parchean en
+  // cada tick, así que el botón se replaces; el contenedor no.
+  buffHudBuilt.done = false;
+  const handleBuffCancelClick = (e: Event) => {
+    const btn = (e.target as HTMLElement).closest('[data-cancel]');
+    const buffKey = btn?.getAttribute('data-cancel') as BuffKey | undefined;
+    if (!buffKey) return;
+    const def = BUFF_DEFS.find(d => d.key === buffKey);
+    showConfirmModal(
+      `¿Cancelar ${def?.label ?? 'el buff'}? El tiempo restante se pierde.`,
+      () => {
+        const cancelled = activeGameInstance?.cancelBuff?.(buffKey);
+        if (cancelled) showToast(`${cancelled} cancelado`, 'info');
+      }
+    );
+  };
+  document.querySelector('#active-buffs-hud')?.addEventListener('click', handleBuffCancelClick);
+  document.querySelector('#buffs-hud-mobile')?.addEventListener('click', handleBuffCancelClick);
 
   document.querySelector('#click-btn')?.addEventListener('click', (e) => {
     const mouseEvent = e as MouseEvent;
@@ -345,13 +497,21 @@ function updateUI(state: any, isAfk: boolean = false) {
   if (nanitesCounter) nanitesCounter.textContent = formatNumber(state.nanites);
 
   const now = Date.now();
-  const clickBuffRemaining = Math.max(0, state.buffs.clickBoostExpiresAt - now);
   const passiveBuffRemaining = Math.max(0, state.buffs.passiveBoostExpiresAt - now);
   const hasPassiveBuff = passiveBuffRemaining > 0;
 
+  const isPresent = typeof activeGameInstance?.isPresent === 'function'
+    ? activeGameInstance.isPresent()
+    : true;
+
   if (passiveIncomeDisplay) {
-    const displayValue = (isAfk && !hasPassiveBuff) ? 0 : state.passiveIncome;
-    passiveIncomeDisplay.textContent = `+${formatNumber(displayValue)} Nanitas / segundo`;
+    if (!isPresent) {
+      // El juego está en pausa: sin ventana activa no hay pasivo
+      passiveIncomeDisplay.innerHTML = `<span class="text-amber-500">⏸ En pausa — vuelve a la ventana para cobrar</span>`;
+    } else {
+      const displayValue = (isAfk && !hasPassiveBuff) ? 0 : state.passiveIncome;
+      passiveIncomeDisplay.textContent = `+${formatNumber(displayValue)} Nanitas / segundo`;
+    }
   }
 
   if (clickDamageDisplay) {
@@ -363,29 +523,7 @@ function updateUI(state: any, isAfk: boolean = false) {
     clickDamageDisplay.textContent = `+${formatNumber(clickDamage)} Nanitas por click`;
   }
 
-  if (activeBuffsHud) {
-    let hudHtml = '';
-    if (clickBuffRemaining > 0) {
-      hudHtml += `<div class="card-glass border border-emerald-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-emerald-600 dark:text-emerald-400">⚡ Clics x2: ${formatTime(clickBuffRemaining)}</div>`;
-    }
-    const clickX2Remaining = Math.max(0, state.buffs.clickX2ExpiresAt - now);
-    const clickX3Remaining = Math.max(0, state.buffs.clickX3ExpiresAt - now);
-    if (clickX3Remaining > 0) {
-      hudHtml += `<div class="card-glass border border-purple-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-purple-600 dark:text-purple-400">⚡ Clics x3: ${formatTime(clickX3Remaining)}</div>`;
-    } else if (clickX2Remaining > 0) {
-      hudHtml += `<div class="card-glass border border-cyan-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-cyan-600 dark:text-cyan-400">⚡ Clics x2: ${formatTime(clickX2Remaining)}</div>`;
-    }
-    if (passiveBuffRemaining > 0) {
-      hudHtml += `<div class="card-glass border border-blue-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-blue-600 dark:text-blue-400">🛡️ Pasivo x2 (AFK): ${formatTime(passiveBuffRemaining)}</div>`;
-    }
-    if (state.afkExpiresAt > now) {
-      hudHtml += `<div class="card-glass border border-amber-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-amber-600 dark:text-amber-400">🎴 AFK: ${formatTime(state.afkExpiresAt - now)}</div>`;
-    }
-    if ((state.passiveMultiplier || 1) > 1) {
-      hudHtml += `<div class="card-glass border border-sky-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-sky-600 dark:text-sky-400">✖ Global x${Number(state.passiveMultiplier).toFixed(2).replace(/\.?0+$/, '')}</div>`;
-    }
-    activeBuffsHud.innerHTML = hudHtml;
-  }
+  renderBuffHud(state, now);
 
   // Renderizar Panel del Jugador solo si no estamos en el almacén
   // (evita titileo por re-render constante)

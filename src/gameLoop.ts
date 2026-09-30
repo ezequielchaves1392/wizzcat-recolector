@@ -46,6 +46,17 @@ const SAVE_VERSION = 6;
 export const AFK_CARD_DURATION_MS = 10 * 60 * 1000; // Cada tarjeta AFK da 10 min
 export const MAX_AFK_BUFF_DURATION_MS = 30 * 60 * 1000; // Máximo acumulable (3 tarjetas)
 
+// Buffs que se pueden cancelar desde la interfaz. El buff AFK vive fuera de
+// `state.buffs`, por eso tiene su propio campo.
+export const BUFF_FIELDS = {
+  clickBoost: 'clickBoostExpiresAt',
+  clickX2: 'clickX2ExpiresAt',
+  clickX3: 'clickX3ExpiresAt',
+  passiveBoost: 'passiveBoostExpiresAt'
+} as const;
+
+export type BuffKey = keyof typeof BUFF_FIELDS | 'afk';
+
 export const COLLECTOR_BASE_COSTS = {
   blaster: 20,
   plasmaCannon: 150,
@@ -61,7 +72,7 @@ export const STORE_ITEMS = {
   epicCrate: { cost: 4500, label: 'Caja Épica' },
   legendaryCrate: { cost: 18000, label: 'Caja Legendaria' },
   clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clicks x2 (30m)' },
-  passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 + Excepción AFK (1h)' },
+  passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 (1h)' },
   // Nuevos items
   backpackExpander: { cost: 20000, label: 'Expansor de Almacén (+1 slot)' },
   companionSlot1: { cost: 50000, label: 'Slot de Compañero 1' },
@@ -93,6 +104,17 @@ export const STORE_ITEMS = {
 
 export const COMPANION_SLOT_COSTS = [0, 1000, 5000, 20000, 75000];
 
+// Consumibles de la tienda. `buffId` es el identificador estable que usa el
+// almacén para aplicar el efecto: cambiar un nombre no puede romper el buff.
+const CONSUMABLES = {
+  clickBuff: { name: 'Buff Clicks x2', details: 'Otorga x2 al click por 30 minutos', rarity: 'Raro', buffId: 'clickBoost' },
+  passiveBuff: { name: 'Buff Pasivo x2', details: 'Otorga x2 al ingreso pasivo por 60 minutos', rarity: 'Épico', buffId: 'passiveBoost' },
+  backpackExpander: { name: 'Expansor de Almacén', details: 'Aumenta el almacén +1 slot (máx 20)', rarity: 'Raro', buffId: 'warehouseExpander' },
+  afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
+  clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
+  clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' }
+} as const;
+
 // Definición de cada tipo de caja. La fuente de verdad es el item del almacén,
 // `state.crates` se mantiene sincronizado como contador para las migraciones.
 const CRATE_TYPES = {
@@ -103,6 +125,19 @@ const CRATE_TYPES = {
 } as const;
 
 export type CrateType = keyof typeof CRATE_TYPES;
+
+// Deduce el buffId de un consumible guardado antes de que existiera el campo.
+// Se usa una sola vez, al migrar saves antiguos.
+function inferBuffIdFromName(name: string): string | null {
+  const lower = name.toLowerCase();
+  if (lower.includes('expansor')) return 'warehouseExpander';
+  if (lower.includes('afk')) return 'afk';
+  if (lower.includes('click x3')) return 'clickX3';
+  if (lower.includes('click x2')) return 'clickX2';
+  if (lower.includes('pasivo')) return 'passiveBoost';
+  if (/clics?\s*x2/.test(lower)) return 'clickBoost';
+  return null;
+}
 
 function createCrateItem(crateType: CrateType, quantity: number = 1) {
   const def = CRATE_TYPES[crateType];
@@ -266,7 +301,10 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
   let isAfk = false;
   let lastActiveTimestamp = Date.now();
-  let hiddenAt = 0; // Momento en que la pestaña pasó a segundo plano
+  // Momento (reloj monótono) en que el jugador dejó de estar presente en la pantalla.
+  // 0 = está presente. Se usa performance.now() porque no lo afecta cambiar la
+  // hora del sistema, a diferencia de Date.now().
+  let awayAt = 0;
   const AFK_THRESHOLD_MS = 45000;
 
   const userRef = doc(db, 'users', user.uid);
@@ -309,6 +347,14 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
           const expectedDetails = `Recolección por click: +${w.damage}`;
           if (w.details !== expectedDetails) {
             w.details = expectedDetails;
+            warehouseNeedsMigration = true;
+          }
+        }
+        // Migración: consumibles antigos sin buffId (creados antes de existir el campo)
+        if (w.type === 'consumable' && !w.buffId) {
+          const buffId = inferBuffIdFromName(w.name || '');
+          if (buffId) {
+            w.buffId = buffId;
             warehouseNeedsMigration = true;
           }
         }
@@ -530,30 +576,54 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     }
   }
 
-  const handleVisibilityChange = () => {
-    const now = Date.now();
-    if (document.hidden) {
-      // Pestaña en segundo plano: detener el bucle de renderizado
-      isAfk = true;
-      hiddenAt = now;
-      if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
-    } else {
-      // Pestaña visible: cobrar el pasivo acumulado durante el tiempo en segundo plano
-      if (hiddenAt > 0) {
-        // Solo cuenta si el buff AFK estaba vigente durante ese tramo
-        const coveredMs = Math.max(0, Math.min(now, state.afkExpiresAt) - hiddenAt);
-        if (coveredMs > 0) {
-          recalculatePassiveIncome();
-          state.nanites += (coveredMs / 1000) * state.passiveIncome;
-        }
-        hiddenAt = 0;
+  // El jugador solo está "presente" si la pestaña es visible Y la ventana tiene el
+  // foco. Cubre todos los casos en los que no está mirando el juego:
+  //   - otra pestaña o ventana del navegador (visibilitychange)
+  //   - otra aplicación delante, ventana minimizada o en segundo plano (blur)
+  //   - pantalla bloqueada, suspensión del sistema o móvil en reposo
+  //   - navegación fuera de la página (pagehide)
+  function isPlayerPresent(): boolean {
+    return document.visibilityState === 'visible' && document.hasFocus();
+  }
+
+  // Cobra el pasivo del tiempo que el jugador estuvo ausente, pero solo si había
+  // un buff AFK vigente. Se acota por tres lados para que no se pueda inflar:
+  //   - tiempo real ausente medido con reloj monótono (no manipulable con la hora)
+  //   - parte restante real del buff AFK
+  //   - tope absoluto del buff (30 min)
+  function grantAfkCatchUp(fromAwayAt: number) {
+    const awayMs = performance.now() - fromAwayAt;
+    const buffRemainingMs = Math.max(0, state.afkExpiresAt - Date.now());
+    const grantMs = Math.min(awayMs, buffRemainingMs, MAX_AFK_BUFF_DURATION_MS);
+    if (grantMs <= 0) return;
+
+    recalculatePassiveIncome();
+    if (state.passiveIncome <= 0) return;
+    state.nanites += (grantMs / 1000) * state.passiveIncome;
+  }
+
+  const handlePresenceChange = () => {
+    if (!isPlayerPresent()) {
+      if (awayAt === 0) {
+        awayAt = performance.now();
+        isAfk = true;
+        // Sin tick no hay income pasivo: el juego está "detenido" mientras no se mira
+        if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
+        // Un último render para que la interfaz muestre la pausa
+        onUpdate(state, true);
       }
-      const elapsed = now - lastActiveTimestamp;
-      isAfk = elapsed > AFK_THRESHOLD_MS;
-      lastActiveTimestamp = now;
-      // Reiniciar intervalos si no están corriendo
-      if (!gameInterval) startGameIntervals();
+      return;
     }
+
+    // El jugador volvió a la pantalla
+    if (awayAt > 0) {
+      grantAfkCatchUp(awayAt);
+      awayAt = 0;
+    }
+    const elapsed = Date.now() - lastActiveTimestamp;
+    isAfk = elapsed > AFK_THRESHOLD_MS;
+    lastActiveTimestamp = Date.now();
+    if (!gameInterval) startGameIntervals();
   };
 
   const handleUserActivity = (e?: Event) => {
@@ -575,7 +645,21 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
   const handleMouseMove = () => { lastActiveTimestamp = Date.now(); };
 
-  document.addEventListener('visibilitychange', handleVisibilityChange);
+  // Page Lifecycle API: el navegador congela la página en segundo plano. Es la
+  // única señal fiable cuando el sistema suspende o la pantalla se bloquea.
+  const docWithLifecycle = document as Document & {
+    addEventListener(type: string, listener: () => void, options?: any): void;
+    removeEventListener(type: string, listener: () => void, options?: any): void;
+  };
+
+  document.addEventListener('visibilitychange', handlePresenceChange);
+  window.addEventListener('focus', handlePresenceChange);
+  window.addEventListener('blur', handlePresenceChange);
+  window.addEventListener('pageshow', handlePresenceChange);
+  // Al navegar fuera no hay vuelta: se marca ausencia y se para el tick
+  window.addEventListener('pagehide', handlePresenceChange);
+  docWithLifecycle.addEventListener('freeze', handlePresenceChange);
+  docWithLifecycle.addEventListener('resume', handlePresenceChange);
   window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('keydown', handleUserActivity);
   window.addEventListener('click', handleUserActivity);
@@ -600,8 +684,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
     // Intervalo principal del juego
     gameInterval = setInterval(() => {
-      // No sumar si la pestaña está oculta
-      if (document.hidden) return;
+      // Watchdog: si el jugador dejó de estar presente sin que llegara el evento
+      // (minimizar desde el SO, bloqueo de pantalla, etc.), esta comprobación
+      // para el tick antes de que accrue nada.
+      if (!isPlayerPresent()) {
+        handlePresenceChange();
+        return;
+      }
 
       recalculatePassiveIncome();
       const now = Date.now();
@@ -626,15 +715,42 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     }, TICK_RATE_MS);
   }
 
-  // Iniciar intervalos
-  startGameIntervals();
+  // Iniciar intervalos solo si el jugador está mirando el juego. Si se abrió en
+  // segundo plano, arrancarán solos en el primer focus/visibilitychange.
+  if (isPlayerPresent()) {
+    startGameIntervals();
+  }
 
   return {
     getState: () => state,
     isAfk: () => isAfk,
+    isPresent: () => isPlayerPresent(),
     // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
     // La UI debe usar esta función para no mostrar un valor distinto al real.
     getClickDamage: () => Math.floor(calculateClickDamage() * calculateMultiplier()),
+    // Cancela un buff activo. El tiempo restante se pierde, no se devuelve el item.
+    cancelBuff: (buffKey: BuffKey) => {
+      handleUserActivity();
+      const labels: Record<BuffKey, string> = {
+        clickBoost: 'Clics x2',
+        clickX2: 'Clics x2 (tarjeta)',
+        clickX3: 'Clics x3 (tarjeta)',
+        passiveBoost: 'Pasivo x2',
+        afk: 'AFK'
+      };
+      if (buffKey === 'afk') {
+        if (state.afkExpiresAt <= Date.now()) return false;
+        state.afkExpiresAt = 0;
+      } else {
+        const field = BUFF_FIELDS[buffKey];
+        if (state.buffs[field] <= Date.now()) return false;
+        state.buffs[field] = 0;
+      }
+      recalculatePassiveIncome();
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return labels[buffKey];
+    },
     updateState: (newState: any) => {
       Object.assign(state, newState);
       // Respetar capacidad máxima del almacén
@@ -829,56 +945,25 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         onUpdate(state, isAfk);
         saveToFirebase();
         return warehouseItem;
-      } else if (itemKey === 'clickBuff') {
+      } else if (CONSUMABLES[itemKey as keyof typeof CONSUMABLES]) {
         if (state.warehouse.length < state.warehouseCapacity) {
+          const def = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
           const warehouseItem = {
-            id: `clickbuff_${Date.now()}`,
-            name: 'Buff Clicks x2',
+            id: `cons_${itemKey}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: def.name,
             type: 'consumable' as const,
-            details: 'Otorga x2 al click base por 30 minutos',
-            rarity: 'Raro',
+            details: def.details,
+            rarity: def.rarity,
             tier: 0,
             sellPrice: Math.floor(item.cost / 4),
             stackable: true,
-            stackCount: 1
+            stackCount: 1,
+            // Identificador estable: el almacén decide el efecto por este campo,
+            // no por el nombre (los nombres ya han cambiado varias veces)
+            buffId: def.buffId
           };
-          state.warehouse.push(warehouseItem);
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
-        }
-      } else if (itemKey === 'passiveBuff') {
-        if (state.warehouse.length < state.warehouseCapacity) {
-          const warehouseItem = {
-            id: `passivebuff_${Date.now()}`,
-            name: 'Buff Pasivo x2',
-            type: 'consumable' as const,
-            details: 'Otorga x2 al ingreso pasivo por 60 minutos',
-            rarity: 'Épico',
-            tier: 0,
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1
-          };
-          state.warehouse.push(warehouseItem);
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
-        }
-      } else if (itemKey === 'backpackExpander') {
-        if (state.warehouse.length < state.warehouseCapacity) {
-          const warehouseItem = {
-            id: `expander_${Date.now()}`,
-            name: 'Expansor de Almacén',
-            type: 'consumable' as const,
-            details: 'Aumenta el almacén +1 slot (máx 20)',
-            rarity: 'Raro',
-            tier: 0,
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1
-          };
-          state.warehouse.push(warehouseItem);
+          state.warehouse.push(warehouseItem as any);
+          refreshAfkCardCount();
           onUpdate(state, isAfk);
           saveToFirebase();
           return warehouseItem;
@@ -893,61 +978,6 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         onUpdate(state, isAfk);
         saveToFirebase();
         return { id: `slot2_${Date.now()}`, name: 'Slot de Compañero 2', type: 'upgrade', details: '+1 slot de compañero', rarity: 'Épico', tier: 0 };
-      } else if (itemKey === 'afkCard') {
-        if (state.warehouse.length < state.warehouseCapacity) {
-          const warehouseItem = {
-            id: `afk_${Date.now()}`,
-            name: 'Tarjeta AFK',
-            type: 'consumable' as const,
-            details: 'Permite juego sin pestaña activa por 10 min (acumulable x3)',
-            rarity: 'Raro',
-            tier: 0,
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1
-          };
-          state.warehouse.push(warehouseItem);
-          refreshAfkCardCount();
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
-        }
-      } else if (itemKey === 'clickX2Card') {
-        if (state.warehouse.length < state.warehouseCapacity) {
-          const warehouseItem = {
-            id: `clickx2_${Date.now()}`,
-            name: 'Tarjeta Click x2',
-            type: 'consumable' as const,
-            details: 'Otorga x2 al click base por 30 segundos',
-            rarity: 'Raro',
-            tier: 0,
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1
-          };
-          state.warehouse.push(warehouseItem);
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
-        }
-      } else if (itemKey === 'clickX3Card') {
-        if (state.warehouse.length < state.warehouseCapacity) {
-          const warehouseItem = {
-            id: `clickx3_${Date.now()}`,
-            name: 'Tarjeta Click x3',
-            type: 'consumable' as const,
-            details: 'Otorga x3 al click base por 30 segundos',
-            rarity: 'Épico',
-            tier: 0,
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1
-          };
-          state.warehouse.push(warehouseItem);
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
-        }
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
@@ -1097,7 +1127,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       if (gameInterval) clearInterval(gameInterval);
       clearInterval(saveInterval);
       window.removeEventListener('beforeunload', handleUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handlePresenceChange);
+      window.removeEventListener('focus', handlePresenceChange);
+      window.removeEventListener('blur', handlePresenceChange);
+      window.removeEventListener('pageshow', handlePresenceChange);
+      window.removeEventListener('pagehide', handlePresenceChange);
+      docWithLifecycle.removeEventListener('freeze', handlePresenceChange);
+      docWithLifecycle.removeEventListener('resume', handlePresenceChange);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleUserActivity);
       window.removeEventListener('click', handleUserActivity);

@@ -703,25 +703,53 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 // Usar consumible - gasta solo 1 por uso
                 showConfirmModal(`¿Usar ${item.name}?`, () => {
                     const now = Date.now();
-                    if (item.name.includes('Expansor')) {
+                    // Se decide por el identificador del item, no por el nombre:
+                    // los nombres han cambiado ("Buff Clicks x2", "Tarjeta Click x2"...)
+                    // y comparar strings dejaba buffs sin activar.
+                    const buffId = (item as any).buffId;
+                    if (buffId) {
+                        if (buffId === 'warehouseExpander') {
+                            if (state.warehouseCapacity >= 20) {
+                                showConfirmModal('Almacén al máximo (20 slots).', () => {});
+                                return;
+                            }
+                            state.warehouseCapacity += 1;
+                        } else if (buffId === 'afk') {
+                            // 10 min por tarjeta, acumulables hasta 30 min
+                            const base = Math.max(now, state.afkExpiresAt || 0);
+                            state.afkExpiresAt = Math.min(base + AFK_CARD_DURATION_MS, now + MAX_AFK_BUFF_DURATION_MS);
+                        } else if (buffId === 'clickBoost') {
+                            const base = Math.max(now, state.buffs.clickBoostExpiresAt);
+                            state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60 * 1000, now + 60 * 60 * 1000);
+                        } else if (buffId === 'passiveBoost') {
+                            const base = Math.max(now, state.buffs.passiveBoostExpiresAt);
+                            state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60 * 1000, now + 2 * 60 * 60 * 1000);
+                        } else if (buffId === 'clickX2') {
+                            const base = Math.max(now, state.buffs.clickX2ExpiresAt);
+                            state.buffs.clickX2ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
+                        } else if (buffId === 'clickX3') {
+                            const base = Math.max(now, state.buffs.clickX3ExpiresAt);
+                            state.buffs.clickX3ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
+                        }
+                    } else if (item.name.includes('Expansor')) {
+                        // Fallback para items de saves antiguos sin buffId
                         if (state.warehouseCapacity >= 20) {
                             showConfirmModal('Almacén al máximo (20 slots).', () => {});
                             return;
                         }
                         state.warehouseCapacity += 1;
                     } else if (item.name.includes('AFK')) {
-                        // 10 min por tarjeta, acumulables hasta 30 min
                         const base = Math.max(now, state.afkExpiresAt || 0);
                         state.afkExpiresAt = Math.min(base + AFK_CARD_DURATION_MS, now + MAX_AFK_BUFF_DURATION_MS);
-                    } else if (item.name.includes('Click x2')) {
-                        const currentExpires = Math.max(now, state.buffs.clickX2ExpiresAt);
-                        state.buffs.clickX2ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);
                     } else if (item.name.includes('Click x3')) {
-                        const currentExpires = Math.max(now, state.buffs.clickX3ExpiresAt);
-                        state.buffs.clickX3ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);
-                    } else if (item.name.includes('Clics')) {
+                        const base = Math.max(now, state.buffs.clickX3ExpiresAt);
+                        state.buffs.clickX3ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
+                    } else if (item.name.includes('Click x2')) {
+                        const base = Math.max(now, state.buffs.clickX2ExpiresAt);
+                        state.buffs.clickX2ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
+                    } else if (/clics?\s*x2/i.test(item.name)) {
                         state.buffs.clickBoostExpiresAt = now + 30 * 60 * 1000;
-                    } else if (item.name.includes('Pasivo')) {
+                    } else if (/pasivo/i.test(item.name)) {
                         state.buffs.passiveBoostExpiresAt = now + 60 * 60 * 1000;
                     }
                     // Gastar solo 1 del stack
