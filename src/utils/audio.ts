@@ -17,7 +17,8 @@ let compressor: DynamicsCompressorNode | null = null;
 
 let muted = localStorage.getItem('cyberforge_muted') === '1';
 let musicEnabled = localStorage.getItem('cyberforge_music') !== '0';
-/** Escalado de pitches: un incremental suena mejor en tonos agudos y，短. */
+// Nota: los efectos de audio se versionan con el multiplicador de la racha de
+// clics, que sube un 2.2% por clic hasta un techo de 22 clics.
 const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export function isMuted() { return muted; }
@@ -150,7 +151,50 @@ export const sfx = {
   },
   levelUp: () => {
     [392, 523.25, 659.25, 784].forEach((n, i) => blip(n, 0.28, 'triangle', 0.5, i * 0.06));
-  }
+  },
+
+  // --- Prestigio y árbol ---
+  // Compra de nodo: dos clicks metálicos agudos. Distinto del `buy` de tienda
+  // para que el jugador sepa sin mirar en qué sección ha gastado núcleos.
+  nodeBuy: () => {
+    blip(1046.5, 0.06, 'square', 0.4);
+    blip(1396.91, 0.1, 'square', 0.32, 0.055);
+  },
+  // Reciclaje: barrido descendente largo + acorde. Comunica "algo termina".
+  prestige: () => {
+    blip(880, 0.5, 'sawtooth', 0.4);
+    blip(440, 0.6, 'sine', 0.35, 0.12);
+    [261.63, 392, 523.25].forEach((n, i) => blip(n, 0.5, 'triangle', 0.42, 0.24 + i * 0.08));
+    blip(1046.5, 0.7, 'sine', 0.25, 0.5);
+  },
+
+  // --- Forja ---
+  // Golpe del martillo: un golpe grave con ruido encima. Se dispara al
+  // empezar la fusión, no al terminar: el martillo es el que suena.
+  hammer: () => {
+    blip(110, 0.22, 'square', 0.55);
+    blip(82.41, 0.26, 'sine', 0.4, 0.02);
+  },
+  // Fusión exitosa: acorde mayor con aire de "metal caliente".
+  forgeSuccess: () => {
+    [329.63, 415.30, 493.88, 659.25].forEach((n, i) => blip(n, 0.45, 'triangle', 0.55, i * 0.07));
+    blip(1318.5, 0.55, 'sine', 0.3, 0.3);
+  },
+  // Fusión fallida: dos golpes secos y graves. El silencio de la cola es lo
+  // que hace que se note el fallo.
+  forgeFail: () => {
+    blip(146.83, 0.2, 'sawtooth', 0.4);
+    blip(110, 0.3, 'sawtooth', 0.35, 0.14);
+  },
+  // Motor de la ruleta de forja: chasquido metálico, más grave que el de cajas.
+  forgeTick: (progress = 0) => blip(900 - progress * 420, 0.03, 'square', 0.2 * (1 - progress * 0.55)),
+
+  // --- Navegación ---
+  nav: () => blip(660, 0.035, 'sine', 0.22),
+  // Colocación de un item: "clack" corto. Es sutil a propósito: en un drag
+  // and drop se dispara muchas veces por minuto y un sonido fuerte cansa.
+  place: () => blip(320, 0.045, 'square', 0.16),
+  pick: () => blip(480, 0.035, 'sine', 0.14)
 };
 
 // ==========================================================================

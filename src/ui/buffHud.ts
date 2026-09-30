@@ -62,7 +62,7 @@ function buildCard(def: BuffDef): string {
       <span class="flex flex-col gap-1">
         <span class="flex items-baseline gap-1.5 leading-none whitespace-nowrap">
           <span class="text-[10px] font-mono font-bold">${def.label}</span>
-          ${def.tag ? `<span class="text-[8px] font-mono uppercase tracking-wider opacity-55">${def.tag}</span>` : ''}
+          ${def.tag ? `<span class="text-[9px] font-mono uppercase tracking-wider opacity-55">${def.tag}</span>` : ''}
           <span data-role="time" class="text-[10px] font-mono tabular-nums opacity-75">0:00</span>
         </span>
         <span class="h-[2.5px] w-full rounded-full bg-black/40 overflow-hidden block">
@@ -73,7 +73,7 @@ function buildCard(def: BuffDef): string {
         </span>
       </span>
       <button data-cancel="${def.key}" title="Cancelar ${def.label}" aria-label="Cancelar ${def.label}"
-              class="w-5 h-5 flex items-center justify-center rounded-md text-[11px] leading-none
+              class="hit-expand w-5 h-5 flex items-center justify-center rounded-md text-[11px] leading-none
                      opacity-40 hover:opacity-100 hover:bg-white/10 active:scale-90
                      transition cursor-pointer shrink-0">${ic('close', 'w-3 h-3')}</button>
     </div>

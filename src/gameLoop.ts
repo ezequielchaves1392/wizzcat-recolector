@@ -5,6 +5,15 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { rollCrateReward } from './components/crateLoot';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
+import { SECRET_ACHIEVEMENTS } from './data/achievements';
+// Los tiers viven en data/ porque los usan también el crafteo, el mercado y la
+// valoración. Se re-exportan aquí para no romper los imports existentes.
+export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
+import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
+import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
+import { TREE_BY_ID, nodeCost } from './data/tree';
+import { attemptForge, AFFIX_BY_ID } from './data/crafting';
+import { sellPrice, weaponValue } from './data/valuation';
 
 
 // Antes esto era un modal con botón "Aceptar" para avisos como "Almacén lleno":
@@ -34,20 +43,24 @@ export const COLLECTOR_BASE_COSTS = {
 export const STORE_ITEMS = {
   key: { cost: 250, label: 'Llave de Cifrado' },
   upgradeCrystal: { cost: 60, label: 'Cristal de Mejora' },
-  warehouseSlot: { cost: 500, label: 'Ampliar Almacén (+5 slots)' },
-  commonCrate: { cost: 400, label: 'Caja Común' },
-  rareCrate: { cost: 1200, label: 'Caja Rara' },
-  epicCrate: { cost: 4500, label: 'Caja Épica' },
-  legendaryCrate: { cost: 18000, label: 'Caja Legendaria' },
+  warehouseSlot: { cost: 6000, label: 'Ampliar Almacén (+5 slots)' },
+  commonCrate: { cost: 500, label: 'Caja Común' },
+  rareCrate: { cost: 1500, label: 'Caja Rara' },
+  epicCrate: { cost: 5500, label: 'Caja Épica' },
+  legendaryCrate: { cost: 21000, label: 'Caja Legendaria' },
   clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clicks x2 (30m)' },
   passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 (1h)' },
   // Nuevos items
-  backpackExpander: { cost: 20000, label: 'Expansor de Almacén (+1 slot)' },
+  backpackExpander: { cost: 1400, label: 'Expansor de Almacén (+1 slot)' },
   companionSlot1: { cost: 1200, label: 'Slot de Compañero 2' },
   companionSlot2: { cost: 16000, label: 'Ranura de Escuadrón (+3 slots)' },
   afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
   clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
   clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },
+  // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
+  // una decisión, no algo que se compre en masa y se gaste sin pensar.
+  calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },
+  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y un afijo extra)' },
   // Escala 1.5x por tier. El poder por tier crece algo más rápido (1.62x) para
   // que el coste por punto de poder no se dispare: en T10 sale ~1.3x mejor que
   // en T1, no 32x peor como antes.
@@ -61,21 +74,35 @@ export const STORE_ITEMS = {
   companionCardT8: { cost: 31000, label: 'Compañero Tier 8' },
   companionCardT9: { cost: 49000, label: 'Compañero Tier 9' },
   companionCardT10: { cost: 77000, label: 'Compañero Tier 10' },
-  weaponCardT1: { cost: 1000, label: 'Arma Tier 1' },
-  weaponCardT2: { cost: 1500, label: 'Arma Tier 2' },
-  weaponCardT3: { cost: 2250, label: 'Arma Tier 3' },
-  weaponCardT4: { cost: 3400, label: 'Arma Tier 4' },
-  weaponCardT5: { cost: 5100, label: 'Arma Tier 5' },
-  weaponCardT6: { cost: 7600, label: 'Arma Tier 6' },
-  weaponCardT7: { cost: 11500, label: 'Arma Tier 7' },
-  weaponCardT8: { cost: 17200, label: 'Arma Tier 8' },
-  weaponCardT9: { cost: 25800, label: 'Arma Tier 9' },
-  weaponCardT10: { cost: 39000, label: 'Arma Tier 10' }
+  // Armas: el precio sigue al DAÑO, no al número de tier.
+  //
+  // Antes escalaba 1.5x por tier igual que los compañeros, y ahí estaba
+  // el error: el daño va de 5 a 77 entre T1 y T10 (15.4x) mientras el
+  // precio iba 39x. El coste por punto de daño pasaba de 166 (T1) a 506
+  // (T10): comprar un T10 era 3x peor que comprar un T1, así que el
+  // jugador se compraba siempre T1. Los tiers altos eran una trampa
+  // invisible, porque el número grande siempre parecía mejor.
+  //
+  // Ahora el coste por punto de daño se mantiene entre 170 y 235 en todo
+  // el rango: 1.38x de dispersión. Subir de tier sigue siendo algo peor
+  // que comprar muchos T1, y ese sobreprecio es deliberado: el T10 es
+  // un objeto de escaparate, no una optimización.
+  weaponCardT1: { cost: 850, label: 'Arma Tier 1' },
+  weaponCardT2: { cost: 1600, label: 'Arma Tier 2' },
+  weaponCardT3: { cost: 2500, label: 'Arma Tier 3' },
+  weaponCardT4: { cost: 3700, label: 'Arma Tier 4' },
+  weaponCardT5: { cost: 5300, label: 'Arma Tier 5' },
+  weaponCardT6: { cost: 7200, label: 'Arma Tier 6' },
+  weaponCardT7: { cost: 9400, label: 'Arma Tier 7' },
+  weaponCardT8: { cost: 11900, label: 'Arma Tier 8' },
+  weaponCardT9: { cost: 14600, label: 'Arma Tier 9' },
+  weaponCardT10: { cost: 17500, label: 'Arma Tier 10' }
 };
 
 // Coste de cada slot de compañero adicional (índice = slots ya poseídos).
 // 5 slots es el techo: es lo que hace que los slots valgan más que los tiers.
-export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000];
+// Se llega hasta 9 slots: 5 de tienda + hasta 4 del nodo "Cuadrilla".
+export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_000, 1_400_000, 3_600_000, 9_000_000];
 
 // Mejora de arma: 20 niveles, coste creciente en cristales y éxito decreciente.
 export const MAX_WEAPON_LEVEL = 20;
@@ -92,7 +119,9 @@ const CONSUMABLES = {
   backpackExpander: { name: 'Expansor de Almacén', details: 'Aumenta el almacén +1 slot (máx 20)', rarity: 'Raro', buffId: 'warehouseExpander' },
   afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
-  clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' }
+  clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
+  calibrationStone: { name: 'Piedra de Calibración', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone' },
+  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'Deja el arma forjada con un afijo extra garantizado', rarity: 'Legendario', buffId: 'stabilityNano' }
 } as const;
 
 // Definición de cada tipo de caja. La fuente de verdad es el item del almacén,
@@ -135,80 +164,6 @@ function createCrateItem(crateType: CrateType, quantity: number = 1) {
   };
 }
 
-// Sistema de Tiers para compañeros y armas.
-//
-// Curva de poder POR TIER (no por nivel). Antes cada tier daba +5 fijos mientras
-// el coste se duplicaba: el coste por punto de poder pasaba de 667 (T1) a 21.333
-// (T10), 32x peor, así que el jugador óptimo solo compraba T1 y los tiers altos
-// eran trampas. Ahora el poder crece ~1.62x por tier, ligeramente por encima
-// del 1.5x del coste, para que subir de tier siga mereciendo la pena.
-export const TIER_POWER = [
-  { tier: 1, base: 6 },
-  { tier: 2, base: 10 },
-  { tier: 3, base: 16 },
-  { tier: 4, base: 26 },
-  { tier: 5, base: 42 },
-  { tier: 6, base: 68 },
-  { tier: 7, base: 110 },
-  { tier: 8, base: 178 },
-  { tier: 9, base: 288 },
-  { tier: 10, base: 466 }
-];
-
-export const TIER_SYSTEM = {
-  // Rango de poder por tier: [min, max]
-  ranges: {
-    1: [5, 7],
-    2: [8, 12],
-    3: [13, 19],
-    4: [21, 31],
-    5: [34, 50],
-    6: [55, 81],
-    7: [88, 132],
-    8: [142, 214],
-    9: [230, 346],
-    10: [373, 559]
-  } as Record<number, [number, number]>,
-  // Nombres de compañeros por tier (de base a imponente)
-  companionNames: {
-    1: ['Dron Explorador', 'Dron Centinela', 'Dron Mensajero'],
-    2: ['Cazador Nocturno', 'Rastreador Fantasma', 'Explorador Estelar'],
-    3: ['Guerrero Mecánico', 'Titán de Acero', 'Coloso de Batalla'],
-    4: ['Señor de la Guerra', 'Destruyente Imperial', 'Aniquilador Prime'],
-    5: ['Avatar del Caos', 'Heraldo del Vacío', 'Portador del Trueno'],
-    6: ['Supremo Estratega', 'Maestro de Batallas', 'General Supremo'],
-    7: ['Forjador de Mundos', 'Creador de Imperios', 'Arquitecto Cósmico'],
-    8: ['Devorador de Estrellas', 'Señor del Tiempo', 'Amo del Espacio'],
-    9: ['Entidad Primordial', 'Ser Trascendente', 'Conciencia Universal'],
-    10: ['Dios de la Guerra', 'El Omnipotente', 'El Infinito']
-  },
-  // Nombres de armas por tier
-  weaponNames: {
-    1: ['Blaster Láser', 'Pistola de Plasma', 'Rifle de Pulso'],
-    2: ['Cañón de Partículas', 'Lanzador de Energía', 'Desintegrador Táctico'],
-    3: ['Aniquilador Cuántico', 'Devorador de Materia', 'Coloso de Fuego'],
-    4: ['Guadaña del Vacío', 'Maldición Estelar', 'Juicio Final'],
-    5: ['Apocalipsis', 'Armagedón', 'Ragnarök'],
-    6: ['Excalibur', 'Mjolnir', 'Gungnir'],
-    7: ['Lanza del Destino', 'Espada del Crepúsculo', 'Hacha del Caos'],
-    8: ['Corte del Tiempo', 'Filo del Infinito', 'Navaja Cósmica'],
-    9: ['Arma del Apocalipsis', 'Instrumento de la Muerte', 'Herencia de los Dioses'],
-    10: ['El Principio y El Fin', 'La Última Palabra', 'El Todo y La Nada']
-  },
-  // Rareza por tier
-  rarityByTier: {
-    1: 'Común',
-    2: 'Común',
-    3: 'Raro',
-    4: 'Raro',
-    5: 'Épico',
-    6: 'Épico',
-    7: 'Legendario',
-    8: 'Legendario',
-    9: 'Mítico',
-    10: 'Divino'
-  }
-};
 
 // Función para generar un compañero aleatorio por tier
 export function generateCompanionByTier(tier: number): { id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier: number } {
@@ -286,6 +241,27 @@ export async function createGameLoop(
     totalInfraestructure: 0,
     cratesOpened: 0,
     unlockedAchievements: [] as AchievementId[],
+    // --- Prestige ---
+    cores: 0, // Núcleos disponibles
+    totalCores: 0, // Núcleos ganados historicamente
+    resets: 0, // Veces que se ha reciclado el progreso
+    unlockedNodes: [] as string[], // Nodos comprados
+    nodeLevels: {} as Record<string, number>, // Nivel por nodo
+    shards: 0, // Esquirlas de crafteo
+    forgedCount: 0, // Armas forjadas con exito
+    // --- Bonificaciones agregadas del arbol (se recalculan al cargar) ---
+    bonus: {
+      clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
+      craftLuck: 0, shardBonus: 0, autoClick: 0, afkHours: 0,
+      offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0
+    },
+    // --- Cosméticos equipados ---
+    cosmetics: {
+      title: 'title_default',
+      frame: 'frame_none',
+      banner: 'banner_none',
+      unlocked: ['title_default', 'frame_none', 'banner_none'] as string[]
+    },
     keys: 3,
     upgradeCrystals: 5,
     warehouseCapacity: 15,
@@ -380,6 +356,29 @@ export async function createGameLoop(
       }
       state.afkCards = data.afkCards ?? 0;
       state.afkExpiresAt = data.afkExpiresAt ?? 0;
+      // --- Prestige y cosméticos ---
+      state.cores = data.cores ?? 0;
+      state.totalCores = data.totalCores ?? 0;
+      state.resets = data.resets ?? 0;
+      state.unlockedNodes = data.unlockedNodes ?? [];
+      state.nodeLevels = data.nodeLevels ?? {};
+      state.shards = data.shards ?? 0;
+      state.forgedCount = data.forgedCount ?? 0;
+      state.cosmetics = {
+        title: data.cosmetics?.title ?? 'title_default',
+        frame: data.cosmetics?.frame ?? 'frame_none',
+        banner: data.cosmetics?.banner ?? 'banner_none',
+        // Los tres por defecto siempre están disponibles aunque el save sea viejo
+        unlocked: Array.from(new Set([
+          'title_default', 'frame_none', 'banner_none',
+          ...(data.cosmetics?.unlocked ?? [])
+        ]))
+      };
+      // `totalCores` ausente en saves anteriores a la librería de restarting.
+      // Se reconstruye del mejor valor posible para no perder el histórico.
+      if (!data.totalCores) {
+        state.totalCores = pendingCores(state.totalNanitesProduced);
+      }
       state.buffs = {
         clickBoostExpiresAt: data.buffs?.clickBoostExpiresAt ?? 0,
         passiveBoostExpiresAt: data.buffs?.passiveBoostExpiresAt ?? 0,
@@ -411,6 +410,14 @@ export async function createGameLoop(
         warehouse: state.warehouse,
         buffs: state.buffs,
         unlockedAchievements: state.unlockedAchievements,
+        cores: state.cores,
+        totalCores: state.totalCores,
+        resets: state.resets,
+        unlockedNodes: state.unlockedNodes,
+        nodeLevels: state.nodeLevels,
+        shards: state.shards,
+        forgedCount: state.forgedCount,
+        cosmetics: state.cosmetics,
         updatedAt: new Date()
       });
       // Crear documento de ranking
@@ -419,6 +426,9 @@ export async function createGameLoop(
         username: user.displayName || 'Operativo',
         score: state.nanites,
         totalClicks: 0,
+        achievements: 0,
+        secretAchievements: 0,
+        forgedCount: 0,
         updatedAt: new Date()
       });
     }
@@ -430,7 +440,7 @@ export async function createGameLoop(
     // Asegurar que todos los compañeros tengan un item correspondiente en el warehouse
     state.companions.forEach((comp: any) => {
       const exists = state.warehouse.some((w: any) => w.id === comp.id);
-      if (!exists && state.warehouse.length < state.warehouseCapacity) {
+      if (!exists && state.warehouse.length < effectiveWarehouseCapacity()) {
         state.warehouse.push({
           id: comp.id,
           name: comp.name,
@@ -454,13 +464,15 @@ export async function createGameLoop(
    * ligado a la progresión.
    */
   function enforceWarehouseCapacity() {
-    if (state.warehouse.length <= state.warehouseCapacity) return;
+    const capacity = effectiveWarehouseCapacity();
+    if (state.warehouse.length <= capacity) return;
 
     const score = (w: any): number => {
       if (w.id === state.equippedWeaponId) return 1000;
       if (w.equipped) return 900;
       if (state.activeCompanions.includes(w.id)) return 800;
-      if (w.type === 'weapon') return 500 + (w.tier || 0);
+      // Un arma crafteada vale más que una de tienda: se conserva antes
+      if (w.type === 'weapon') return 500 + (w.tier || 0) + (w.potential || 0) * 50;
       if (w.type === 'companion') return 400 + (w.tier || 0);
       if (w.type === 'crate') return 300;
       if (w.type === 'consumable') return 200;
@@ -471,7 +483,7 @@ export async function createGameLoop(
     const kept = state.warehouse
       .map((w: any, index: number) => ({ w, index, s: score(w) }))
       .sort((a, b) => (b.s - a.s) || (a.index - b.index))
-      .slice(0, state.warehouseCapacity)
+      .slice(0, capacity)
       .sort((a, b) => a.index - b.index)
       .map(x => x.w);
 
@@ -505,7 +517,7 @@ export async function createGameLoop(
       const missing = (state.crates[crateType] || 0) - counts[crateType];
       if (missing <= 0) return;
       // Materializar lo que falte, respetando la capacidad del almacén
-      const free = state.warehouseCapacity - state.warehouse.length;
+      const free = effectiveWarehouseCapacity() - state.warehouse.length;
       const toCreate = Math.min(missing, Math.max(0, free));
       for (let i = 0; i < toCreate; i++) {
         state.warehouse.push(createCrateItem(crateType) as any);
@@ -522,6 +534,7 @@ export async function createGameLoop(
   }
 
   // Sincronizar compañeros con el warehouse después de inicializar
+  recomputeBonuses();
   rebuildAchievementBonuses();
   syncCompanionsToWarehouse();
   syncCrateCounters();
@@ -569,6 +582,36 @@ export async function createGameLoop(
     return Math.max(1, multiplier);
   }
 
+  /**
+   * Recalcula `state.bonus` desde los nodos comprados. Se llama en cada cambio
+   * de nodos y una vez al cargar.
+   *
+   * Importante: los derivados (capacidad, slots, duración AFK) se guardan como
+   * base en el save y el bonus se aplica encima, en vez de escribirse en el
+   * estado. Si se escribieran, comprar un nodo de almacenamiento sería
+   * irreversible al reiniciar: el jugador pagaría dos veces.
+   */
+  function recomputeBonuses() {
+    state.bonus = aggregateBonuses(state.nodeLevels);
+    // `nodeLevels` es la fuente de verdad; `unlockedNodes` es su proyección
+    state.unlockedNodes = Object.keys(state.nodeLevels).filter(id => (state.nodeLevels[id] || 0) > 0);
+  }
+
+  /** Capacidad real del almacén: base del save + ranuras del árbol. */
+  function effectiveWarehouseCapacity(): number {
+    return state.warehouseCapacity + state.bonus.storageSlots;
+  }
+
+  /** Slots de compañero reales: base del save + cuadrilla. */
+  function effectiveCompanionSlots(): number {
+    return state.maxCompanionSlots + state.bonus.companionSlots;
+  }
+
+  /** Duración de una tarjeta AFK: 10 min base + extra del árbol. */
+  function afkCardDurationMs(): number {
+    return AFK_CARD_DURATION_MS + state.bonus.afkHours * 3600_000;
+  }
+
   function recalculatePassiveIncome() {
     let base = 0;
     // SOLO los compañeros activos suman recursos por segundo.
@@ -585,19 +628,48 @@ export async function createGameLoop(
     }
 
     state.passiveMultiplier = calculateCompanionMultiplier();
-    // El bonus de logros entra aquí: son pasivos, noNanitas directas
-    const withAchievements = base * state.passiveMultiplier * (1 + achievementState.passiveBonus);
+    const withAchievements = base * state.passiveMultiplier
+      * (1 + achievementState.passiveBonus)
+      * (1 + state.bonus.passiveMult);
     state.passiveIncome = Math.floor(withAchievements);
+  }
+
+  /**
+   * Bonificaciones de los afijos del arma equipada. Se suman al daño aquí y no
+   * se hornean en `item.damage`: si se guardaran, vender y volver a comprar el
+   * mismo objeto cambiaría su estadística.
+   */
+  function equippedAffixEffect(): { clickMult: number; passiveMult: number; flat: number } {
+    const out = { clickMult: 0, passiveMult: 0, flat: 0 };
+    if (!state.equippedWeaponId) return out;
+    const item: any = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+    if (!item?.affixes?.length) return out;
+    for (const affixId of item.affixes) {
+      const affix = AFFIX_BY_ID[affixId];
+      if (!affix) continue;
+      out.clickMult += affix.effect.clickMult || 0;
+      out.passiveMult += affix.effect.passiveMult || 0;
+      // Los afijos planos escalan con el nivel del arma: es lo que hace que
+      // subir un arma crafteada siga valiendo algo.
+      out.flat += (affix.effect.flatDamage || 0) * (1 + (item.level || 0) * 0.08);
+    }
+    return out;
   }
 
   function calculateClickDamage() {
     if (!state.equippedWeaponId) return 0;
-    const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+    const item: any = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
     if (!item) return 0;
 
-    const baseDmg = item.damage || 0;
+    const affixes = equippedAffixEffect();
+    const baseDmg = (item.damage || 0) + affixes.flat;
     const levelMultiplier = 1 + ((item.level || 0) * 0.10);
-    const total = baseDmg * levelMultiplier * calculateCompanionMultiplier() * (1 + achievementState.clickBonus);
+    const total = baseDmg
+      * levelMultiplier
+      * calculateCompanionMultiplier()
+      * (1 + achievementState.clickBonus)
+      * (1 + state.bonus.clickMult)
+      * (1 + affixes.clickMult);
     return Math.floor(total);
   }
 
@@ -640,6 +712,14 @@ export async function createGameLoop(
         warehouse: state.warehouse,
         buffs: state.buffs,
         unlockedAchievements: state.unlockedAchievements,
+        cores: state.cores,
+        totalCores: state.totalCores,
+        resets: state.resets,
+        unlockedNodes: state.unlockedNodes,
+        nodeLevels: state.nodeLevels,
+        shards: state.shards,
+        forgedCount: state.forgedCount,
+        cosmetics: state.cosmetics,
         updatedAt: new Date()
       };
       // Guardar datos del juego en users/{uid}
@@ -650,6 +730,11 @@ export async function createGameLoop(
         username: user.displayName || 'Operativo',
         score: state.nanites,
         totalClicks: state.totalClicks,
+        // Módulo 8: el ranking refleja logros y firmas de autor
+        achievements: state.unlockedAchievements.filter(id => !SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
+        secretAchievements: state.unlockedAchievements.filter(id => SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
+        forgedCount: state.forgedCount,
+        title: state.cosmetics.title,
         updatedAt: new Date()
       }, { merge: true });
     } catch (error) {
@@ -755,6 +840,8 @@ export async function createGameLoop(
 
   // Estado para manejar el regreso del AFK
   let awaitingClickAfterAfk = false;
+  // Resto fraccionario de los clics automáticos (ver el tick)
+  let autoClickAccumulator = 0;
 
   // Variables para intervalos (pueden detenerse y reiniciarse)
   let gameInterval: ReturnType<typeof setInterval> | null = null;
@@ -793,6 +880,20 @@ export async function createGameLoop(
         const gained = state.passiveIncome / TICKS_PER_SECOND;
         state.nanites += gained;
         state.totalNanitesProduced += gained;
+      }
+
+      // Clics automáticos del árbol de pasivas. Se acumulan como resto entre
+      // ticks en vez de redondear cada tick: a 0.5 clics/s y un tick de 500 ms
+      // el redondeo por tick perdería la mitad de la producción.
+      if (state.bonus.autoClick > 0) {
+        autoClickAccumulator += state.bonus.autoClick * (TICK_RATE_MS / 1000);
+        while (autoClickAccumulator >= 1) {
+          autoClickAccumulator -= 1;
+          const dmg = calculateClickDamage() * calculateMultiplier();
+          state.nanites += dmg;
+          state.totalNanitesProduced += dmg;
+          state.totalClicks += 1;
+        }
       }
       // Los logros se comprueban en el tick: así se desbloquean solos sin que
       // el jugador tenga que tocar nada
@@ -908,8 +1009,10 @@ export async function createGameLoop(
     },
     expandWarehouse: () => {
       handleUserActivity();
-      const cost = 500;
-      if (state.nanites >= cost && state.warehouse.length < 50) {
+      const cost = Math.floor(500 * (1 - state.bonus.costReduction));
+      // El tope es sobre la base guardada, no sobre el total efectivo: los
+      // slots del árbol no se "gastan" al comprar una expansión.
+      if (state.nanites >= cost && state.warehouseCapacity < 50) {
         state.nanites -= cost;
         state.warehouseCapacity += 5;
         onUpdate(state, isAfk);
@@ -920,8 +1023,11 @@ export async function createGameLoop(
     },
     unlockCompanionSlot: () => {
       handleUserActivity();
+      // Tope duro: 5 slots comprables en tienda. Los extra salen del árbol.
       if (state.maxCompanionSlots >= 5) return false;
-      const cost = COMPANION_SLOT_COSTS[state.maxCompanionSlots];
+      // Se cobra sobre el total efectivo (tienda + cuadrilla): si el árbol ya
+      // dio 2 slots, el siguiente de tienda cuesta el del escalón 4.
+      const cost = Math.floor(COMPANION_SLOT_COSTS[effectiveCompanionSlots()] ?? 9_000_000);
       if (state.nanites >= cost) {
         state.nanites -= cost;
         state.maxCompanionSlots += 1;
@@ -938,7 +1044,7 @@ export async function createGameLoop(
         state.activeCompanions.splice(index, 1);
       } else {
         // Verificar si hay espacio disponible
-        if (state.activeCompanions.length < state.maxCompanionSlots) {
+        if (state.activeCompanions.length < effectiveCompanionSlots()) {
           // Insertar en el primer slot vacío (mantener orden)
           state.activeCompanions.push(compId);
           state.activeCompanions.sort((a, b) => {
@@ -989,7 +1095,7 @@ export async function createGameLoop(
       if (index > -1) {
         state.activeCompanions.splice(index, 1);
       } else {
-        if (state.activeCompanions.length < state.maxCompanionSlots) {
+        if (state.activeCompanions.length < effectiveCompanionSlots()) {
           state.activeCompanions.push(compId);
         } else {
           return false;
@@ -1003,23 +1109,29 @@ export async function createGameLoop(
     buyStoreItem: (itemKey: keyof typeof STORE_ITEMS) => {
       handleUserActivity();
       const item = STORE_ITEMS[itemKey];
-      if (!item || state.nanites < item.cost) return false;
+      if (!item) return false;
 
-      // Validar antes de cobrar: los slots son únicos y no se pueden repetir
-      if (itemKey === 'companionSlot1' && state.maxCompanionSlots !== 1) return false;
-      if (itemKey === 'companionSlot2' && state.maxCompanionSlots !== 3) return false;
+      // El árbol de pasivas abarata la tienda. El descuento se aplica al
+      // cobrar, no al mostrar: así el precio de la carta y el cobrado salen
+      // siempre del mismo número.
+      const cost = Math.floor(item.cost * (1 - state.bonus.costReduction));
+      if (state.nanites < cost) return false;
+
+      // Validar antes de cobrar: los slots son únicos y no se pueden repetir.
+      // Se comparan sobre el total efectivo para que un slot del árbol no
+      // "bloquee" la compra del siguiente de tienda.
+      const effSlots = effectiveCompanionSlots();
+      if (itemKey === 'companionSlot1' && effSlots >= 2) return false;
+      if (itemKey === 'companionSlot2' && effSlots >= 5) return false;
 
       // Validar mochila llena (excepto para items que no ocupan espacio en el almacén)
       const needsWarehouseSpace = !['key', 'upgradeCrystal', 'warehouseSlot', 'companionSlot1', 'companionSlot2'].includes(itemKey as string);
-      if (needsWarehouseSpace && state.warehouse.length >= state.warehouseCapacity) {
-        showToast('⚠️ Almacén lleno. No puedes comprar más items.', 'error');
+      if (needsWarehouseSpace && state.warehouse.length >= effectiveWarehouseCapacity()) {
+        showToast('Almacén lleno. No puedes comprar más items.', 'error');
         return false;
       }
 
-      // Confirmar compra
-      // Toast de compra eliminado - la card de item es suficiente
-
-      state.nanites -= item.cost;
+      state.nanites -= cost;
 
       if (itemKey === 'key') {
         state.keys += 1;
@@ -1046,7 +1158,7 @@ export async function createGameLoop(
         saveToFirebase();
         return warehouseItem;
       } else if (CONSUMABLES[itemKey as keyof typeof CONSUMABLES]) {
-        if (state.warehouse.length < state.warehouseCapacity) {
+        if (state.warehouse.length < effectiveWarehouseCapacity()) {
           const def = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
           const warehouseItem = {
             id: `cons_${itemKey}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -1081,7 +1193,7 @@ export async function createGameLoop(
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
-        if (state.warehouse.length < state.warehouseCapacity) {
+        if (state.warehouse.length < effectiveWarehouseCapacity()) {
           state.companions.push(comp);
           const warehouseItem = {
             id: comp.id,
@@ -1100,7 +1212,7 @@ export async function createGameLoop(
       } else if (itemKey.startsWith('weaponCardT')) {
         const tier = parseInt(itemKey.replace('weaponCardT', ''));
         const weapon = generateWeaponByTier(tier);
-        if (state.warehouse.length < state.warehouseCapacity) {
+        if (state.warehouse.length < effectiveWarehouseCapacity()) {
           const warehouseItem = {
             ...weapon,
             sellPrice: Math.floor(item.cost / 4)
@@ -1133,9 +1245,9 @@ export async function createGameLoop(
         nanites: (n) => { state.nanites += n; },
         crystals: (n) => { state.upgradeCrystals += n; },
         keys: (n) => { state.keys += n; },
-        hasSpace: () => state.warehouse.length < state.warehouseCapacity,
+        hasSpace: () => state.warehouse.length < effectiveWarehouseCapacity(),
         addItem: (item) => {
-          if (state.warehouse.length >= state.warehouseCapacity) return false;
+          if (state.warehouse.length >= effectiveWarehouseCapacity()) return false;
           state.warehouse.push(item as any);
           // El item trae `companionType` y `power` ya resueltos por crateLoot.
           // Antes se deducían parseando `details` con regex y el multiplicador
@@ -1160,6 +1272,306 @@ export async function createGameLoop(
       saveToFirebase();
       return reward;
     },
+
+    // ======================================================================
+    //  PRESTIGIO
+    // ======================================================================
+
+    /** Núcleos disponibles y los que daría el siguiente reinicio. */
+    getPrestigeInfo: () => ({
+      cores: state.cores,
+      totalCores: state.totalCores,
+      pending: nextCores({
+        totalNanitesProduced: state.totalNanitesProduced,
+        totalCores: state.totalCores,
+        coreGain: state.bonus.coreGain
+      }),
+      resets: state.resets,
+      totalProduced: state.totalNanitesProduced,
+      bonus: state.bonus
+    }),
+
+    /**
+     * Recicla el progreso: devuelve nanitas, armas, compañeros e infraestructura
+     * a cambio de núcleos.
+     *
+     * Un detalle que parece obvio y no lo es: las armas que el jugador ya
+     * forjó también se pierden, porque viven en el almacén. Se conserva a
+     * propósito solo lo que importa como identidad (cuántas forjó), no el
+     * inventario. Si se conservaran los objetos, la forja dejaría de ser una
+     * apuesta y `forgedCount` no significaría nada.
+     *
+     * Lo que NO se pierde: núcleos, nodos del árbol, cosméticos, logros,
+     * esquirlas y el contador de armas forjadas. Esa es toda la promesa del
+     * reinicio, así que el estado se construye explícitamente en vez de
+     * hacer `Object.assign` con un reset parcial: si mañana se añade un campo
+     * al save, el reinicio lo limpia solo.
+     */
+    prestige: () => {
+      handleUserActivity();
+      const gained = nextCores({
+        totalNanitesProduced: state.totalNanitesProduced,
+        totalCores: state.totalCores,
+        coreGain: state.bonus.coreGain
+      });
+      if (gained <= 0) {
+        return { success: false, gained: 0, msg: 'Necesitas producir más para reciclar.' };
+      }
+      if (!state.totalCores) {
+        state.totalCores = pendingCores(state.totalNanitesProduced);
+      }
+
+      const keptShards = state.shards;
+      const keptForged = state.forgedCount;
+      const keptAchievements = [...state.unlockedAchievements];
+      const keptCores = state.cores + gained;
+      const keptTotalCores = state.totalCores;
+      const keptResets = state.resets + 1;
+      const keptNodes = { ...state.nodeLevels };
+      const keptCosmetics = { ...state.cosmetics, unlocked: [...state.cosmetics.unlocked] };
+
+      // Reinicio total
+      Object.assign(state, {
+        nanites: 0,
+        totalNanitesProduced: 0,
+        passiveIncome: 0,
+        passiveMultiplier: 1,
+        totalClicks: 0,
+        totalInfraestructure: 0,
+        cratesOpened: 0,
+        keys: 3,
+        upgradeCrystals: 5,
+        warehouseCapacity: 15,
+        maxCompanionSlots: 1,
+        afkCards: 0,
+        afkExpiresAt: 0,
+        crates: { common: 2, rare: 0, epic: 0, legendary: 0 },
+        equippedWeaponId: null,
+        companions: [baseCompanion],
+        activeCompanions: [],
+        warehouse: [
+          { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
+          { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +5/s', rarity: 'Común', tier: 1, sellPrice: 250 }
+        ],
+        buffs: { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 },
+        // Lo permanente
+        cores: keptCores,
+        totalCores: keptTotalCores,
+        resets: keptResets,
+        nodeLevels: keptNodes,
+        unlockedNodes: Object.keys(keptNodes),
+        shards: keptShards,
+        forgedCount: keptForged,
+        unlockedAchievements: keptAchievements,
+        cosmetics: keptCosmetics
+      });
+
+      recomputeBonuses();
+      rebuildAchievementBonuses();
+      syncCompanionsToWarehouse();
+      syncCrateCounters();
+      recalculatePassiveIncome();
+      checkAchievements();
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return { success: true, gained, msg: `+${gained} núcleos` };
+    },
+
+    /** Compra un nivel de un nodo del árbol. */
+    buyNode: (nodeId: string) => {
+      handleUserActivity();
+      const check = canBuyNode(nodeId, state.nodeLevels, state.cores);
+      if (!check.ok) return { success: false, msg: check.reason ?? 'No se puede comprar.' };
+
+      const node = TREE_BY_ID[nodeId];
+      const level = state.nodeLevels[nodeId] || 0;
+      const cost = nodeCost(node, level);
+      state.cores -= cost;
+      state.nodeLevels[nodeId] = level + 1;
+      recomputeBonuses();
+      recalculatePassiveIncome();
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return { success: true, msg: `${node.name} → nivel ${level + 1}` };
+    },
+
+    // ======================================================================
+    //  CRAFTEO
+    // ======================================================================
+
+    /**
+     * Fusiona 3 armas del mismo tier en una de tier+1.
+     * `stonesUsed` es cuántas Piedras de Calibración se consumen: cada una
+     * sube 12 puntos la probabilidad, hasta 5.
+     */
+    forgeWeapon: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
+      handleUserActivity();
+      if ((state.nodeLevels.blueprint || 0) < 1) {
+        return { success: false, msg: 'Necesitas el nodo "Planos Viejos" para craftear.' };
+      }
+      if (materialIds.length !== 3) {
+        return { success: false, msg: 'Selecciona exactamente 3 armas.' };
+      }
+      const materials = materialIds
+        .map(id => state.warehouse.find((w: any) => w.id === id))
+        .filter((w: any): w is any => !!w);
+      if (materials.length !== 3) return { success: false, msg: 'Material no encontrado.' };
+      if (materials.some((m: any) => m.type !== 'weapon')) {
+        return { success: false, msg: 'Solo se pueden fusionar armas.' };
+      }
+      const tier = materials[0].tier || 1;
+      if (materials.some((m: any) => (m.tier || 1) !== tier)) {
+        return { success: false, msg: 'Las 3 armas deben ser del mismo tier.' };
+      }
+      // El arma equipada no se puede consumir: perderla sería un castigo doble
+      if (materials.some((m: any) => m.equipped || m.id === state.equippedWeaponId)) {
+        return { success: false, msg: 'No puedes fusionar el arma equipada. Desequípala primero.' };
+      }
+      if (tier >= 11) {
+        return { success: false, msg: 'T11 es el techo de la forja.' };
+      }
+
+      // Consumir piedras
+      const stonesToUse = Math.max(0, Math.min(5, stonesUsed));
+      if (stonesToUse > 0) {
+        const stone = state.warehouse.find(
+          (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
+        );
+        if (!stone) return { success: false, msg: 'No tienes Piedras de Calibración.' };
+        const available = stone.stackCount || 1;
+        if (available < stonesToUse) {
+          return { success: false, msg: `Solo tienes ${available} Piedra(s) de Calibración.` };
+        }
+        stone.stackCount = available - stonesToUse;
+        if (stone.stackCount <= 0) {
+          state.warehouse = state.warehouse.filter((w: any) => w.id !== stone.id);
+        }
+      }
+
+      // Consumir la nanopartícula, como mucho una por fusión
+      const nanoToUse = nanoUsed > 0 ? 1 : 0;
+      if (nanoToUse > 0) {
+        const nano = state.warehouse.find(
+          (w: any) => w.type === 'consumable' && w.buffId === 'stabilityNano'
+        );
+        if (!nano) return { success: false, msg: 'No tienes Nanopartículas de Estabilidad.' };
+        const available = nano.stackCount || 1;
+        if (available < nanoToUse) {
+          return { success: false, msg: `Solo tienes ${available} Nanopartícula(s).` };
+        }
+        nano.stackCount = available - nanoToUse;
+        if (nano.stackCount <= 0) {
+          state.warehouse = state.warehouse.filter((w: any) => w.id !== nano.id);
+        }
+      }
+
+      const author = user.displayName || username || 'Anónimo';
+      const result = attemptForge(materials, tier, author, {
+        craftLuck: state.bonus.craftLuck,
+        shardBonus: state.bonus.shardBonus,
+        stonesUsed: stonesToUse,
+        nanoUsed: nanoToUse
+      });
+
+      if (result.error) {
+        return { success: false, msg: result.error };
+      }
+
+      if (result.success && result.weapon) {
+        const w = result.weapon;
+        w.sellPrice = sellPrice(w as any, { sellMult: 1 + state.bonus.sellMult });
+        // Restar 2 y devolver 1 en lugar de perder las tres: la tensión se
+        // mantiene (pierdes 2 armas) sin que un mal rollo vacíe el almacén.
+        const keep = materials.reduce((a: any, m: any) => (a.damage < m.damage ? a : m), materials[0]);
+        state.warehouse = state.warehouse.filter(
+          (x: any) => !materialIds.includes(x.id) || x.id === keep.id
+        );
+        state.warehouse.push(w as any);
+        state.forgedCount += 1;
+        recalculatePassiveIncome();
+        checkAchievements();
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return {
+          success: true,
+          weapon: w,
+          chance: result.chanceUsed,
+          msg: `${w.name} forjada`
+        };
+      }
+
+      // Fallo: se pierden las 3 y se ganan esquirlas
+      state.warehouse = state.warehouse.filter((x: any) => !materialIds.includes(x.id));
+      state.shards += result.shards || 0;
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return {
+        success: false,
+        shards: result.shards,
+        chance: result.chanceUsed,
+        msg: `Fallo en la forja: +${result.shards} esquirlas`
+      };
+    },
+
+    /** Cuántas esquirlas hacen falta para garantizar el próximo intento. */
+    getForgeInfo: () => ({
+      shards: state.shards,
+      craftLuck: state.bonus.craftLuck,
+      forgeUnlocked: (state.nodeLevels.blueprint || 0) > 0,
+      baseChance: (fromTier: number) => {
+        const b = 0.78 - (fromTier - 1) * 0.05;
+        return Math.min(0.95, Math.max(0.30, b) + state.bonus.craftLuck);
+      }
+    }),
+
+    // ======================================================================
+    //  VALORACIÓN Y VENTA
+    // ======================================================================
+
+    /** Precio de venta actual del item, con la bonificación del árbol. */
+    getSellPrice: (itemId: string): number => {
+      const item: any = state.warehouse.find((w: any) => w.id === itemId);
+      if (!item) return 0;
+      if (item.type === 'weapon') {
+        return sellPrice(item, { sellMult: 1 + state.bonus.sellMult });
+      }
+      return Math.floor((item.sellPrice || 0) * (1 + state.bonus.sellMult));
+    },
+
+    getWeaponValue: (itemId: string) => {
+      const item: any = state.warehouse.find((w: any) => w.id === itemId);
+      if (!item || item.type !== 'weapon') return 0;
+      return weaponValue(item, { sellMult: 1 + state.bonus.sellMult });
+    },
+
+    // ======================================================================
+    //  COSMÉTICOS
+    // ======================================================================
+
+    equipCosmetic: (slot: 'title' | 'frame' | 'banner', cosmeticId: string) => {
+      handleUserActivity();
+      if (!state.cosmetics.unlocked.includes(cosmeticId)) return false;
+      state.cosmetics[slot] = cosmeticId;
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return true;
+    },
+
+    /** Marca un cosmético como desbloqueado. Idempotente. */
+    unlockCosmetic: (cosmeticId: string) => {
+      if (state.cosmetics.unlocked.includes(cosmeticId)) return false;
+      state.cosmetics.unlocked.push(cosmeticId);
+      return true;
+    },
+
+    // ======================================================================
+    //  CAPACIDADES EFECTIVAS (la UI debe usar estas, no el valor base)
+    // ======================================================================
+
+    getCapacity: () => effectiveWarehouseCapacity(),
+    getCompanionSlots: () => effectiveCompanionSlots(),
+    getAfkDurationMs: () => afkCardDurationMs(),
+
     cleanup: async () => {
       if (gameInterval) clearInterval(gameInterval);
       clearInterval(saveInterval);

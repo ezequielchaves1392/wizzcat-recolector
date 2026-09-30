@@ -2,14 +2,19 @@ import { renderBuffHud, resetBuffHud, buffLabel } from './ui/buffHud';
 import { renderPanel } from './ui/playerPanel';
 import { formatNumber } from './utils/format';
 import './style.css';
+import './style.modules.css';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
-import { createGameLoop, COLLECTOR_BASE_COSTS, STORE_ITEMS, type BuffKey } from './gameLoop';
+import { createGameLoop, type BuffKey } from './gameLoop';
 import { showToast } from './utils/toast';
 import { renderWarehouseTab } from './components/warehouse';
 import { renderRankings } from './components/rankings';
 import { renderStoreTab } from './components/store';
+import { renderForgePage } from './ui/forgePage';
+import { renderProfilePage } from './ui/profilePage';
+import { renderPrestigePage } from './ui/prestigePage';
+import { Router, type Route } from './ui/router';
 
 import { applyTheme, getSavedTheme, setTheme, type ThemeName } from './theme';
 import { showConfirmModal } from './utils/modal';
@@ -21,7 +26,16 @@ import { ic } from './ui/icons';
 
 const app = document.querySelector('#app') as HTMLElement;
 let activeGameInstance: any = null;
+let activeUser: any = null;
+const router = new Router();
 
+/**
+ * Manejador de `visibilitychange` con nombre, para poder quitarlo antes de
+ * volver a ponerlo. Ver `renderBase`.
+ */
+function handleVisibility() {
+  setAudioSuspended(document.hidden);
+}
 
 // Aviso de logro desbloqueado. Va abajo al centro, por encima de la barra de
 // navegación, y se apila si llegan varios seguidos en el mismo segundo.
@@ -32,10 +46,12 @@ function showAchievementPopup(achievement: { title: string; description: string;
   if (!stack) return;
 
   const el = document.createElement('div');
-  el.className = 'card-glass-elevated border-[var(--accent)] rounded-2xl px-4 py-2.5 flex items-center gap-3 w-full pointer-events-none';
-  el.style.cssText = 'animation: achievementIn 380ms cubic-bezier(0.16, 1, 0.3, 1);';
+  el.className = 'card-glass-elevated rounded-2xl px-4 py-2.5 flex items-center gap-3 w-full pointer-events-none';
+  el.style.borderColor = 'var(--accent)';
+  el.style.cssText += 'animation: achievementIn 380ms cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid var(--accent);';
   el.innerHTML = `
-    <span class="w-9 h-9 rounded-xl accent-bg flex items-center justify-center flex-shrink-0 text-lg">${achievement.icon}</span>
+    <span class="w-9 h-9 rounded-xl accent-bg flex items-center justify-center flex-shrink-0
+                 [&>span>svg]:w-4 [&>span>svg]:h-4 text-slate-900">${ic((achievement.icon || 'sparkle') as any)}</span>
     <span class="flex flex-col gap-0.5 min-w-0">
       <span class="label-caps" style="color: var(--accent)">Logro desbloqueado</span>
       <span class="font-['Orbitron'] font-bold text-[13px] text-[var(--text-main)] truncate">${achievement.title}</span>
@@ -55,25 +71,17 @@ function showAchievementPopup(achievement: { title: string; description: string;
   }, 3000);
 }
 
-// mm:ss, o h:mm:ss a partir de una hora
-function formatCountdown(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60) % 60;
-  const hours = Math.floor(totalSeconds / 3600);
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
-}
-
 // Aplicar tema guardado (o por defecto cyber-dark)
 applyTheme(getSavedTheme());
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-document.addEventListener('dragstart', (e) => e.preventDefault());
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     if (activeGameInstance?.cleanup) await activeGameInstance.cleanup();
+    stopCompanionClicks();
+    activeGameInstance = null;
+    activeUser = null;
     renderAuth(app, (loggedInUser, username) => {
       initGame(loggedInUser, username);
     });
@@ -90,9 +98,10 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function initGame(user: any, username?: string) {
-  activeGameInstance = await createGameLoop(user, (state, isAfk) => {
-    updateUI(state, isAfk);
-  }, username, (achievement) => {
+  activeUser = user;
+  activeGameInstance = await createGameLoop(user, (state: any, isAfk?: boolean) => {
+    updateUI(state, isAfk ?? false);
+  }, username, (achievement: any) => {
     showAchievementPopup(achievement);
   });
 
@@ -100,28 +109,85 @@ async function initGame(user: any, username?: string) {
   // desde la consola. Se elimina del build de producción.
   if (import.meta.env.DEV) {
     (window as any).__cyberforge = activeGameInstance;
-    (window as any).__cyberforgeRelayout = () => renderGameLayout(user, activeGameInstance);
+    (window as any).__cyberforgeRelayout = () => renderRoute(router.current);
   }
 
-  // Esperar a que el DOM esté completamente listo antes de renderizar
   requestAnimationFrame(() => {
-    renderGameLayout(user, activeGameInstance);
+    renderRoute(router.current);
+    startCompanionClicks(activeGameInstance);
   });
 }
 
-function renderGameLayout(user: any, game: any) {
+// ==========================================================================
+//  Router
+// ==========================================================================
+
+/**
+ * Monta la vista que toca. Es el único punto donde se decide qué se pinta,
+ * y todas las páginas reciben la misma pareja de callbacks (`back` y, en el
+ * caso del perfil, `prestigio`) para que el botón de atrás funcione igual en
+ * las cinco.
+ *
+ * Nota sobre el estado: el game loop NO se reinicia al cambiar de vista. El
+ * tick sigue corriendo con la página de almacén abierta, así que las nanitas
+ * siguen entrando. Antes, al entrar al almacén se paraba el bucle y el juego
+ * se congelaba mientras mirabas tus cosas.
+ */
+function renderRoute(route: Route) {
+  if (!activeGameInstance) return;
   app.innerHTML = '';
   app.removeAttribute('style');
   document.body.setAttribute('data-theme', getSavedTheme());
 
-  // El DOM del HUD de buffs se recrea, así que hay que invalidar la marca de
-  // "ya construido" para que se vuelva a generar en el nuevo árbol
+  // El DOM del HUD de buffs se recrea, así que hay que invalidar la marca
   resetBuffHud();
 
-  app.innerHTML = renderLayoutHTML(user, getSavedTheme(), {
-    onWarehouse: () => openWarehouse(),
-    onStore: () => openStore(),
-    onRankings: () => openRankings(),
+  const goBack = () => {
+    sfx.nav();
+    if (!router.back()) router.goTo('base');
+    else renderRoute(router.current);
+  };
+
+  const go = (r: Route) => {
+    sfx.nav();
+    router.goTo(r);
+    renderRoute(router.current);
+  };
+
+  switch (route) {
+    case 'base':
+      renderBase(go, goBack);
+      break;
+    case 'almacen':
+      renderWarehouseTab(app, activeGameInstance, goBack, () => {
+        updateUI(activeGameInstance.getState(), activeGameInstance.isAfk());
+      });
+      break;
+    case 'forja':
+      renderForgePage(app, activeGameInstance, goBack);
+      break;
+    case 'tienda':
+      renderStoreTab(app, activeGameInstance, goBack);
+      break;
+    case 'perfil':
+      renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'));
+      break;
+    case 'ranking':
+      renderRankings(app, activeUser, goBack);
+      break;
+    case 'prestigio':
+      renderPrestigePage(app, activeGameInstance, goBack);
+      break;
+  }
+}
+
+/** Vista principal: el recolector, el escuadrón y la navegación. */
+function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
+  const game = activeGameInstance;
+  const user = activeUser;
+
+  app.innerHTML = renderLayoutHTML(user, getSavedTheme(), router.current, {
+    onNavigate,
     onLogout: () => void doLogout(),
     onToggleMute: () => {
       const muted = toggleMute();
@@ -142,6 +208,17 @@ function renderGameLayout(user: any, game: any) {
     },
     onThemeChange: (theme) => setTheme(theme as ThemeName)
   });
+
+  // --- Navegación: delegación en el contenedor, no por botón ---
+  // Con un solo listener en `app` todos los botones `data-nav` funcionan sin
+  // registrar nueve manejadores distintos cada vez que se monta la vista.
+  app.onclick = (e) => {
+    const nav = (e.target as HTMLElement).closest('[data-nav]') as HTMLElement | null;
+    if (!nav) return;
+    e.preventDefault();
+    sfx.nav();
+    onNavigate(nav.dataset.nav as Route);
+  };
 
   // ---- Click del recolector ----
   let clickStreak = 0;
@@ -171,22 +248,18 @@ function renderGameLayout(user: any, game: any) {
     const btn = (e.target as HTMLElement).closest('[data-cancel]');
     const buffKey = btn?.getAttribute('data-cancel') as BuffKey | undefined;
     if (!buffKey) return;
+    e.stopPropagation();
     showConfirmModal(
-      `¿Cancelar ${buffLabel(buffKey)}? El tiempo restante se pierde.`,
+      `Se pierde el tiempo restante de ${buffLabel(buffKey)}. El item ya está gastado.`,
       () => {
         const cancelled = activeGameInstance?.cancelBuff?.(buffKey);
         if (cancelled) showToast(`${cancelled} cancelado`, 'info');
-      }
+      },
+      { sublabel: 'Cancelar buff', confirmText: 'Cancelar buff', danger: true }
     );
   };
   document.querySelector('#active-buffs-hud')?.addEventListener('click', handleBuffCancel);
   document.querySelector('#buffs-hud-mobile')?.addEventListener('click', handleBuffCancel);
-
-  // ---- Navegación ----
-  document.querySelector('#warehouse-tab-btn-mobile')?.addEventListener('click', openWarehouse);
-  document.querySelector('#store-tab-btn-mobile')?.addEventListener('click', openStore);
-  document.querySelector('#rankings-btn-mobile')?.addEventListener('click', openRankings);
-  document.querySelector('#logout-btn-mobile')?.addEventListener('click', () => void doLogout());
 
   // ---- Panel de tema (móvil) ----
   const sheet = document.querySelector('#theme-sheet');
@@ -208,7 +281,12 @@ function renderGameLayout(user: any, game: any) {
   themeSelector?.addEventListener('change', (e) => setTheme((e.target as HTMLSelectElement).value as ThemeName));
 
   // ---- Audio: suspende en segundo plano para no gastar batería ----
-  document.addEventListener('visibilitychange', () => setAudioSuspended(document.hidden));
+  // El listener vive en `document`, que sobrevive a los re-renders de la
+  // vista. Sin el `removeEventListener` previo, cada vuelta a la base añadía
+  // un manejador más y cambiar la visibilidad disparaba N veces el mismo
+  // trabajo de audio.
+  document.removeEventListener('visibilitychange', handleVisibility);
+  document.addEventListener('visibilitychange', handleVisibility);
 
   // ---- Primer render ----
   const initialState = game.getState();
@@ -219,32 +297,7 @@ function renderGameLayout(user: any, game: any) {
   requestAnimationFrame(() => {
     updateUI(game.getState(), game.isAfk());
     renderPlayerPanel(game.getState());
-    startCompanionClicks(game);
   });
-}
-
-function openWarehouse() {
-  if (!activeGameInstance) return;
-  sfx.use();
-  renderWarehouseTab(app, activeGameInstance, () => {
-    renderGameLayout(app, activeGameInstance);
-  }, () => {
-    updateUI(activeGameInstance.getState(), activeGameInstance.isAfk());
-  });
-}
-
-function openStore() {
-  if (!activeGameInstance) return;
-  sfx.use();
-  renderStoreTab(app, activeGameInstance, () => {
-    renderGameLayout(app, activeGameInstance);
-  });
-}
-
-function openRankings() {
-  if (!activeGameInstance) return;
-  sfx.use();
-  renderRankings(app, activeGameInstance, () => renderGameLayout(app, activeGameInstance));
 }
 
 async function doLogout() {
@@ -255,17 +308,14 @@ async function doLogout() {
 
 // Exponer updateUI globalmente para que el almacén pueda actualizar la UI
 (window as any).updateGameUI = (state?: any) => {
-  const gameState = state || (typeof activeGameInstance !== 'undefined' && activeGameInstance?.getState());
-  if (gameState) {
-    updateUI(gameState, activeGameInstance?.isAfk() || false);
-  }
+  const gameState = state || activeGameInstance?.getState();
+  if (gameState) updateUI(gameState, activeGameInstance?.isAfk() || false);
 };
 
 function updateUI(state: any, isAfk: boolean = false) {
   const nanitesCounter = document.querySelector('#nanites-counter');
   const passiveIncomeDisplay = document.querySelector('#passive-income-display');
   const clickDamageDisplay = document.querySelector('#click-damage-display');
-  const activeBuffsHud = document.querySelector('#active-buffs-hud');
 
   if (nanitesCounter) nanitesCounter.textContent = formatNumber(state.nanites);
 
@@ -279,8 +329,8 @@ function updateUI(state: any, isAfk: boolean = false) {
 
   if (passiveIncomeDisplay) {
     if (!isPresent) {
-      // El juego está en pausa: sin ventana activa no hay pasivo
-      passiveIncomeDisplay.innerHTML = `<span class="text-amber-500">⏸ En pausa — vuelve a la ventana para cobrar</span>`;
+      passiveIncomeDisplay.innerHTML =
+        `<span class="text-amber-500">En pausa — vuelve a la ventana para cobrar</span>`;
     } else {
       const displayValue = (isAfk && !hasPassiveBuff) ? 0 : state.passiveIncome;
       passiveIncomeDisplay.textContent = `+${formatNumber(displayValue)} Nanitas / segundo`;
@@ -288,42 +338,47 @@ function updateUI(state: any, isAfk: boolean = false) {
   }
 
   if (clickDamageDisplay) {
-    // El daño real lo calcula el game loop (nivel del arma + buffs + multiplicador
-    // de compañeros). Si aquí se recalcula a mano se desincroniza del valor real.
+    // El daño real lo calcula el game loop (nivel del arma + buffs + afijos +
+    // multiplicador de compañeros + árbol). Si aquí se recalcula a mano se
+    // desincroniza del valor real.
     const clickDamage = typeof activeGameInstance?.getClickDamage === 'function'
       ? activeGameInstance.getClickDamage()
       : 0;
     clickDamageDisplay.textContent = `+${formatNumber(clickDamage)} Nanitas por click`;
   }
 
+  // Atajo a la ascensión: dice cuántos núcleos llevas sin abrir la página
+  const prestigeHint = document.querySelector('#prestige-hint');
+  if (prestigeHint) {
+    const pending = activeGameInstance?.getPrestigeInfo?.()?.pending ?? 0;
+    prestigeHint.textContent = state.cores > 0
+      ? `${formatNumber(state.cores)} núcleos disponibles`
+      : pending > 0
+        ? `Reciclar: +${formatNumber(pending)} núcleos`
+        : '0 núcleos';
+  }
+
   renderBuffHud(state, now);
 
-  // Renderizar Panel del Jugador solo si no estamos en el almacén
-  // (evita titileo por re-render constante)
-  const warehouseOverlay = document.querySelector('#back-btn');
-  if (!warehouseOverlay) {
+  // El panel del jugador solo se pinta en la vista principal: en las demás no
+  // existe el DOM y renderizarlo sería trabajo tirado a la basura.
+  if (document.querySelector('#equipped-collector-container')) {
     renderPlayerPanel(state);
   }
 }
 
-
 function renderPlayerPanel(state: any) {
-  // El danio real (con buffs, logros y multiplicadores) lo calcula el game loop:
-  // asi la tarjeta nunca contradice al boton del recolector
+  // El daño real (con buffs, logros, afijos y multiplicadores) lo calcula el
+  // game loop: así la tarjeta nunca contradice al botón del recolector
   const realDamage = typeof activeGameInstance?.getClickDamage === 'function'
     ? activeGameInstance.getClickDamage()
     : 0;
-  renderPanel(state, realDamage);
-}
-
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+  // El total de slots (tienda + árbol) lo resuelve el game loop: leer
+  // `state.maxCompanionSlots` mostraría "3/3 activos" con 5 huecos reales
+  const slots = typeof activeGameInstance?.getCompanionSlots === 'function'
+    ? activeGameInstance.getCompanionSlots()
+    : undefined;
+  renderPanel(state, realDamage, slots);
 }
 
 // Texto flotante para clicks del jugador
@@ -353,13 +408,11 @@ function showCompanionClickInCollector(power: number) {
   const collector = document.querySelector('#click-btn');
   if (!collector) return;
   const rect = collector.getBoundingClientRect();
-  
-  // Posición random dentro del recolector (con margen para que no salga del borde)
+
   const margin = 40;
   const x = rect.left + margin + Math.random() * (rect.width - margin * 2);
   const y = rect.top + margin + Math.random() * (rect.height - margin * 2);
-  
-  // Crear efecto visual de click (círculo que se expande)
+
   const clickEffect = document.createElement('div');
   clickEffect.style.cssText = `
     position: fixed;
@@ -378,12 +431,11 @@ function showCompanionClickInCollector(power: number) {
   `;
   document.body.appendChild(clickEffect);
   setTimeout(() => clickEffect.remove(), 800);
-  
-  // Texto flotante
-  showFloatingText(x, y, `+${power}`, 'var(--accent)');
+
+  showFloatingText(x, y, `+${formatNumber(power)}`, 'var(--accent)');
 }
 
-// Clicks automáticos de compañeros (cada segundo)
+// Clics automáticos de compañeros (cada segundo)
 let companionClickInterval: number | null = null;
 
 function startCompanionClicks(game: any) {
@@ -391,6 +443,8 @@ function startCompanionClicks(game: any) {
   companionClickInterval = window.setInterval(() => {
     // Solo efectos visuales: con la pestaña oculta no hay nada que dibujar
     if (document.hidden) return;
+    // Solo en la vista principal: en las demás el recolector no existe
+    if (!document.querySelector('#click-btn')) return;
 
     const state = game.getState();
     const clickCompanions = state.activeCompanions

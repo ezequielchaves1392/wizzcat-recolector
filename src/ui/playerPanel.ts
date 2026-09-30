@@ -1,12 +1,13 @@
 import { ic } from './icons';
 import { formatNumber } from '../utils/format';
+import { AFFIX_BY_ID } from '../data/crafting';
 
 /**
  * Panel del jugador: recolector equipado y slots de companeros.
  * Vive en su propio modulo para que el banco de pruebas visuales (/preview.html)
  * reuse exactamente el mismo marcado que la partida real.
  */
-export function renderPanel(state: any, realDamage: number) {
+export function renderPanel(state: any, realDamage: number, effectiveSlots?: number) {
   // --- Recolector equipado ---
   const equippedItem = state.equippedWeaponId
     ? state.warehouse.find((w: any) => w.id === state.equippedWeaponId)
@@ -17,8 +18,12 @@ export function renderPanel(state: any, realDamage: number) {
     if (equippedItem) {
       const tier = equippedItem.tier || 1;
       const level = equippedItem.level || 0;
+      // Las armas crafteadas suben el techo: 20 normal, hasta 35 con 5 estrellas
+      const maxLevel = equippedItem.maxLevel || 20;
       const rarity = equippedItem.rarity || 'Común';
       const overclocked = Boolean(equippedItem.overclock);
+      // Los afijos son la diferencia entre dos armas del mismo tier
+      const affixes: string[] = equippedItem.affixes || [];
 
       collectorContainer.innerHTML = `
         <div class="flex items-center gap-3">
@@ -40,17 +45,34 @@ export function renderPanel(state: any, realDamage: number) {
             <div class="flex items-center gap-2 mt-1">
               <span class="text-[10px] font-mono rarity-${slug(rarity)}">${rarity}</span>
               ${overclocked ? `<span class="text-[9px] font-mono rarity-sobrecargado">· SOBRECARGADO</span>` : ''}
+              ${equippedItem.potential ? `<span class="text-[9px] text-amber-400">· ${'★'.repeat(equippedItem.potential)}</span>` : ''}
             </div>
+            ${affixes.length ? `
+              <div class="flex items-center gap-1 flex-wrap mt-1">
+                ${affixes.map(id => {
+                  const a = AFFIX_BY_ID[id];
+                  return a
+                    ? `<span class="text-[9px] font-mono px-1 py-[1px] rounded border rarity-${slug(a.rarity)}"
+                              style="border-color: currentColor" title="${a.description}">${a.name}</span>`
+                    : '';
+                }).join('')}
+              </div>
+            ` : ''}
+            ${equippedItem.forgedBy ? `
+              <div class="text-[9px] font-mono text-[var(--text-muted)] mt-1 truncate">
+                Forjada por <span class="accent-text">${equippedItem.forgedBy}</span>
+              </div>
+            ` : ''}
             <!-- Barra de nivel: comunica progreso de un vistazo -->
             <div class="flex items-center gap-2 mt-2">
               <div class="flex-1 h-1 rounded-full overflow-hidden"
                    style="background: color-mix(in srgb, var(--text-main) 10%, transparent)">
                 <div class="h-full rounded-full transition-[width] duration-500 ease-out"
-                     style="width: ${Math.min(100, (level / 20) * 100)}%;
+                     style="width: ${Math.min(100, (level / maxLevel) * 100)}%;
                             background: var(--accent)"></div>
               </div>
               <span class="text-[9px] font-mono text-[var(--text-muted)] tabular flex-shrink-0">
-                Nv ${level}/20
+                Nv ${level}/${maxLevel}
               </span>
             </div>
           </div>
@@ -84,7 +106,11 @@ export function renderPanel(state: any, realDamage: number) {
   // --- Slots de compañeros ---
   const companionsContainer = document.querySelector('#companions-slots-container');
   const slotsLabel = document.querySelector('#slots-label');
-  const maxSlots = state.maxCompanionSlots || 1;
+  // El total de slots incluye los que aporta el árbol de pasivas. Se recibe
+  // como parámetro en vez de leerse de `state.maxCompanionSlots` porque ese es
+  // solo la parte comprada con nanitas: sin el ajuste, un jugador con 3 slots
+  // del árbol vería "3/3 activos" con 5 huecos reales en la cuadrícula.
+  const maxSlots = effectiveSlots ?? state.maxCompanionSlots ?? 1;
   if (slotsLabel) {
     const n = state.activeCompanions.length;
     slotsLabel.textContent = `${n}/${maxSlots} activos`;

@@ -1,0 +1,329 @@
+// ==========================================================================
+// Perfil · Identidad, cosméticos y logros
+//
+// Reúne tres cosas que antes estaban repartidas y nadie relacionaba:
+//   - la tarjeta de identidad (título, marco, banner) que sale en el ranking
+//   - los cosméticos que puedes equipar y cómo se consiguen
+//   - el progreso de logros, incluidos los secretos con pista
+//
+// El avatar se monta con la pila de 3 capas (`.avatar-stack`): banner de
+// fondo, marco y glifo. Así el marco puede tener animación propia sin que el
+// contenido se mueva, y el mismo marcado sirve para el perfil y para el
+// ranking sin duplicar la estructura.
+// ==========================================================================
+
+import { ic } from './icons';
+import { pageShell, mountInto, statStrip, sectionHead } from './pageShell';
+import { COSMETICS, COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
+import { SECRET_ACHIEVEMENTS } from '../data/achievements';
+import { formatNumber } from '../utils/format';
+import { sfx } from '../utils/audio';
+import { showToast } from '../utils/toast';
+import { rarityClass, raritySlug } from '../components/crateLoot';
+import type { Cosmetic } from '../types/domain';
+
+/** Cómo se consigue un cosmético, en una frase. */
+function unlockHint(cos: Cosmetic): string {
+  const u = cos.unlock;
+  switch (u.kind) {
+    case 'default': return 'Disponible desde el principio';
+    case 'cores': return `Compra con ${u.value} núcleos en la Ascensión`;
+    case 'achievement': return 'Se desbloquea con un logro';
+    case 'ranking': return u.value === 1 ? 'Solo para quien ocupe el 1er puesto'
+      : u.value === 3 ? 'Solo para el Top 3 sostenido 7 días'
+      : `Solo para el Top ${u.value} sostenido 7 días`;
+    case 'crate': return 'Sale de una caja';
+    case 'secret': return u.hint ?? 'Condición oculta';
+    default: return 'No disponible';
+  }
+}
+
+/** Tarjeta de identidad: avatar con marco + banner + título. */
+export function identityCard(opts: {
+  name: string;
+  cosmetics: { title: string; frame: string; banner: string };
+  size?: 'sm' | 'md' | 'lg';
+  subtitle?: string;
+}): string {
+  const size = opts.size ?? 'md';
+  const dims = size === 'lg' ? 'w-20 h-20' : size === 'sm' ? 'w-9 h-9' : 'w-14 h-14';
+  const glyph = size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-[13px]' : 'text-lg';
+  const initials = (opts.name || '?').trim().slice(0, 2).toUpperCase();
+
+  const title = COSMETICS_BY_ID[opts.cosmetics.title];
+  const frame = COSMETICS_BY_ID[opts.cosmetics.frame];
+  const banner = COSMETICS_BY_ID[opts.cosmetics.banner];
+
+  const titleStyle = [
+    cosmeticStyle(title),
+    title?.style.gradient ? 'background-clip:text;-webkit-background-clip:text;color:transparent' : '',
+    title?.style.glow === 'true' ? 'text-shadow:0 0 16px currentColor' : ''
+  ].filter(Boolean).join(';');
+
+  return `
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="avatar-stack ${dims} flex-shrink-0">
+        <span class="avatar-frame w-full h-full rounded-full ${banner?.id && banner.id !== 'banner_none'
+          ? '' : 'opacity-0'}"
+              style="${banner && banner.id !== 'banner_none' ? `transform:scale(1.9);opacity:.5;${cosmeticStyle(banner)}` : ''}"></span>
+        <span class="avatar-core w-[78%] h-[78%] ${glyph}">${initials}</span>
+        <span class="avatar-frame w-full h-full rounded-full"
+              style="${frame ? cosmeticStyle(frame) : ''}"></span>
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="font-['Orbitron'] font-bold text-[13px] md:text-sm text-[var(--text-main)] truncate leading-tight">
+          ${opts.name}
+        </div>
+        ${title ? `
+          <div class="title-display text-[10px] truncate" style="${titleStyle}">${title.name}</div>
+        ` : `<div class="label-caps">${opts.subtitle ?? 'Operativo'}</div>`}
+      </div>
+    </div>
+  `;
+}
+
+/** Estado de la pantalla. Sobrevive a los re-render. */
+const ui = { tab: 'title' as 'title' | 'frame' | 'banner' };
+
+export function renderProfilePage(
+  container: HTMLElement,
+  game: any,
+  onBack: () => void,
+  onGoPrestige: () => void
+) {
+  const state = game.getState();
+  const achievements = game.getAchievements() as any[];
+  const unlocked = achievements.filter(a => a.unlocked);
+  const secrets = (state.unlockedAchievements as string[]).filter(id => SECRET_ACHIEVEMENTS.includes(id as any));
+
+  const weapons = (state.warehouse as any[]).filter(w => w.type === 'weapon');
+  const bestWeapon = weapons.reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
+  const bestForged = weapons
+    .filter((w: any) => w.forgedBy)
+    .reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
+
+  const unlockedCosmetics = state.cosmetics.unlocked as string[];
+
+  // La pestaña activa vive a nivel de módulo, no como variable local de esta
+  // función. Antes estaba aquí, y cada re-render la reiniciaba a 'title': al
+  // tocar "Marcos" se llamaba a `renderProfilePage`, que creaba un `tab` nuevo
+  // con valor 'title', y la lista no cambiaba nunca. Es el mismo error que en la
+  // Forja, y la misma solución: el estado de la interfaz va fuera de la función
+  // que se vuelve a pintar.
+  const tab = ui.tab;
+
+  const cosCard = (cos: Cosmetic) => {
+    const owned = unlockedCosmetics.includes(cos.id);
+    const equipped =
+      (tab === 'title' && state.cosmetics.title === cos.id) ||
+      (tab === 'frame' && state.cosmetics.frame === cos.id) ||
+      (tab === 'banner' && state.cosmetics.banner === cos.id);
+
+    return `
+      <button class="text-left card-glass border rounded-xl p-2.5 flex flex-col gap-1.5 cursor-pointer
+                     transition active:scale-[0.97] ${equipped ? 'is-selected' : ''} ${owned ? '' : 'opacity-55'}"
+              data-cos="${cos.id}"
+              style="${equipped
+                ? 'border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent)'
+                : ''}">
+        <div class="flex items-start justify-between gap-1.5">
+          <span class="text-[11px] font-bold ${rarityClass(cos.rarity)} leading-tight">${cos.name}</span>
+          ${equipped
+            ? `<span class="accent-text flex-shrink-0 [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('check')}</span>`
+            : owned
+              ? `<span class="text-emerald-400 flex-shrink-0 [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('unlock')}</span>`
+              : `<span class="text-[var(--text-muted)] opacity-60 flex-shrink-0 [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('lock')}</span>`}
+        </div>
+
+        <div class="flex items-center gap-1.5 min-h-[28px]">
+          ${tab === 'frame' ? `
+            <span class="w-7 h-7 rounded-full flex-shrink-0" style="${cosmeticStyle(cos)}"></span>
+          ` : tab === 'banner' ? `
+            <span class="w-9 h-6 rounded-md flex-shrink-0" style="${cosmeticStyle(cos)}"></span>
+          ` : `
+            <span class="title-display text-[9px] truncate flex-1"
+                  style="${cosmeticStyle(cos)}${cos.style.gradient ? ';background-clip:text;-webkit-background-clip:text' : ''}">
+              ${cos.name}
+            </span>
+          `}
+        </div>
+
+        <span class="text-[9px] text-[var(--text-muted)] leading-snug">${unlockHint(cos)}</span>
+      </button>
+    `;
+  };
+
+  const cosGrid = (type: 'title' | 'frame' | 'banner') => `
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      ${COSMETICS_BY_TYPE(type).map(cosCard).join('')}
+    </div>
+  `;
+
+  // --- Logros ---
+  const achRow = (a: any) => {
+    const isSecret = SECRET_ACHIEVEMENTS.includes(a.id);
+    const pct = a.target > 0 ? Math.min(100, (a.current / a.target) * 100) : 0;
+    return `
+      <div class="rounded-xl border border-[var(--border-color)] p-2.5 flex items-center gap-2.5
+                  ${a.unlocked ? '' : 'opacity-65'}"
+           style="${a.unlocked ? 'background: color-mix(in srgb, var(--accent) 8%, transparent)' : ''}">
+        <span class="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0
+                     ${a.unlocked ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
+              aria-hidden="true">${ic((isSecret && !a.unlocked ? 'lock' : a.icon) as any)}</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="text-[11px] font-bold text-[var(--text-main)] truncate">
+              ${isSecret && !a.unlocked ? '???' : a.title}
+            </span>
+            ${a.unlocked
+              ? `<span class="text-[9px] font-mono text-emerald-400 flex-shrink-0">✓</span>`
+              : `<span class="text-[9px] font-mono text-[var(--text-muted)] tabular flex-shrink-0">${formatNumber(a.current)}/${formatNumber(a.target)}</span>`}
+          </div>
+          <p class="text-[9px] text-[var(--text-muted)] leading-snug mt-0.5">
+            ${isSecret && !a.unlocked ? (a.description || 'Logro oculto') : a.description}
+          </p>
+          ${!a.unlocked && a.target > 0 ? `<div class="meter mt-1.5"><span style="width:${pct}%"></span></div>` : ''}
+          ${a.unlocked ? `<p class="text-[9px] font-mono mt-0.5" style="color:var(--accent)">${a.rewardText}</p>` : ''}
+        </div>
+      </div>
+    `;
+  };
+
+  const body = `
+    ${statStrip([
+      { label: 'Nanitas', value: formatNumber(state.nanites) },
+      { label: 'Logros', value: `${unlocked.length}/${achievements.length}`, tone: 'text-amber-300' },
+      { label: 'Núcleos', value: formatNumber(state.cores), tone: 'text-purple-300' },
+      { label: 'Forjadas', value: String(state.forgedCount) }
+    ])}
+
+    <!-- Mejor arma: el objeto del que presume el jugador -->
+    ${bestWeapon ? `
+      <section class="card-glass rounded-2xl p-3 mb-3">
+        <div class="label-caps mb-2 flex items-center gap-1.5">
+          <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('weapon')}</span>
+          ${bestForged ? 'Mejor arma forjada' : 'Mejor recolector'}
+        </div>
+        <div class="flex items-center gap-2.5">
+          <span class="ring-${raritySlug(bestWeapon.rarity)} w-10 h-10 rounded-xl grid place-items-center flex-shrink-0
+                       ${rarityClass(bestWeapon.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('weapon')}</span>
+          <div class="min-w-0 flex-1">
+            <div class="text-[12px] font-bold text-[var(--text-main)] truncate">${bestWeapon.name}</div>
+            <div class="text-[9px] font-mono text-[var(--text-muted)]">
+              T${bestWeapon.tier} · ${bestWeapon.rarity}${bestWeapon.potential ? ` · ${'★'.repeat(bestWeapon.potential)}` : ''}
+              ${bestWeapon.forgedBy ? ` · de <span class="accent-text">${bestWeapon.forgedBy}</span>` : ''}
+            </div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="label-caps leading-none">Daño</div>
+            <div class="font-['Orbitron'] font-bold text-[13px] accent-text tabular">+${formatNumber(bestWeapon.damage)}</div>
+          </div>
+        </div>
+      </section>
+    ` : ''}
+
+    <!-- Tarjeta de identidad -->
+    <section class="card-glass rounded-2xl overflow-hidden mb-3">
+      <div class="cosmetic-banner" style="${cosmeticStyle(COSMETICS_BY_ID[state.cosmetics.banner])}">
+        <div class="p-4 md:p-5 flex flex-col items-center text-center gap-2"
+             style="background: color-mix(in srgb, var(--bg-app) 72%, transparent)">
+          ${identityCard({ name: state.__username || 'Operativo', cosmetics: state.cosmetics, size: 'lg' })}
+          <div class="flex items-center gap-2 flex-wrap justify-center mt-1">
+            <span class="medal text-[var(--text-muted)]">${ic('core', 'w-3 h-3')} ${state.resets} ascensiones</span>
+            <span class="medal text-[var(--text-muted)]">${ic('anvil', 'w-3 h-3')} ${state.forgedCount} armas</span>
+            <span class="medal text-amber-400">${ic('sparkle', 'w-3 h-3')} ${secrets.length} secretos</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Acceso a la ascensión -->
+    <button data-go-prestige
+      class="w-full card-glass border rounded-2xl p-3.5 mb-3 flex items-center gap-3 cursor-pointer
+             transition active:scale-[0.99] hover:border-[var(--accent)]"
+      style="border-color: color-mix(in srgb, var(--accent) 40%, transparent)">
+      <span class="accent-text flex-shrink-0 [&>span>svg]:w-6 [&>span>svg]:h-6">${ic('recycle')}</span>
+      <div class="min-w-0 flex-1 text-left">
+        <div class="text-[12px] font-bold text-[var(--text-main)]">Ascensión y árbol de pasivas</div>
+        <div class="text-[10px] text-[var(--text-muted)] font-mono">
+          ${formatNumber(state.cores)} núcleos disponibles
+        </div>
+      </div>
+      <span class="text-[var(--text-muted)] flex-shrink-0 rotate-180 [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('back')}</span>
+    </button>
+
+    <!-- Cosméticos -->
+    <section class="card-glass rounded-2xl p-3 md:p-4 mb-3">
+      ${sectionHead('Cosméticos', 'crown', `
+        <span class="text-[10px] font-mono text-[var(--text-muted)]">${unlockedCosmetics.length}/${COSMETICS.length}</span>
+      `)}
+
+      <div class="flex gap-1 mb-3">
+        ${([
+          { id: 'title', label: 'Títulos', icon: 'medal' },
+          { id: 'frame', label: 'Marcos', icon: 'sparkle' },
+          { id: 'banner', label: 'Banners', icon: 'layers' }
+        ] as const).map(t => `
+          <button class="flex-1 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition flex items-center
+                         justify-center gap-1.5
+                         ${tab === t.id ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
+                  data-cos-tab="${t.id}">
+            <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(t.icon as any)}</span>
+            ${t.label}
+          </button>
+        `).join('')}
+      </div>
+
+      <div id="cos-panel">${cosGrid(tab)}</div>
+    </section>
+
+    <!-- Logros -->
+    <section class="card-glass rounded-2xl p-3 md:p-4">
+      ${sectionHead('Logros', 'achievement', `
+        <span class="text-[10px] font-mono text-[var(--text-muted)]">${unlocked.length}/${achievements.length}</span>
+      `)}
+      <div class="flex flex-col gap-2">
+        ${achievements.map(achRow).join('')}
+      </div>
+      ${secrets.length > 0 ? `
+        <p class="text-[9px] text-[var(--text-muted)] mt-3 text-center leading-relaxed">
+          Hay ${secrets.length} logro(s) secreto(s) desbloqueado(s). Nadie más puede ver cuáles.
+        </p>
+      ` : ''}
+    </section>
+  `;
+
+  const root = mountInto(container, pageShell({
+    title: 'Perfil',
+    subtitle: 'Identidad, cosméticos y logros',
+    icon: 'user',
+    onBack
+  }, body));
+
+  // --- Eventos ---
+  root.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
+  root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
+
+  root.querySelectorAll<HTMLElement>('[data-cos-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.nav();
+      ui.tab = btn.dataset.cosTab as 'title' | 'frame' | 'banner';
+      renderProfilePage(container, game, onBack, onGoPrestige);
+    });
+  });
+
+  root.querySelectorAll<HTMLElement>('[data-cos]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cosId = btn.dataset.cos!;
+      if (!unlockedCosmetics.includes(cosId)) {
+        sfx.error();
+        const cos = COSMETICS_BY_ID[cosId];
+        showToast(`${cos?.name}: ${unlockHint(cos!)}`, 'info');
+        return;
+      }
+      sfx.equip();
+      game.equipCosmetic(tab, cosId);
+      renderProfilePage(container, game, onBack, onGoPrestige);
+    });
+  });
+}

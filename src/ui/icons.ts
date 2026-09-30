@@ -37,6 +37,27 @@ export const ICONS = {
   chip: svg('<rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>'),
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>'),
 
+  // Destino, identidad y progresión
+  user: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+  anvil: svg('<path d="M3 9h7l3 3h8"/><path d="M3 9v3h6"/><path d="M6 12v3a3 3 0 0 0 3 3h6l2-6"/><path d="M8 21h8"/>'),
+  tree: svg('<circle cx="12" cy="5" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M12 7.5 6 15.5M12 7.5l6 8M8.5 18h7"/>'),
+  layers: svg('<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/><path d="m3 17.5 9 5 9-5"/>'),
+  crown: svg('<path d="M4 8l3.5 3L12 5l4.5 6L20 8l-1.5 10h-13L4 8Z"/><path d="M5.5 21h13"/>'),
+  medal: svg('<circle cx="12" cy="15" r="5"/><path d="m8.5 10.5-3-7.5h4l2 5M15.5 10.5l3-7.5h-4l-2 5"/><path d="m12 13 .9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2L9.1 15l2-.3L12 13Z"/>'),
+  recycle: svg('<path d="M7 7h3l-2.5-2.5"/><path d="M4 9a8 8 0 0 1 13.5-3"/><path d="M17 17h-3l2.5 2.5"/><path d="M20 15a8 8 0 0 1-13.5 3"/>'),
+  core: svg('<circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="8"/><path d="M12 1.5v2.5M12 20v2.5M1.5 12H4M20 12h2.5"/>'),
+  graph: svg('<path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 3.5-4 3 2.5L20 7"/>'),
+  flask: svg('<path d="M10 3h4"/><path d="M10.5 3v6L5 19a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 19l-5.5-10V3"/><path d="M8 15h8"/>'),
+  hammer: svg('<path d="m14 5 5 5"/><path d="m12.5 6.5 5 5"/><path d="M17.5 3.5 21 7l-2 2-3.5-3.5 2-2Z"/><path d="m11 8-8 8 4 4 8-8"/>'),
+  scroll: svg('<path d="M6 4h11a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M5 6a2 2 0 0 0-2 2v1h4"/><path d="M9 9h7M9 13h7M9 17h4"/>'),
+  lock: svg('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+  unlock: svg('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.5-2"/>'),
+  drag: svg('<circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none"/>'),
+  arrowUp: svg('<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>'),
+  eye: svg('<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.8"/>'),
+  flame: svg('<path d="M12 3s5 4 5 9a5 5 0 0 1-10 0c0-2 1-3 1-3s1 2 2 2c1.5 0 1-4 2-8Z"/>'),
+  snow: svg('<path d="M12 2v20M2 12h20"/><path d="m5 5 14 14M19 5 5 19"/>'),
+
   // Acciones
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
   check: svg('<path d="m5 13 4 4 10-10"/>'),
@@ -47,6 +68,8 @@ export const ICONS = {
   sound: svg('<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/>'),
   mute: svg('<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="m17 10 4 4M21 10l-4 4"/>')
 } as const;
+
+
 
 export type IconName = keyof typeof ICONS;
 

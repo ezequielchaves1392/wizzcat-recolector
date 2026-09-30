@@ -1,891 +1,734 @@
+// ==========================================================================
+// Almacén · Rejilla con arrastre y hoja de detalle
+//
+// Qué cambia respecto a la versión anterior:
+//
+// 1. REJILLA EN VEZ DE LISTA. El almacén tenía 20 filas de ancho completo con
+//    la información metida dentro. En móvil eso obliga a hacer scroll para ver
+//    4 cosas. Ahora es una rejilla de celdas cuadradas y la información vive
+//    en una hoja que se abre al tocar.
+//
+// 2. ARRASTRE REAL (módulo 4 del encargo). Antes había un modo "Mover": tocar
+//    "Mover", luego tocar el destino. Cuatro toques y un estado intermedio que
+//    se podía olvidar activating. Ahora se arrastra la celda y se suelta en
+//    otra. Se usa Pointer Events porque es el único mecanismo que cubre dedo,
+//    ratón y lápiz con el mismo código, y `touch-action: none` en la celda
+//    porque sin eso el navegador scrollea en cuanto el dedo se mueve 2px.
+//
+// 3. VENTA DINÁMICA. `item.sellPrice` era un número congelado en el save.
+//    Ahora se pide al game loop, que aplica la valoración por tier, potencial,
+//    afijos y la bonificación de venta del árbol de pasivas. Vender un arma
+//    crafteada de 5 estrellas vale 12x lo que valía al comprarla.
+//
+// 4. SIN EMOJIS. Se usan los iconos SVG del set. El emoji 🤖 salía como un
+//    cuadrado vacío en Windows y como un robot en macOS: el mismo item se ve
+//    distinto según el sistema del jugador.
+// ==========================================================================
+
 import { showToast } from '../utils/toast';
 import { formatNumber } from '../utils/format';
-import { WarehouseItem } from '../types';
-import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS } from '../gameLoop';
+import { ic } from '../ui/icons';
+import { pageShell, mountInto, sectionHead } from '../ui/pageShell';
+import { showConfirmModal } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
 import { sfx } from '../utils/audio';
+import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
+import { AFFIX_BY_ID } from '../data/crafting';
+import { valuationBreakdown } from '../data/valuation';
 
+const TYPE_ICON: Record<string, any> = {
+  weapon: 'weapon',
+  companion: 'companion',
+  crate: 'crate',
+  key: 'key',
+  crystal: 'crystal',
+  consumable: 'flask'
+};
 
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+const TYPE_LABEL: Record<string, string> = {
+  weapon: 'Recolector',
+  companion: 'Compañero',
+  crate: 'Caja',
+  key: 'Llave',
+  crystal: 'Cristal de Mejora',
+  consumable: 'Consumible'
+};
+
+const MAX_STACK: Record<string, number> = {
+  consumable: 20, crate: 20, key: 99, crystal: 99
+};
+
+// Estado de la pantalla. Sobrevive a los re-render.
+const ui = {
+  selectedId: null as string | null,
+  filter: 'all' as string,
+  sort: 'default' as string,
+  sheetOpen: false
+};
+
+export function renderWarehouseTab(
+  container: HTMLElement,
+  game: any,
+  onBack: () => void,
+  onStateChange?: () => void
+) {
+  draw(container, game, onBack, onStateChange);
 }
 
-// Sistema de modal de confirmación
-function showQuantityModal(item: any, maxStack: number, onConfirm: (quantity: number) => void) {
-  const price = item.sellPrice || 0;
-  let selectedQuantity = 1;
+function draw(container: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void) {
+  const state = game.getState();
+  const warehouse = (state.warehouse || []) as any[];
+  const capacity = game.getCapacity?.() ?? state.warehouseCapacity ?? 15;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-  overlay.innerHTML = `
-    <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4 shadow-2xl">
-      <div class="text-center">
-        <div class="text-4xl mb-2">${item.type === 'weapon' ? '⚔️' : item.type === 'companion' ? '🤖' : '📦'}</div>
-        <h3 class="font-['Orbitron'] font-bold text-lg text-[var(--text-main)]">${item.name}</h3>
-        <div class="text-sm font-mono text-[var(--text-muted)]">Cantidad disponible: ${maxStack}</div>
+  // --- Filtrado y orden --------------------------------------------------
+  let items = warehouse.filter((w: any) => {
+    if (ui.filter === 'all') return true;
+    if (ui.filter === 'otros') return !['weapon', 'companion'].includes(w.type);
+    return w.type === ui.filter;
+  });
+
+  if (ui.sort === 'name') items = [...items].sort((a, b) => a.name.localeCompare(b.name));
+  else if (ui.sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
+  else if (ui.sort === 'tier') items = [...items].sort((a, b) => (b.tier || 0) - (a.tier || 0));
+  else if (ui.sort === 'value') {
+    items = [...items].sort((a, b) => (game.getSellPrice?.(b.id) ?? b.sellPrice ?? 0) - (game.getSellPrice?.(a.id) ?? a.sellPrice ?? 0));
+  }
+
+  const stacked = stackItems(items);
+
+  // La selección sobrevive al re-render, pero se invalida si el item desaparece
+  if (ui.selectedId && !warehouse.some((w: any) => w.id === ui.selectedId)) {
+    ui.selectedId = null;
+    ui.sheetOpen = false;
+  }
+  const selected = ui.selectedId ? warehouse.find((w: any) => w.id === ui.selectedId) : null;
+
+  // --- Celdas -----------------------------------------------------------
+  const cell = (w: any, i: number) => {
+    const isSel = w.id === ui.selectedId;
+    const isEquipped = (w.type === 'weapon' && w.equipped) || (w.type === 'companion' && state.activeCompanions.includes(w.id));
+    const count = w.stackable ? (w.stackCount || 1) : 0;
+    return `
+      <button class="inv-cell ${isSel ? 'is-selected' : ''} ${count > 0 ? 'is-stackable' : ''}"
+              data-cell="${i}" data-id="${w.id}" data-count="${count}"
+              style="${isEquipped ? 'border-color:#fbbf24; box-shadow: inset 0 0 0 1px #fbbf24;' : ''}"
+              aria-label="${w.name}">
+        <span class="ring-${raritySlug(w.rarity)} w-8 h-8 rounded-lg grid place-items-center
+                     ${rarityClass(w.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">
+          ${ic(TYPE_ICON[w.type] ?? 'crate')}
+        </span>
+        <span class="text-[9px] font-mono text-[var(--text-main)] text-center leading-tight line-clamp-2 w-full px-0.5">
+          ${w.name}
+        </span>
+        <span class="text-[9px] font-mono ${isEquipped ? 'text-amber-400' : 'text-[var(--text-muted)]'}">
+          ${w.tier ? `T${w.tier}` : (w.rarity ?? '')}
+          ${w.potential ? ` ${'★'.repeat(w.potential)}` : ''}
+        </span>
+        ${isEquipped ? `<span class="absolute bottom-0.5 left-1 text-[9px] font-mono text-amber-400">EQ</span>` : ''}
+      </button>
+    `;
+  };
+
+  const emptyCell = (i: number) => `
+    <div class="inv-cell opacity-25" data-cell="${i}" data-empty="1" aria-hidden="true">
+      <span class="text-[var(--text-muted)] [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('plus')}</span>
+    </div>
+  `;
+
+  // Huecos hasta la capacidad: el jugador ve cuánto le queda
+  const totalCells = Math.max(stacked.length, Math.min(capacity, Math.max(12, Math.ceil(capacity / 3) * 3)));
+  const cells: string[] = [];
+  for (let i = 0; i < totalCells; i++) {
+    cells.push(stacked[i] ? cell(stacked[i], i) : emptyCell(i));
+  }
+
+  const body = `
+    ${sectionHead('Almacén', 'warehouse', `
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-mono tabular ${warehouse.length >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
+          ${warehouse.length}/${capacity}
+        </span>
+        <span class="text-[10px] font-mono accent-text tabular hidden sm:inline">${formatNumber(state.nanites)} ◆</span>
       </div>
-      <div class="border-t border-[var(--border-color)] pt-3">
-        <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-2">Cantidad a vender</div>
-        <div class="flex items-center gap-3">
-          <button id="qty-minus" class="w-10 h-10 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 font-bold hover:bg-slate-700 transition cursor-pointer">-</button>
-          <div class="flex-1 text-center">
-            <div class="text-2xl font-bold text-cyan-400 font-['Orbitron']" id="qty-display">1</div>
+    `)}
+
+    <div class="flex flex-wrap items-center gap-1.5 mb-3">
+      ${([
+        { id: 'all', label: 'Todo' },
+        { id: 'weapon', label: 'Recolectores' },
+        { id: 'companion', label: 'Compañeros' },
+        { id: 'otros', label: 'Otros' }
+      ]).map(f => `
+        <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition
+                       ${ui.filter === f.id ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
+                data-filter="${f.id}">${f.label}</button>
+      `).join('')}
+      <select id="wh-sort"
+        class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
+        <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Mi orden</option>
+        <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
+        <option value="rarity" ${ui.sort === 'rarity' ? 'selected' : ''}>Rareza</option>
+        <option value="tier" ${ui.sort === 'tier' ? 'selected' : ''}>Tier</option>
+        <option value="name" ${ui.sort === 'name' ? 'selected' : ''}>Nombre</option>
+      </select>
+    </div>
+
+    <div class="inv-grid mb-2" id="inv-grid">${cells.join('')}</div>
+
+    <p class="text-[9px] text-[var(--text-muted)] text-center leading-relaxed">
+      Arrastra una celda sobre otra para reordenar. Toca para ver detalles.
+    </p>
+
+    <!-- Hoja de detalle -->
+    ${selected ? detailSheet(selected, state, game) : ''}
+  `;
+
+  const root = mountInto(container, pageShell({
+    title: 'Almacén',
+    subtitle: 'Arrastra para reordenar · toca para inspeccionar',
+    icon: 'warehouse',
+    onBack
+  }, body));
+
+  wire(root, game, onBack, onStateChange);
+}
+
+/** Hoja de detalle. En móvil va abajo con arrastre de salida; en escritorio, arriba. */
+function detailSheet(item: any, state: any, game: any): string {
+  const isWeapon = item.type === 'weapon';
+  const isCompanion = item.type === 'companion';
+  const isEquipped = (isWeapon && item.equipped) || (isCompanion && state.activeCompanions.includes(item.id));
+  const sellPrice = game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0;
+  const maxStack = MAX_STACK[item.type] ?? 1;
+  const maxLevel = item.maxLevel ?? 20;
+
+  const affixList = (item.affixes || []).map((id: string) => {
+    const a = AFFIX_BY_ID[id];
+    if (!a) return '';
+    return `<li class="text-[10px] flex items-start gap-1.5">
+      <span class="${rarityClass(a.rarity)} flex-shrink-0 mt-[3px]">◆</span>
+      <span><span class="${rarityClass(a.rarity)}">${a.name}</span>
+      <span class="text-[var(--text-muted)]"> — ${a.description}</span></span>
+    </li>`;
+  }).join('');
+
+  const valuation = isWeapon ? valuationBreakdown(item) : [];
+
+  return `
+    <div class="fixed inset-0 z-[60] lg:static lg:z-auto lg:bg-transparent lg:p-0
+                flex items-end lg:items-start justify-center lg:justify-end pointer-events-none">
+
+      <div class="absolute inset-0 bg-black/55 lg:hidden pointer-events-auto" data-act="close"></div>
+
+      <div class="relative card-glass-elevated w-full lg:w-80 rounded-t-2xl lg:rounded-2xl pointer-events-auto
+                  p-4 max-h-[76dvh] lg:max-h-[calc(100dvh-8rem)] overflow-y-auto overscroll-contain
+                  animate-rise-in lg:animate-none"
+           style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+
+        <div class="flex items-start gap-2.5 mb-3">
+          <span class="ring-${raritySlug(item.rarity)} w-11 h-11 rounded-xl grid place-items-center
+                       flex-shrink-0 ${rarityClass(item.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">
+            ${ic(TYPE_ICON[item.type] ?? 'crate')}
+          </span>
+          <div class="min-w-0 flex-1">
+            <h3 class="font-['Orbitron'] font-bold text-[13px] text-[var(--text-main)] truncate leading-tight">
+              ${item.name}
+            </h3>
+            <div class="flex items-center gap-1.5 flex-wrap mt-1">
+              <span class="text-[10px] font-mono ${rarityClass(item.rarity)}">${item.rarity}</span>
+              ${item.tier ? `<span class="text-[10px] font-mono text-[var(--text-muted)]">T${item.tier}</span>` : ''}
+              <span class="text-[10px] font-mono text-[var(--text-muted)]">${TYPE_LABEL[item.type] ?? item.type}</span>
+              ${item.potential ? `<span class="text-[10px] text-amber-400">${'★'.repeat(item.potential)}</span>` : ''}
+            </div>
           </div>
-          <button id="qty-plus" class="w-10 h-10 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 font-bold hover:bg-slate-700 transition cursor-pointer">+</button>
+          <button class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0
+                         lg:hidden" data-act="close" aria-label="Cerrar">
+            <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
+          </button>
         </div>
-        <input type="range" id="qty-slider" min="1" max="${maxStack}" value="1" class="w-full mt-3">
-      </div>
-      <div class="border-t border-[var(--border-color)] pt-3">
-        <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Precio total</div>
-        <div class="text-xl font-bold text-amber-400 font-['Orbitron']" id="qty-total">${formatNumber(price)} ⚡</div>
-      </div>
-      <div class="flex gap-2">
-        <button id="qty-cancel" class="flex-1 py-2 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">
-          Cancelar
-        </button>
-        <button id="qty-confirm" class="flex-1 py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-          Vender
-        </button>
+
+        <!-- Autoría: lo que hace único al objeto -->
+        ${item.forgedBy ? `
+          <div class="rounded-lg px-2.5 py-1.5 mb-2.5 flex items-center gap-1.5"
+               style="background: color-mix(in srgb, var(--accent) 10%, transparent);
+                      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
+            <span class="accent-text flex-shrink-0 [&>span>svg]:w-3 h-3">${ic('anvil')}</span>
+            <span class="text-[10px] font-mono text-[var(--text-main)] truncate">
+              Forjada por <span class="accent-text">${item.forgedBy}</span>
+            </span>
+          </div>
+        ` : ''}
+
+        <p class="text-[11px] text-[var(--text-main)] leading-relaxed mb-2.5">
+          ${item.details || 'Sin descripción'}
+        </p>
+
+        ${item.stackable ? `
+          <div class="mb-2.5">
+            <div class="label-caps mb-1">Cantidad</div>
+            <div class="flex items-baseline gap-1.5">
+              <span class="font-['Orbitron'] font-bold text-base accent-text tabular">${item.stackCount || 1}</span>
+              <span class="text-[10px] font-mono text-[var(--text-muted)]">/ ${maxStack}</span>
+            </div>
+          </div>
+        ` : ''}
+
+        ${isWeapon && (item.level ?? 0) > 0 ? `
+          <div class="mb-2.5">
+            <div class="label-caps mb-1">Nivel ${item.level} / ${maxLevel}</div>
+            <div class="meter is-tall"><span style="width:${(item.level / maxLevel) * 100}%"></span></div>
+          </div>
+        ` : ''}
+
+        ${affixList ? `
+          <div class="mb-2.5">
+            <div class="label-caps mb-1">Afijos heredados</div>
+            <ul class="space-y-1">${affixList}</ul>
+          </div>
+        ` : ''}
+
+        ${valuation.length ? `
+          <details class="mb-2.5">
+            <summary class="label-caps cursor-pointer select-none">Valoración</summary>
+            <ul class="mt-1.5 space-y-0.5">
+              ${valuation.map(v => `<li class="text-[10px] font-mono text-[var(--text-muted)]">${v}</li>`).join('')}
+            </ul>
+          </details>
+        ` : ''}
+
+        <div class="flex flex-col gap-1.5 mt-3">
+          ${isWeapon || isCompanion ? `
+            <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
+                    data-act="equip">
+              ${isEquipped ? 'Desequipar' : 'Equipar'}
+            </button>
+          ` : ''}
+
+          ${item.type === 'crate' ? `
+            <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
+                    data-act="open">
+              Abrir caja · 1 llave
+            </button>
+          ` : ''}
+
+          ${item.type === 'consumable' ? `
+            <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
+                    data-act="use">Usar</button>
+          ` : ''}
+
+          ${isWeapon ? `
+            <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
+                    data-act="upgrade" ${isEquipped ? '' : 'disabled style="opacity:.4"'}
+                    title="${isEquipped ? '' : 'Equípala primero'}">
+              Mejorar con cristales
+            </button>
+          ` : ''}
+
+          <button class="w-full h-11 rounded-xl font-['Orbitron'] font-bold text-[11px] cursor-pointer
+                         border border-amber-500/30 text-amber-400"
+                  style="background: color-mix(in srgb, #f59e0b 12%, transparent)"
+                  data-act="sell" ${isEquipped ? 'disabled style="opacity:.4"' : ''}>
+            Vender · ${formatNumber(sellPrice)} ◆
+          </button>
+        </div>
+
+        ${isEquipped ? `<p class="text-[9px] text-amber-400 text-center mt-2">Desequípalo para venderlo o mejorarlo.</p>` : ''}
       </div>
     </div>
   `;
-
-  document.body.appendChild(overlay);
-
-  const qtyDisplay = overlay.querySelector('#qty-display')!;
-  const qtyTotal = overlay.querySelector('#qty-total')!;
-  const qtySlider = overlay.querySelector('#qty-slider') as HTMLInputElement;
-
-  const updateQuantity = (qty: number) => {
-    selectedQuantity = Math.max(1, Math.min(qty, maxStack));
-    qtyDisplay.textContent = selectedQuantity.toString();
-    qtyTotal.textContent = `${formatNumber(price * selectedQuantity)} ⚡`;
-    qtySlider.value = selectedQuantity.toString();
-  };
-
-  overlay.querySelector('#qty-minus')?.addEventListener('click', () => updateQuantity(selectedQuantity - 1));
-  overlay.querySelector('#qty-plus')?.addEventListener('click', () => updateQuantity(selectedQuantity + 1));
-  qtySlider?.addEventListener('input', (e) => updateQuantity(parseInt((e.target as HTMLInputElement).value)));
-  overlay.querySelector('#qty-cancel')?.addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#qty-confirm')?.addEventListener('click', () => {
-    overlay.remove();
-    onConfirm(selectedQuantity);
-  });
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
 }
 
-function showItemCard(item: any, onConfirm: () => void) {
-  const rarityColors: Record<string, string> = {
-    'Común': 'text-slate-400',
-    'Raro': 'text-blue-400',
-    'Épico': 'text-purple-400',
-    'Legendario': 'text-amber-400',
-    'Mítico': 'text-red-400',
-    'Divino': 'text-yellow-300'
-  };
+/** Agrupa los apilables por tipo+nombre y devuelve una copia ordenada. */
+function stackItems(items: any[]): any[] {
+  const out: any[] = [];
+  const map = new Map<string, any>();
+  const STACKABLE = ['consumable', 'crate', 'key', 'crystal'];
 
-  const rarityColor = rarityColors[item.rarity] || 'text-slate-400';
-  const icon = item.type === 'weapon' ? '⚔️' : item.type === 'companion' ? '🤖' : item.type === 'crate' ? '📦' : item.type === 'key' ? '🔑' : item.type === 'crystal' ? '💎' : '⚡';
-
-  const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-  overlay.innerHTML = `
-    <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4 shadow-2xl">
-      <div class="text-center">
-        <div class="text-4xl mb-2">${icon}</div>
-        <h3 class="font-['Orbitron'] font-bold text-lg text-[var(--text-main)]">${item.name}${item.tier ? ` T${item.tier}` : ''}</h3>
-        <div class="text-sm font-mono ${rarityColor}">${item.rarity}</div>
-      </div>
-      <div class="border-t border-[var(--border-color)] pt-3">
-        <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
-        <div class="text-sm font-mono text-[var(--text-main)]">${item.details || 'Sin descripción'}</div>
-      </div>
-      <div class="flex gap-2">
-        <button id="item-card-cancel" class="flex-1 py-2 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">
-          Cancelar
-        </button>
-        <button id="item-card-confirm" class="flex-1 py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-          Vender
-        </button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
-  overlay.querySelector('#item-card-cancel')?.addEventListener('click', () => {
-    overlay.remove();
-  });
-
-  overlay.querySelector('#item-card-confirm')?.addEventListener('click', () => {
-    overlay.remove();
-    onConfirm();
-  });
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
-}
-
-function showConfirmModal(message: string, onConfirm: () => void) {
-  // Crear overlay
-  const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
-  overlay.id = 'confirm-modal-overlay';
-  
-  // Crear modal
-  const modal = document.createElement('div');
-  modal.className = 'card-glass border rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4';
-  
-  // Mensaje
-  const messageEl = document.createElement('p');
-  messageEl.className = 'text-sm font-mono text-[var(--text-main)] text-center';
-  messageEl.textContent = message;
-  
-  // Contenedor de botones
-  const buttonContainer = document.createElement('div');
-  buttonContainer.className = 'flex gap-3';
-  
-  // Botón cancelar
-  const cancelBtn = document.createElement('button');
-  cancelBtn.className = 'flex-1 py-2.5 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-[\'Orbitron\'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer';
-  cancelBtn.textContent = 'Cancelar';
-  cancelBtn.addEventListener('click', () => {
-    overlay.remove();
-  });
-  
-  // Botón aceptar
-  const confirmBtn = document.createElement('button');
-  confirmBtn.className = 'flex-1 py-2.5 accent-bg text-slate-950 font-[\'Orbitron\'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer';
-  confirmBtn.textContent = 'Aceptar';
-  confirmBtn.addEventListener('click', () => {
-    overlay.remove();
-    onConfirm();
-  });
-  
-  buttonContainer.appendChild(cancelBtn);
-  buttonContainer.appendChild(confirmBtn);
-  
-  modal.appendChild(messageEl);
-  modal.appendChild(buttonContainer);
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-  
-  // Cerrar con Escape
-  const handleEscape = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      overlay.remove();
-      document.removeEventListener('keydown', handleEscape);
+  for (const item of items) {
+    if (item.stackable && STACKABLE.includes(item.type)) {
+      const key = `${item.type}_${item.name}`;
+      const cap = MAX_STACK[item.type] ?? 20;
+      const existing = map.get(key);
+      if (existing) {
+        existing.stackCount = Math.min((existing.stackCount || 1) + (item.stackCount || 1), cap);
+      } else {
+        const copy = { ...item, stackCount: Math.min(item.stackCount || 1, cap) };
+        map.set(key, copy);
+        out.push(copy);
+      }
+    } else {
+      out.push(item);
     }
+  }
+  return out;
+}
+
+function wire(container: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void) {
+  const redraw = () => draw(container, game, onBack, onStateChange);
+
+  container.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
+
+  // --- Filtro y orden ---
+  container.querySelectorAll<HTMLElement>('[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.nav();
+      ui.filter = btn.dataset.filter!;
+      redraw();
+    });
+  });
+  container.querySelector<HTMLSelectElement>('#wh-sort')?.addEventListener('change', (e) => {
+    ui.sort = (e.target as HTMLSelectElement).value;
+    redraw();
+  });
+
+  // --- Selección y arrastre --------------------------------------------
+  // Un solo conjunto de manejadores de puntero para toda la rejilla. Cada
+  // celda recibe listeners nuevos en cada re-render; si se cumularan, un
+  // arrastre dispararía N veces. Se limpian antes de volver a ligar.
+  const grid = container.querySelector('#inv-grid') as HTMLElement | null;
+  if (grid) setupDragAndDrop(grid, game, redraw);
+
+  // --- Acciones de la hoja ---------------------------------------------
+  container.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
+    if (!btn) return;
+    const act = btn.dataset.act;
+    const item = ui.selectedId ? (game.getState().warehouse as any[]).find((w: any) => w.id === ui.selectedId) : null;
+
+    switch (act) {
+      case 'close':
+        sfx.pick();
+        ui.selectedId = null;
+        redraw();
+        break;
+      case 'equip':
+        if (!item) return;
+        sfx.equip();
+        if (item.type === 'weapon') game.equipCollector(item.id);
+        else if (item.type === 'companion') {
+          const ok = game.equipCompanion(item.id);
+          if (!ok) showToast('No hay slots de compañero libres.', 'error');
+        }
+        redraw();
+        onStateChange?.();
+        break;
+      case 'open':
+        if (!item) return;
+        openCrate(game, item, redraw);
+        break;
+      case 'use':
+        if (!item) return;
+        useConsumable(game, item, redraw);
+        break;
+      case 'upgrade':
+        if (!item) return;
+        sfx.use();
+        if (item.id !== game.getState().equippedWeaponId) {
+          showToast('Equipa el recolector primero.', 'info');
+          return;
+        }
+        const res = game.upgradeEquippedWeapon();
+        if (res) showToast(res.msg, res.success ? 'success' : 'error');
+        redraw();
+        break;
+      case 'sell':
+        if (!item) return;
+        sellItem(game, item, redraw);
+        break;
+    }
+  });
+}
+
+// ==========================================================================
+//  Arrastre con Pointer Events
+// ==========================================================================
+
+function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
+  let dragId: string | null = null;
+  let fromIndex = -1;
+  let ghost: HTMLElement | null = null;
+  let activePointer: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  // Umbral en píxeles: por debajo de esto es un toque, no un arrastre. Sin
+  // él, cada toque en móvil movía un píxel y seleccionaba otra celda.
+  const THRESHOLD = 8;
+
+  const cleanupGhost = () => {
+    ghost?.remove();
+    ghost = null;
   };
-  document.addEventListener('keydown', handleEscape);
+
+  grid.addEventListener('pointerdown', (e) => {
+    const cell = (e.target as HTMLElement).closest('[data-cell]') as HTMLElement | null;
+    if (!cell || (e.target as HTMLElement).closest('select, button[data-act]')) return;
+    if (activePointer !== null) return; // ya hay un dedo en pantalla
+
+    const id = cell.dataset.id;
+    if (!id) return;
+
+    activePointer = e.pointerId;
+    dragId = id;
+    fromIndex = Number(cell.dataset.cell);
+    startX = e.clientX;
+    startY = e.clientY;
+    cell.dataset.pendingDrag = '1';
+  });
+
+  grid.addEventListener('pointermove', (e) => {
+    if (activePointer !== e.pointerId || !dragId) return;
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!ghost && Math.hypot(dx, dy) < THRESHOLD) return; // todavía es un toque
+
+    const cell = grid.querySelector(`[data-cell="${fromIndex}"]`) as HTMLElement | null;
+    if (!cell) return;
+
+    if (!ghost) {
+      sfx.pick();
+      cell.classList.add('is-dragging');
+      delete cell.dataset.pendingDrag;
+      ghost = document.createElement('div');
+      ghost.className = 'drag-ghost';
+      ghost.style.background = 'color-mix(in srgb, var(--bg-app) 88%, transparent)';
+      ghost.style.border = '1px solid var(--accent)';
+      ghost.innerHTML = cell.innerHTML;
+      document.body.appendChild(ghost);
+      // `setPointerCapture` en el elemento que recibió el pointerdown: sin
+      // esto, en móvil el dedo se sale de la celda a los pocos píxeles y el
+      // navegador cancela el arrastre.
+      cell.setPointerCapture?.(e.pointerId);
+    }
+
+    e.preventDefault();
+    ghost.style.left = `${e.clientX}px`;
+    ghost.style.top = `${e.clientY}px`;
+
+    // Resaltar la celda bajo el dedo
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-cell]') as HTMLElement | null;
+    grid.querySelectorAll('.is-over').forEach(el => el.classList.remove('is-over'));
+    if (over && over.dataset.cell !== String(fromIndex)) over.classList.add('is-over');
+  });
+
+  const finish = (e: PointerEvent) => {
+    if (activePointer !== e.pointerId) return;
+    activePointer = null;
+
+    const wasDragging = !!ghost;
+    cleanupGhost();
+    grid.querySelectorAll('.is-over, .is-dragging').forEach(el => el.classList.remove('is-over', 'is-dragging'));
+
+    if (!dragId) return;
+    const draggedId = dragId;
+    dragId = null;
+    const src = fromIndex;
+    fromIndex = -1;
+
+    if (!wasDragging) {
+      // Toque simple: seleccionar
+      sfx.pick();
+      ui.selectedId = ui.selectedId === draggedId ? null : draggedId;
+      redraw();
+      return;
+    }
+
+    // Arrastre: soltar sobre otra celda
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-cell]') as HTMLElement | null;
+    const dst = target ? Number(target.dataset.cell) : -1;
+    if (dst >= 0 && dst !== src) {
+      swapItems(game, draggedId, dst, src);
+      sfx.place();
+      ui.sort = 'default';
+    }
+    redraw();
+  };
+
+  grid.addEventListener('pointerup', finish);
+  grid.addEventListener('pointercancel', (e) => {
+    cleanupGhost();
+    grid.querySelectorAll('.is-over, .is-dragging').forEach(el => el.classList.remove('is-over', 'is-dragging'));
+    if (activePointer === e.pointerId) activePointer = null;
+    dragId = null;
+    fromIndex = -1;
+  });
+
+  // Sin esto, un arrastre en móvil termina en un clic que abre la hoja.
+  grid.addEventListener('click', (e) => e.stopPropagation());
 }
 
 /**
- * Módulo de Almacén Central (Warehouse Hub)
- * Grilla de 20 slots con panel lateral de inspección
+ * Intercambia dos items en el array del almacén.
+ *
+ * Se opera sobre `state.warehouse` en bruto, no sobre la vista apilada: si se
+ * moviera sobre la vista, mover "20 tarjetas apiladas en 1 celda" no se podría
+ * expresar, porque la pila no tiene posición propia en el array.
+ *
+ * `srcIndex` es el índice en la vista; se traduce al índice real buscando el
+ * id, que sí es único.
  */
-export function renderWarehouseTab(container: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void) {
-    let selectedItemId: string | null = null;
-    let currentSort: string = 'default';
-    let currentFilter: string = 'all';
-    let moveMode = false;
+function swapItems(game: any, draggedId: string, dstViewIndex: number, srcViewIndex: number) {
+  const state = game.getState();
+  const wh = state.warehouse as any[];
+  const realFrom = wh.findIndex((w: any) => w.id === draggedId);
+  if (realFrom < 0) return;
 
-    const renderTemplate = () => {
-        const state = game.getState();
-        const warehouse = state.warehouse || [];
-        const capacity = state.warehouseCapacity || 20;
+  // Índice real del destino: se cuentan los items no apilados hasta la
+  // posición de la vista, que es la posición equivalente en el array real.
+  let realTo = Math.min(dstViewIndex, wh.length - 1);
+  if (realTo === realFrom) return;
 
-        // Aplicar filtro
-        let filteredItems = warehouse.filter((item: WarehouseItem) => {
-            if (currentFilter === 'all') return true;
-            if (currentFilter === 'consumable') {
-                return !['weapon', 'companion'].includes(item.type);
-            }
-            return item.type === currentFilter;
-        });
+  const [moved] = wh.splice(realFrom, 1);
+  if (realTo > realFrom) realTo -= 1;
+  wh.splice(Math.max(0, Math.min(realTo, wh.length)), 0, moved);
 
-        // Aplicar orden (no ordenar si es Custom - respetar orden manual del usuario)
-        if (currentSort === 'name') {
-            filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => a.name.localeCompare(b.name));
-        } else if (currentSort === 'rarity') {
-            const rarityOrder: Record<string, number> = { 'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3 };
-            filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0));
-        } else if (currentSort === 'type') {
-            filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => a.type.localeCompare(b.type));
-        } else if (currentSort === 'tier') {
-            filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => (b.tier || 0) - (a.tier || 0));
+  game.updateState(state);
+}
+
+// ==========================================================================
+//  Acciones sobre items
+// ==========================================================================
+
+function openCrate(game: any, item: any, redraw: () => void) {
+  const state = game.getState();
+  if (state.keys < 1) {
+    showToast('No tienes llaves.', 'error');
+    return;
+  }
+  const crateType = inferCrateType(item.name);
+  showConfirmModal(
+    `La ruleta decide el premio al terminar la animación.`,
+    () => {
+      const reward = game.openCrateBox(crateType);
+      if (!reward) {
+        showToast('No se pudo abrir la caja.', 'error');
+        return;
+      }
+      // El game loop ya descontó el contador; el item se recalcula solo al
+      // siguiente syncCrateCounters, pero el stack visible hay que bajarlo aquí
+      if (item.stackCount && item.stackCount > 1) item.stackCount -= 1;
+      else state.warehouse = state.warehouse.filter((w: any) => w.id !== item.id);
+      game.updateState(state);
+
+      showCrateRoulette(reward, crateType, () => {
+        ui.selectedId = null;
+        redraw();
+      });
+    },
+    { sublabel: item.name, confirmText: 'Abrir' }
+  );
+}
+
+function inferCrateType(name: string): any {
+  const l = name.toLowerCase();
+  if (l.includes('común')) return 'common';
+  if (l.includes('rara')) return 'rare';
+  if (l.includes('épica')) return 'epic';
+  return 'legendary';
+}
+
+function useConsumable(game: any, item: any, redraw: () => void) {
+  const state = game.getState();
+  const buffId = item.buffId;
+
+  showConfirmModal(
+    item.details || 'Aplicar el efecto de este consumible.',
+    () => {
+      sfx.use();
+      const now = Date.now();
+      const afkMs = game.getAfkDurationMs?.() ?? 10 * 60 * 1000;
+
+      switch (buffId) {
+        case 'warehouseExpander':
+          if (state.warehouseCapacity >= 50) {
+            showToast('Almacén al máximo.', 'error');
+            return;
+          }
+          state.warehouseCapacity += 1;
+          break;
+        case 'afk': {
+          const base = Math.max(now, state.afkExpiresAt || 0);
+          // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
+          state.afkExpiresAt = Math.min(base + afkMs, now + afkMs * 3);
+          break;
         }
-        // Si currentSort es 'custom' o 'default', no ordenar - mantener orden actual
-
-        // Apilar items apilables
-        const stackedItems = stackItems(filteredItems);
-
-        // Crear grilla de 20 slots
-        const slots = [];
-        for (let i = 0; i < capacity; i++) {
-            const item = stackedItems[i];
-            if (item) {
-                slots.push(renderItemSlot(item, item.id === selectedItemId, state, i, moveMode));
-            } else {
-                slots.push(renderEmptySlot(i, moveMode));
-            }
+        case 'clickBoost': {
+          const base = Math.max(now, state.buffs.clickBoostExpiresAt);
+          state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, now + 60 * 60_000);
+          break;
         }
-
-        // Item seleccionado para panel lateral
-        const selectedItem = selectedItemId ? warehouse.find((i: WarehouseItem) => i.id === selectedItemId) : null;
-
-        // Guardar valores actuales de los selects
-        const currentFilterValue = (container.querySelector('#filter-type') as HTMLSelectElement)?.value || 'all';
-        const currentSortValue = (container.querySelector('#sort-by') as HTMLSelectElement)?.value || 'default';
-
-        container.innerHTML = `
-            <div class="fixed inset-0 app-bg flex flex-col items-center p-3 md:p-4 font-sans select-none overflow-hidden">
-                <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[var(--accent)]/10 via-[var(--bg-app)] to-[var(--bg-app)] pointer-events-none"></div>
-                
-                <div class="relative z-10 max-w-6xl w-full flex flex-col gap-3 md:gap-4 h-full min-h-0">
-                    <!-- Header -->
-                    <div class="flex items-center justify-between flex-shrink-0">
-                        <button id="back-btn" class="px-4 py-2 card-glass border border-[var(--border-color)] rounded-xl text-xs font-mono accent-text hover:border-[var(--accent)] transition cursor-pointer">
-                            ← Volver a la Base
-                        </button>
-                        <div class="flex items-center gap-4">
-                            <div class="text-right">
-                                <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Nanitas</div>
-                                <div id="warehouse-nanites" class="text-lg font-bold accent-text font-['Orbitron']">${formatNumber(state.nanites)}</div>
-                            </div>
-                            <h2 class="text-base md:text-xl font-['Orbitron'] font-black accent-text tracking-wider text-right">📦 ALMACÉN CENTRAL</h2>
-                        </div>
-                    </div>
-
-                    <!-- Stats Bar -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-shrink-0">
-                        <div class="card-glass border rounded-xl p-3 text-center">
-                            <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Capacidad</div>
-                            <div class="text-lg font-bold text-emerald-400 font-['Orbitron']">${warehouse.length} / ${capacity}</div>
-                        </div>
-                        <div class="card-glass border rounded-xl p-3 text-center">
-                            <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Recolectores</div>
-                            <div class="text-lg font-bold text-red-400 font-['Orbitron']">${warehouse.filter((i: WarehouseItem) => i.type === 'weapon').length}</div>
-                        </div>
-                        <div class="card-glass border rounded-xl p-3 text-center">
-                            <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Compañeros</div>
-                            <div class="text-lg font-bold text-blue-400 font-['Orbitron']">${warehouse.filter((i: WarehouseItem) => i.type === 'companion').length}</div>
-                        </div>
-                        <div class="card-glass border rounded-xl p-3 text-center">
-                            <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Consumibles</div>
-                            <div class="text-lg font-bold text-amber-400 font-['Orbitron']">${warehouse.filter((i: WarehouseItem) => i.type === 'consumable').length}</div>
-                        </div>
-                    </div>
-
-                    <!--Toolbar: Filtro por tipo y ordenamiento -->
-                    <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
-                        <select id="filter-type" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
-                            <option value="all">Todos</option>
-                            <option value="weapon">Recolectores</option>
-                            <option value="companion">Compañeros</option>
-                            <option value="consumable">Consumibles</option>
-                        </select>
-                        <select id="sort-by" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
-                            <option value="default">Ordenar: Default</option>
-                            <option value="custom">Ordenar: Custom</option>
-                            <option value="name">Nombre A-Z</option>
-                            <option value="rarity">Rareza</option>
-                            <option value="type">Tipo</option>
-                            <option value="tier">Tier</option>
-                        </select>
-                    </div>
-
-                    <!-- Main Content: Grid + Side Panel -->
-                    <div class="flex flex-col lg:flex-row gap-4 flex-grow overflow-hidden">
-                        <!-- Grid de 20 slots -->
-                        <div class="flex-grow overflow-y-auto pr-1 custom-scrollbar">
-                            <div class="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                                ${slots.join('')}
-                            </div>
-                        </div>
-
-                        <!-- Panel Lateral de Inspección -->
-                        <div class="lg:w-80 flex-shrink-0">
-                            <div id="inspection-panel" class="card-glass border rounded-2xl p-4 h-full overflow-y-auto custom-scrollbar">
-                                ${selectedItem ? renderInspectionPanel(selectedItem, state) : renderEmptyPanel()}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Restaurar valores de los selects
-        const filterTypeSelect = container.querySelector('#filter-type') as HTMLSelectElement;
-        if (filterTypeSelect) filterTypeSelect.value = currentFilterValue;
-        const sortBySelect = container.querySelector('#sort-by') as HTMLSelectElement;
-        if (sortBySelect) sortBySelect.value = currentSortValue;
-
-        setupEventListeners();
-    };
-
-    function renderItemSlot(item: WarehouseItem, isSelected: boolean, state: any, slotIndex: number, moveMode: boolean = false): string {
-        const rarityColors: Record<string, string> = {
-            'Común': 'border-slate-500/50',
-            'Raro': 'border-blue-500/50',
-            'Épico': 'border-purple-500/50',
-            'Legendario': 'border-amber-500/50'
-        };
-        const rarityBg: Record<string, string> = {
-            'Común': 'bg-slate-800/60',
-            'Raro': 'bg-blue-900/40',
-            'Épico': 'bg-purple-900/40',
-            'Legendario': 'bg-amber-900/40'
-        };
-        const typeIcons: Record<string, string> = {
-            'weapon': '⚙️',
-            'companion': '🤖',
-            'crate': '📦',
-            'key': '🔑',
-            'crystal': '💎',
-            'consumable': '⚡'
-        };
-
-        const isEquipped = (item.type === 'weapon' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
-        const equippedBorder = isEquipped ? 'ring-2 ring-amber-400 border-amber-400' : '';
-        const equippedBg = isEquipped ? 'bg-amber-900/30' : '';
-        
-        return `
-            <div class="warehouse-item ${rarityColors[item.rarity] || 'border-slate-500/50'} ${rarityBg[item.rarity] || 'bg-slate-800/60'} ${equippedBg} border-2 rounded-xl p-3 cursor-pointer transition-all hover:border-[var(--accent)] ${isSelected ? 'ring-2 ring-[var(--accent)] border-[var(--accent)]' : ''} ${equippedBorder}" data-item-id="${item.id}" data-slot-index="${slotIndex}" class="${moveMode ? 'ring-2 ring-[var(--accent)] border-[var(--accent)] cursor-move' : ''}">
-                <div class="text-2xl text-center mb-1">${typeIcons[item.type] || '📦'}</div>
-                <div class="text-[10px] font-mono text-center text-[var(--text-main)] truncate">${item.name}${item.tier ? ` T${item.tier}` : ''}</div>
-                <div class="text-[9px] font-mono text-center text-[var(--text-muted)]">${item.rarity}</div>
-                ${item.stackable && item.stackCount ? `<div class="text-[9px] font-mono text-center text-emerald-400">${item.stackCount}/${item.type === 'consumable' ? 20 : item.type === 'crate' ? 20 : item.type === 'key' ? 99 : 99}</div>` : ''}
-                ${isEquipped ? '<div class="mt-1 text-[9px] font-mono text-center text-slate-900 font-bold bg-amber-400 rounded px-1">(Equipado)</div>' : ''}
-            </div>
-        `;
-    }
-
-    function renderEmptySlot(slotIndex: number, moveMode: boolean = false): string {
-        return `
-            <div class="border-2 border-dashed border-slate-700/50 rounded-xl p-3 opacity-30 cursor-pointer hover:opacity-60 transition ${moveMode ? 'ring-2 ring-[var(--accent)] border-[var(--accent)] cursor-move' : ''}" data-slot-index="${slotIndex}">
-                <div class="text-2xl text-center mb-1">📭</div>
-                <div class="text-[10px] font-mono text-center text-[var(--text-muted)]">Vacío</div>
-            </div>
-        `;
-    }
-
-    function renderInspectionPanel(item: WarehouseItem, state: any): string {
-        const typeLabels: Record<string, string> = {
-            'weapon': 'Recolector',
-            'companion': 'Compañero',
-            'crate': 'Caja',
-            'key': 'Llave',
-            'crystal': 'Cristal de Mejora',
-            'consumable': 'Consumible'
-        };
-
-        const rarityColors: Record<string, string> = {
-            'Común': 'text-slate-400',
-            'Raro': 'text-blue-400',
-            'Épico': 'text-purple-400',
-            'Legendario': 'text-amber-400'
-        };
-
-        let actionButtons = '';
-
-        if (item.type === 'weapon') {
-            actionButtons = `
-                <button id="action-equip" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-                    ${item.equipped ? 'Desequipar' : 'Equipar'}
-                </button>
-            `;
-        } else if (item.type === 'companion') {
-            const isActive = state.activeCompanions.includes(item.id);
-            actionButtons = `
-                <button id="action-equip" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-                    ${isActive ? 'Desequipar' : 'Equipar'}
-                </button>
-            `;
-        } else if (item.type === 'crate') {
-            actionButtons = `
-                <button id="action-use" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-                    Abrir Caja (1 🔑)
-                </button>
-            `;
-        } else if (item.type === 'consumable') {
-            const isExpander = item.name.includes('Expansor');
-            const isAfkCard = item.name.includes('AFK');
-            const isClickCard = item.name.includes('Click');
-            let useLabel = 'Usar';
-            if (isExpander) useLabel = 'Usar (+1 slot)';
-            else if (isAfkCard) useLabel = 'Usar (10 min AFK)';
-            else if (isClickCard) useLabel = 'Usar (buff click)';
-            actionButtons = `
-                <button id="action-use" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-                    ${useLabel}
-                </button>
-            `;
-        } else if (item.type === 'crystal') {
-            actionButtons = `
-                <div class="text-[10px] font-mono text-[var(--text-muted)] text-center">Usa "Mejorar" en un recolector para aplicar cristales</div>
-            `;
+        case 'passiveBoost': {
+          const base = Math.max(now, state.buffs.passiveBoostExpiresAt);
+          state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60_000, now + 2 * 60 * 60_000);
+          break;
         }
-
-        // Botón Mover (siempre visible)
-        actionButtons += `
-            <button id="action-move" class="w-full py-2 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">
-                📦 Mover
-            </button>
-        `;
-
-        return `
-            <div class="flex flex-col gap-4">
-                <div class="text-center">
-                    <div class="text-4xl mb-2">${item.type === 'weapon' ? '⚙️' : item.type === 'companion' ? '🤖' : item.type === 'crate' ? '📦' : item.type === 'key' ? '🔑' : item.type === 'crystal' ? '💎' : '⚡'}</div>
-                    <h3 class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">${item.name}${item.tier ? ` T${item.tier}` : ''}</h3>
-                    <div class="text-xs font-mono ${rarityColors[item.rarity] || 'text-slate-400'}">${item.rarity}</div>
-                    ${item.tier ? `<div class="text-[10px] font-mono text-[var(--text-muted)]">Tier ${item.tier}</div>` : ''}
-                    <div class="text-[10px] font-mono text-[var(--text-muted)]">${typeLabels[item.type] || item.type}</div>
-                </div>
-
-                ${item.stackable && item.stackCount ? `
-                <div class="border-t border-[var(--border-color)] pt-3">
-                    <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Cantidad</div>
-                    <div class="text-lg font-bold text-cyan-400 font-['Orbitron']">${item.stackCount}/${item.type === 'consumable' ? 20 : item.type === 'crate' ? 20 : item.type === 'key' ? 99 : 99}</div>
-                </div>
-                ` : ''}
-
-                <div class="border-t border-[var(--border-color)] pt-3">
-                    <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
-                    <div class="text-xs font-mono text-[var(--text-main)]">${item.details || 'Sin descripción'}</div>
-                    ${item.type === 'consumable' && (item.name.includes('Click x2') || item.name.includes('Click x3') || item.name.includes('AFK')) ? `
-                    <div class="mt-2 text-[10px] font-mono text-[var(--text-muted)]">
-                        <span class="buff-timer" data-buff="${item.name.includes('Click x2') ? 'clickX2' : item.name.includes('Click x3') ? 'clickX3' : 'afk'}">Tiempo restante: --</span>
-                    </div>
-                    ` : ''}
-                </div>
-
-                ${item.level ? `
-                <div class="border-t border-[var(--border-color)] pt-3">
-                    <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Nivel</div>
-                    <div class="text-lg font-bold text-emerald-400 font-['Orbitron']">${item.level} / 20</div>
-                </div>
-                ` : ''}
-
-                <div class="border-t border-[var(--border-color)] pt-3 flex flex-col gap-2">
-                    ${actionButtons}
-                    <button id="action-sell" class="w-full py-2 bg-amber-600/20 border border-amber-600/40 text-amber-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-amber-600/30 transition cursor-pointer">
-                        Vender (${item.sellPrice || 0} ⚡)
-                    </button>
-                    <button id="action-delete" class="w-full py-2 bg-red-600/20 border border-red-600/40 text-red-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-red-600/30 transition cursor-pointer">
-                        Eliminar
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    function renderEmptyPanel(): string {
-        return `
-            <div class="flex flex-col items-center justify-center h-full text-center opacity-50">
-                <div class="text-4xl mb-3">🔍</div>
-                <div class="text-xs font-mono text-[var(--text-muted)]">Selecciona un ítem del almacén para inspeccionarlo</div>
-            </div>
-        `;
-    }
-
-    function stackItems(items: WarehouseItem[]): WarehouseItem[] {
-        const stacked: WarehouseItem[] = [];
-        const stackMap = new Map<string, WarehouseItem>();
-        // Solo estos tipos se apilan (recolectores y compañeros tienen IDs únicos)
-        const STACKABLE_TYPES = ['consumable', 'crate', 'key', 'crystal'];
-        // Máximo de apilamiento por tipo de item
-        const MAX_STACK_BY_TYPE: Record<string, number> = {
-            'consumable': 20,  // Tarjetas y consumibles se apilan hasta 20
-            'crate': 20,        // Cajas hasta 20
-            'key': 99,         // Llaves hasta 99
-            'crystal': 99      // Cristales hasta 99
-        };
-
-        for (const item of items) {
-            // Solo apilar si es un tipo apilable Y tiene stackable=true
-            if (item.stackable && STACKABLE_TYPES.includes(item.type)) {
-                const maxStack = MAX_STACK_BY_TYPE[item.type] || 20;
-                // Apilar por nombre + tipo (items con mismo nombre y tipo se apilan)
-                const stackKey = `${item.type}_${item.name}`;
-                const existing = stackMap.get(stackKey);
-                if (existing) {
-                    existing.stackCount = Math.min((existing.stackCount || 1) + (item.stackCount || 1), maxStack);
-                } else {
-                    const newItem = { ...item, stackCount: Math.min(item.stackCount || 1, maxStack) };
-                    stackMap.set(stackKey, newItem);
-                    stacked.push(newItem);
-                }
-            } else {
-                // Recolectores y compañeros: no apilar, cada uno es único
-                stacked.push(item);
-            }
+        case 'clickX2': {
+          const base = Math.max(now, state.buffs.clickX2ExpiresAt);
+          state.buffs.clickX2ExpiresAt = Math.min(base + 30_000, now + 30 * 60_000);
+          break;
         }
-
-        return stacked;
-    }
-
-    function setupEventListeners() {
-        const backBtn = container.querySelector('#back-btn');
-        backBtn?.addEventListener('click', onBack);
-
-        // Filtros
-        container.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const filter = (e.currentTarget as HTMLElement).getAttribute('data-filter');
-                if (filter) {
-                    currentFilter = filter;
-                    renderTemplate();
-                }
-            });
-        });
-
-        // Filtro por tipo
-        const filterTypeSelect = container.querySelector('#filter-type') as HTMLSelectElement;
-        filterTypeSelect?.addEventListener('change', () => {
-            currentFilter = filterTypeSelect.value;
-            renderTemplate();
-        });
-
-        // Ordenar
-        const sortSelect = container.querySelector('#sort-by') as HTMLSelectElement;
-        sortSelect?.addEventListener('change', () => {
-            currentSort = sortSelect.value;
-            renderTemplate();
-        });
-
-        // Botón Mover a otro slot
-        const moveBtn = container.querySelector('#action-move');
-        moveBtn?.addEventListener('click', () => {
-            const currentState = game.getState();
-            const selectedItem = currentState.warehouse.find((i: WarehouseItem) => i.id === selectedItemId);
-            if (!selectedItem) return;
-            showConfirmModal('Elija el nuevo slot o similar', () => {
-                moveMode = true;
-                renderTemplate();
-            });
-        });
-
-        // Seleccionar item o mover a slot (incluso vacío)
-        container.querySelectorAll('[data-slot-index]').forEach((slot) => {
-            slot.addEventListener('click', (e) => {
-                const slotIndex = parseInt((e.currentTarget as HTMLElement).getAttribute('data-slot-index') || '0');
-                const id = (e.currentTarget as HTMLElement).getAttribute('data-item-id');
-                console.log('Click en slot:', slotIndex, 'moveMode:', moveMode, 'selectedItemId:', selectedItemId);
-
-                // Si estamos en modo movimiento, mover el item seleccionado a este slot
-                if (moveMode && selectedItemId) {
-                    const state = game.getState();
-                    const fromIndex = state.warehouse.findIndex((i: WarehouseItem) => i.id === selectedItemId);
-                    if (fromIndex !== -1) {
-                        // Mover al slot exacto seleccionado (incluso si está vacío)
-                        const itemToMove = state.warehouse[fromIndex];
-                        state.warehouse.splice(fromIndex, 1);
-                        // Insertar en la posición exacta del slot seleccionado
-                        // Si el slot está más allá del final, agregar al final
-                        // Si el slot está dentro, insertar en esa posición
-                        const insertIndex = Math.min(slotIndex, state.warehouse.length);
-                        state.warehouse.splice(insertIndex, 0, itemToMove);
-                        // Asegurar que el item quede en la posición correcta
-                        // Si el slot está más allá del final, el item queda al final
-                        // Si el slot está dentro, el item queda en esa posición
-                        game.updateState(state);
-                        selectedItemId = null;
-                        moveMode = false;
-                        // No re-ordenar después de mover - el item se queda en su nueva posición
-                        currentSort = 'custom';
-                        renderTemplate();
-                        return;
-                    }
-                }
-
-                if (id) {
-                    selectedItemId = id;
-                    renderTemplate();
-                }
-            });
-        });
-
-        // Acciones del panel lateral
-        setupActionListeners();
-    }
-
-    function setupActionListeners() {
-        const state = game.getState();
-        const item = selectedItemId ? state.warehouse.find((i: WarehouseItem) => i.id === selectedItemId) : null;
-        if (!item) return;
-
-        // Equipar/Desequipar
-        const equipBtn = container.querySelector('#action-equip');
-        equipBtn?.addEventListener('click', () => {
-            if (item.type === 'weapon') {
-                const wasEquipped = item.equipped;
-                const collectorName = item.name;
-                const action = wasEquipped ? 'desequipar' : 'equipar';
-                showConfirmModal(`¿${action === 'equipar' ? 'Equipar' : 'Desequipar'} ${collectorName}?`, () => {
-                    game.equipCollector(item.id);
-                    renderTemplate();
-                    // Re-renderizar el juego completo para actualizar el panel principal
-                    if (onStateChange) onStateChange();
-                });
-            } else if (item.type === 'companion') {
-                const wasActive = state.activeCompanions.includes(item.id);
-                const compName = item.name;
-                const action = wasActive ? 'desequipar' : 'equipar';
-                showConfirmModal(`¿${action === 'equipar' ? 'Equipar' : 'Desequipar'} ${compName}?`, () => {
-                    const success = game.equipCompanion(item.id);
-                    if (!success) {
-                        showConfirmModal('No hay slots disponibles. Desequipa un compañero primero.', () => {});
-                    }
-                    renderTemplate();
-                    // Re-renderizar el juego completo para actualizar el panel principal
-                    if (onStateChange) onStateChange();
-                });
-            }
-        });
-
-        // Mejorar recolector
-        const upgradeBtn = container.querySelector('#action-upgrade');
-        upgradeBtn?.addEventListener('click', () => {
-            if (state.upgradeCrystals < 1) {
-                showConfirmModal('No tienes cristales de mejora suficientes.', () => {});
-                return;
-            }
-            if (item.level >= 20) {
-                showConfirmModal('El recolector ya está al nivel máximo.', () => {});
-                return;
-            }
-            // Se delega en el game loop: alli viven el coste en cristales y la
-            // probabilidad de exito. Aqui solo habia un +1 garantizado.
-            showConfirmModal(`\u00bfIntentar mejorar ${item.name} al nivel ${(item.level || 0) + 1}?`, () => {
-                sfx.use();
-                const result = game.upgradeEquippedWeapon();
-                if (result) {
-                    showToast(result.msg, result.success ? 'success' : 'error');
-                    renderTemplate();
-                }
-            });
-        });
-
-        // Usar item
-        const useBtn = container.querySelector('#action-use');
-        useBtn?.addEventListener('click', () => {
-            if (item.type === 'crate') {
-                if (state.keys < 1) {
-                    showConfirmModal('No tienes llaves suficientes.', () => {});
-                    return;
-                }
-                // Abrir caja
-                const crateType = item.name.toLowerCase().includes('común') ? 'common' :
-                                  item.name.toLowerCase().includes('rara') ? 'rare' :
-                                  item.name.toLowerCase().includes('épica') ? 'epic' : 'legendary';
-                showConfirmModal(`¿Abrir ${item.name}?`, () => {
-                    const reward = game.openCrateBox(crateType);
-                    if (reward) {
-                        // Reducir cantidad o eliminar
-                        if (item.stackCount && item.stackCount > 1) {
-                            item.stackCount -= 1;
-                        } else {
-                            state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== item.id);
-                        }
-                        game.updateState(state);
-                        renderTemplate();
-                    }
-                });
-            } else if (item.type === 'consumable') {
-                // Usar consumible - gasta solo 1 por uso
-                showConfirmModal(`¿Usar ${item.name}?`, () => {
-                    const now = Date.now();
-                    // Se decide por el identificador del item, no por el nombre:
-                    // los nombres han cambiado ("Buff Clicks x2", "Tarjeta Click x2"...)
-                    // y comparar strings dejaba buffs sin activar.
-                    const buffId = (item as any).buffId;
-                    if (buffId) {
-                        if (buffId === 'warehouseExpander') {
-                            if (state.warehouseCapacity >= 20) {
-                                showConfirmModal('Almacén al máximo (20 slots).', () => {});
-                                return;
-                            }
-                            state.warehouseCapacity += 1;
-                        } else if (buffId === 'afk') {
-                            // 10 min por tarjeta, acumulables hasta 30 min
-                            const base = Math.max(now, state.afkExpiresAt || 0);
-                            state.afkExpiresAt = Math.min(base + AFK_CARD_DURATION_MS, now + MAX_AFK_BUFF_DURATION_MS);
-                        } else if (buffId === 'clickBoost') {
-                            const base = Math.max(now, state.buffs.clickBoostExpiresAt);
-                            state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60 * 1000, now + 60 * 60 * 1000);
-                        } else if (buffId === 'passiveBoost') {
-                            const base = Math.max(now, state.buffs.passiveBoostExpiresAt);
-                            state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60 * 1000, now + 2 * 60 * 60 * 1000);
-                        } else if (buffId === 'clickX2') {
-                            const base = Math.max(now, state.buffs.clickX2ExpiresAt);
-                            state.buffs.clickX2ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
-                        } else if (buffId === 'clickX3') {
-                            const base = Math.max(now, state.buffs.clickX3ExpiresAt);
-                            state.buffs.clickX3ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
-                        }
-                    } else if (item.name.includes('Expansor')) {
-                        // Fallback para items de saves antiguos sin buffId
-                        if (state.warehouseCapacity >= 20) {
-                            showConfirmModal('Almacén al máximo (20 slots).', () => {});
-                            return;
-                        }
-                        state.warehouseCapacity += 1;
-                    } else if (item.name.includes('AFK')) {
-                        const base = Math.max(now, state.afkExpiresAt || 0);
-                        state.afkExpiresAt = Math.min(base + AFK_CARD_DURATION_MS, now + MAX_AFK_BUFF_DURATION_MS);
-                    } else if (item.name.includes('Click x3')) {
-                        const base = Math.max(now, state.buffs.clickX3ExpiresAt);
-                        state.buffs.clickX3ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
-                    } else if (item.name.includes('Click x2')) {
-                        const base = Math.max(now, state.buffs.clickX2ExpiresAt);
-                        state.buffs.clickX2ExpiresAt = Math.min(base + 30000, now + 30 * 60 * 1000);
-                    } else if (/clics?\s*x2/i.test(item.name)) {
-                        state.buffs.clickBoostExpiresAt = now + 30 * 60 * 1000;
-                    } else if (/pasivo/i.test(item.name)) {
-                        state.buffs.passiveBoostExpiresAt = now + 60 * 60 * 1000;
-                    }
-                    // Gastar solo 1 del stack
-                    if (item.stackCount && item.stackCount > 1) {
-                        item.stackCount -= 1;
-                    } else {
-                        state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== item.id);
-                    }
-                    game.updateState(state);
-                    renderTemplate();
-                });
-            }
-        });
-
-        // Vender
-        const sellBtn = container.querySelector('#action-sell');
-        sellBtn?.addEventListener('click', () => {
-            // Verificar si el objeto está equipado
-            const isEquipped = (item.type === 'weapon' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
-            if (isEquipped) {
-                showConfirmModal('Debes desequipar el objeto antes de venderlo', () => {});
-                return;
-            }
-            // Verificar si es el último recolector o compañero
-            const isLastOfKind = (type: string) => {
-                const count = state.warehouse.filter((i: WarehouseItem) => i.type === type).length;
-                return count <= 1;
-            };
-            if ((item.type === 'weapon' && isLastOfKind('weapon')) || (item.type === 'companion' && isLastOfKind('companion'))) {
-                showConfirmModal('No puedes vender el último de este tipo. Debes tener al menos uno en el almacén.', () => {});
-                return;
-            }
-            const price = item.sellPrice || 0;
-
-            // Vender de a uno del stack
-            showItemCard(item, () => {
-                state.nanites += price;
-                const itemId = item.id;
-                if (item.stackCount && item.stackCount > 1) {
-                    const stackItem = state.warehouse.find((i: WarehouseItem) => i.id === itemId);
-                    if (stackItem) stackItem.stackCount = (stackItem.stackCount || 1) - 1;
-                } else {
-                    state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== itemId);
-                    if (item.type === 'companion') {
-                        state.companions = state.companions.filter((c: any) => c.id !== itemId);
-                        state.activeCompanions = state.activeCompanions.filter((id: string) => id !== itemId);
-                    }
-                }
-                game.updateState(state);
-                selectedItemId = null;
-                renderTemplate();
-            });
-        });
-
-        // Eliminar
-        const deleteBtn = container.querySelector('#action-delete');
-        deleteBtn?.addEventListener('click', () => {
-            // Verificar si el objeto está equipado
-            const isEquipped = (item.type === 'weapon' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
-            if (isEquipped) {
-                showConfirmModal('Debes desequipar el objeto antes de eliminarlo', () => {});
-                return;
-            }
-            // Verificar si es el último recolector o compañero
-            const isLastOfKind = (type: string) => {
-                const count = state.warehouse.filter((i: WarehouseItem) => i.type === type).length;
-                return count <= 1;
-            };
-            if ((item.type === 'weapon' && isLastOfKind('weapon')) || (item.type === 'companion' && isLastOfKind('companion'))) {
-                showConfirmModal('No puedes eliminar el último de este tipo. Debes tener al menos uno en el almacén.', () => {});
-                return;
-            }
-            showConfirmModal(`¿Estás seguro de que deseas eliminar ${item.name}?`, () => {
-                state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== item.id);
-                // Si es un compañero, también eliminar de la lista de compañeros
-                if (item.type === 'companion') {
-                    state.companions = state.companions.filter((c: any) => c.id !== item.id);
-                    state.activeCompanions = state.activeCompanions.filter((id: string) => id !== item.id);
-                }
-                game.updateState(state);
-                selectedItemId = null;
-                renderTemplate();
-            });
-        });
-    }
-
-    renderTemplate();
-
-    // Actualizar nanitas cada segundo
-    const nanitesInterval = setInterval(() => {
-        const nanitesEl = container.querySelector('#warehouse-nanites');
-        if (nanitesEl) {
-            const currentState = game.getState();
-            nanitesEl.textContent = formatNumber(currentState.nanites);
+        case 'clickX3': {
+          const base = Math.max(now, state.buffs.clickX3ExpiresAt);
+          state.buffs.clickX3ExpiresAt = Math.min(base + 30_000, now + 30 * 60_000);
+          break;
         }
-        // Actualizar tooltips de buffs con contador y X para cancelar
-        const buffTimers = container.querySelectorAll('.buff-timer');
-        buffTimers.forEach((el) => {
-            const buffType = el.getAttribute('data-buff');
-            const state = game.getState();
-            let remaining = 0;
-            if (buffType === 'clickX2') remaining = Math.max(0, state.buffs.clickX2ExpiresAt - Date.now());
-            else if (buffType === 'clickX3') remaining = Math.max(0, state.buffs.clickX3ExpiresAt - Date.now());
-            else if (buffType === 'afk') remaining = state.afkCards * 10 * 60 * 1000;
-            if (buffType === 'afk') {
-                // No mostrar leyenda de AFK en la descripción
-                el.innerHTML = `<span class="text-[var(--text-muted)]">Buff AFK activo</span>`;
-            } else if (remaining > 0) {
-                el.innerHTML = `<span>⏱️ ${formatTime(remaining)}</span> <button class="buff-cancel ml-1 text-red-400 hover:text-red-300 font-bold" data-buff-type="${buffType}">✕</button>`;
-            } else {
-                el.innerHTML = `<span class="text-[var(--text-muted)]">Sin buff activo</span>`;
-            }
-        });
+        case 'calibrationStone':
+        case 'stabilityNano':
+          // No se usan desde el almacén: se consumen en la Forja
+          showToast('Este consumible se usa en la Forja.', 'info');
+          return;
+        default:
+          showToast('Este consumible no tiene efecto.', 'error');
+          return;
+      }
 
-        // Event delegation para cancelar buffs (funciona aunque el botón se recree)
-        container.onclick = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (target.classList.contains('buff-cancel')) {
-                e.stopPropagation();
-                const buffType = target.getAttribute('data-buff-type');
-                const state = game.getState();
-                if (buffType === 'clickX2') state.buffs.clickX2ExpiresAt = 0;
-                else if (buffType === 'clickX3') state.buffs.clickX3ExpiresAt = 0;
-                else if (buffType === 'clickBoost') state.buffs.clickBoostExpiresAt = 0;
-                else if (buffType === 'passiveBoost') state.buffs.passiveBoostExpiresAt = 0;
-                game.updateState(state);
-                renderTemplate();
-            }
-        };
-    }, 1000);
+      if (item.stackCount && item.stackCount > 1) item.stackCount -= 1;
+      else state.warehouse = state.warehouse.filter((w: any) => w.id !== item.id);
+      game.updateState(state);
+      showToast(`${item.name}: aplicado`, 'success');
+      redraw();
+    },
+    { sublabel: item.name, confirmText: 'Usar' }
+  );
+}
 
-    // Limpiar intervalo cuando se sale del almacén
-    const originalOnBack = onBack;
-    onBack = () => {
-        clearInterval(nanitesInterval);
-        originalOnBack();
-    };
+function sellItem(game: any, item: any, redraw: () => void) {
+  const state = game.getState();
+  const isEquipped = (item.type === 'weapon' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
+  if (isEquipped) {
+    showToast('Desequípalo antes de venderlo.', 'info');
+    return;
+  }
+  const count = (state.warehouse as any[]).filter((w: any) => w.type === item.type).length;
+  if ((item.type === 'weapon' || item.type === 'companion') && count <= 1) {
+    showToast('No puedes vender el último de su tipo.', 'error');
+    return;
+  }
+  const price = game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0;
+
+  showConfirmModal(
+    `Vendes ${item.name}${item.stackable ? ` ×${item.stackCount || 1}` : ''} por ${formatNumber(price * (item.stackable ? (item.stackCount || 1) : 1))} nanitas.`,
+    () => {
+      sfx.buy();
+      const qty = item.stackable ? (item.stackCount || 1) : 1;
+      state.nanites += price * qty;
+      if (item.stackable && (item.stackCount || 1) > 1) {
+        const live = (state.warehouse as any[]).find((w: any) => w.id === item.id);
+        if (live) live.stackCount = (live.stackCount || 1) - qty;
+        if ((live?.stackCount ?? 0) <= 0) {
+          state.warehouse = (state.warehouse as any[]).filter((w: any) => w.id !== item.id);
+        }
+      } else {
+        state.warehouse = (state.warehouse as any[]).filter((w: any) => w.id !== item.id);
+        if (item.type === 'companion') {
+          state.companions = (state.companions as any[]).filter((c: any) => c.id !== item.id);
+          state.activeCompanions = (state.activeCompanions as string[]).filter((id) => id !== item.id);
+        }
+      }
+      game.updateState(state);
+      ui.selectedId = null;
+      redraw();
+    },
+    { sublabel: 'Vender', confirmText: `+${formatNumber(price * (item.stackable ? (item.stackCount || 1) : 1))} ◆` }
+  );
 }

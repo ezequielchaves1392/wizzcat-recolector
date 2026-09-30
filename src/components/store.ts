@@ -1,274 +1,263 @@
-import { STORE_ITEMS, TIER_SYSTEM } from '../gameLoop';
+// ==========================================================================
+// Mercado · Tienda
+//
+// Reestructurado por tres razones:
+//
+// 1. PRECIO REAL. La tarjeta mostraba `item.cost` y el game loop cobraba lo
+//    mismo. Al añadir la reducción de coste del árbol de pasivas, si la tarjeta
+//    siguiera mostrando el precio base el jugador pagaría más de lo que ve.
+//    Ahora ambos salen del mismo número, calculado en un único sitio.
+//
+// 2. CATEGORÍAS CON ICONOS. Las etiquetas eran "📦 Cajas", "⚡ Recursos"... Los
+//    emojis se veían distintos según el sistema operativo, así que se
+//    sustituyeron por iconos SVG del mismo set que el resto del juego.
+//
+// 3. ESTADO DEL ALMACÉN. Un item que no cabe se deshabilita, pero la razón no
+//    se veía: el botón ponía "Comprar" en gris y no explicaba por qué. Ahora
+//    el texto del botón es la razón ("Almacén lleno"), que es lo único que
+//    puede hacer un botón deshabilitado.
+// ==========================================================================
+
 import { formatNumber } from '../utils/format';
+import { ic } from '../ui/icons';
+import { pageShell, mountInto, statStrip } from '../ui/pageShell';
+import { STORE_ITEMS, TIER_SYSTEM, TIER_POWER } from '../gameLoop';
+import { sfx } from '../utils/audio';
+import { showToast } from '../utils/toast';
+import { rarityClass, raritySlug } from './crateLoot';
 
-function formatDuration(ms: number): string {
-  const totalMinutes = Math.ceil(ms / 60000);
-  if (totalMinutes >= 60) return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-  return `${totalMinutes}m`;
+interface Category {
+  id: string;
+  label: string;
+  icon: string;
+  items: string[];
 }
 
-function showConfirmModal(message: string, onConfirm: () => void) {
-  const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
-  overlay.innerHTML = `
-    <div class="card-glass border rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4">
-      <p class="text-sm font-mono text-[var(--text-main)] text-center">${message}</p>
-      <div class="flex gap-3">
-        <button id="confirm-cancel" class="flex-1 py-2.5 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">Cancelar</button>
-        <button id="confirm-ok" class="flex-1 py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">Aceptar</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  overlay.querySelector('#confirm-cancel')?.addEventListener('click', () => overlay.remove());
-  overlay.querySelector('#confirm-ok')?.addEventListener('click', () => { overlay.remove(); onConfirm(); });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+const CATEGORIES: Category[] = [
+  { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
+  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['key', 'upgradeCrystal', 'warehouseSlot', 'backpackExpander'] },
+  { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickBuff', 'passiveBuff', 'clickX2Card', 'clickX3Card'] },
+  { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
+  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: ['companionSlot1', 'companionSlot2'] },
+  { id: 'companeros', label: 'Compañeros', icon: 'companion', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
+  { id: 'armas', label: 'Armas', icon: 'weapon', items: Array.from({ length: 10 }, (_, i) => `weaponCardT${i + 1}`) }
+];
+
+/** Rango de poder de un tier, para la línea de detalle de las tarjetas. */
+function tierRange(tier: number): [number, number] {
+  return (TIER_SYSTEM.ranges as Record<number, [number, number]>)[tier] ?? [1, 5];
 }
+
+function tierRarity(tier: number): string {
+  return (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier] ?? 'Común';
+}
+
+let activeCategory = 'cajas';
 
 export function renderStoreTab(container: HTMLElement, game: any, onBack: () => void) {
   const state = game.getState();
+  const discount = state.bonus?.costReduction || 0;
+  const effectiveCost = (base: number) => Math.floor(base * (1 - discount));
 
-  const storeCategories = [
-    { id: 'crates', label: '📦 Cajas', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
-    { id: 'resources', label: '⚡ Recursos', items: ['key', 'upgradeCrystal', 'warehouseSlot'] },
-    { id: 'cards', label: '🎴 Tarjetas', items: ['afkCard', 'clickBuff', 'passiveBuff', 'clickX2Card', 'clickX3Card'] },
-    { id: 'upgrades', label: '⬆️ Mejoras', items: ['backpackExpander', 'companionSlot1', 'companionSlot2'] },
-    { id: 'companionCards', label: '🤖 Compañeros', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
-    { id: 'weaponCards', label: '⚔️ Armas', items: Array.from({ length: 10 }, (_, i) => `weaponCardT${i + 1}`) }
-  ];
+  const category = CATEGORIES.find(c => c.id === activeCategory) ?? CATEGORIES[0];
 
-  let activeCategory = 'crates';
+  // --- Tarjetas ---------------------------------------------------------
+  const card = (itemKey: string) => {
+    const item = (STORE_ITEMS as Record<string, any>)[itemKey];
+    if (!item) return '';
 
-  function renderTemplate() {
-    const state = game.getState();
-    const category = storeCategories.find(c => c.id === activeCategory)!;
+    const cost = effectiveCost(item.cost);
+    const canAfford = state.nanites >= cost;
+    const disabled = isDisabled(itemKey, state, game);
+    const reason = disabledReason(itemKey, state, game);
+    const rarity = itemRarity(itemKey);
 
-    const itemsHtml = category.items.map((itemKey) => {
-      const item = STORE_ITEMS[itemKey as keyof typeof STORE_ITEMS];
-      if (!item) return '';
+    // Nota contextual: por qué este item existe
+    let note = '';
+    if (itemKey === 'backpackExpander') {
+      const cap = game.getCapacity?.() ?? state.warehouseCapacity;
+      note = `Capacidad real: ${state.warehouse.length}/${cap}`;
+    } else if (itemKey === 'warehouseSlot') {
+      note = `Añade 5 ranuras · base ${state.warehouseCapacity}`;
+    } else if (itemKey === 'afkCard') {
+      const mins = Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000);
+      note = `${mins} min cada una · acumulable ×3`;
+    } else if (itemKey === 'key') {
+      note = `Llaves: ${state.keys}`;
+    } else if (itemKey === 'upgradeCrystal') {
+      note = `Cristales: ${state.upgradeCrystals}`;
+    } else if (itemKey === 'companionSlot1' || itemKey === 'companionSlot2') {
+      note = `Slots activos: ${game.getCompanionSlots?.() ?? state.maxCompanionSlots}`;
+    } else if (itemKey === 'calibrationStone') {
+      note = '+12 puntos de éxito por piedra, hasta 5';
+    } else if (itemKey === 'stabilityNano') {
+      note = 'Afijo garantizado en la próxima arma';
+    } else if (itemKey.startsWith('companionCardT') || itemKey.startsWith('weaponCardT')) {
+      const t = parseInt(itemKey.replace(/^(companion|weapon)CardT/, ''));
+      const range = tierRange(t);
+      const unit = itemKey.startsWith('companionCardT') ? '/s' : '';
+      const r = tierRarity(t);
+      note = `T${t} · +${range[0]}–${range[1]}${unit} · <span class="${rarityClass(r)}">${r}</span>`;
+    }
 
-      const canAfford = state.nanites >= item.cost;
-      const isDisabled = isItemDisabled(itemKey, state);
-      const disabledReason = getDisabledReason(itemKey, state);
+    const isCheap = discount > 0 && Math.floor(item.cost) > cost;
 
-      let extraInfo = '';
-      if (itemKey === 'backpackExpander') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Actual: ${state.warehouseCapacity}/20 slots</div>`;
-      } else if (itemKey === 'afkCard') {
-        const afkRemaining = Math.max(0, (state.afkExpiresAt || 0) - Date.now());
-        const extra = afkRemaining > 0 ? ` · Activo ${formatDuration(afkRemaining)}` : '';
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">En almacén: ${state.afkCards || 0}/3${extra}</div>`;
-      } else if (itemKey === 'key') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Llaves: ${state.keys || 0}</div>`;
-      } else if (itemKey === 'upgradeCrystal') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Cristales: ${state.upgradeCrystals || 0}</div>`;
-      } else if (itemKey === 'warehouseSlot') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Actual: ${state.warehouseCapacity} slots</div>`;
-      } else if (itemKey === 'companionSlot1') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Slots activos: ${state.maxCompanionSlots} → 2</div>`;
-      } else if (itemKey === 'companionSlot2') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Slots activos: ${state.maxCompanionSlots} → 5</div>`;
-      } else if (itemKey === 'clickX2Card' || itemKey === 'clickX3Card') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Solo 30 s: úsalo en el pico de una racha</div>`;
-      } else if (itemKey === 'clickBuff') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">x2 al daño de click durante 30 min</div>`;
-      } else if (itemKey === 'passiveBuff') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">x2 a todo el ingreso pasivo durante 60 min</div>`;
-      } else if (itemKey.startsWith('companionCardT') || itemKey.startsWith('weaponCardT')) {
-        const tier = parseInt(itemKey.replace(/^(companion|weapon)CardT/, ''));
-        const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges];
-        const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier];
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Tier ${tier} • ${itemKey.startsWith('companionCardT') ? `+${range[0]}-${range[1]}/s` : `+${range[0]}-${range[1]} por click`} • ${rarity}</div>`;
-      }
-
-      return `
-        <div class="card-glass border rounded-xl p-3 flex flex-col gap-2 ${isDisabled ? 'opacity-50' : ''}">
-          <div class="flex items-start justify-between gap-2">
-            <div class="flex-1 min-w-0">
-              <div class="text-xs font-bold text-[var(--text-main)] truncate">${item.label}</div>
-              ${extraInfo}
-            </div>
-            <div class="text-right flex-shrink-0">
-              <div class="text-xs font-bold accent-text">${formatNumber(item.cost)} ⚡</div>
-            </div>
+    return `
+      <div class="card-glass border rounded-xl p-3 flex flex-col gap-2 ${disabled ? 'opacity-55' : ''}">
+        <div class="flex items-start gap-2.5">
+          <span class="w-9 h-9 rounded-lg grid place-items-center flex-shrink-0
+                       ${rarity ? 'ring-' + raritySlug(rarity) : ''}
+                       [&>span>svg]:w-4 [&>span>svg]:h-4"
+                style="${rarity ? rarityClass(rarity) : ''}">
+            ${ic(catIconFor(itemKey))}
+          </span>
+          <div class="flex-1 min-w-0">
+            <div class="text-[12px] font-bold text-[var(--text-main)] leading-tight">${item.label}</div>
+            ${note ? `<div class="text-[9px] font-mono text-[var(--text-muted)] mt-0.5 leading-snug">${note}</div>` : ''}
           </div>
-          <button
-            data-item-key="${itemKey}"
-            class="w-full py-2 rounded-lg text-xs font-bold transition cursor-pointer ${isDisabled ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed' : canAfford ? 'accent-bg text-slate-950 hover:opacity-90' : 'bg-slate-700/50 text-slate-400 cursor-not-allowed'}"
-            ${isDisabled ? 'disabled' : ''}
-          >
-            ${isDisabled ? disabledReason : canAfford ? 'Comprar' : 'Sin nanitas'}
+        </div>
+
+        <div class="flex items-end justify-between gap-2 mt-auto">
+          <div>
+            <div class="font-['Orbitron'] font-bold text-[14px] accent-text tabular leading-none">
+              ${formatNumber(cost)}
+            </div>
+            ${isCheap ? `
+              <div class="text-[9px] font-mono text-emerald-400 line-through leading-none mt-0.5">
+                ${formatNumber(item.cost)}
+              </div>
+            ` : `<div class="text-[9px] font-mono text-[var(--text-muted)] mt-0.5">nanitas</div>`}
+          </div>
+          <button data-buy="${itemKey}" ${disabled ? 'disabled' : ''}
+            class="px-3 h-9 rounded-lg text-[10px] font-['Orbitron'] font-bold cursor-pointer transition
+                   ${disabled ? 'btn-ghost text-[var(--text-muted)] cursor-not-allowed'
+                              : canAfford ? 'btn-primary'
+                              : 'btn-ghost text-[var(--text-muted)] cursor-not-allowed'}">
+            ${reason ?? (canAfford ? 'Comprar' : 'Sin nanitas')}
           </button>
         </div>
-      `;
-    }).join('');
-
-    container.innerHTML = `
-      <div class="fixed inset-0 app-bg flex flex-col items-center p-3 md:p-4 font-sans select-none overflow-hidden">
-        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[var(--accent)]/10 via-[var(--bg-app)] to-[var(--bg-app)] pointer-events-none"></div>
-
-        <div class="relative z-10 max-w-4xl w-full flex flex-col gap-3 md:gap-4 h-full min-h-0">
-          <!-- Header -->
-          <div class="flex items-center justify-between flex-shrink-0">
-            <button id="back-btn" class="px-4 py-2 card-glass border border-[var(--border-color)] rounded-xl text-xs font-mono accent-text hover:border-[var(--accent)] transition cursor-pointer">
-              ← Volver al Comando
-            </button>
-            <div class="flex items-center gap-4">
-              <div class="text-right">
-                <div class="text-[10px] text-[var(--text-muted)] font-mono uppercase">Nanitas</div>
-                <div id="store-nanites" class="text-lg font-bold accent-text font-['Orbitron']">${formatNumber(state.nanites)}</div>
-              </div>
-              <h2 class="text-base md:text-xl font-['Orbitron'] font-black accent-text tracking-wider text-right">🛒 TIENDA</h2>
-            </div>
-          </div>
-
-          <!-- Categorías -->
-          <div class="flex flex-wrap gap-2 flex-shrink-0">
-            ${storeCategories.map(cat => `
-              <button data-cat="${cat.id}" class="cat-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeCategory === cat.id ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}">
-                ${cat.label}
-              </button>
-            `).join('')}
-          </div>
-
-          <!-- Items Grid -->
-          <div class="flex-grow overflow-y-auto pr-1 min-h-0">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              ${itemsHtml}
-            </div>
-          </div>
-        </div>
       </div>
     `;
-
-    setupEventListeners();
-  }
-
-  function isItemDisabled(itemKey: string, state: any): boolean {
-    if (itemKey === 'backpackExpander') return state.warehouseCapacity >= 20;
-    if (itemKey === 'afkCard') return (state.afkCards || 0) >= 3;
-    if (itemKey === 'companionSlot1') return state.maxCompanionSlots >= 2;
-    if (itemKey === 'companionSlot2') return state.maxCompanionSlots >= 5;
-    return false;
-  }
-
-  function getDisabledReason(itemKey: string, state: any): string {
-    if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 20) return 'Máximo alcanzado';
-    if (itemKey === 'afkCard' && (state.afkCards || 0) >= 3) return 'Máximo acumulado';
-    if (itemKey === 'companionSlot1' && state.maxCompanionSlots >= 2) return 'Ya comprado';
-    if (itemKey === 'companionSlot2' && state.maxCompanionSlots >= 5) return 'Ya comprado';
-    return 'No disponible';
-  }
-
-  function setupEventListeners() {
-    container.querySelector('#back-btn')?.addEventListener('click', onBack);
-
-    container.querySelectorAll('.cat-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const cat = (e.currentTarget as HTMLElement).getAttribute('data-cat');
-        if (cat) {
-          activeCategory = cat;
-          renderTemplate();
-        }
-      });
-    });
-
-    container.querySelectorAll('button[data-item-key]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const itemKey = (e.currentTarget as HTMLElement).getAttribute('data-item-key') as keyof typeof STORE_ITEMS;
-        if (!itemKey) return;
-
-        // Verificar si tiene suficientes nanitas antes de mostrar el modal
-        const item = STORE_ITEMS[itemKey];
-        const state = game.getState();
-        if (state.nanites < item.cost) return; // No hacer nada si no hay suficientes nanitas
-
-        // Preguntar primero, comprar solo si confirma
-        showConfirmModal(`¿Comprar ${item.label} por ${formatNumber(item.cost)} nanitas?`, () => {
-          const purchasedItem = game.buyStoreItem(itemKey);
-          if (!purchasedItem) return;
-          // Los items que no ocupan espacio (llaves, cristales, slots) no devuelven card
-          if (typeof purchasedItem === 'object') {
-            showItemCard(purchasedItem);
-          }
-          renderTemplate();
-        });
-      });
-    });
-  }
-
-  function showItemCard(item: any) {
-    const rarityColors: Record<string, string> = {
-      'Común': 'text-slate-400',
-      'Raro': 'text-blue-400',
-      'Épico': 'text-purple-400',
-      'Legendario': 'text-amber-400',
-      'Mítico': 'text-red-400',
-      'Divino': 'text-yellow-300'
-    };
-
-    const rarityColor = rarityColors[item.rarity] || 'text-slate-400';
-    const icon = item.type === 'weapon' ? '⚔️' : item.type === 'companion' ? '🤖' : '📦';
-
-    const overlay = document.createElement('div');
-    overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm';
-    overlay.innerHTML = `
-      <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4 shadow-2xl">
-        <div class="text-center">
-          <div class="text-4xl mb-2">${icon}</div>
-          <h3 class="font-['Orbitron'] font-bold text-lg text-[var(--text-main)]">${item.name}</h3>
-          <div class="text-sm font-mono ${rarityColor}">${item.rarity}</div>
-          ${item.tier ? `<div class="text-xs font-mono text-[var(--text-muted)]">Tier ${item.tier}</div>` : ''}
-        </div>
-        <div class="border-t border-[var(--border-color)] pt-3">
-          <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
-          <div class="text-sm font-mono text-[var(--text-main)]">${item.details || 'Sin descripción'}</div>
-        </div>
-        ${item.damage ? `
-        <div class="border-t border-[var(--border-color)] pt-3">
-          <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Daño</div>
-          <div class="text-lg font-bold text-emerald-400 font-['Orbitron']">+${item.damage}</div>
-        </div>
-        ` : ''}
-        ${item.level !== undefined ? `
-        <div class="border-t border-[var(--border-color)] pt-3">
-          <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Nivel</div>
-          <div class="text-lg font-bold text-cyan-400 font-['Orbitron']">${item.level} / 20</div>
-        </div>
-        ` : ''}
-        <button id="item-card-close" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
-          Aceptar
-        </button>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    overlay.querySelector('#item-card-close')?.addEventListener('click', () => {
-      overlay.remove();
-    });
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
-
-  renderTemplate();
-
-  // Actualizar nanitas cada segundo (como en el almacén)
-  const nanitesInterval = setInterval(() => {
-    const nanitesEl = container.querySelector('#store-nanites');
-    if (nanitesEl) {
-      const currentState = game.getState();
-      nanitesEl.textContent = formatNumber(currentState.nanites);
-    }
-  }, 1000);
-
-  // Limpiar intervalo cuando se sale de la tienda
-  const originalOnBack = onBack;
-  onBack = () => {
-    clearInterval(nanitesInterval);
-    originalOnBack();
   };
+
+  const body = `
+    ${statStrip([
+      { label: 'Nanitas', value: formatNumber(state.nanites) },
+      { label: 'Almacén', value: `${state.warehouse.length}/${game.getCapacity?.() ?? state.warehouseCapacity}` },
+      { label: 'Descuento', value: discount > 0 ? `−${Math.round(discount * 100)}%` : '—', tone: discount > 0 ? 'text-emerald-400' : undefined },
+      { label: 'Llaves', value: String(state.keys) }
+    ])}
+
+    <div class="flex gap-1 mb-3 overflow-x-auto pb-1">
+      ${CATEGORIES.map(c => `
+        <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer flex-shrink-0
+                       transition flex items-center gap-1.5
+                       ${activeCategory === c.id ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
+                data-cat="${c.id}">
+          <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(c.icon as any)}</span>
+          ${c.label}
+        </button>
+      `).join('')}
+    </div>
+
+    ${category.id === 'forja' && !((state.nodeLevels?.blueprint) > 0) ? `
+      <div class="rounded-xl border p-3 mb-2.5 text-[10px] leading-relaxed"
+           style="border-color: color-mix(in srgb, #f59e0b 40%, transparent);
+                  background: color-mix(in srgb, #f59e0b 8%, transparent)">
+        Puedes comprar estas piedras antes de desbloquear la forja, pero no
+        sirven de nada hasta que tengas el nodo <span class="text-amber-400">Planos Viejos</span>.
+      </div>
+    ` : ''}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      ${category.items.map(card).join('')}
+    </div>
+  `;
+
+  const root = mountInto(container, pageShell({
+    title: 'Mercado',
+    subtitle: discount > 0 ? `Descuento del árbol aplicado: −${Math.round(discount * 100)}%` : 'Todo con nanitas',
+    icon: 'store',
+    onBack
+  }, body));
+
+  // --- Eventos ---
+  root.querySelector('[data-nav-back]')?.addEventListener('click', onBack);
+
+  root.querySelectorAll<HTMLElement>('[data-cat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.nav();
+      activeCategory = btn.dataset.cat!;
+      renderStoreTab(container, game, onBack);
+    });
+  });
+
+  root.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-buy]') as HTMLElement | null;
+    if (!btn || btn.hasAttribute('disabled')) return;
+    const key = btn.dataset.buy!;
+    const bought = game.buyStoreItem(key as any);
+    if (bought === false) {
+      sfx.error();
+      showToast('No se pudo completar la compra.', 'error');
+      return;
+    }
+    sfx.buy();
+    showToast('Comprado', 'success');
+    renderStoreTab(container, game, onBack);
+  });
+}
+
+// --- Reglas de disponibilidad --------------------------------------------
+
+const NO_SPACE = ['key', 'upgradeCrystal', 'warehouseSlot', 'backpackExpander', 'companionSlot1', 'companionSlot2'];
+
+function isDisabled(itemKey: string, state: any, game: any): boolean {
+  const effSlots = game.getCompanionSlots?.() ?? state.maxCompanionSlots;
+  if (itemKey === 'companionSlot1' && effSlots >= 2) return true;
+  if (itemKey === 'companionSlot2' && effSlots >= 5) return true;
+  if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 50) return true;
+  if (!NO_SPACE.includes(itemKey)) {
+    if (state.warehouse.length >= (game.getCapacity?.() ?? state.warehouseCapacity)) return true;
+  }
+  return false;
+}
+
+function disabledReason(itemKey: string, state: any, game: any): string | null {
+  const effSlots = game.getCompanionSlots?.() ?? state.maxCompanionSlots;
+  if (itemKey === 'companionSlot1' && effSlots >= 2) return 'Comprado';
+  if (itemKey === 'companionSlot2' && effSlots >= 5) return 'Comprado';
+  if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 50) return 'Al máximo';
+  if (!NO_SPACE.includes(itemKey)) {
+    if (state.warehouse.length >= (game.getCapacity?.() ?? state.warehouseCapacity)) return 'Almacén lleno';
+  }
+  return null;
+}
+
+function itemRarity(itemKey: string): string | null {
+  if (itemKey.endsWith('Crate')) {
+    return { commonCrate: 'Común', rareCrate: 'Raro', epicCrate: 'Épico', legendaryCrate: 'Legendario' }[itemKey as never] ?? null;
+  }
+  if (itemKey.startsWith('companionCardT')) return tierRarity(parseInt(itemKey.slice(14)));
+  if (itemKey.startsWith('weaponCardT')) return tierRarity(parseInt(itemKey.slice(11)));
+  const map: Record<string, string> = {
+    key: 'Común', upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
+    afkCard: 'Raro', clickBuff: 'Raro', passiveBuff: 'Épico', clickX2Card: 'Raro', clickX3Card: 'Épico',
+    calibrationStone: 'Raro', stabilityNano: 'Legendario',
+    companionSlot1: 'Épico', companionSlot2: 'Legendario'
+  };
+  return map[itemKey] ?? null;
+}
+
+function catIconFor(itemKey: string): any {
+  if (itemKey.endsWith('Crate')) return 'crate';
+  if (itemKey.startsWith('weaponCardT')) return 'weapon';
+  if (itemKey.startsWith('companionCardT')) return 'companion';
+  const map: Record<string, any> = {
+    key: 'key', upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
+    afkCard: 'clock', clickBuff: 'bolt', passiveBuff: 'graph', clickX2Card: 'bolt', clickX3Card: 'bolt',
+    calibrationStone: 'flask', stabilityNano: 'flask',
+    companionSlot1: 'layers', companionSlot2: 'layers'
+  };
+  return map[itemKey] ?? 'store';
 }

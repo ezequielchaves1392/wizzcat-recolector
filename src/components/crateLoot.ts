@@ -67,6 +67,25 @@ export function rarityClass(rarity: string): string {
   return `${RARITY_TEXT[rarity] || RARITY_TEXT['Común']} ${RARITY_BORDER[rarity] || RARITY_BORDER['Común']}`;
 }
 
+/**
+ * Slug de rareza para las clases `.ring-*` y `.rarity-*` del CSS.
+ *
+ * Existe porque `rarityClass()` devuelve utilidades de Tailwind
+ * (`text-blue-400 border-blue-500/40`) y no se pueden componer: no hay forma
+ * de extraer de ahí el nombre "raro" para escribir `ring-raro`. Antes de
+ * esto el almacén construía `ring-text-blue-400`, una clase que no existe, y
+ * todas las celdas salían sin el halo de rareza.
+ *
+ * `normalize('NFD')` + diacríticos porque 'Épico' y 'Mítico' llevan tilde y la
+ * clase CSS no la lleva.
+ */
+export function raritySlug(rarity: string): string {
+  return (rarity || 'Común')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 export const RARITY_RANK: Record<string, number> = {
   'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3, 'Mítico': 4, 'Divino': 5, 'Sobrecargado': 6
 };
@@ -173,20 +192,22 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'keys', weight: 14, build: () => { const a = rand(2, 4); return { kind: 'keys', amount: a, name: 'Llave de Cifrado', label: `+${a} Llaves`, details: 'Abre otra caja', rarity: 'Épico', icon: 'key' }; } }
   ],
   epic: [
-    { id: 'crystals', weight: 24, build: () => { const a = rand(16, 24); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Legendario', icon: 'crystal' }; } },
-    { id: 'companion_t6', weight: 22, build: () => { const t = TIER_SYSTEM.ranges[6]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Titán de Acero', label: 'Titán de Acero', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', icon: 'companion', tier: 6, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Titán de Acero', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', tier: 6, companionType: 'passive', power: p, sellPrice: 2500 } }; } },
-    { id: 'weapon_oc6', weight: 18, build: () => { const w = makeOverclockWeapon(6); return { kind: 'weapon', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'weapon', tier: 6, item: w.item }; } },
-    { id: 'ghost', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
-    { id: 'phoenix', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
+    { id: 'crystals', weight: 22, build: () => { const a = rand(16, 24); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Legendario', icon: 'crystal' }; } },
+    { id: 'calibration_stone', weight: 18, build: () => { const a = rand(1, 2); return { kind: 'consumable', amount: a, name: 'Piedra de Calibración', label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', icon: 'flask', item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: a, sellPrice: 11250 } }; } },
+    { id: 'companion_t6', weight: 20, build: () => { const t = TIER_SYSTEM.ranges[6]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Titán de Acero', label: 'Titán de Acero', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', icon: 'companion', tier: 6, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Titán de Acero', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', tier: 6, companionType: 'passive', power: p, sellPrice: 2500 } }; } },
+    { id: 'weapon_oc6', weight: 16, build: () => { const w = makeOverclockWeapon(6); return { kind: 'weapon', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'weapon', tier: 6, item: w.item }; } },
+    { id: 'ghost', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
+    { id: 'phoenix', weight: 10, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
     { id: 'legendary_crate', weight: 10, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Legendaria', label: '+1 Caja Legendaria', details: 'Abre una caja de botín máximo', rarity: 'Legendario', icon: 'trophy', item: { id: `crate_legendary_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0, sellPrice: 4500, stackable: true, stackCount: 1 } }) }
   ],
   legendary: [
-    { id: 'crystals', weight: 22, build: () => { const a = rand(45, 65); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Mítico', icon: 'crystal' }; } },
-    { id: 'weapon_oc8', weight: 20, build: () => { const w = makeOverclockWeapon(8); return { kind: 'weapon', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'weapon', tier: 8, item: w.item }; } },
-    { id: 'avatar', weight: 18, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
-    { id: 'oracle', weight: 16, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
-    { id: 'sentinel', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
-    { id: 'keys', weight: 10, build: () => { const a = rand(5, 8); return { kind: 'keys', amount: a, name: 'Llave de Cifrado', label: `+${a} Llaves`, details: 'Abre otra caja', rarity: 'Legendario', icon: 'key' }; } }
+    { id: 'crystals', weight: 20, build: () => { const a = rand(45, 65); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Mítico', icon: 'crystal' }; } },
+    { id: 'weapon_oc8', weight: 18, build: () => { const w = makeOverclockWeapon(8); return { kind: 'weapon', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'weapon', tier: 8, item: w.item }; } },
+    { id: 'stability_nano', weight: 14, build: () => ({ kind: 'consumable', amount: 1, name: 'Nanopartícula de Estabilidad', label: 'Nanopartícula de Estabilidad', details: 'Deja el arma forjada con un afijo garantizado', rarity: 'Legendario', icon: 'flask', item: { id: `crate_nano_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el arma forjada con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 1, sellPrice: 55000 } }) },
+    { id: 'avatar', weight: 16, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
+    { id: 'oracle', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
+    { id: 'sentinel', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
+    { id: 'keys', weight: 8, build: () => { const a = rand(5, 8); return { kind: 'keys', amount: a, name: 'Llave de Cifrado', label: `+${a} Llaves`, details: 'Abre otra caja', rarity: 'Legendario', icon: 'key' }; } }
   ]
 };
 

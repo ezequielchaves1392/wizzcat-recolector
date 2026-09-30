@@ -1,0 +1,474 @@
+/* ==========================================================================
+   Cyber-Forge · Módulos de interfaz
+   Se importa después de style.css y solo añade clases. Separarlo evita que un
+   bloque de 300 líneas de CSS de la forja quede mezclado con los tokens de
+   tema, que sí se tocan a menudo.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Árbol de pasivas
+   El árbol se dibuja con una rejilla de CSS, no con SVG ni con un canvas:
+   es texto seleccionable, escala con el zoom del navegador y hereda las
+   variables de tema sin código extra. Cada nodo es un botón real, así que
+   funciona con teclado y lectores de pantalla sin trabajo adicional.
+   -------------------------------------------------------------------------- */
+
+.tree-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
+}
+
+@media (max-width: 480px) {
+  .tree-grid { gap: 0.375rem; }
+}
+
+/* En horizontal cabe en la pantalla; en vertical se lee por columnas. */
+.tree-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.5rem;
+}
+
+/* Conexión vertical entre nodos de la misma columna */
+.tree-link {
+  width: 2px;
+  height: 0.75rem;
+  margin: 0 auto;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    color-mix(in srgb, var(--accent) 10%, transparent)
+  );
+}
+
+.tree-link.is-done {
+  background: linear-gradient(to bottom, var(--accent), color-mix(in srgb, var(--accent) 20%, transparent));
+}
+
+/* Nodo del árbol */
+.tree-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.25rem 0.4rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--text-main) 3%, transparent);
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms ease, background 160ms ease;
+  min-height: 64px;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+}
+
+.tree-node:active:not(.is-locked) { transform: scale(0.94); }
+
+.tree-node.is-owned {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 0 18px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Nodo comprable ahora mismo: un halo latente invita a pulsarlo */
+.tree-node.is-affordable {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.tree-node.is-affordable::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: nodePulse 2.4s ease-in-out infinite;
+}
+
+.tree-node.is-locked {
+  opacity: 0.32;
+  cursor: not-allowed;
+  filter: grayscale(0.75);
+}
+
+.tree-node.is-capped {
+  border-color: color-mix(in srgb, #fbbf24 60%, transparent);
+  background: color-mix(in srgb, #fbbf24 12%, transparent);
+}
+
+@keyframes nodePulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+/* Punto de nivel: uno por nivel comprado */
+.tree-pip {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.tree-pip.is-on {
+  background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   Identidad y cosméticos
+   El avatar es un disco de 3 capas (núcleo, marco, aura). Las tres se
+   posicionan con `grid-area: 1/1` para no depender del orden del DOM: así el
+   marco puede animarse sin desplazar el glifo.
+   -------------------------------------------------------------------------- */
+
+.avatar-stack {
+  display: grid;
+  place-items: center;
+  position: relative;
+  isolation: isolate;
+}
+
+.avatar-stack > * { grid-area: 1 / 1; }
+
+.avatar-core {
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, var(--accent), var(--bg-deep) 72%);
+  color: var(--bg-app);
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.avatar-frame {
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+@keyframes framePulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes frameShimmer {
+  0% { filter: hue-rotate(0deg) brightness(1); }
+  50% { filter: hue-rotate(26deg) brightness(1.18); }
+  100% { filter: hue-rotate(0deg) brightness(1); }
+}
+
+.cosmetic-banner {
+  border-radius: 0.9rem;
+  border: 1px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Barrido diagonal sobre el banner: comunica "esto es decorativo" */
+.cosmetic-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgb(255 255 255 / 0.09) 50%, transparent 60%);
+  background-size: 220% 100%;
+  animation: shimmer 6s linear infinite;
+}
+
+.title-display {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.title-glow { text-shadow: 0 0 16px currentColor; }
+
+.title-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Forja
+   -------------------------------------------------------------------------- */
+
+/* Rejilla de 3 huecos: el molde donde caen los materiales */
+.forge-anvil {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border-color);
+  background:
+    radial-gradient(ellipse 70% 100% at 50% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    color-mix(in srgb, var(--text-main) 3%, transparent);
+  position: relative;
+}
+
+.forge-slot {
+  aspect-ratio: 1;
+  border-radius: 0.75rem;
+  border: 1px dashed color-mix(in srgb, var(--text-main) 14%, transparent);
+  display: grid;
+  place-items: center;
+  padding: 0.375rem;
+  transition: border-color 160ms ease, background 160ms ease, transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.forge-slot.is-filled {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.forge-slot:active { transform: scale(0.95); }
+
+/* Ruleta de forja: la banda se desplaza hasta clavar la aguja central */
+.forge-roulette {
+  display: flex;
+  gap: 0.375rem;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  padding: 0.5rem 0;
+  position: relative;
+  background: color-mix(in srgb, var(--text-main) 3%, transparent);
+}
+
+.forge-roulette::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes forgeSpin {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(calc(-1 * var(--forge-travel, 0px)), 0, 0); }
+}
+
+/* Barra de probabilidad: la parte "a favor" y la parte "en contra" */
+.chance-bar {
+  height: 8px;
+  border-radius: 9999px;
+  overflow: hidden;
+  display: flex;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--text-main) 5%, transparent);
+}
+
+.chance-bar > span { display: block; height: 100%; }
+
+/* --------------------------------------------------------------------------
+   Inventario con arrastre
+   La rejilla usa `aspect-ratio` para que las celdas sean cuadradas en
+   cualquier ancho sin medir nada con JS, y el arrastre usa Pointer Events
+   para que funcione igual con dedo, ratón y lápiz.
+   -------------------------------------------------------------------------- */
+
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .inv-grid { grid-template-columns: repeat(auto-fill, minmax(94px, 1fr)); }
+}
+
+.inv-cell {
+  aspect-ratio: 1;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--text-main) 3%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.375rem;
+  position: relative;
+  cursor: grab;
+  /* Sin esto el navegador hace scroll vertical en cuanto el dedo se mueve:
+     es el motivo número uno de que el arrastre no funcione en móvil. */
+  touch-action: none;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), border-color 160ms ease, opacity 160ms ease;
+  min-width: 0;
+}
+
+.inv-cell.is-dragging { opacity: 0.3; cursor: grabbing; }
+.inv-cell.is-over { border-color: var(--accent); transform: scale(1.06); z-index: 2; }
+.inv-cell.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.inv-cell.is-stackable::after {
+  content: attr(data-count);
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-app) 85%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  padding: 0 4px;
+  line-height: 1.4;
+}
+
+/* La celda fantasma que sigue al dedo */
+.drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 0.75rem;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%) scale(1.1) rotate(-3deg);
+  box-shadow: 0 18px 40px -10px rgb(0 0 0 / 0.7);
+  opacity: 0.95;
+}
+
+/* --------------------------------------------------------------------------
+   Perfil y ranking
+   -------------------------------------------------------------------------- */
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr auto;
+  gap: 0.625rem;
+  align-items: center;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--text-main) 3%, transparent);
+}
+
+.rank-row.is-me {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.rank-pos {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 0.95rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.rank-pos[data-tier="1"] { color: #fde047; }
+.rank-pos[data-tier="2"] { color: #e2e8f0; }
+.rank-pos[data-tier="3"] { color: #d97757; }
+
+.medal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 9999px;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+}
+
+/* Barra de progreso reutilizable (logros, árbol, núcleo) */
+.meter {
+  height: 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--text-main) 6%, transparent);
+  overflow: hidden;
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--accent) 65%, transparent),
+    var(--accent)
+  );
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.meter.is-tall { height: 10px; }
+
+/* --------------------------------------------------------------------------
+   Rarezas (reutilizadas por el almacén, la forja y el perfil)
+   -------------------------------------------------------------------------- */
+
+.ring-common   { box-shadow: inset 0 0 0 1px rgb(148 163 184 / 0.45); }
+.ring-raro     { box-shadow: inset 0 0 0 1px rgb(96 165 250 / 0.65), 0 0 14px -6px rgb(96 165 250 / 0.7); }
+.ring-epico    { box-shadow: inset 0 0 0 1px rgb(192 132 252 / 0.7), 0 0 16px -6px rgb(192 132 252 / 0.8); }
+.ring-legendario { box-shadow: inset 0 0 0 1px rgb(251 191 36 / 0.75), 0 0 18px -6px rgb(251 191 36 / 0.85); }
+.ring-mitico   { box-shadow: inset 0 0 0 1px rgb(251 113 133 / 0.75), 0 0 18px -6px rgb(251 113 133 / 0.85); }
+.ring-divino   { box-shadow: inset 0 0 0 1px rgb(253 224 71 / 0.8), 0 0 22px -6px rgb(253 224 71 / 0.9); }
+.ring-sobrecargado { box-shadow: inset 0 0 0 1px rgb(240 171 252 / 0.8), 0 0 22px -4px rgb(240 171 252 / 0.9); }
+
+/* --------------------------------------------------------------------------
+   Zonas táctiles
+   Un botón de 20px es preciso pero inusable con el dedo: el objetivo mínimo
+   recomendado es 44px. Aquí se mantiene el tamaño *visual* pequeño (una X de
+   20px dentro de una tarjeta de 28px se ve mejor que una de 44) y se amplía
+   el área *táctil* con un pseudo-elemento que se sale de la caja.
+
+   Es la técnica que usan los menús de iOS: el icono es pequeño, la superficie
+   de pulsación es grande. Al ser un `::after` con `position: absolute`, no
+   altera el layout ni el tamaño del texto.
+   -------------------------------------------------------------------------- */
+
+.hit-expand { position: relative; }
+.hit-expand::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  /* 44px es el mínimo en táctil; max() evita encoger algo que ya es mayor */
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+}
+
+/* En escritorio el ratón es preciso: 24px bastan y la tarjeta respira más */
+@media (pointer: fine) {
+  .hit-expand::after {
+    width: max(100%, 24px);
+    height: max(100%, 24px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Preferencia del sistema
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cosmetic-banner::after,
+  .tree-node.is-affordable::after { animation: none !important; }
+  .inv-cell, .tree-node, .forge-slot { transition: none !important; }
+}

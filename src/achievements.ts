@@ -115,10 +115,60 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'tycoon',
     title: 'Barón de Nanobots',
     description: 'Alcanza 5.000 Nanitas por segundo',
-    icon: '🚀',
+    icon: 'sparkle',
     rewardText: '+30% poder de click y +30% pasivo',
     reward: { clickBonus: 0.30, passiveBonus: 0.30 },
     progress: (s) => ({ current: Math.min(Math.floor(s.passiveIncome ?? 0), 5000), target: 5000 })
+  },
+  {
+    id: 'first_forge',
+    title: 'Primera Chispa',
+    description: 'Forja tu primera arma',
+    icon: 'weapon',
+    rewardText: '+5% poder de click · Título "Aprendiz de Forja"',
+    reward: { clickBonus: 0.05, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 1), target: 1 })
+  },
+  {
+    id: 'smith_25',
+    title: 'Maestro de Forja',
+    description: 'Forja 25 armas con éxito',
+    icon: 'weapon',
+    rewardText: '+10% click y +10% pasivo · Marco "Brasa"',
+    reward: { clickBonus: 0.10, passiveBonus: 0.10 },
+    progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 25), target: 25 })
+  },
+  {
+    id: 'ascendant',
+    title: 'Ascendido',
+    description: 'Recicla tu progreso 5 veces',
+    icon: 'sparkle',
+    rewardText: '+20% click y +20% pasivo · Banner "Carmesí"',
+    reward: { clickBonus: 0.20, passiveBonus: 0.20 },
+    progress: (s) => ({ current: Math.min(s.resets ?? 0, 5), target: 5 })
+  },
+  // ------------------------------------------------------------- Secretos
+  {
+    id: 'ghost',
+    title: '???',
+    description: 'Un logro que nadie te pidió completar.',
+    icon: 'sparkle',
+    rewardText: 'Título oculto',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    progress: (s) => ({
+      // Afijo Divino en un arma: casi imposible por azar
+      current: (s.warehouse ?? []).some((w: any) => (w.affixes || []).includes('aff_void')) ? 1 : 0,
+      target: 1
+    })
+  },
+  {
+    id: 'hidden',
+    title: '???',
+    description: 'Cien cajas. Ni una más.',
+    icon: 'crate',
+    rewardText: 'Banner oculto',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(s.cratesOpened ?? 0, 100), target: 100 })
   }
 ];
 

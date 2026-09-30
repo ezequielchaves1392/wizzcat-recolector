@@ -1,7 +1,7 @@
 // Ruleta horizontal de apertura de cajas.
 //
-// Importante: la ruleta NO decide el premio. `reward` llega ya decidedor por el
-// game loop y la animación se limita a停下来 en él. Si se invirtiera el orden,
+// Importante: la ruleta NO decide el premio. `reward` llega ya decidido por el
+// game loop y la animación se limita a enseñarlo. Si se invirtiera el orden,
 // la ruleta estaría mintiendo sobre las probabilidades reales.
 
 import { sfx } from '../utils/audio';
@@ -23,7 +23,7 @@ function tileHtml(t: { label: string; sub: string; rarity: string; icon: string 
          style="width:${width}px;height:${width + 24}px">
       <span class="[&>span>svg]:w-6 [&>span>svg]:h-6 ${RARITY_TEXT[t.rarity] || ''} leading-none">${ic(t.icon as IconName)}</span>
       <span class="text-[9px] font-mono text-center leading-tight px-1 line-clamp-2 w-full ${RARITY_TEXT[t.rarity] || ''}">${t.label}</span>
-      <span class="text-[8px] font-mono uppercase tracking-wider ${RARITY_TEXT[t.rarity] || ''} opacity-70">${t.sub}</span>
+      <span class="text-[9px] font-mono uppercase tracking-wider ${RARITY_TEXT[t.rarity] || ''} opacity-70">${t.sub}</span>
     </div>
   `;
 }

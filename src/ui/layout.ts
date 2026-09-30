@@ -10,43 +10,65 @@
 //  - `dvh` en lugar de `vh`: evita el salto cuando aparece la barra del navegador
 //  - sin hover-dependiente: todo lo accionable es un botón real con :active
 //  - las áreas de scroll usan `overscroll-behavior: contain` para que el
-//    arrastre noAnimator la página entera
+//    arrastre no mueva la página entera
+//
+// La barra inferior tiene exactamente 5 destinos. Antes tenía 5 también, pero
+// dos de ellos (Ranking y Tema) eran secundarios: el jugador tenía que
+// apartar el pulgar del borde inferior y buscar en la esquina. Ahora los
+// cinco son páginas de verdad —Base, Almacén, Forja, Tienda, Perfil— y tanto
+// el Ranking como el tema se alcanzan desde la cabecera y desde el Perfil.
 // ==========================================================================
 
-import { ic } from './icons';
+import { ic, type IconName } from './icons';
 import { isMuted, isMusicEnabled } from '../utils/audio';
+import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
 
 export interface LayoutCallbacks {
-  onWarehouse: () => void;
-  onStore: () => void;
-  onRankings: () => void;
+  onNavigate: (route: Route) => void;
   onLogout: () => void;
   onToggleMute: () => void;
   onToggleMusic: () => void;
   onThemeChange: (theme: string) => void;
 }
 
-const THEMES: Array<{ value: string; label: string }> = [
-  { value: 'cyber-dark', label: 'Cyber Dark' },
-  { value: 'synthwave', label: 'Synthwave' },
-  { value: 'matrix', label: 'Matrix' },
-  { value: 'neon-purple', label: 'Neón Púrpura' },
-  { value: 'sunset', label: 'Sunset' },
-  { value: 'nature', label: 'Naturaleza' }
+const THEMES: Array<{ value: string; label: string; tone: string }> = [
+  { value: 'cyber-dark', label: 'Cyber Dark', tone: '#38bdf8' },
+  { value: 'synthwave', label: 'Synthwave', tone: '#ff5ea8' },
+  { value: 'matrix', label: 'Matrix', tone: '#34d399' },
+  { value: 'neon-purple', label: 'Neón Púrpura', tone: '#c084fc' },
+  { value: 'sunset', label: 'Sunset', tone: '#fb923c' },
+  { value: 'nature', label: 'Naturaleza', tone: '#16a34a' }
 ];
 
-export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallbacks): string {
+export function renderLayoutHTML(
+  user: any,
+  savedTheme: string,
+  activeRoute: Route,
+  cb: LayoutCallbacks
+): string {
   const options = THEMES.map(t =>
     `<option value="${t.value}" ${t.value === savedTheme ? 'selected' : ''}>${t.label}</option>`
   ).join('');
 
-  const navBtn = (id: string, iconName: Parameters<typeof ic>[0], label: string) => `
-    <button id="${id}" class="nav-item group flex flex-col items-center justify-center gap-1 flex-1 h-full
-           text-[var(--text-muted)] transition-colors duration-150 active:scale-95"
-            style="min-height:44px" aria-label="${label}">
-      <span class="[&>span>svg]:w-[22px] [&>span>svg]:h-[22px] transition-transform duration-150 group-active:scale-90">${ic(iconName)}</span>
-      <span class="text-[9px] font-mono tracking-wide leading-none">${label}</span>
-    </button>`;
+  const navBtn = (route: Route) => {
+    const def = BOTTOM_BAR_ROUTES.find(r => r.id === route)!;
+    const active = activeRoute === route;
+    return `
+      <button data-nav="${route}"
+        class="nav-item group flex flex-col items-center justify-center gap-1 flex-1 h-full cursor-pointer
+               transition-colors duration-150 active:scale-95
+               ${active ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}"
+        style="min-height:44px" aria-label="${def.label}"
+        ${active ? 'aria-current="page"' : ''}>
+        <span class="[&>span>svg]:w-[22px] [&>span>svg]:h-[22px] transition-transform duration-150
+                     group-active:scale-90
+                     ${active ? 'drop-shadow-[0_0_8px_var(--accent)]' : ''}">
+          ${ic(def.icon as IconName)}
+        </span>
+        <span class="text-[9px] font-mono tracking-wide leading-none">${def.label}</span>
+        ${active ? `<span class="absolute top-0 w-6 h-[2px] rounded-full" style="background: var(--accent)"></span>` : ''}
+      </button>`;
+  };
 
   return `
     <div class="fixed inset-0 app-bg flex flex-col font-sans select-none overflow-hidden">
@@ -69,7 +91,7 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
                     style="border-color: var(--bg-app)"></span>
             </div>
             <div class="min-w-0">
-              <div class="label-caps leading-none">Cyber Base</div>
+              <div class="label-caps leading-none" id="page-title">${routeTitle(activeRoute)}</div>
               <div id="nav-username"
                    class="font-['Orbitron'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight mt-0.5">
                 ${user.displayName || 'Operativo'}
@@ -77,12 +99,34 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
             </div>
           </div>
 
+          <!-- Navegación de escritorio -->
+          <nav class="hidden lg:flex items-center gap-0.5 flex-shrink-0" aria-label="Navegación">
+            ${HEADER_ROUTES.map(r => {
+              const active = activeRoute === r.id;
+              return `
+                <button data-nav="${r.id}"
+                  class="h-9 px-3 rounded-lg text-[11px] font-mono cursor-pointer transition flex items-center gap-1.5
+                         ${active ? 'accent-bg text-slate-950 font-bold'
+                                  : 'btn-ghost text-[var(--text-muted)]'}"
+                  aria-label="${r.title}">
+                  <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(r.icon as IconName)}</span>
+                  ${r.label}
+                </button>`;
+            }).join('')}
+          </nav>
+
           <!-- HUD de buffs: fila con scroll, nunca agranda la cabecera -->
           <div id="active-buffs-hud"
-               class="hidden lg:flex items-center gap-1.5 flex-nowrap min-w-0 overflow-x-auto py-0.5"></div>
+               class="hidden xl:flex items-center gap-1.5 flex-nowrap min-w-0 overflow-x-auto py-0.5"></div>
 
-          <!-- Controles: audio en móvil, todo en escritorio -->
+          <!-- Controles -->
           <div class="flex items-center gap-1.5 flex-shrink-0">
+            <button data-nav="ranking" title="Ranking"
+              class="lg:hidden w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer"
+              aria-label="Ranking">
+              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('trophy')}</span>
+            </button>
+
             <button id="music-btn" title="Música"
               class="w-9 h-9 md:w-auto md:h-9 md:px-3 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px]">
               <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('sound')}</span>
@@ -112,7 +156,7 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
 
         <!-- Buffs en móvil: bajo la cabecera, siempre visible -->
         <div id="buffs-hud-mobile"
-             class="lg:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>
+             class="xl:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>
       </header>
 
       <!-- ===================== ZONA DE JUEGO ===================== -->
@@ -143,7 +187,7 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
             </div>
             <div id="passive-income-display"
                  class="text-[11px] md:text-xs font-mono mt-1.5 text-[var(--text-muted)] tabular
-                        min-h-[16px] flex items-center justify-center text-center px-2">
+                       min-h-[16px] flex items-center justify-center text-center px-2">
               +0 /s
             </div>
           </div>
@@ -162,7 +206,6 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
                    0 0 44px -8px color-mix(in srgb, var(--accent) 55%, transparent),
                    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent)"
             aria-label="Recolectar nanitas">
-            <!-- Anillo interior que late con el pulso -->
             <span class="absolute inset-2 rounded-full border border-[var(--accent)] opacity-25 animate-core-pulse pointer-events-none"></span>
             <span class="relative accent-text animate-pulse" style="animation-duration:2s">
               <span class="[&>span>svg]:w-9 [&>span>svg]:h-9">${ic('bolt')}</span>
@@ -175,6 +218,21 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
                class="text-[11px] md:text-xs font-mono text-emerald-400 flex-shrink-0 tabular">
             +0 por click
           </div>
+
+          <!-- Acceso rápido a la ascensión: el techo del juego tiene que ser
+               alcanzable desde donde se pasa el 95% del tiempo -->
+          <button data-nav="prestigio"
+            class="flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl btn-ghost cursor-pointer
+                   transition active:scale-95 w-full max-w-[16rem]"
+            style="border-color: color-mix(in srgb, var(--accent) 35%, transparent)">
+            <span class="accent-text flex-shrink-0 [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('recycle')}</span>
+            <span class="min-w-0 flex-1 text-left">
+              <span class="block text-[10px] font-mono text-[var(--text-muted)] leading-none">Ascensión</span>
+              <span class="block text-[11px] font-bold accent-text leading-tight mt-0.5" id="prestige-hint">
+                0 núcleos
+              </span>
+            </span>
+          </button>
         </section>
 
         <!-- ---------- Columna derecha: paneles ---------- -->
@@ -184,7 +242,7 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
                       border-b border-[var(--border-color)]">
             <h2 class="font-['Orbitron'] font-bold text-[13px] md:text-sm accent-text
                        tracking-wide flex items-center gap-2">
-              ${ic('companion', 'w-4 h-4')}
+              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('companion')}</span>
               Escuadrón
             </h2>
             <span class="label-caps">Panel principal</span>
@@ -224,21 +282,11 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
 
       <!-- ===================== NAVEGACIÓN INFERIOR (MÓVIL) ===================== -->
       <nav
-        class="lg:hidden relative z-20 card-glass border-x-0 border-b-0 flex-shrink-0
-               px-1 pt-1.5 pb-1"
+        class="lg:hidden relative z-20 card-glass border-x-0 border-b-0 flex-shrink-0 px-1 pt-1.5 pb-1"
         style="padding-bottom: max(0.25rem, env(safe-area-inset-bottom))"
         aria-label="Navegación principal">
-        <div class="flex items-stretch gap-0.5">
-          ${navBtn('warehouse-tab-btn-mobile', 'warehouse', 'Almacén')}
-          ${navBtn('store-tab-btn-mobile', 'store', 'Tienda')}
-          ${navBtn('rankings-btn-mobile', 'trophy', 'Ranking')}
-          <button id="theme-btn-mobile" class="nav-item flex flex-col items-center justify-center gap-1 flex-1
-                   text-[var(--text-muted)] transition-colors duration-150 active:scale-95"
-                  style="min-height:44px" aria-label="Cambiar tema">
-            <span class="[&>span>svg]:w-[22px] [&>span>svg]:h-[22px]">${ic('gear')}</span>
-            <span class="text-[9px] font-mono tracking-wide leading-none">Tema</span>
-          </button>
-          ${navBtn('logout-btn-mobile', 'power', 'Salir')}
+        <div class="flex items-stretch gap-0.5 relative">
+          ${BOTTOM_BAR_ROUTES.map(r => navBtn(r.id)).join('')}
         </div>
       </nav>
 
@@ -266,7 +314,11 @@ export function renderLayoutHTML(user: any, savedTheme: string, cb: LayoutCallba
             ${THEMES.map(t => `
               <button data-theme-option="${t.value}"
                 class="theme-option h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer
-                       flex items-center justify-center transition-colors">${t.label}</button>
+                       flex items-center justify-center gap-1.5 transition-colors"
+                style="${t.value === savedTheme ? 'border-color:' + t.tone + ';color:' + t.tone : ''}">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${t.tone}"></span>
+                ${t.label}
+              </button>
             `).join('')}
           </div>
         </div>
