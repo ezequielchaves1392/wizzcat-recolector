@@ -355,20 +355,12 @@ function updateUI(state: any, isAfk: boolean = false) {
   }
 
   if (clickDamageDisplay) {
-    let clickDamage = 0;
-    if (state.equippedWeaponId) {
-      const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
-      if (item) {
-        const baseDmg = item.damage || 0;
-        const levelMultiplier = 1 + ((item.level || 0) * 0.10);
-        clickDamage = Math.floor(baseDmg * levelMultiplier);
-      }
-    }
-    let multiplier = 1;
-    if (now < state.buffs.clickBoostExpiresAt) multiplier = 2;
-    if (now < state.buffs.clickX3ExpiresAt) multiplier = 3;
-    else if (now < state.buffs.clickX2ExpiresAt) multiplier = 2;
-    clickDamageDisplay.textContent = `+${formatNumber(clickDamage * multiplier)} Nanitas por click`;
+    // El daño real lo calcula el game loop (nivel del arma + buffs + multiplicador
+    // de compañeros). Si aquí se recalcula a mano se desincroniza del valor real.
+    const clickDamage = typeof activeGameInstance?.getClickDamage === 'function'
+      ? activeGameInstance.getClickDamage()
+      : 0;
+    clickDamageDisplay.textContent = `+${formatNumber(clickDamage)} Nanitas por click`;
   }
 
   if (activeBuffsHud) {
@@ -386,8 +378,11 @@ function updateUI(state: any, isAfk: boolean = false) {
     if (passiveBuffRemaining > 0) {
       hudHtml += `<div class="card-glass border border-blue-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-blue-600 dark:text-blue-400">🛡️ Pasivo x2 (AFK): ${formatTime(passiveBuffRemaining)}</div>`;
     }
-    if (state.afkCards > 0) {
-      hudHtml += `<div class="card-glass border border-amber-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-amber-600 dark:text-amber-400">🎴 Tarjetas AFK: ${state.afkCards}</div>`;
+    if (state.afkExpiresAt > now) {
+      hudHtml += `<div class="card-glass border border-amber-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-amber-600 dark:text-amber-400">🎴 AFK: ${formatTime(state.afkExpiresAt - now)}</div>`;
+    }
+    if ((state.passiveMultiplier || 1) > 1) {
+      hudHtml += `<div class="card-glass border border-sky-500/50 rounded-xl px-2.5 py-1 text-[11px] font-mono text-sky-600 dark:text-sky-400">✖ Global x${Number(state.passiveMultiplier).toFixed(2).replace(/\.?0+$/, '')}</div>`;
     }
     activeBuffsHud.innerHTML = hudHtml;
   }
@@ -484,7 +479,9 @@ function renderPlayerPanel(state: any) {
     for (let i = 0; i < maxSlots; i++) {
       const comp = activeCompanions[i];
       if (comp) {
-        const compDescription = `Recolección por segundo: +${comp.power}/s`;
+        const compDescription = comp.type === 'multiplier'
+          ? `Multiplicador global: x${(1 + comp.power).toFixed(2).replace(/\.?0+$/, '')}`
+          : `Recolección por segundo: +${comp.power}/s`;
         const tierLabel = comp.tier ? ` T${comp.tier}` : '';
         const compRarity = comp.rarity || 'Común';
         const rarityColor = rarityColors[compRarity] || 'text-slate-400';
@@ -581,25 +578,19 @@ let companionClickInterval: number | null = null;
 function startCompanionClicks(game: any) {
   if (companionClickInterval) clearInterval(companionClickInterval);
   companionClickInterval = window.setInterval(() => {
+    // Solo efectos visuales: con la pestaña oculta no hay nada que dibujar
+    if (document.hidden) return;
+
     const state = game.getState();
-    const isTabActive = !document.hidden;
-    const hasAfkCard = state.afkCards > 0;
-    
-    // Si la pestaña está inactiva y no hay tarjeta AFK, no hacer nada
-    if (!isTabActive && !hasAfkCard) return;
-    
     const clickCompanions = state.activeCompanions
       .map((compId: string) => state.companions.find((c: any) => c.id === compId))
       .filter((c: any) => c && c.type === 'click');
-    
-    // Solo mostrar efectos visuales si la pestaña está activa
-    if (isTabActive) {
-      clickCompanions.forEach((comp: any, index: number) => {
-        setTimeout(() => {
-          showCompanionClickInCollector(comp.power);
-        }, index * 100);
-      });
-    }
+
+    clickCompanions.forEach((comp: any, index: number) => {
+      setTimeout(() => {
+        showCompanionClickInCollector(comp.power);
+      }, index * 100);
+    });
   }, 1000);
 }
 

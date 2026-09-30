@@ -1,4 +1,5 @@
 import { WarehouseItem } from '../types';
+import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS } from '../gameLoop';
 
 function formatNumber(num: number): string {
   const floored = Math.floor(num);
@@ -709,12 +710,9 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                         }
                         state.warehouseCapacity += 1;
                     } else if (item.name.includes('AFK')) {
-                        const afkCardsInWarehouse = state.warehouse.filter((i: WarehouseItem) => i.name.includes('AFK') && i.id !== item.id).length;
-                        if (afkCardsInWarehouse >= 20) {
-                            showConfirmModal('Máximo de tarjetas AFK (20).', () => {});
-                            return;
-                        }
-                        state.afkCards = afkCardsInWarehouse + 1;
+                        // 10 min por tarjeta, acumulables hasta 30 min
+                        const base = Math.max(now, state.afkExpiresAt || 0);
+                        state.afkExpiresAt = Math.min(base + AFK_CARD_DURATION_MS, now + MAX_AFK_BUFF_DURATION_MS);
                     } else if (item.name.includes('Click x2')) {
                         const currentExpires = Math.max(now, state.buffs.clickX2ExpiresAt);
                         state.buffs.clickX2ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);

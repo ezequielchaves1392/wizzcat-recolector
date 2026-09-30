@@ -43,9 +43,8 @@ function showToast(message: string, type: 'success' | 'error' | 'info' = 'info')
 }
 
 const SAVE_VERSION = 6;
-const MAX_BUFF_DURATION_MS = 8 * 60 * 60 * 1000;
-const MAX_CARD_BUFF_DURATION_MS = 30 * 60 * 1000; // Máximo 30 minutos para buffs de tarjetas
-const MAX_STACK_SIZE = 100;
+export const AFK_CARD_DURATION_MS = 10 * 60 * 1000; // Cada tarjeta AFK da 10 min
+export const MAX_AFK_BUFF_DURATION_MS = 30 * 60 * 1000; // Máximo acumulable (3 tarjetas)
 
 export const COLLECTOR_BASE_COSTS = {
   blaster: 20,
@@ -93,6 +92,33 @@ export const STORE_ITEMS = {
 };
 
 export const COMPANION_SLOT_COSTS = [0, 1000, 5000, 20000, 75000];
+
+// Definición de cada tipo de caja. La fuente de verdad es el item del almacén,
+// `state.crates` se mantiene sincronizado como contador para las migraciones.
+const CRATE_TYPES = {
+  common: { name: 'Caja Común', rarity: 'Común', details: 'Contiene recompensas básicas' },
+  rare: { name: 'Caja Rara', rarity: 'Raro', details: 'Contiene recompensas mejores' },
+  epic: { name: 'Caja Épica', rarity: 'Épico', details: 'Contiene recompensas altas' },
+  legendary: { name: 'Caja Legendaria', rarity: 'Legendario', details: 'Contiene recompensas máximas' }
+} as const;
+
+export type CrateType = keyof typeof CRATE_TYPES;
+
+function createCrateItem(crateType: CrateType, quantity: number = 1) {
+  const def = CRATE_TYPES[crateType];
+  const storeItem = (STORE_ITEMS as Record<string, { cost: number }>)[`${crateType}Crate`];
+  return {
+    id: `crate_${crateType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name: def.name,
+    type: 'crate' as const,
+    details: def.details,
+    rarity: def.rarity,
+    tier: 0,
+    sellPrice: Math.floor(storeItem.cost / 4),
+    stackable: true,
+    stackCount: quantity
+  };
+}
 
 // Sistema de Tiers para compañeros y armas
 export const TIER_SYSTEM = {
@@ -207,6 +233,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     saveVersion: SAVE_VERSION,
     nanites: initialNanites,
     passiveIncome: 0,
+    passiveMultiplier: 1, // Multiplicador global aportado por los compañeros tipo 'multiplier'
     totalClicks: 0,
     totalInfraestructure: 0,
     cratesOpened: 0,
@@ -239,6 +266,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
   let isAfk = false;
   let lastActiveTimestamp = Date.now();
+  let hiddenAt = 0; // Momento en que la pestaña pasó a segundo plano
   const AFK_THRESHOLD_MS = 45000;
 
   const userRef = doc(db, 'users', user.uid);
@@ -289,6 +317,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         saveToFirebase();
       }
       state.afkCards = data.afkCards ?? 0;
+      state.afkExpiresAt = data.afkExpiresAt ?? 0;
       state.buffs = {
         clickBoostExpiresAt: data.buffs?.clickBoostExpiresAt ?? 0,
         passiveBoostExpiresAt: data.buffs?.passiveBoostExpiresAt ?? 0,
@@ -311,6 +340,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
+        afkExpiresAt: state.afkExpiresAt,
         crates: state.crates,
         equippedWeaponId: state.equippedWeaponId,
         companions: state.companions,
@@ -353,18 +383,76 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     }
   }
 
+  // Detecta el tipo de caja a partir del nombre del item
+  function getCrateTypeFromName(name: string): CrateType | null {
+    const lower = name.toLowerCase();
+    if (lower.includes('común')) return 'common';
+    if (lower.includes('rara')) return 'rare';
+    if (lower.includes('épica')) return 'epic';
+    if (lower.includes('legendaria')) return 'legendary';
+    return null;
+  }
+
+  // `state.crates` es un contador derivado: el almacén es la fuente de verdad.
+  // Convierte contadores huérfanos de saves antiguos en items reales.
+  function syncCrateCounters() {
+    const counts: Record<CrateType, number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
+
+    state.warehouse.forEach((w: any) => {
+      if (w.type !== 'crate') return;
+      const crateType = getCrateTypeFromName(w.name || '');
+      if (!crateType) return;
+      // Un item apilado (stackCount) representa varias cajas
+      counts[crateType] += (w.stackCount || 1);
+    });
+
+    (Object.keys(CRATE_TYPES) as CrateType[]).forEach(crateType => {
+      const missing = (state.crates[crateType] || 0) - counts[crateType];
+      if (missing <= 0) return;
+      // Materializar lo que falte, respetando la capacidad del almacén
+      const free = state.warehouseCapacity - state.warehouse.length;
+      const toCreate = Math.min(missing, Math.max(0, free));
+      for (let i = 0; i < toCreate; i++) {
+        state.warehouse.push(createCrateItem(crateType) as any);
+      }
+      counts[crateType] += toCreate;
+    });
+
+    state.crates = counts;
+  }
+
+  // Actualiza el contador de tarjetas AFK a partir de las que hay en el almacén
+  function refreshAfkCardCount() {
+    state.afkCards = state.warehouse.filter((w: any) => w.name.includes('AFK')).length;
+  }
+
   // Sincronizar compañeros con el warehouse después de inicializar
   syncCompanionsToWarehouse();
+  syncCrateCounters();
 
   // Guardar inmediatamente al iniciar sesión
   await saveToFirebase();
 
-  function recalculatePassiveIncome() {
-    let base = 0;
-    // SOLO los compañeros activos suman recursos por segundo
+  // Los compañeros tipo 'multiplier' no aportan nanitas: multiplican el rendimiento.
+  // power es el factor extra (0.5 = +50%, 2.0 = +200%)
+  function calculateCompanionMultiplier(): number {
+    let multiplier = 1;
     state.activeCompanions.forEach(compId => {
       const comp = state.companions.find(c => c.id === compId);
-      if (comp) {
+      if (comp && comp.type === 'multiplier') {
+        multiplier += comp.power;
+      }
+    });
+    return Math.max(1, multiplier);
+  }
+
+  function recalculatePassiveIncome() {
+    let base = 0;
+    // SOLO los compañeros activos suman recursos por segundo.
+    // Los de tipo 'click' cuentan aquí: es su único origen de ingresos.
+    state.activeCompanions.forEach(compId => {
+      const comp = state.companions.find(c => c.id === compId);
+      if (comp && comp.type !== 'multiplier') {
         base += comp.power;
       }
     });
@@ -372,8 +460,10 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     if (Date.now() < state.buffs.passiveBoostExpiresAt) {
       base *= 2;
     }
+
+    state.passiveMultiplier = calculateCompanionMultiplier();
     // Redondear a entero para mantener consistencia
-    state.passiveIncome = Math.floor(base);
+    state.passiveIncome = Math.floor(base * state.passiveMultiplier);
   }
 
   function calculateClickDamage() {
@@ -383,7 +473,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
     const baseDmg = item.damage || 0;
     const levelMultiplier = 1 + ((item.level || 0) * 0.10);
-    return Math.floor(baseDmg * levelMultiplier);
+    return Math.floor(baseDmg * levelMultiplier * calculateCompanionMultiplier());
   }
 
   function calculateMultiplier() {
@@ -416,6 +506,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
+        afkExpiresAt: state.afkExpiresAt,
         crates: state.crates,
         equippedWeaponId: state.equippedWeaponId,
         companions: state.companions,
@@ -440,16 +531,26 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   }
 
   const handleVisibilityChange = () => {
+    const now = Date.now();
     if (document.hidden) {
-      // Pestaña en segundo plano: detener intervalos completamente
+      // Pestaña en segundo plano: detener el bucle de renderizado
       isAfk = true;
+      hiddenAt = now;
       if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
-      if (companionClickInterval) { clearInterval(companionClickInterval); companionClickInterval = null; }
     } else {
-      // Pestaña visible: reiniciar intervalos
-      const elapsed = Date.now() - lastActiveTimestamp;
+      // Pestaña visible: cobrar el pasivo acumulado durante el tiempo en segundo plano
+      if (hiddenAt > 0) {
+        // Solo cuenta si el buff AFK estaba vigente durante ese tramo
+        const coveredMs = Math.max(0, Math.min(now, state.afkExpiresAt) - hiddenAt);
+        if (coveredMs > 0) {
+          recalculatePassiveIncome();
+          state.nanites += (coveredMs / 1000) * state.passiveIncome;
+        }
+        hiddenAt = 0;
+      }
+      const elapsed = now - lastActiveTimestamp;
       isAfk = elapsed > AFK_THRESHOLD_MS;
-      lastActiveTimestamp = Date.now();
+      lastActiveTimestamp = now;
       // Reiniciar intervalos si no están corriendo
       if (!gameInterval) startGameIntervals();
     }
@@ -472,8 +573,10 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     }
   };
 
+  const handleMouseMove = () => { lastActiveTimestamp = Date.now(); };
+
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('mousemove', () => { lastActiveTimestamp = Date.now(); });
+  window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('keydown', handleUserActivity);
   window.addEventListener('click', handleUserActivity);
 
@@ -489,32 +592,11 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   let awaitingClickAfterAfk = false;
 
   // Variables para intervalos (pueden detenerse y reiniciarse)
-  let companionClickInterval: ReturnType<typeof setInterval> | null = null;
   let gameInterval: ReturnType<typeof setInterval> | null = null;
 
   function startGameIntervals() {
     // Detener intervalos existentes si los hay
-    if (companionClickInterval) clearInterval(companionClickInterval);
     if (gameInterval) clearInterval(gameInterval);
-
-    // Intervalo de 1 segundo para clicks de compañeros
-    companionClickInterval = setInterval(() => {
-      // No sumar si la pestaña está oculta
-      if (document.hidden) return;
-
-      let companionClickPower = 0;
-      state.activeCompanions.forEach((compId: string) => {
-        const comp = state.companions.find((c: any) => c.id === compId);
-        if (comp && comp.type === 'click') {
-          companionClickPower += comp.power;
-        }
-      });
-
-      if (companionClickPower > 0) {
-        state.nanites += companionClickPower;
-        onUpdate(state, false);
-      }
-    }, 1000);
 
     // Intervalo principal del juego
     gameInterval = setInterval(() => {
@@ -524,8 +606,8 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       recalculatePassiveIncome();
       const now = Date.now();
       const hasPassiveBuffActive = now < state.buffs.passiveBoostExpiresAt;
-      const hasAfkCards = state.afkCards > 0;
-      const isEffectivelyAfk = isAfk && !hasPassiveBuffActive && !hasAfkCards;
+      const hasAfkBuff = now < state.afkExpiresAt;
+      const isEffectivelyAfk = isAfk && !hasPassiveBuffActive && !hasAfkBuff;
 
       if (isEffectivelyAfk) {
         onUpdate(state, true);
@@ -540,7 +622,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       if (state.passiveIncome > 0) {
         state.nanites += state.passiveIncome / TICKS_PER_SECOND;
       }
-      onUpdate(state, isAfk && (hasPassiveBuffActive || hasAfkCards));
+      onUpdate(state, isAfk && (hasPassiveBuffActive || hasAfkBuff));
     }, TICK_RATE_MS);
   }
 
@@ -550,6 +632,9 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   return {
     getState: () => state,
     isAfk: () => isAfk,
+    // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
+    // La UI debe usar esta función para no mostrar un valor distinto al real.
+    getClickDamage: () => Math.floor(calculateClickDamage() * calculateMultiplier()),
     updateState: (newState: any) => {
       Object.assign(state, newState);
       // Respetar capacidad máxima del almacén
@@ -557,6 +642,9 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         state.warehouse = state.warehouse.slice(0, state.warehouseCapacity);
       }
       syncCompanionsToWarehouse();
+      syncCrateCounters();
+      refreshAfkCardCount();
+      recalculatePassiveIncome();
       onUpdate(state, isAfk);
       saveToFirebase();
     },
@@ -701,8 +789,12 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       const item = STORE_ITEMS[itemKey];
       if (!item || state.nanites < item.cost) return false;
 
-      // Validar mochila llena (excepto para items que no ocupan espacio como slots)
-      const needsWarehouseSpace = !['companionSlot1', 'companionSlot2', 'backpackExpander'].includes(itemKey as string);
+      // Validar antes de cobrar: los slots son únicos y no se pueden repetir
+      if (itemKey === 'companionSlot1' && state.maxCompanionSlots !== 1) return false;
+      if (itemKey === 'companionSlot2' && state.maxCompanionSlots !== 2) return false;
+
+      // Validar mochila llena (excepto para items que no ocupan espacio en el almacén)
+      const needsWarehouseSpace = !['key', 'upgradeCrystal', 'warehouseSlot', 'companionSlot1', 'companionSlot2'].includes(itemKey as string);
       if (needsWarehouseSpace && state.warehouse.length >= state.warehouseCapacity) {
         showToast('⚠️ Almacén lleno. No puedes comprar más items.', 'error');
         return false;
@@ -728,26 +820,15 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         onUpdate(state, isAfk);
         saveToFirebase();
         return { id: `slot_${Date.now()}`, name: 'Espacio de Almacén', type: 'upgrade', details: '+5 espacios de almacén', rarity: 'Raro', tier: 0 };
-      } else if (itemKey === 'commonCrate') {
-        state.crates.common += 1;
+      } else if (itemKey === 'commonCrate' || itemKey === 'rareCrate' || itemKey === 'epicCrate' || itemKey === 'legendaryCrate') {
+        // La caja es un item real del almacén: sin esto no se puede abrir
+        const crateType = itemKey.replace('Crate', '').toLowerCase() as CrateType;
+        const warehouseItem = createCrateItem(crateType);
+        state.warehouse.push(warehouseItem as any);
+        syncCrateCounters();
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { id: `crate_common_${Date.now()}`, name: 'Caja Común', type: 'crate', details: 'Contiene recompensas básicas', rarity: 'Común', tier: 0 };
-      } else if (itemKey === 'rareCrate') {
-        state.crates.rare += 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { id: `crate_rare_${Date.now()}`, name: 'Caja Rara', type: 'crate', details: 'Contiene recompensas mejores', rarity: 'Raro', tier: 0 };
-      } else if (itemKey === 'epicCrate') {
-        state.crates.epic += 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { id: `crate_epic_${Date.now()}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0 };
-      } else if (itemKey === 'legendaryCrate') {
-        state.crates.legendary += 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { id: `crate_legendary_${Date.now()}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0 };
+        return warehouseItem;
       } else if (itemKey === 'clickBuff') {
         if (state.warehouse.length < state.warehouseCapacity) {
           const warehouseItem = {
@@ -803,13 +884,11 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
           return warehouseItem;
         }
       } else if (itemKey === 'companionSlot1') {
-        if (state.maxCompanionSlots !== 1) return false;
         state.maxCompanionSlots += 1;
         onUpdate(state, isAfk);
         saveToFirebase();
         return { id: `slot1_${Date.now()}`, name: 'Slot de Compañero 1', type: 'upgrade', details: '+1 slot de compañero', rarity: 'Épico', tier: 0 };
       } else if (itemKey === 'companionSlot2') {
-        if (state.maxCompanionSlots !== 2) return false;
         state.maxCompanionSlots += 1;
         onUpdate(state, isAfk);
         saveToFirebase();
@@ -828,6 +907,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
             stackCount: 1
           };
           state.warehouse.push(warehouseItem);
+          refreshAfkCardCount();
           onUpdate(state, isAfk);
           saveToFirebase();
           return warehouseItem;
@@ -871,8 +951,8 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
-        state.companions.push(comp);
         if (state.warehouse.length < state.warehouseCapacity) {
+          state.companions.push(comp);
           const warehouseItem = {
             id: comp.id,
             name: comp.name,
@@ -900,33 +980,16 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
           saveToFirebase();
           return warehouseItem;
         }
-      } else if ((itemKey as string) === 'afkCard') {
-        if (state.afkCards >= 3) return false;
-        state.afkCards += 1;
-        // Establecer tiempo de expiración (10 min por tarjeta, acumulable hasta 30 min)
-        const now = Date.now();
-        const currentExpires = Math.max(now, state.afkExpiresAt);
-        state.afkExpiresAt = Math.min(currentExpires + 10 * 60 * 1000, now + 30 * 60 * 1000);
-        // Guardar en almacén como consumible
-        if (state.warehouse.length < state.warehouseCapacity) {
-          state.warehouse.push({
-            id: `afk_${Date.now()}`,
-            name: 'Tarjeta AFK',
-            type: 'consumable',
-            details: 'Permite juego sin pestaña activa por 10 min (acumulable x3)',
-            rarity: 'Raro',
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1
-          });
-        }
       }
+
+      // Si llegamos aquí el item no ocupa espacio (llave, cristal, slot, +5 almacén).
+      // La compra ya está cobrada, así que se devuelve true sin item que mostrar.
 
       onUpdate(state, isAfk);
       saveToFirebase();
       return true;
     },
-    openCrateBox: (crateType: 'common' | 'rare' | 'epic' | 'legendary') => {
+    openCrateBox: (crateType: CrateType) => {
       handleUserActivity();
       if (state.keys < 1 || state.crates[crateType] < 1) return null;
 
@@ -946,6 +1009,17 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
       const roll = Math.random() * 100;
       let reward: { type: string; amount: number; label: string; itemData?: any };
+
+      // Una caja regalada es un item real del almacén. Si no cabe, se compensa
+      // con nanitas para que el jugador no pierda el drop.
+      const grantCrate = (crateType: CrateType) => {
+        if (state.warehouse.length >= state.warehouseCapacity) {
+          const compensation = crateType === 'epic' ? 5000 : 20000;
+          return { type: 'nanites', amount: compensation, label: `Almacén lleno: +${compensation} Nanitas` };
+        }
+        state.warehouse.push(createCrateItem(crateType) as any);
+        return { type: 'crate', amount: 1, label: `+1 ${CRATE_TYPES[crateType].name}` };
+      };
 
       if (crateType === 'common') {
         if (roll < 50) reward = { type: 'nanites', amount: 300, label: '+300 Nanitas' };
@@ -976,8 +1050,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
             reward = { type: 'nanites', amount: 1500, label: 'Almacén lleno: +1,500 Nanitas' };
           }
         } else {
-          state.crates.epic += 1;
-          reward = { type: 'crate', amount: 1, label: '+1 Caja Épica' };
+          reward = grantCrate('epic');
         }
       } else if (crateType === 'epic') {
         if (roll < 45) {
@@ -993,8 +1066,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
             reward = { type: 'nanites', amount: 5000, label: 'Almacén lleno: +5,000 Nanitas' };
           }
         } else {
-          state.crates.legendary += 1;
-          reward = { type: 'crate', amount: 1, label: '+1 Caja Legendaria' };
+          reward = grantCrate('legendary');
         }
       } else {
         // Legendary
@@ -1023,11 +1095,10 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     },
     cleanup: async () => {
       if (gameInterval) clearInterval(gameInterval);
-      if (companionClickInterval) clearInterval(companionClickInterval);
       clearInterval(saveInterval);
       window.removeEventListener('beforeunload', handleUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleUserActivity);
       window.removeEventListener('click', handleUserActivity);
       await saveToFirebase();

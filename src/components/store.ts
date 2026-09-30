@@ -1,5 +1,11 @@
 import { STORE_ITEMS, TIER_SYSTEM } from '../gameLoop';
 
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.ceil(ms / 60000);
+  if (totalMinutes >= 60) return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+  return `${totalMinutes}m`;
+}
+
 function showConfirmModal(message: string, onConfirm: () => void) {
   const overlay = document.createElement('div');
   overlay.className = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
@@ -22,19 +28,21 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
   const state = game.getState();
 
   const storeCategories = [
-    { id: 'cards', label: '🎴 Tarjetas', items: ['afkCard', 'clickX2Card', 'clickX3Card'] },
+    { id: 'crates', label: '📦 Cajas', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
+    { id: 'resources', label: '⚡ Recursos', items: ['key', 'upgradeCrystal', 'warehouseSlot'] },
+    { id: 'cards', label: '🎴 Tarjetas', items: ['afkCard', 'clickBuff', 'passiveBuff', 'clickX2Card', 'clickX3Card'] },
     { id: 'upgrades', label: '⬆️ Mejoras', items: ['backpackExpander', 'companionSlot1', 'companionSlot2'] },
     { id: 'companionCards', label: '🤖 Compañeros', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
     { id: 'weaponCards', label: '⚔️ Armas', items: Array.from({ length: 10 }, (_, i) => `weaponCardT${i + 1}`) }
   ];
 
-  let activeCategory = 'cards';
+  let activeCategory = 'crates';
 
   function renderTemplate() {
     const state = game.getState();
     const category = storeCategories.find(c => c.id === activeCategory)!;
 
-    const itemsHtml = category.items.map((itemKey, index) => {
+    const itemsHtml = category.items.map((itemKey) => {
       const item = STORE_ITEMS[itemKey as keyof typeof STORE_ITEMS];
       if (!item) return '';
 
@@ -46,19 +54,23 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
       if (itemKey === 'backpackExpander') {
         extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Actual: ${state.warehouseCapacity}/20 slots</div>`;
       } else if (itemKey === 'afkCard') {
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Acumuladas: ${state.afkCards}/3</div>`;
+        const afkRemaining = Math.max(0, (state.afkExpiresAt || 0) - Date.now());
+        const extra = afkRemaining > 0 ? ` · Activo ${formatDuration(afkRemaining)}` : '';
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">En almacén: ${state.afkCards || 0}/3${extra}</div>`;
+      } else if (itemKey === 'key') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Llaves: ${state.keys || 0}</div>`;
+      } else if (itemKey === 'upgradeCrystal') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Cristales: ${state.upgradeCrystals || 0}</div>`;
+      } else if (itemKey === 'warehouseSlot') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Actual: ${state.warehouseCapacity} slots</div>`;
       } else if (itemKey.startsWith('companionCardT') || itemKey.startsWith('weaponCardT')) {
         const tier = parseInt(itemKey.replace(/^(companion|weapon)CardT/, ''));
         const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges];
         const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier];
-        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Tier ${tier} • ${range[0]}-${range[1]} clics/s • ${rarity}</div>`;
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Tier ${tier} • ${itemKey.startsWith('companionCardT') ? `+${range[0]}-${range[1]}/s` : `+${range[0]}-${range[1]} por click`} • ${rarity}</div>`;
       }
 
-      // Añadir división visual después de las tarjetas AFK (antes de las Click)
-      const showDivider = index > 0 && category.items[index - 1] === 'afkCard' && itemKey === 'clickX2Card';
-
       return `
-        ${showDivider ? '<div class="col-span-full border-t border-[var(--border-color)] my-1"></div>' : ''}
         <div class="card-glass border rounded-xl p-3 flex flex-col gap-2 ${isDisabled ? 'opacity-50' : ''}">
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
@@ -123,7 +135,7 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
 
   function isItemDisabled(itemKey: string, state: any): boolean {
     if (itemKey === 'backpackExpander') return state.warehouseCapacity >= 20;
-    if (itemKey === 'afkCard') return state.afkCards >= 3;
+    if (itemKey === 'afkCard') return (state.afkCards || 0) >= 3;
     if (itemKey === 'companionSlot1') return state.maxCompanionSlots >= 2;
     if (itemKey === 'companionSlot2') return state.maxCompanionSlots >= 3;
     return false;
@@ -131,7 +143,7 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
 
   function getDisabledReason(itemKey: string, state: any): string {
     if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 20) return 'Máximo alcanzado';
-    if (itemKey === 'afkCard' && state.afkCards >= 3) return 'Máximo acumulado';
+    if (itemKey === 'afkCard' && (state.afkCards || 0) >= 3) return 'Máximo acumulado';
     if (itemKey === 'companionSlot1' && state.maxCompanionSlots >= 2) return 'Ya comprado';
     if (itemKey === 'companionSlot2' && state.maxCompanionSlots >= 3) return 'Ya comprado';
     return 'No disponible';
@@ -163,10 +175,12 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
         // Preguntar primero, comprar solo si confirma
         showConfirmModal(`¿Comprar ${item.label} por ${formatNumber(item.cost)} nanitas?`, () => {
           const purchasedItem = game.buyStoreItem(itemKey);
-          if (purchasedItem) {
+          if (!purchasedItem) return;
+          // Los items que no ocupan espacio (llaves, cristales, slots) no devuelven card
+          if (typeof purchasedItem === 'object') {
             showItemCard(purchasedItem);
-            renderTemplate();
           }
+          renderTemplate();
         });
       });
     });
