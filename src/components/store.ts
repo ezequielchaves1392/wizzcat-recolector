@@ -155,8 +155,12 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
         const itemKey = (e.currentTarget as HTMLElement).getAttribute('data-item-key') as keyof typeof STORE_ITEMS;
         if (!itemKey) return;
 
-        // Preguntar primero, comprar solo si confirma
+        // Verificar si tiene suficientes nanitas antes de mostrar el modal
         const item = STORE_ITEMS[itemKey];
+        const state = game.getState();
+        if (state.nanites < item.cost) return; // No hacer nada si no hay suficientes nanitas
+
+        // Preguntar primero, comprar solo si confirma
         showConfirmModal(`¿Comprar ${item.label} por ${formatNumber(item.cost)} nanitas?`, () => {
           const purchasedItem = game.buyStoreItem(itemKey);
           if (purchasedItem) {

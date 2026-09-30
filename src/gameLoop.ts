@@ -226,8 +226,8 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number }>,
     activeCompanions: [] as string[],
     warehouse: [
-      { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Daño: +1', rarity: 'Común' },
-      { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: '+1/s', rarity: 'Común' }
+      { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
+      { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +1/s', rarity: 'Común', tier: 1, sellPrice: 250 }
     ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; damage?: number; equipped?: boolean; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
     buffs: {
       clickBoostExpiresAt: 0,
@@ -441,14 +441,17 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
   const handleVisibilityChange = () => {
     if (document.hidden) {
-      // Solo marcar AFK si no hay tarjetas AFK activas
-      if (state.afkCards <= 0) {
-        isAfk = true;
-      }
+      // Pestaña en segundo plano: detener intervalos completamente
+      isAfk = true;
+      if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
+      if (companionClickInterval) { clearInterval(companionClickInterval); companionClickInterval = null; }
     } else {
+      // Pestaña visible: reiniciar intervalos
       const elapsed = Date.now() - lastActiveTimestamp;
       isAfk = elapsed > AFK_THRESHOLD_MS;
       lastActiveTimestamp = Date.now();
+      // Reiniciar intervalos si no están corriendo
+      if (!gameInterval) startGameIntervals();
     }
   };
 
@@ -485,49 +488,64 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   // Estado para manejar el regreso del AFK
   let awaitingClickAfterAfk = false;
 
-  // Intervalo de 1 segundo para clicks de compañeros y actualización de nanitas
-  const companionClickInterval = setInterval(() => {
-    const now = Date.now();
-    
-    // Sumar clicks de compañeros click
-    let companionClickPower = 0;
-    state.activeCompanions.forEach((compId: string) => {
-      const comp = state.companions.find((c: any) => c.id === compId);
-      if (comp && comp.type === 'click') {
-        companionClickPower += comp.power;
+  // Variables para intervalos (pueden detenerse y reiniciarse)
+  let companionClickInterval: ReturnType<typeof setInterval> | null = null;
+  let gameInterval: ReturnType<typeof setInterval> | null = null;
+
+  function startGameIntervals() {
+    // Detener intervalos existentes si los hay
+    if (companionClickInterval) clearInterval(companionClickInterval);
+    if (gameInterval) clearInterval(gameInterval);
+
+    // Intervalo de 1 segundo para clicks de compañeros
+    companionClickInterval = setInterval(() => {
+      // No sumar si la pestaña está oculta
+      if (document.hidden) return;
+
+      let companionClickPower = 0;
+      state.activeCompanions.forEach((compId: string) => {
+        const comp = state.companions.find((c: any) => c.id === compId);
+        if (comp && comp.type === 'click') {
+          companionClickPower += comp.power;
+        }
+      });
+
+      if (companionClickPower > 0) {
+        state.nanites += companionClickPower;
+        onUpdate(state, false);
       }
-    });
-    
-    if (companionClickPower > 0) {
-      state.nanites += companionClickPower;
-      onUpdate(state, false);
-    }
-  }, 1000);
+    }, 1000);
 
-  const gameInterval = setInterval(() => {
-    recalculatePassiveIncome();
-    const now = Date.now();
-    const hasPassiveBuffActive = now < state.buffs.passiveBoostExpiresAt;
-    const hasAfkCards = state.afkCards > 0;
-    const isEffectivelyAfk = isAfk && !hasPassiveBuffActive && !hasAfkCards;
+    // Intervalo principal del juego
+    gameInterval = setInterval(() => {
+      // No sumar si la pestaña está oculta
+      if (document.hidden) return;
 
-    if (isEffectivelyAfk) {
-      onUpdate(state, true);
-      return;
-    }
+      recalculatePassiveIncome();
+      const now = Date.now();
+      const hasPassiveBuffActive = now < state.buffs.passiveBoostExpiresAt;
+      const hasAfkCards = state.afkCards > 0;
+      const isEffectivelyAfk = isAfk && !hasPassiveBuffActive && !hasAfkCards;
 
-    // Si estamos esperando un click después del AFK, no sumar pasivo
-    if (awaitingClickAfterAfk) {
-      onUpdate(state, false);
-      return;
-    }
+      if (isEffectivelyAfk) {
+        onUpdate(state, true);
+        return;
+      }
 
-    if (state.passiveIncome > 0) {
-      // Sumar fracción del ingreso pasivo para animación fluida
-      state.nanites += state.passiveIncome / TICKS_PER_SECOND;
-    }
-    onUpdate(state, isAfk && (hasPassiveBuffActive || hasAfkCards));
-  }, TICK_RATE_MS);
+      if (awaitingClickAfterAfk) {
+        onUpdate(state, false);
+        return;
+      }
+
+      if (state.passiveIncome > 0) {
+        state.nanites += state.passiveIncome / TICKS_PER_SECOND;
+      }
+      onUpdate(state, isAfk && (hasPassiveBuffActive || hasAfkCards));
+    }, TICK_RATE_MS);
+  }
+
+  // Iniciar intervalos
+  startGameIntervals();
 
   return {
     getState: () => state,
@@ -1004,7 +1022,8 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       return reward;
     },
     cleanup: async () => {
-      clearInterval(gameInterval);
+      if (gameInterval) clearInterval(gameInterval);
+      if (companionClickInterval) clearInterval(companionClickInterval);
       clearInterval(saveInterval);
       window.removeEventListener('beforeunload', handleUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
