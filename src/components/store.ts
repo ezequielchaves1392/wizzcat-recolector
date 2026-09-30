@@ -1,4 +1,5 @@
 import { STORE_ITEMS, TIER_SYSTEM } from '../gameLoop';
+import { formatNumber } from '../utils/format';
 
 function formatDuration(ms: number): string {
   const totalMinutes = Math.ceil(ms / 60000);
@@ -252,13 +253,6 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
     });
   }
 
-  function formatNumber(num: number): string {
-    const floored = Math.floor(num);
-    if (floored >= 1e9) return (floored / 1e9).toFixed(2) + ' B';
-    if (floored >= 1e6) return (floored / 1e6).toFixed(2) + ' M';
-    if (floored >= 1e3) return (floored / 1e3).toFixed(2) + ' K';
-    return floored.toString();
-  }
 
   renderTemplate();
 

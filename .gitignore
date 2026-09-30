@@ -32,6 +32,10 @@ lerna-debug.log*
 # Vite
 .vite/
 
+# Banco de pruebas visual (solo desarrollo)
+preview.html
+src/preview.ts
+
 # Firebase
 .firebase
 firebase-debug.log

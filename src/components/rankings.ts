@@ -1,3 +1,4 @@
+import { formatNumber } from '../utils/format';
 import { db } from '../firebase';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
@@ -113,11 +114,4 @@ export function renderRankings(container: HTMLElement, currentUser: any, onBack:
       listContainer.innerHTML = html;
     });
   }
-}
-
-function formatNumber(num: number): string {
-  if (num >= 1e9) return (num / 1e9).toFixed(2) + ' B';
-  if (num >= 1e6) return (num / 1e6).toFixed(2) + ' M';
-  if (num >= 1e3) return (num / 1e3).toFixed(2) + ' K';
-  return Math.floor(num).toLocaleString();
 }

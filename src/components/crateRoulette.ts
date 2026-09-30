@@ -5,7 +5,11 @@
 // la ruleta estaría mintiendo sobre las probabilidades reales.
 
 import { sfx } from '../utils/audio';
-import { buildRouletteStrip, RARITY_COLORS, RARITY_GLOW, RARITY_RANK, CRATE_META, type CrateReward } from './crateLoot';
+import { ic, type IconName } from '../ui/icons';
+import {
+  buildRouletteStrip, rarityClass, RARITY_GLOW, RARITY_TEXT, RARITY_RANK, CRATE_META,
+  type CrateReward
+} from './crateLoot';
 import type { CrateType } from '../gameLoop';
 
 const TILE_W = 96;   // ancho de casilla en desktop
@@ -13,13 +17,13 @@ const TILE_W_MOBILE = 78;
 const SPIN_MS = 4200;
 
 function tileHtml(t: { label: string; sub: string; rarity: string; icon: string }, width: number) {
-  const color = RARITY_COLORS[t.rarity] || RARITY_COLORS['Común'];
   return `
-    <div class="flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl border ${color} card-glass"
+    <div class="flex-shrink-0 flex flex-col items-center justify-center gap-1 rounded-xl
+                border ${rarityClass(t.rarity)} card-glass"
          style="width:${width}px;height:${width + 24}px">
-      <span class="text-2xl leading-none">${t.icon}</span>
-      <span class="text-[9px] font-mono text-center leading-tight px-1 line-clamp-2" style="color:inherit">${t.label}</span>
-      <span class="text-[8px] font-mono uppercase tracking-wider opacity-70">${t.sub}</span>
+      <span class="[&>span>svg]:w-6 [&>span>svg]:h-6 ${RARITY_TEXT[t.rarity] || ''} leading-none">${ic(t.icon as IconName)}</span>
+      <span class="text-[9px] font-mono text-center leading-tight px-1 line-clamp-2 w-full ${RARITY_TEXT[t.rarity] || ''}">${t.label}</span>
+      <span class="text-[8px] font-mono uppercase tracking-wider ${RARITY_TEXT[t.rarity] || ''} opacity-70">${t.sub}</span>
     </div>
   `;
 }
@@ -45,7 +49,7 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
   };
 
   const meta = CRATE_META[crateType];
-  const rarityColor = RARITY_COLORS[reward.rarity] || RARITY_COLORS['Común'];
+  const rarityColor = rarityClass(reward.rarity);
   const rarityGlow = RARITY_GLOW[reward.rarity] || '';
   const isJackpot = (RARITY_RANK[reward.rarity] ?? 0) >= 4;
   const alreadyStored = Boolean(reward.item);
@@ -54,7 +58,7 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
   overlay.className = 'fixed inset-0 z-[60] flex flex-col items-center justify-center gap-5 p-4 app-bg overflow-y-auto';
   overlay.innerHTML = `
     <div class="text-center flex-shrink-0">
-      <div class="text-4xl mb-2">${meta.icon}</div>
+      <div class="mb-2 [&>span>svg]:w-9 [&>span>svg]:h-9" style="color: var(--accent)">${ic(meta.icon as IconName)}</div>
       <h2 class="font-['Orbitron'] font-black text-lg tracking-wider" style="color: var(--accent)">${meta.name.toUpperCase()}</h2>
       <p class="text-[10px] font-mono mt-1" style="color: var(--text-muted)">DESBLOQUEANDO CARGA…</p>
     </div>
@@ -76,10 +80,10 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
     </div>
 
     <div id="roulette-result" class="opacity-0 transition-opacity duration-300 flex flex-col items-center gap-3 flex-shrink-0 pb-2">
-      <div id="result-card" class="card-glass border ${rarityColor} rounded-2xl px-6 py-5 flex flex-col items-center gap-2 ${rarityGlow} max-w-sm text-center">
-        <div class="text-5xl mb-1">${reward.icon}</div>
-        <div class="font-['Orbitron'] font-bold text-base" style="color: inherit">${reward.name}</div>
-        <div class="text-[11px] font-mono uppercase tracking-wider opacity-80">${reward.rarity}${reward.exclusive ? ' · EXCLUSIVO' : ''}</div>
+      <div id="result-card" class="card-glass-elevated border ${rarityColor} rounded-2xl px-6 py-5 flex flex-col items-center gap-2 ${rarityGlow} max-w-sm text-center">
+        <div class="mb-1 [&>span>svg]:w-12 [&>span>svg]:h-12 ${RARITY_TEXT[reward.rarity] || ''}">${ic(reward.icon as IconName)}</div>
+        <div class="font-['Orbitron'] font-bold text-base ${RARITY_TEXT[reward.rarity] || ''}">${reward.name}</div>
+        <div class="text-[11px] font-mono uppercase tracking-wider ${RARITY_TEXT[reward.rarity] || ''} opacity-80">${reward.rarity}${reward.exclusive ? ' · EXCLUSIVO' : ''}</div>
         <div class="text-xs font-mono mt-1" style="color: var(--text-main)">${reward.details}</div>
         ${alreadyStored ? `<div class="text-[10px] font-mono mt-1" style="color: var(--text-muted)">✓ Guardado en el almacén</div>` : ''}
       </div>

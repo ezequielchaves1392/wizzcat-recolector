@@ -1,17 +1,11 @@
+import { showToast } from './utils/toast';
+import { formatNumber } from './utils/format';
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { rollCrateReward } from './components/crateLoot';
-import { showToast } from './utils/toast';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
 
-function formatNumber(num: number): string {
-  const floored = Math.floor(num);
-  if (floored >= 1e9) return (floored / 1e9).toFixed(2) + ' B';
-  if (floored >= 1e6) return (floored / 1e6).toFixed(2) + ' M';
-  if (floored >= 1e3) return (floored / 1e3).toFixed(2) + ' K';
-  return floored.toString();
-}
 
 // Antes esto era un modal con botón "Aceptar" para avisos como "Almacén lleno":
 // bloqueaba la partida por un mensaje informativo. Ahora es un toast no bloqueante.

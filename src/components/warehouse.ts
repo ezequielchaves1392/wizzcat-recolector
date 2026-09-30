@@ -1,16 +1,10 @@
+import { showToast } from '../utils/toast';
+import { formatNumber } from '../utils/format';
 import { WarehouseItem } from '../types';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS } from '../gameLoop';
 import { showCrateRoulette } from './crateRoulette';
 import { sfx } from '../utils/audio';
-import { showToast } from '../utils/toast';
 
-function formatNumber(num: number): string {
-  const floored = Math.floor(num);
-  if (floored >= 1e9) return (floored / 1e9).toFixed(2) + ' B';
-  if (floored >= 1e6) return (floored / 1e6).toFixed(2) + ' M';
-  if (floored >= 1e3) return (floored / 1e3).toFixed(2) + ' K';
-  return floored.toString();
-}
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
