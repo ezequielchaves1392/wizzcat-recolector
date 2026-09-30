@@ -14,7 +14,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Primer Enlace',
     description: 'Extrae tus primeras 100 Nanitas Puras.',
     icon: '⚡',
-    rewardText: '+5% Poder de Clic',
+    rewardText: '+5% Poder de Click',
     condition: (state) => state.totalNanitesProduced >= 100,
     unlocked: false
   },

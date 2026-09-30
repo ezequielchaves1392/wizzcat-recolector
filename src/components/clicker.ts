@@ -12,15 +12,10 @@ export function renderGameHUD(
   const playerName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Operativo';
   const currentTheme = getSavedTheme();
 
-  // Obtener recolector equipado
-  const equippedCollector = Object.entries(gameState.collectors).find(([_, c]: [string, any]) => c.equipped);
-  const collectorName = equippedCollector ? equippedCollector[0] : 'blaster';
-  const collectorLevel = equippedCollector ? (equippedCollector[1] as any).level : 0;
-  const collectorLabels: Record<string, string> = {
-    blaster: 'Blaster Láser',
-    plasmaCannon: 'Cañón de Plasma',
-    quantumDisruptor: 'Disruptor Cuántico'
-  };
+  // Obtener arma equipada
+  const equippedItem = gameState.equippedWeaponId
+    ? gameState.warehouse.find((w: any) => w.id === gameState.equippedWeaponId)
+    : null;
 
   // Obtener compañeros activos
   const activeCompanions = gameState.activeCompanions
@@ -89,15 +84,15 @@ export function renderGameHUD(
         <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 w-full max-w-md flex flex-col gap-4 shadow-2xl">
           <h3 class="font-['Orbitron'] font-bold text-sm accent-text tracking-wider border-b border-[var(--border-color)] pb-3">PANEL DEL JUGADOR</h3>
           
-          <!-- Recolector Equipado -->
+          <!-- Arma Equipada -->
           <div class="app-bg border border-[var(--border-color)] rounded-xl p-4">
-            <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-2">Recolector Equipado</div>
+            <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-2">Arma Equipada</div>
             <div class="flex items-center justify-between">
               <div>
-                <div class="font-bold text-sm text-[var(--text-main)] font-mono">${collectorLabels[collectorName] || collectorName}</div>
-                <div class="text-xs text-[var(--text-muted)] font-mono">Nivel: ${collectorLevel} / 20</div>
+                <div class="font-bold text-sm text-[var(--text-main)] font-mono">${equippedItem ? equippedItem.name : 'Sin arma equipada'}</div>
+                <div class="text-xs text-[var(--text-muted)] font-mono">${equippedItem ? `Nivel: ${equippedItem.level || 0} / 20` : '—'}</div>
               </div>
-              <div class="text-2xl">🔫</div>
+              <div class="text-2xl">${equippedItem ? '⚔️' : '—'}</div>
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import './style.css';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
 import { createGameLoop, COLLECTOR_BASE_COSTS, STORE_ITEMS } from './gameLoop';
@@ -14,6 +14,13 @@ let activeGameInstance: any = null;
 
 // Aplicar tema guardado (o por defecto cyber-dark)
 applyTheme(getSavedTheme());
+
+// Verificar build
+console.log('Sistema de audio inicializado correctamente');
+
+
+
+// Nota: initAudioSystem se llama al final de renderGameLayout
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => e.preventDefault());
@@ -348,13 +355,14 @@ function updateUI(state: any, isAfk: boolean = false) {
   }
 
   if (clickDamageDisplay) {
-    const equippedCollector = Object.entries(state.collectors).find(([_, c]: [string, any]) => c.equipped);
     let clickDamage = 0;
-    if (equippedCollector) {
-      const [collectorKey, collector]: [string, any] = equippedCollector;
-      const baseDmg = collectorKey === 'blaster' ? 1 : collectorKey === 'plasmaCannon' ? 5 : 25;
-      const levelMultiplier = 1 + ((collector.level || 0) * 0.10);
-      clickDamage = Math.floor(baseDmg * levelMultiplier);
+    if (state.equippedWeaponId) {
+      const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+      if (item) {
+        const baseDmg = item.damage || 0;
+        const levelMultiplier = 1 + ((item.level || 0) * 0.10);
+        clickDamage = Math.floor(baseDmg * levelMultiplier);
+      }
     }
     let multiplier = 1;
     if (now < state.buffs.clickBoostExpiresAt) multiplier = 2;
@@ -423,44 +431,42 @@ function showToast(message: string, type: 'success' | 'error' | 'info' = 'info')
 }
 
 function renderPlayerPanel(state: any) {
-  const collectorLabels: Record<string, string> = {
-    blaster: 'Recolector Básico',
-    plasmaCannon: 'Recolector de Plasma',
-    quantumDisruptor: 'Recolector Cuántico'
+  const rarityColors: Record<string, string> = {
+    'Común': 'text-slate-400',
+    'Raro': 'text-blue-400',
+    'Épico': 'text-purple-400',
+    'Legendario': 'text-amber-400',
+    'Mítico': 'text-red-400',
+    'Divino': 'text-yellow-300'
   };
 
-  // Recolector equipado
-  const equippedCollector = Object.entries(state.collectors).find(([_, c]: [string, any]) => c.equipped);
+  // Arma equipada
+  const equippedItem = state.equippedWeaponId
+    ? state.warehouse.find((w: any) => w.id === state.equippedWeaponId)
+    : null;
   const collectorContainer = document.querySelector('#equipped-collector-container');
   if (collectorContainer) {
-    if (equippedCollector) {
-      const [collectorKey, collector]: [string, any] = equippedCollector;
-      const baseDmg = collectorKey === 'blaster' ? 1 : collectorKey === 'plasmaCannon' ? 5 : 25;
-      const levelMultiplier = 1 + ((collector.level || 0) * 0.10);
+    if (equippedItem) {
+      const tier = equippedItem.tier || 1;
+      const baseDmg = equippedItem.damage || 0;
+      const levelMultiplier = 1 + ((equippedItem.level || 0) * 0.10);
       const totalDmg = Math.floor(baseDmg * levelMultiplier);
-      const rarity = collectorKey === 'blaster' ? 'Común' : collectorKey === 'plasmaCannon' ? 'Raro' : 'Épico';
-      const rarityColors: Record<string, string> = {
-        'Común': 'text-slate-400',
-        'Raro': 'text-blue-400',
-        'Épico': 'text-purple-400',
-        'Legendario': 'text-amber-400'
-      };
+      const rarity = equippedItem.rarity || 'Común';
       collectorContainer.innerHTML = `
         <div class="flex items-center justify-between">
           <div>
-            <div class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">${collectorLabels[collectorKey] || collectorKey}</div>
-            <div class="text-xs font-mono ${rarityColors[rarity] || 'text-slate-400'}">${rarity}</div>
-            <div class="text-xs font-mono text-[var(--text-muted)]">Nivel: ${collector.level || 0} / 20</div>
+            <div class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">${equippedItem.name} T${tier}</div>
+            <div class="text-xs font-mono ${rarityColors[rarity] || 'text-slate-400'}">${rarity} — Tier ${tier}</div>
+            <div class="text-xs font-mono text-[var(--text-muted)]">Nivel: ${equippedItem.level || 0} / 20</div>
             <div class="text-xs font-mono" style="color: var(--accent)">Recolección: +${totalDmg}</div>
           </div>
-          <div class="text-3xl">⚙️</div>
         </div>
       `;
     } else {
       collectorContainer.innerHTML = `
         <div class="text-center py-4">
-          <div class="text-3xl mb-2 opacity-50">⚙️</div>
-          <div class="text-xs font-mono text-[var(--text-muted)]">Sin recolector equipado</div>
+          <div class="text-3xl mb-2 opacity-50">⚔️</div>
+          <div class="text-xs font-mono text-[var(--text-muted)]">Sin arma equipada</div>
         </div>
       `;
     }
@@ -478,12 +484,14 @@ function renderPlayerPanel(state: any) {
     for (let i = 0; i < maxSlots; i++) {
       const comp = activeCompanions[i];
       if (comp) {
-        const compDescription = comp.type === 'click' ? `+${comp.power} Clics/s` : comp.type === 'passive' ? `+${comp.power}/s` : `+${comp.power * 100}% Mult`;
+        const compDescription = `Recolección por segundo: +${comp.power}/s`;
         const tierLabel = comp.tier ? ` T${comp.tier}` : '';
+        const compRarity = comp.rarity || 'Común';
+        const rarityColor = rarityColors[compRarity] || 'text-slate-400';
         slotsHtml += `
           <div class="rounded-xl p-3 text-center border transition-all" style="background: var(--bg-app); border-color: var(--accent); border-opacity: 0.3;">
-            <div class="text-2xl mb-1">${comp.type === 'click' ? '⚔️' : comp.type === 'passive' ? '🛡️' : '✨'}</div>
-            <div class="text-[10px] font-mono text-[var(--text-main)] truncate">${comp.name}${tierLabel} <span class="text-[var(--accent)]">(equipado)</span></div>
+            <div class="text-[10px] font-mono text-[var(--text-main)] truncate">${comp.name}${tierLabel}</div>
+            <div class="text-[9px] font-mono ${rarityColor}">${compRarity}</div>
             <div class="text-[9px] font-mono" style="color: var(--accent)">${compDescription}</div>
           </div>
         `;

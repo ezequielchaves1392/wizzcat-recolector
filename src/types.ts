@@ -1,8 +1,3 @@
-export interface Collector {
-  level: number;
-  equipped: boolean;
-}
-
 export interface Companion {
   id: string;
   name: string;
@@ -18,6 +13,8 @@ export interface WarehouseItem {
   details: string;
   rarity: string;
   level?: number;
+  tier?: number;
+  damage?: number;
   equipped?: boolean;
   stackable?: boolean;
   stackCount?: number;
@@ -45,11 +42,7 @@ export interface GameState {
     epic: number;
     legendary: number;
   };
-  collectors: {
-    blaster: Collector;
-    plasmaCannon: Collector;
-    quantumDisruptor: Collector;
-  };
+  equippedWeaponId: string | null;
   companions: Companion[];
   activeCompanions: string[];
   warehouse: WarehouseItem[];

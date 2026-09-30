@@ -1,5 +1,23 @@
 import { STORE_ITEMS, TIER_SYSTEM } from '../gameLoop';
 
+function showConfirmModal(message: string, onConfirm: () => void) {
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
+  overlay.innerHTML = `
+    <div class="card-glass border rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4">
+      <p class="text-sm font-mono text-[var(--text-main)] text-center">${message}</p>
+      <div class="flex gap-3">
+        <button id="confirm-cancel" class="flex-1 py-2.5 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">Cancelar</button>
+        <button id="confirm-ok" class="flex-1 py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">Aceptar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#confirm-cancel')?.addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#confirm-ok')?.addEventListener('click', () => { overlay.remove(); onConfirm(); });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
 export function renderStoreTab(container: HTMLElement, game: any, onBack: () => void) {
   const state = game.getState();
 
@@ -106,12 +124,16 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
   function isItemDisabled(itemKey: string, state: any): boolean {
     if (itemKey === 'backpackExpander') return state.warehouseCapacity >= 20;
     if (itemKey === 'afkCard') return state.afkCards >= 3;
+    if (itemKey === 'companionSlot1') return state.maxCompanionSlots >= 2;
+    if (itemKey === 'companionSlot2') return state.maxCompanionSlots >= 3;
     return false;
   }
 
   function getDisabledReason(itemKey: string, state: any): string {
     if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 20) return 'Máximo alcanzado';
     if (itemKey === 'afkCard' && state.afkCards >= 3) return 'Máximo acumulado';
+    if (itemKey === 'companionSlot1' && state.maxCompanionSlots >= 2) return 'Ya comprado';
+    if (itemKey === 'companionSlot2' && state.maxCompanionSlots >= 3) return 'Ya comprado';
     return 'No disponible';
   }
 
@@ -133,11 +155,72 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
         const itemKey = (e.currentTarget as HTMLElement).getAttribute('data-item-key') as keyof typeof STORE_ITEMS;
         if (!itemKey) return;
 
-        const success = game.buyStoreItem(itemKey);
-        if (success) {
-          renderTemplate();
-        }
+        // Preguntar primero, comprar solo si confirma
+        const item = STORE_ITEMS[itemKey];
+        showConfirmModal(`¿Comprar ${item.label} por ${formatNumber(item.cost)} nanitas?`, () => {
+          const purchasedItem = game.buyStoreItem(itemKey);
+          if (purchasedItem) {
+            showItemCard(purchasedItem);
+            renderTemplate();
+          }
+        });
       });
+    });
+  }
+
+  function showItemCard(item: any) {
+    const rarityColors: Record<string, string> = {
+      'Común': 'text-slate-400',
+      'Raro': 'text-blue-400',
+      'Épico': 'text-purple-400',
+      'Legendario': 'text-amber-400',
+      'Mítico': 'text-red-400',
+      'Divino': 'text-yellow-300'
+    };
+
+    const rarityColor = rarityColors[item.rarity] || 'text-slate-400';
+    const icon = item.type === 'weapon' ? '⚔️' : item.type === 'companion' ? '🤖' : '📦';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+    overlay.innerHTML = `
+      <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4 shadow-2xl">
+        <div class="text-center">
+          <div class="text-4xl mb-2">${icon}</div>
+          <h3 class="font-['Orbitron'] font-bold text-lg text-[var(--text-main)]">${item.name}</h3>
+          <div class="text-sm font-mono ${rarityColor}">${item.rarity}</div>
+          ${item.tier ? `<div class="text-xs font-mono text-[var(--text-muted)]">Tier ${item.tier}</div>` : ''}
+        </div>
+        <div class="border-t border-[var(--border-color)] pt-3">
+          <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
+          <div class="text-sm font-mono text-[var(--text-main)]">${item.details || 'Sin descripción'}</div>
+        </div>
+        ${item.damage ? `
+        <div class="border-t border-[var(--border-color)] pt-3">
+          <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Daño</div>
+          <div class="text-lg font-bold text-emerald-400 font-['Orbitron']">+${item.damage}</div>
+        </div>
+        ` : ''}
+        ${item.level !== undefined ? `
+        <div class="border-t border-[var(--border-color)] pt-3">
+          <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Nivel</div>
+          <div class="text-lg font-bold text-cyan-400 font-['Orbitron']">${item.level} / 20</div>
+        </div>
+        ` : ''}
+        <button id="item-card-close" class="w-full py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
+          Aceptar
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#item-card-close')?.addEventListener('click', () => {
+      overlay.remove();
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
     });
   }
 

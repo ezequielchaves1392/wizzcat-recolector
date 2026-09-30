@@ -17,6 +17,124 @@ function formatTime(ms: number): string {
 }
 
 // Sistema de modal de confirmación
+function showQuantityModal(item: any, maxStack: number, onConfirm: (quantity: number) => void) {
+  const price = item.sellPrice || 0;
+  let selectedQuantity = 1;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+  overlay.innerHTML = `
+    <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4 shadow-2xl">
+      <div class="text-center">
+        <div class="text-4xl mb-2">${item.type === 'weapon' ? '⚔️' : item.type === 'companion' ? '🤖' : '📦'}</div>
+        <h3 class="font-['Orbitron'] font-bold text-lg text-[var(--text-main)]">${item.name}</h3>
+        <div class="text-sm font-mono text-[var(--text-muted)]">Cantidad disponible: ${maxStack}</div>
+      </div>
+      <div class="border-t border-[var(--border-color)] pt-3">
+        <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-2">Cantidad a vender</div>
+        <div class="flex items-center gap-3">
+          <button id="qty-minus" class="w-10 h-10 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 font-bold hover:bg-slate-700 transition cursor-pointer">-</button>
+          <div class="flex-1 text-center">
+            <div class="text-2xl font-bold text-cyan-400 font-['Orbitron']" id="qty-display">1</div>
+          </div>
+          <button id="qty-plus" class="w-10 h-10 rounded-lg bg-slate-700/50 border border-slate-600/50 text-slate-300 font-bold hover:bg-slate-700 transition cursor-pointer">+</button>
+        </div>
+        <input type="range" id="qty-slider" min="1" max="${maxStack}" value="1" class="w-full mt-3">
+      </div>
+      <div class="border-t border-[var(--border-color)] pt-3">
+        <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Precio total</div>
+        <div class="text-xl font-bold text-amber-400 font-['Orbitron']" id="qty-total">${formatNumber(price)} ⚡</div>
+      </div>
+      <div class="flex gap-2">
+        <button id="qty-cancel" class="flex-1 py-2 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button id="qty-confirm" class="flex-1 py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
+          Vender
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const qtyDisplay = overlay.querySelector('#qty-display')!;
+  const qtyTotal = overlay.querySelector('#qty-total')!;
+  const qtySlider = overlay.querySelector('#qty-slider') as HTMLInputElement;
+
+  const updateQuantity = (qty: number) => {
+    selectedQuantity = Math.max(1, Math.min(qty, maxStack));
+    qtyDisplay.textContent = selectedQuantity.toString();
+    qtyTotal.textContent = `${formatNumber(price * selectedQuantity)} ⚡`;
+    qtySlider.value = selectedQuantity.toString();
+  };
+
+  overlay.querySelector('#qty-minus')?.addEventListener('click', () => updateQuantity(selectedQuantity - 1));
+  overlay.querySelector('#qty-plus')?.addEventListener('click', () => updateQuantity(selectedQuantity + 1));
+  qtySlider?.addEventListener('input', (e) => updateQuantity(parseInt((e.target as HTMLInputElement).value)));
+  overlay.querySelector('#qty-cancel')?.addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#qty-confirm')?.addEventListener('click', () => {
+    overlay.remove();
+    onConfirm(selectedQuantity);
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+function showItemCard(item: any, onConfirm: () => void) {
+  const rarityColors: Record<string, string> = {
+    'Común': 'text-slate-400',
+    'Raro': 'text-blue-400',
+    'Épico': 'text-purple-400',
+    'Legendario': 'text-amber-400',
+    'Mítico': 'text-red-400',
+    'Divino': 'text-yellow-300'
+  };
+
+  const rarityColor = rarityColors[item.rarity] || 'text-slate-400';
+  const icon = item.type === 'weapon' ? '⚔️' : item.type === 'companion' ? '🤖' : item.type === 'crate' ? '📦' : item.type === 'key' ? '🔑' : item.type === 'crystal' ? '💎' : '⚡';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+  overlay.innerHTML = `
+    <div class="card-glass border border-[var(--border-color)] rounded-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-4 shadow-2xl">
+      <div class="text-center">
+        <div class="text-4xl mb-2">${icon}</div>
+        <h3 class="font-['Orbitron'] font-bold text-lg text-[var(--text-main)]">${item.name}${item.tier ? ` T${item.tier}` : ''}</h3>
+        <div class="text-sm font-mono ${rarityColor}">${item.rarity}</div>
+      </div>
+      <div class="border-t border-[var(--border-color)] pt-3">
+        <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
+        <div class="text-sm font-mono text-[var(--text-main)]">${item.details || 'Sin descripción'}</div>
+      </div>
+      <div class="flex gap-2">
+        <button id="item-card-cancel" class="flex-1 py-2 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">
+          Cancelar
+        </button>
+        <button id="item-card-confirm" class="flex-1 py-2 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
+          Vender
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#item-card-cancel')?.addEventListener('click', () => {
+    overlay.remove();
+  });
+
+  overlay.querySelector('#item-card-confirm')?.addEventListener('click', () => {
+    overlay.remove();
+    onConfirm();
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
 function showConfirmModal(message: string, onConfirm: () => void) {
   // Crear overlay
   const overlay = document.createElement('div');
@@ -79,6 +197,7 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
     let selectedItemId: string | null = null;
     let currentSort: string = 'default';
     let currentFilter: string = 'all';
+    let moveMode = false;
 
     const renderTemplate = () => {
         const state = game.getState();
@@ -88,10 +207,13 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
         // Aplicar filtro
         let filteredItems = warehouse.filter((item: WarehouseItem) => {
             if (currentFilter === 'all') return true;
+            if (currentFilter === 'consumable') {
+                return !['weapon', 'companion'].includes(item.type);
+            }
             return item.type === currentFilter;
         });
 
-        // Aplicar orden
+        // Aplicar orden (no ordenar si es Custom - respetar orden manual del usuario)
         if (currentSort === 'name') {
             filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => a.name.localeCompare(b.name));
         } else if (currentSort === 'rarity') {
@@ -99,7 +221,10 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
             filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0));
         } else if (currentSort === 'type') {
             filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => a.type.localeCompare(b.type));
+        } else if (currentSort === 'tier') {
+            filteredItems.sort((a: WarehouseItem, b: WarehouseItem) => (b.tier || 0) - (a.tier || 0));
         }
+        // Si currentSort es 'custom' o 'default', no ordenar - mantener orden actual
 
         // Apilar items apilables
         const stackedItems = stackItems(filteredItems);
@@ -109,14 +234,18 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
         for (let i = 0; i < capacity; i++) {
             const item = stackedItems[i];
             if (item) {
-                slots.push(renderItemSlot(item, item.id === selectedItemId, state));
+                slots.push(renderItemSlot(item, item.id === selectedItemId, state, i, moveMode));
             } else {
-                slots.push(renderEmptySlot());
+                slots.push(renderEmptySlot(i, moveMode));
             }
         }
 
         // Item seleccionado para panel lateral
         const selectedItem = selectedItemId ? warehouse.find((i: WarehouseItem) => i.id === selectedItemId) : null;
+
+        // Guardar valores actuales de los selects
+        const currentFilterValue = (container.querySelector('#filter-type') as HTMLSelectElement)?.value || 'all';
+        const currentSortValue = (container.querySelector('#sort-by') as HTMLSelectElement)?.value || 'default';
 
         container.innerHTML = `
             <div class="fixed inset-0 app-bg flex flex-col items-center p-3 md:p-4 font-sans select-none overflow-hidden">
@@ -157,28 +286,22 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                         </div>
                     </div>
 
-                    <!-- Toolbar -->
-                    <div class="flex flex-wrap gap-2 justify-between items-center flex-shrink-0">
-                        <div class="flex flex-wrap gap-2">
-                            <button data-filter="all" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'all' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}">Todos</button>
-                            <button data-filter="weapon" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'weapon' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}">Recolectores</button>
-                            <button data-filter="companion" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'companion' ? 'accent-bg text-white' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Compañeros</button>
-                            <button data-filter="crate" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'crate' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Cajas</button>
-                            <button data-filter="key" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'key' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Llaves</button>
-                            <button data-filter="crystal" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'crystal' ? 'accent-bg text-slate-950' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Cristales</button>
-                            <button data-filter="consumable" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentFilter === 'consumable' ? 'accent-bg text-white' : 'card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)]'}>Consumibles</button>
-                        </div>
-                        <div class="flex gap-2">
-                            <button id="stack-btn" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] hover:border-[var(--accent)] transition-all cursor-pointer">
-                                📚 Apilar
-                            </button>
-                            <select id="sort-select" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
-                                <option value="default">Ordenar: Default</option>
-                                <option value="name">Nombre A-Z</option>
-                                <option value="rarity">Rareza</option>
-                                <option value="type">Tipo</option>
-                            </select>
-                        </div>
+                    <!--Toolbar: Filtro por tipo y ordenamiento -->
+                    <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
+                        <select id="filter-type" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
+                            <option value="all">Todos</option>
+                            <option value="weapon">Recolectores</option>
+                            <option value="companion">Compañeros</option>
+                            <option value="consumable">Consumibles</option>
+                        </select>
+                        <select id="sort-by" class="px-3 py-1.5 text-xs font-semibold rounded-lg card-glass border border-[var(--border-color)] text-[var(--text-main)] focus:outline-none focus:border-[var(--accent)] cursor-pointer">
+                            <option value="default">Ordenar: Default</option>
+                            <option value="custom">Ordenar: Custom</option>
+                            <option value="name">Nombre A-Z</option>
+                            <option value="rarity">Rareza</option>
+                            <option value="type">Tipo</option>
+                            <option value="tier">Tier</option>
+                        </select>
                     </div>
 
                     <!-- Main Content: Grid + Side Panel -->
@@ -201,10 +324,16 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
             </div>
         `;
 
+        // Restaurar valores de los selects
+        const filterTypeSelect = container.querySelector('#filter-type') as HTMLSelectElement;
+        if (filterTypeSelect) filterTypeSelect.value = currentFilterValue;
+        const sortBySelect = container.querySelector('#sort-by') as HTMLSelectElement;
+        if (sortBySelect) sortBySelect.value = currentSortValue;
+
         setupEventListeners();
     };
 
-    function renderItemSlot(item: WarehouseItem, isSelected: boolean, state: any): string {
+    function renderItemSlot(item: WarehouseItem, isSelected: boolean, state: any, slotIndex: number, moveMode: boolean = false): string {
         const rarityColors: Record<string, string> = {
             'Común': 'border-slate-500/50',
             'Raro': 'border-blue-500/50',
@@ -231,19 +360,19 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
         const equippedBg = isEquipped ? 'bg-amber-900/30' : '';
         
         return `
-            <div class="warehouse-item ${rarityColors[item.rarity] || 'border-slate-500/50'} ${rarityBg[item.rarity] || 'bg-slate-800/60'} ${equippedBg} border-2 rounded-xl p-3 cursor-pointer transition-all hover:border-[var(--accent)] ${isSelected ? 'ring-2 ring-[var(--accent)] border-[var(--accent)]' : ''} ${equippedBorder}" data-item-id="${item.id}">
+            <div class="warehouse-item ${rarityColors[item.rarity] || 'border-slate-500/50'} ${rarityBg[item.rarity] || 'bg-slate-800/60'} ${equippedBg} border-2 rounded-xl p-3 cursor-pointer transition-all hover:border-[var(--accent)] ${isSelected ? 'ring-2 ring-[var(--accent)] border-[var(--accent)]' : ''} ${equippedBorder}" data-item-id="${item.id}" data-slot-index="${slotIndex}" class="${moveMode ? 'ring-2 ring-[var(--accent)] border-[var(--accent)] cursor-move' : ''}">
                 <div class="text-2xl text-center mb-1">${typeIcons[item.type] || '📦'}</div>
-                <div class="text-[10px] font-mono text-center text-[var(--text-main)] truncate">${item.name}</div>
+                <div class="text-[10px] font-mono text-center text-[var(--text-main)] truncate">${item.name}${item.tier ? ` T${item.tier}` : ''}</div>
                 <div class="text-[9px] font-mono text-center text-[var(--text-muted)]">${item.rarity}</div>
-                ${item.stackable && item.stackCount ? `<div class="text-[9px] font-mono text-center text-emerald-400">x${item.stackCount}</div>` : ''}
+                ${item.stackable && item.stackCount ? `<div class="text-[9px] font-mono text-center text-emerald-400">${item.stackCount}/${item.type === 'consumable' ? 20 : item.type === 'crate' ? 20 : item.type === 'key' ? 99 : 99}</div>` : ''}
                 ${isEquipped ? '<div class="mt-1 text-[9px] font-mono text-center text-slate-900 font-bold bg-amber-400 rounded px-1">(Equipado)</div>' : ''}
             </div>
         `;
     }
 
-    function renderEmptySlot(): string {
+    function renderEmptySlot(slotIndex: number, moveMode: boolean = false): string {
         return `
-            <div class="border-2 border-dashed border-slate-700/50 rounded-xl p-3 opacity-30">
+            <div class="border-2 border-dashed border-slate-700/50 rounded-xl p-3 opacity-30 cursor-pointer hover:opacity-60 transition ${moveMode ? 'ring-2 ring-[var(--accent)] border-[var(--accent)] cursor-move' : ''}" data-slot-index="${slotIndex}">
                 <div class="text-2xl text-center mb-1">📭</div>
                 <div class="text-[10px] font-mono text-center text-[var(--text-muted)]">Vacío</div>
             </div>
@@ -307,14 +436,29 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
             `;
         }
 
+        // Botón Mover (siempre visible)
+        actionButtons += `
+            <button id="action-move" class="w-full py-2 bg-slate-700/50 border border-slate-600/50 text-slate-300 font-['Orbitron'] font-bold text-xs rounded-xl hover:bg-slate-700 transition cursor-pointer">
+                📦 Mover
+            </button>
+        `;
+
         return `
             <div class="flex flex-col gap-4">
                 <div class="text-center">
                     <div class="text-4xl mb-2">${item.type === 'weapon' ? '⚙️' : item.type === 'companion' ? '🤖' : item.type === 'crate' ? '📦' : item.type === 'key' ? '🔑' : item.type === 'crystal' ? '💎' : '⚡'}</div>
-                    <h3 class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">${item.name}</h3>
+                    <h3 class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">${item.name}${item.tier ? ` T${item.tier}` : ''}</h3>
                     <div class="text-xs font-mono ${rarityColors[item.rarity] || 'text-slate-400'}">${item.rarity}</div>
+                    ${item.tier ? `<div class="text-[10px] font-mono text-[var(--text-muted)]">Tier ${item.tier}</div>` : ''}
                     <div class="text-[10px] font-mono text-[var(--text-muted)]">${typeLabels[item.type] || item.type}</div>
                 </div>
+
+                ${item.stackable && item.stackCount ? `
+                <div class="border-t border-[var(--border-color)] pt-3">
+                    <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Cantidad</div>
+                    <div class="text-lg font-bold text-cyan-400 font-['Orbitron']">${item.stackCount}/${item.type === 'consumable' ? 20 : item.type === 'crate' ? 20 : item.type === 'key' ? 99 : 99}</div>
+                </div>
+                ` : ''}
 
                 <div class="border-t border-[var(--border-color)] pt-3">
                     <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Descripción</div>
@@ -330,13 +474,6 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 <div class="border-t border-[var(--border-color)] pt-3">
                     <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Nivel</div>
                     <div class="text-lg font-bold text-emerald-400 font-['Orbitron']">${item.level} / 20</div>
-                </div>
-                ` : ''}
-
-                ${item.stackable && item.stackCount ? `
-                <div class="border-t border-[var(--border-color)] pt-3">
-                    <div class="text-[10px] font-mono text-[var(--text-muted)] uppercase tracking-wide mb-1">Cantidad</div>
-                    <div class="text-lg font-bold text-cyan-400 font-['Orbitron']">x${item.stackCount}</div>
                 </div>
                 ` : ''}
 
@@ -365,20 +502,32 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
     function stackItems(items: WarehouseItem[]): WarehouseItem[] {
         const stacked: WarehouseItem[] = [];
         const stackMap = new Map<string, WarehouseItem>();
-        const MAX_STACK = 100;
+        // Solo estos tipos se apilan (recolectores y compañeros tienen IDs únicos)
+        const STACKABLE_TYPES = ['consumable', 'crate', 'key', 'crystal'];
+        // Máximo de apilamiento por tipo de item
+        const MAX_STACK_BY_TYPE: Record<string, number> = {
+            'consumable': 20,  // Tarjetas y consumibles se apilan hasta 20
+            'crate': 20,        // Cajas hasta 20
+            'key': 99,         // Llaves hasta 99
+            'crystal': 99      // Cristales hasta 99
+        };
 
         for (const item of items) {
-            if (item.stackable) {
-                const existing = stackMap.get(item.id);
+            // Solo apilar si es un tipo apilable Y tiene stackable=true
+            if (item.stackable && STACKABLE_TYPES.includes(item.type)) {
+                const maxStack = MAX_STACK_BY_TYPE[item.type] || 20;
+                // Apilar por nombre + tipo (items con mismo nombre y tipo se apilan)
+                const stackKey = `${item.type}_${item.name}`;
+                const existing = stackMap.get(stackKey);
                 if (existing) {
-                    // Acumular hasta el máximo de 100
-                    existing.stackCount = Math.min((existing.stackCount || 1) + (item.stackCount || 1), MAX_STACK);
+                    existing.stackCount = Math.min((existing.stackCount || 1) + (item.stackCount || 1), maxStack);
                 } else {
-                    const newItem = { ...item, stackCount: Math.min(item.stackCount || 1, MAX_STACK) };
-                    stackMap.set(item.id, newItem);
+                    const newItem = { ...item, stackCount: Math.min(item.stackCount || 1, maxStack) };
+                    stackMap.set(stackKey, newItem);
                     stacked.push(newItem);
                 }
             } else {
+                // Recolectores y compañeros: no apilar, cada uno es único
                 stacked.push(item);
             }
         }
@@ -401,27 +550,65 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
             });
         });
 
+        // Filtro por tipo
+        const filterTypeSelect = container.querySelector('#filter-type') as HTMLSelectElement;
+        filterTypeSelect?.addEventListener('change', () => {
+            currentFilter = filterTypeSelect.value;
+            renderTemplate();
+        });
+
         // Ordenar
-        const sortSelect = container.querySelector('#sort-select') as HTMLSelectElement;
+        const sortSelect = container.querySelector('#sort-by') as HTMLSelectElement;
         sortSelect?.addEventListener('change', () => {
             currentSort = sortSelect.value;
             renderTemplate();
         });
 
-        // Apilar
-        const stackBtn = container.querySelector('#stack-btn');
-        stackBtn?.addEventListener('click', () => {
-            const state = game.getState();
-            const newWarehouse = stackItems(state.warehouse);
-            state.warehouse = newWarehouse;
-            game.updateState(state);
-            renderTemplate();
+        // Botón Mover a otro slot
+        const moveBtn = container.querySelector('#action-move');
+        moveBtn?.addEventListener('click', () => {
+            const currentState = game.getState();
+            const selectedItem = currentState.warehouse.find((i: WarehouseItem) => i.id === selectedItemId);
+            if (!selectedItem) return;
+            showConfirmModal('Elija el nuevo slot o similar', () => {
+                moveMode = true;
+                renderTemplate();
+            });
         });
 
-        // Seleccionar item
-        container.querySelectorAll('.warehouse-item').forEach(item => {
-            item.addEventListener('click', (e) => {
+        // Seleccionar item o mover a slot (incluso vacío)
+        container.querySelectorAll('[data-slot-index]').forEach((slot) => {
+            slot.addEventListener('click', (e) => {
+                const slotIndex = parseInt((e.currentTarget as HTMLElement).getAttribute('data-slot-index') || '0');
                 const id = (e.currentTarget as HTMLElement).getAttribute('data-item-id');
+                console.log('Click en slot:', slotIndex, 'moveMode:', moveMode, 'selectedItemId:', selectedItemId);
+
+                // Si estamos en modo movimiento, mover el item seleccionado a este slot
+                if (moveMode && selectedItemId) {
+                    const state = game.getState();
+                    const fromIndex = state.warehouse.findIndex((i: WarehouseItem) => i.id === selectedItemId);
+                    if (fromIndex !== -1) {
+                        // Mover al slot exacto seleccionado (incluso si está vacío)
+                        const itemToMove = state.warehouse[fromIndex];
+                        state.warehouse.splice(fromIndex, 1);
+                        // Insertar en la posición exacta del slot seleccionado
+                        // Si el slot está más allá del final, agregar al final
+                        // Si el slot está dentro, insertar en esa posición
+                        const insertIndex = Math.min(slotIndex, state.warehouse.length);
+                        state.warehouse.splice(insertIndex, 0, itemToMove);
+                        // Asegurar que el item quede en la posición correcta
+                        // Si el slot está más allá del final, el item queda al final
+                        // Si el slot está dentro, el item queda en esa posición
+                        game.updateState(state);
+                        selectedItemId = null;
+                        moveMode = false;
+                        // No re-ordenar después de mover - el item se queda en su nueva posición
+                        currentSort = 'custom';
+                        renderTemplate();
+                        return;
+                    }
+                }
+
                 if (id) {
                     selectedItemId = id;
                     renderTemplate();
@@ -512,29 +699,26 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                     }
                 });
             } else if (item.type === 'consumable') {
-                // Usar consumible
+                // Usar consumible - gasta solo 1 por uso
                 showConfirmModal(`¿Usar ${item.name}?`, () => {
                     const now = Date.now();
                     if (item.name.includes('Expansor')) {
-                        // Expansor de almacén - verificar si está al máximo
                         if (state.warehouseCapacity >= 20) {
-                            showConfirmModal('⚠️ Almacén al máximo (20 slots). No puedes usar el Expansor. Véndelo o espera a tener espacio.', () => {});
+                            showConfirmModal('Almacén al máximo (20 slots).', () => {});
                             return;
                         }
                         state.warehouseCapacity += 1;
                     } else if (item.name.includes('AFK')) {
-                        // Tarjeta AFK
-                        if (state.afkCards >= 3) {
-                            showConfirmModal('Ya tienes el máximo de tarjetas AFK (3).', () => {});
+                        const afkCardsInWarehouse = state.warehouse.filter((i: WarehouseItem) => i.name.includes('AFK') && i.id !== item.id).length;
+                        if (afkCardsInWarehouse >= 20) {
+                            showConfirmModal('Máximo de tarjetas AFK (20).', () => {});
                             return;
                         }
-                        state.afkCards += 1;
+                        state.afkCards = afkCardsInWarehouse + 1;
                     } else if (item.name.includes('Click x2')) {
-                        // Tarjeta Click x2 - acumulable hasta 30 min
                         const currentExpires = Math.max(now, state.buffs.clickX2ExpiresAt);
                         state.buffs.clickX2ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);
                     } else if (item.name.includes('Click x3')) {
-                        // Tarjeta Click x3 - acumulable hasta 30 min
                         const currentExpires = Math.max(now, state.buffs.clickX3ExpiresAt);
                         state.buffs.clickX3ExpiresAt = Math.min(currentExpires + 30000, now + 30 * 60 * 1000);
                     } else if (item.name.includes('Clics')) {
@@ -542,6 +726,7 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                     } else if (item.name.includes('Pasivo')) {
                         state.buffs.passiveBoostExpiresAt = now + 60 * 60 * 1000;
                     }
+                    // Gastar solo 1 del stack
                     if (item.stackCount && item.stackCount > 1) {
                         item.stackCount -= 1;
                     } else {
@@ -571,32 +756,21 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 showConfirmModal('No puedes vender el último de este tipo. Debes tener al menos uno en el almacén.', () => {});
                 return;
             }
-            // Precio de venta = 1/4 del precio original, ajustado por calidad del item
-            const originalPrice = item.sellPrice || 0;
-            let price = Math.floor(originalPrice / 4);
-            
-            // Ajustar precio según qué tan buena fue la estadística del item
-            if (item.tier) {
-                const tierRanges: Record<number, [number, number]> = {
-                    1: [1, 5], 2: [5, 10], 3: [10, 15], 4: [15, 20], 5: [20, 25],
-                    6: [25, 30], 7: [30, 35], 8: [35, 40], 9: [40, 45], 10: [45, 50]
-                };
-                const range = tierRanges[item.tier];
-                if (range) {
-                    const [min, max] = range;
-                    const power = item.power || item.details?.match(/\+(\d+)/)?.[1] || min;
-                    const qualityRatio = (power - min) / (max - min); // 0 = peor, 1 = mejor
-                    // Ajustar precio: peor stats = -50%, mejores stats = +100%
-                    price = Math.floor(price * (0.5 + qualityRatio * 1.5));
-                }
-            }
-            
-            showConfirmModal(`¿Vender ${item.name} por ${formatNumber(price)} nanitas?`, () => {
+            const price = item.sellPrice || 0;
+
+            // Vender de a uno del stack
+            showItemCard(item, () => {
                 state.nanites += price;
+                const itemId = item.id;
                 if (item.stackCount && item.stackCount > 1) {
-                    item.stackCount -= 1;
+                    const stackItem = state.warehouse.find((i: WarehouseItem) => i.id === itemId);
+                    if (stackItem) stackItem.stackCount = (stackItem.stackCount || 1) - 1;
                 } else {
-                    state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== item.id);
+                    state.warehouse = state.warehouse.filter((i: WarehouseItem) => i.id !== itemId);
+                    if (item.type === 'companion') {
+                        state.companions = state.companions.filter((c: any) => c.id !== itemId);
+                        state.activeCompanions = state.activeCompanions.filter((id: string) => id !== itemId);
+                    }
                 }
                 game.updateState(state);
                 selectedItemId = null;
@@ -645,7 +819,7 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
             const currentState = game.getState();
             nanitesEl.textContent = formatNumber(currentState.nanites);
         }
-        // Actualizar tooltips de buffs
+        // Actualizar tooltips de buffs con contador y X para cancelar
         const buffTimers = container.querySelectorAll('.buff-timer');
         buffTimers.forEach((el) => {
             const buffType = el.getAttribute('data-buff');
@@ -653,13 +827,32 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
             let remaining = 0;
             if (buffType === 'clickX2') remaining = Math.max(0, state.buffs.clickX2ExpiresAt - Date.now());
             else if (buffType === 'clickX3') remaining = Math.max(0, state.buffs.clickX3ExpiresAt - Date.now());
-            else if (buffType === 'afk') remaining = state.afkCards * 10 * 60 * 1000; // AFK no expira, muestra tiempo total
+            else if (buffType === 'afk') remaining = state.afkCards * 10 * 60 * 1000;
             if (buffType === 'afk') {
-                el.textContent = `Tarjetas AFK: ${state.afkCards}/3`;
+                // No mostrar leyenda de AFK en la descripción
+                el.innerHTML = `<span class="text-[var(--text-muted)]">Buff AFK activo</span>`;
+            } else if (remaining > 0) {
+                el.innerHTML = `<span>⏱️ ${formatTime(remaining)}</span> <button class="buff-cancel ml-1 text-red-400 hover:text-red-300 font-bold" data-buff-type="${buffType}">✕</button>`;
             } else {
-                el.textContent = `Tiempo restante: ${formatTime(remaining)}`;
+                el.innerHTML = `<span class="text-[var(--text-muted)]">Sin buff activo</span>`;
             }
         });
+
+        // Event delegation para cancelar buffs (funciona aunque el botón se recree)
+        container.onclick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (target.classList.contains('buff-cancel')) {
+                e.stopPropagation();
+                const buffType = target.getAttribute('data-buff-type');
+                const state = game.getState();
+                if (buffType === 'clickX2') state.buffs.clickX2ExpiresAt = 0;
+                else if (buffType === 'clickX3') state.buffs.clickX3ExpiresAt = 0;
+                else if (buffType === 'clickBoost') state.buffs.clickBoostExpiresAt = 0;
+                else if (buffType === 'passiveBoost') state.buffs.passiveBoostExpiresAt = 0;
+                game.updateState(state);
+                renderTemplate();
+            }
+        };
     }, 1000);
 
     // Limpiar intervalo cuando se sale del almacén

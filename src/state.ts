@@ -20,11 +20,7 @@ export const defaultState: GameState = {
     epic: 0,
     legendary: 0
   },
-  collectors: {
-    blaster: { level: 0, equipped: false },
-    plasmaCannon: { level: 0, equipped: false },
-    quantumDisruptor: { level: 0, equipped: false }
-  },
+  equippedWeaponId: null,
   companions: [],
   activeCompanions: [],
   warehouse: [],

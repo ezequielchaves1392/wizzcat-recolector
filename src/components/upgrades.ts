@@ -3,6 +3,9 @@ import { COMPANION_SLOT_COSTS } from '../gameLoop';
 export function renderUpgradesTab(container: HTMLElement, game: any, onBack: () => void) {
   const renderTemplate = () => {
     const state = game.getState();
+    const equippedItem = state.equippedWeaponId
+      ? state.warehouse.find((w: any) => w.id === state.equippedWeaponId)
+      : null;
     container.innerHTML = `
       <div class="w-screen h-dvh app-bg flex flex-col items-center p-4 md:p-6 font-sans select-none overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[var(--accent)]/10 via-[var(--bg-app)] to-[var(--bg-app)] pointer-events-none"></div>
@@ -31,52 +34,18 @@ export function renderUpgradesTab(container: HTMLElement, game: any, onBack: () 
 
           <!-- Contenedor con Scroll Interno Estricto -->
           <div class="flex flex-col gap-3 overflow-y-auto pr-1 max-h-[52vh] flex-grow">
-            <!-- Blaster -->
+            <!-- Arma Equipada -->
             <div class="card-glass border rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
               <div>
                 <div class="flex items-center gap-2">
-                  <span class="text-lg">🔫</span>
-                  <div class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">Blaster Láser</div>
-                  <span class="text-[10px] font-mono accent-bg text-slate-950 px-2 py-0.5 rounded-full font-bold">Nivel: ${state.collectors.blaster.level} / 20</span>
+                  <span class="text-lg">⚔️</span>
+                  <div class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">${equippedItem ? equippedItem.name : 'Sin arma equipada'}</div>
+                  ${equippedItem ? `<span class="text-[10px] font-mono accent-bg text-slate-950 px-2 py-0.5 rounded-full font-bold">Nivel: ${equippedItem.level || 0} / 20</span>` : ''}
                 </div>
-                <div class="text-xs text-[var(--text-muted)] font-mono mt-1">Recolector principal de asalto. Incrementa la recolección de extracción.</div>
+                <div class="text-xs text-[var(--text-muted)] font-mono mt-1">${equippedItem ? `${equippedItem.rarity} — Tier ${equippedItem.tier || 1}` : 'Equipá un arma desde el almacén para mejorarla.'}</div>
               </div>
               <div class="flex items-center gap-2 w-full md:w-auto">
-                <button data-collector="blaster" class="gacha-btn flex-1 md:flex-initial px-4 py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer accent-glow">
-                  Sintonizar (1 💎)
-                </button>
-              </div>
-            </div>
-
-            <!-- Plasma Cannon -->
-            <div class="card-glass border rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="text-lg">☄️</span>
-                  <div class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">Cañón de Plasma</div>
-                  <span class="text-[10px] font-mono accent-bg text-slate-950 px-2 py-0.5 rounded-full font-bold">Nivel: ${state.collectors.plasmaCannon.level} / 20</span>
-                </div>
-                <div class="text-xs text-[var(--text-muted)] font-mono mt-1">Alta potencia de fuego condensada.</div>
-              </div>
-              <div class="flex items-center gap-2 w-full md:w-auto">
-                <button data-collector="plasmaCannon" class="gacha-btn flex-1 md:flex-initial px-4 py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer accent-glow">
-                  Sintonizar (1 💎)
-                </button>
-              </div>
-            </div>
-
-            <!-- Quantum Disruptor -->
-            <div class="card-glass border rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
-              <div>
-                <div class="flex items-center gap-2">
-                  <span class="text-lg">🌌</span>
-                  <div class="font-['Orbitron'] font-bold text-sm text-[var(--text-main)]">Disruptor Cuántico</div>
-                  <span class="text-[10px] font-mono accent-bg text-slate-950 px-2 py-0.5 rounded-full font-bold">Nivel: ${state.collectors.quantumDisruptor.level} / 20</span>
-                </div>
-                <div class="text-xs text-[var(--text-muted)] font-mono mt-1">Tecnología de punta capaz de desestabilizar nanitas puros.</div>
-              </div>
-              <div class="flex items-center gap-2 w-full md:w-auto">
-                <button data-collector="quantumDisruptor" class="gacha-btn flex-1 md:flex-initial px-4 py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer accent-glow">
+                <button id="upgrade-weapon-btn" class="gacha-btn flex-1 md:flex-initial px-4 py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer accent-glow">
                   Sintonizar (1 💎)
                 </button>
               </div>
@@ -97,13 +66,10 @@ export function renderUpgradesTab(container: HTMLElement, game: any, onBack: () 
       }
     });
 
-    container.querySelectorAll('.gacha-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const collectorKey = (e.currentTarget as HTMLElement).getAttribute('data-collector') as any;
-        const result = game.upgradeCollectorGacha(collectorKey);
-        alert(result.msg);
-        renderTemplate();
-      });
+    container.querySelector('#upgrade-weapon-btn')?.addEventListener('click', () => {
+      const result = game.upgradeEquippedWeapon();
+      alert(result.msg);
+      renderTemplate();
     });
   };
 

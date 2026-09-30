@@ -61,7 +61,7 @@ export const STORE_ITEMS = {
   rareCrate: { cost: 1200, label: 'Caja Rara' },
   epicCrate: { cost: 4500, label: 'Caja Épica' },
   legendaryCrate: { cost: 18000, label: 'Caja Legendaria' },
-  clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clics x2 (30m)' },
+  clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clicks x2 (30m)' },
   passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 + Excepción AFK (1h)' },
   // Nuevos items
   backpackExpander: { cost: 20000, label: 'Expansor de Almacén (+1 slot)' },
@@ -169,7 +169,7 @@ export function generateCompanionByTier(tier: number): { id: string; name: strin
 }
 
 // Función para generar un arma aleatoria por tier
-export function generateWeaponByTier(tier: number): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number } {
+export function generateWeaponByTier(tier: number): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number } {
   const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
   const power = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
   const names = TIER_SYSTEM.weaponNames[tier as keyof typeof TIER_SYSTEM.weaponNames] || ['Blaster Láser'];
@@ -180,10 +180,11 @@ export function generateWeaponByTier(tier: number): { id: string; name: string; 
     id: `weapon_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     name,
     type: 'weapon',
-    details: `Daño: +${power}`,
+    details: `Recolección por click: +${power}`,
     rarity,
     tier,
-    level: 0
+    level: 0,
+    damage: power
   };
 }
 
@@ -221,17 +222,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       epic: 0,
       legendary: 0
     },
-    collectors: {
-      blaster: { level: 0, equipped: false },
-      plasmaCannon: { level: 0, equipped: false },
-      quantumDisruptor: { level: 0, equipped: false }
-    },
+    equippedWeaponId: null as string | null,
     companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number }>,
     activeCompanions: [] as string[],
     warehouse: [
       { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Daño: +1', rarity: 'Común' },
       { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: '+1/s', rarity: 'Común' }
-    ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
+    ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; damage?: number; equipped?: boolean; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
     buffs: {
       clickBoostExpiresAt: 0,
       passiveBoostExpiresAt: 0,
@@ -266,10 +263,31 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         epic: data.crates?.epic ?? 0,
         legendary: data.crates?.legendary ?? 0
       };
-      state.collectors = data.collectors ?? state.collectors;
+      state.equippedWeaponId = data.equippedWeaponId ?? null;
       state.companions = data.companions ?? [];
       state.activeCompanions = data.activeCompanions ?? [];
       state.warehouse = data.warehouse ?? [];
+      // Migración: agregar 'damage' y actualizar descripción a armas viejas
+      let warehouseNeedsMigration = false;
+      state.warehouse.forEach((w: any) => {
+        if (w.type === 'weapon') {
+          if (w.damage === undefined) {
+            const tier = w.tier || 1;
+            const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
+            w.damage = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+            warehouseNeedsMigration = true;
+          }
+          // Actualizar descripción al nuevo formato
+          const expectedDetails = `Recolección por click: +${w.damage}`;
+          if (w.details !== expectedDetails) {
+            w.details = expectedDetails;
+            warehouseNeedsMigration = true;
+          }
+        }
+      });
+      if (warehouseNeedsMigration) {
+        saveToFirebase();
+      }
       state.afkCards = data.afkCards ?? 0;
       state.buffs = {
         clickBoostExpiresAt: data.buffs?.clickBoostExpiresAt ?? 0,
@@ -277,10 +295,6 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         clickX2ExpiresAt: data.buffs?.clickX2ExpiresAt ?? 0,
         clickX3ExpiresAt: data.buffs?.clickX3ExpiresAt ?? 0
       };
-      // Asegurar que el recolector equipado tenga level definido
-      Object.values(state.collectors).forEach((c: any) => {
-        if (c.level === undefined) c.level = 0;
-      });
       recalculatePassiveIncome();
     } else {
       // Crear documento del usuario
@@ -298,7 +312,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
         crates: state.crates,
-        collectors: state.collectors,
+        equippedWeaponId: state.equippedWeaponId,
         companions: state.companions,
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
@@ -327,7 +341,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
           id: comp.id,
           name: comp.name,
           type: 'companion',
-          details: comp.type === 'click' ? `+${comp.power} Daño de Clic` : comp.type === 'passive' ? `+${comp.power} Pasivo/s` : `+${comp.power * 100}% Multiplicador`,
+          details: `Recolección por segundo: +${comp.power}/s`,
           rarity: comp.rarity,
           sellPrice: comp.rarity === 'Común' ? 100 : comp.rarity === 'Raro' ? 500 : comp.rarity === 'Épico' ? 2000 : 10000
         } as any);
@@ -363,17 +377,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   }
 
   function calculateClickDamage() {
-    let collectorDamageBonus = 0;
-    // SOLO el recolector equipado suma a la recolección por click
-    Object.entries(state.collectors).forEach(([key, c]: [string, any]) => {
-      if (c.equipped) {
-        const baseDmg = key === 'blaster' ? 1 : key === 'plasmaCannon' ? 5 : 25;
-        const levelMultiplier = 1 + ((c.level || 0) * 0.10);
-        collectorDamageBonus += baseDmg * levelMultiplier;
-      }
-    });
+    if (!state.equippedWeaponId) return 0;
+    const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+    if (!item) return 0;
 
-    return Math.floor(collectorDamageBonus);
+    const baseDmg = item.damage || 0;
+    const levelMultiplier = 1 + ((item.level || 0) * 0.10);
+    return Math.floor(baseDmg * levelMultiplier);
   }
 
   function calculateMultiplier() {
@@ -407,7 +417,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
         crates: state.crates,
-        collectors: state.collectors,
+        equippedWeaponId: state.equippedWeaponId,
         companions: state.companions,
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
@@ -530,6 +540,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       }
       syncCompanionsToWarehouse();
       onUpdate(state, isAfk);
+      saveToFirebase();
     },
     click: () => {
       handleUserActivity();
@@ -544,47 +555,33 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       state.totalClicks += 1;
       onUpdate(state, isAfk);
     },
-    buyCollectorLevel: (collectorKey: 'blaster' | 'plasmaCannon' | 'quantumDisruptor') => {
+    upgradeEquippedWeapon: () => {
       handleUserActivity();
-      const baseCost = COLLECTOR_BASE_COSTS[collectorKey];
-      const collector = state.collectors[collectorKey];
-      if (!collector || collector.level >= 3) return false; // Solo se pueden comprar 3 niveles base directos en la tienda
-
-      const cost = Math.floor(baseCost * Math.pow(1.5, collector.level));
-      if (state.nanites >= cost) {
-        state.nanites -= cost;
-        collector.level += 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return true;
-      }
-      return false;
-    },
-    upgradeCollectorGacha: (collectorKey: 'blaster' | 'plasmaCannon' | 'quantumDisruptor') => {
-      handleUserActivity();
-      const collector = state.collectors[collectorKey];
-      if (!collector || collector.level >= 20) return { success: false, msg: 'Recolector al nivel máximo (+200%).' };
+      if (!state.equippedWeaponId) return { success: false, msg: 'No hay ningún arma equipada.' };
+      const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+      if (!item) return { success: false, msg: 'Arma no encontrada.' };
+      if ((item.level || 0) >= 20) return { success: false, msg: 'Arma al nivel máximo (+200%).' };
       if (state.upgradeCrystals < 1) return { success: false, msg: 'Requiere al menos 1 Cristal de Mejora.' };
 
       state.upgradeCrystals -= 1;
 
       // Probabilidad de éxito disminuye conforme sube de nivel (ej. 90% en nivel 3 hasta 40% en nivel 19)
-      const successChance = Math.max(40, 95 - (collector.level * 2.5));
+      const successChance = Math.max(40, 95 - ((item.level || 0) * 2.5));
       const roll = Math.random() * 100;
 
       if (roll <= successChance) {
-        collector.level += 1;
+        item.level = (item.level || 0) + 1;
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { success: true, msg: `¡Mejora exitosa! Recolector ascendió al nivel ${collector.level}.` };
+        return { success: true, msg: `¡Mejora exitosa! ${item.name} ascendió al nivel ${item.level}.` };
       } else {
-        // Falló: baja de nivel (si es mayor a 0 y mayor al nivel base comprado, o baja 1 nivel respetando mínimo 0)
-        if (collector.level > 0) {
-          collector.level -= 1;
+        // Falló: baja de nivel (si es mayor a 0)
+        if ((item.level || 0) > 0) {
+          item.level = (item.level || 0) - 1;
         }
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { success: false, msg: `Fallo en el sintonizador. El recolector retrocedió al nivel ${collector.level}.` };
+        return { success: false, msg: `Fallo en el sintonizador. ${item.name} retrocedió al nivel ${item.level}.` };
       }
     },
     expandWarehouse: () => {
@@ -637,56 +634,32 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       saveToFirebase();
       return true;
     },
-    equipCollector: (collectorId: string) => {
+    equipCollector: (itemId: string) => {
       handleUserActivity();
       // Buscar el item en el warehouse
-      const item = state.warehouse.find((w: any) => w.id === collectorId);
+      const item = state.warehouse.find((w: any) => w.id === itemId);
       if (!item || item.type !== 'weapon') return false;
 
       // Si ya está equipado, desequiparlo
-      if ((item as any).equipped) {
-        (item as any).equipped = false;
-        Object.values(state.collectors).forEach((c: any) => c.equipped = false);
+      if (item.equipped) {
+        item.equipped = false;
+        state.equippedWeaponId = null;
         onUpdate(state, isAfk);
         saveToFirebase();
         return true;
       }
 
-      // Desequipar todos los recolectores del warehouse
+      // Desequipar cualquier arma equipada actualmente
       state.warehouse.forEach((w: any) => {
         if (w.type === 'weapon') w.equipped = false;
       });
 
-      // Desequipar todos los recolectores del state
-      Object.values(state.collectors).forEach((c: any) => c.equipped = false);
-
-      // Determinar el tipo de recolector basado en el nombre o tier
-      const itemName = (item as any).name.toLowerCase();
-      const itemTier = (item as any).tier || 0;
-      let collectorKey = '';
-      if (itemName.includes('blaster') || itemName.includes('láser') || itemName.includes('laser')) {
-        collectorKey = 'blaster';
-      } else if (itemName.includes('plasma') || itemName.includes('cañon') || itemName.includes('canon')) {
-        collectorKey = 'plasmaCannon';
-      } else if (itemName.includes('quantum') || itemName.includes('disruptor') || itemName.includes('aniquilador') || itemName.includes('devorador') || itemName.includes('coloso') || itemName.includes('guadaña') || itemName.includes('maldición') || itemName.includes('juicio') || itemName.includes('apocalipsis') || itemName.includes('armagedón') || itemName.includes('ragnarök') || itemName.includes('excalibur') || itemName.includes('mjolnir') || itemName.includes('gungnir') || itemName.includes('lanza') || itemName.includes('espada') || itemName.includes('hacha') || itemName.includes('corte') || itemName.includes('filo') || itemName.includes('navaja') || itemName.includes('arma del apocalipsis') || itemName.includes('instrumento') || itemName.includes('herencia') || itemName.includes('principio') || itemName.includes('palabra') || itemName.includes('todo')) {
-        collectorKey = 'quantumDisruptor';
-      }
-
-      // Buscar el recolector con el nivel más cercano al item
-      if (collectorKey) {
-        const collector = (state.collectors as any)[collectorKey];
-        if (collector) {
-          collector.equipped = true;
-          (item as any).equipped = true;
-          // Actualizar el nivel del recolector para que coincida con el item
-          collector.level = (item as any).level || collector.level;
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return true;
-        }
-      }
-
-      return false;
+      // Equipar el nuevo item
+      item.equipped = true;
+      state.equippedWeaponId = item.id;
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return true;
     },
     equipCompanion: (compId: string) => {
       handleUserActivity();
@@ -718,115 +691,196 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       }
 
       // Confirmar compra
-      showToast(`✅ Comprado: ${item.label} por ${formatNumber(item.cost)} nanitas`, 'success');
+      // Toast de compra eliminado - la card de item es suficiente
 
       state.nanites -= item.cost;
 
       if (itemKey === 'key') {
         state.keys += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `key_${Date.now()}`, name: 'Llave', type: 'key', details: 'Abre cajas en el almacén', rarity: 'Común', tier: 0 };
       } else if (itemKey === 'upgradeCrystal') {
         state.upgradeCrystals += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `crystal_${Date.now()}`, name: 'Cristal de Mejora', type: 'crystal', details: 'Mejora el arma equipada', rarity: 'Raro', tier: 0 };
       } else if (itemKey === 'warehouseSlot') {
         state.warehouseCapacity += 5;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `slot_${Date.now()}`, name: 'Espacio de Almacén', type: 'upgrade', details: '+5 espacios de almacén', rarity: 'Raro', tier: 0 };
       } else if (itemKey === 'commonCrate') {
         state.crates.common += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `crate_common_${Date.now()}`, name: 'Caja Común', type: 'crate', details: 'Contiene recompensas básicas', rarity: 'Común', tier: 0 };
       } else if (itemKey === 'rareCrate') {
         state.crates.rare += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `crate_rare_${Date.now()}`, name: 'Caja Rara', type: 'crate', details: 'Contiene recompensas mejores', rarity: 'Raro', tier: 0 };
       } else if (itemKey === 'epicCrate') {
         state.crates.epic += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `crate_epic_${Date.now()}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0 };
       } else if (itemKey === 'legendaryCrate') {
         state.crates.legendary += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `crate_legendary_${Date.now()}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0 };
       } else if (itemKey === 'clickBuff') {
-        const now = Date.now();
-        const currentExpires = Math.max(now, state.buffs.clickBoostExpiresAt);
-        state.buffs.clickBoostExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_BUFF_DURATION_MS);
-      } else if (itemKey === 'passiveBuff') {
-        const now = Date.now();
-        const currentExpires = Math.max(now, state.buffs.passiveBoostExpiresAt);
-        state.buffs.passiveBoostExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_BUFF_DURATION_MS);
-        recalculatePassiveIncome();
-      } else if (itemKey === 'backpackExpander') {
-        // El expansor se guarda en el almacén como consumible, no se aplica directamente
         if (state.warehouse.length < state.warehouseCapacity) {
-          state.warehouse.push({
+          const warehouseItem = {
+            id: `clickbuff_${Date.now()}`,
+            name: 'Buff Clicks x2',
+            type: 'consumable' as const,
+            details: 'Otorga x2 al click base por 30 minutos',
+            rarity: 'Raro',
+            tier: 0,
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
+        }
+      } else if (itemKey === 'passiveBuff') {
+        if (state.warehouse.length < state.warehouseCapacity) {
+          const warehouseItem = {
+            id: `passivebuff_${Date.now()}`,
+            name: 'Buff Pasivo x2',
+            type: 'consumable' as const,
+            details: 'Otorga x2 al ingreso pasivo por 60 minutos',
+            rarity: 'Épico',
+            tier: 0,
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
+        }
+      } else if (itemKey === 'backpackExpander') {
+        if (state.warehouse.length < state.warehouseCapacity) {
+          const warehouseItem = {
             id: `expander_${Date.now()}`,
             name: 'Expansor de Almacén',
-            type: 'consumable',
+            type: 'consumable' as const,
             details: 'Aumenta el almacén +1 slot (máx 20)',
             rarity: 'Raro',
+            tier: 0,
             sellPrice: Math.floor(item.cost / 4),
             stackable: true,
             stackCount: 1
-          });
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
         }
       } else if (itemKey === 'companionSlot1') {
-        // Solo se puede comprar una vez (cuando tienes 1 slot)
         if (state.maxCompanionSlots !== 1) return false;
         state.maxCompanionSlots += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `slot1_${Date.now()}`, name: 'Slot de Compañero 1', type: 'upgrade', details: '+1 slot de compañero', rarity: 'Épico', tier: 0 };
       } else if (itemKey === 'companionSlot2') {
-        // Solo se puede comprar una vez (cuando tienes 2 slots)
         if (state.maxCompanionSlots !== 2) return false;
         state.maxCompanionSlots += 1;
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return { id: `slot2_${Date.now()}`, name: 'Slot de Compañero 2', type: 'upgrade', details: '+1 slot de compañero', rarity: 'Épico', tier: 0 };
       } else if (itemKey === 'afkCard') {
-        if (state.afkCards >= 3) return false;
-        state.afkCards += 1;
-      } else if (itemKey === 'clickX2Card') {
-        const now = Date.now();
-        const currentExpires = Math.max(now, state.buffs.clickX2ExpiresAt);
-        state.buffs.clickX2ExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_CARD_BUFF_DURATION_MS);
-        // Guardar en almacén como consumible
         if (state.warehouse.length < state.warehouseCapacity) {
-          state.warehouse.push({
+          const warehouseItem = {
+            id: `afk_${Date.now()}`,
+            name: 'Tarjeta AFK',
+            type: 'consumable' as const,
+            details: 'Permite juego sin pestaña activa por 10 min (acumulable x3)',
+            rarity: 'Raro',
+            tier: 0,
+            sellPrice: Math.floor(item.cost / 4),
+            stackable: true,
+            stackCount: 1
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
+        }
+      } else if (itemKey === 'clickX2Card') {
+        if (state.warehouse.length < state.warehouseCapacity) {
+          const warehouseItem = {
             id: `clickx2_${Date.now()}`,
             name: 'Tarjeta Click x2',
-            type: 'consumable',
+            type: 'consumable' as const,
             details: 'Otorga x2 al click base por 30 segundos',
             rarity: 'Raro',
+            tier: 0,
             sellPrice: Math.floor(item.cost / 4),
             stackable: true,
             stackCount: 1
-          });
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
         }
       } else if (itemKey === 'clickX3Card') {
-        const now = Date.now();
-        const currentExpires = Math.max(now, state.buffs.clickX3ExpiresAt);
-        state.buffs.clickX3ExpiresAt = Math.min(currentExpires + (item as any).durationMs, now + MAX_CARD_BUFF_DURATION_MS);
-        // Guardar en almacén como consumible
         if (state.warehouse.length < state.warehouseCapacity) {
-          state.warehouse.push({
+          const warehouseItem = {
             id: `clickx3_${Date.now()}`,
             name: 'Tarjeta Click x3',
-            type: 'consumable',
+            type: 'consumable' as const,
             details: 'Otorga x3 al click base por 30 segundos',
             rarity: 'Épico',
+            tier: 0,
             sellPrice: Math.floor(item.cost / 4),
             stackable: true,
             stackCount: 1
-          });
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
         }
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
         state.companions.push(comp);
         if (state.warehouse.length < state.warehouseCapacity) {
-          state.warehouse.push({
+          const warehouseItem = {
             id: comp.id,
             name: comp.name,
-            type: 'companion',
-            details: `+${comp.power} Clics/s`,
+            type: 'companion' as const,
+            details: `Recolección por segundo: +${comp.power}/s`,
             rarity: comp.rarity,
             tier: comp.tier,
             sellPrice: Math.floor(item.cost / 4)
-          });
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
         }
       } else if (itemKey.startsWith('weaponCardT')) {
         const tier = parseInt(itemKey.replace('weaponCardT', ''));
         const weapon = generateWeaponByTier(tier);
         if (state.warehouse.length < state.warehouseCapacity) {
-          state.warehouse.push({
+          const warehouseItem = {
             ...weapon,
             sellPrice: Math.floor(item.cost / 4)
-          });
+          };
+          state.warehouse.push(warehouseItem);
+          onUpdate(state, isAfk);
+          saveToFirebase();
+          return warehouseItem;
         }
       } else if ((itemKey as string) === 'afkCard') {
         if (state.afkCards >= 3) return false;
@@ -897,9 +951,9 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         } else if (roll < 80) {
           const comp = { id: 'comp_' + Math.random().toString(36).substring(2, 9), name: 'Artillero Táctico', type: 'click' as const, power: 10, rarity: 'Raro' };
           if (state.warehouse.length < state.warehouseCapacity) {
-            state.warehouse.push({ id: comp.id, name: comp.name, type: 'companion', details: '+10 Daño de Clic', rarity: comp.rarity });
+            state.warehouse.push({ id: comp.id, name: comp.name, type: 'companion', details: '+10 Daño de Click', rarity: comp.rarity });
             state.companions.push(comp);
-            reward = { type: 'companion', amount: 1, label: 'Compañero: Artillero Táctico (+10 Clic)' };
+            reward = { type: 'companion', amount: 1, label: 'Compañero: Artillero Táctico (+10 Click)' };
           } else {
             reward = { type: 'nanites', amount: 1500, label: 'Almacén lleno: +1,500 Nanitas' };
           }
