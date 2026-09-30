@@ -1,5 +1,9 @@
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { rollCrateReward } from './components/crateLoot';
+import { showToast } from './utils/toast';
+import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
+import type { AchievementId } from './data/achievements';
 
 function formatNumber(num: number): string {
   const floored = Math.floor(num);
@@ -9,38 +13,8 @@ function formatNumber(num: number): string {
   return floored.toString();
 }
 
-function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
-  // Usar modal de confirmación en lugar de toast flash
-  const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4';
-  overlay.id = 'toast-modal-overlay';
-  const modal = document.createElement('div');
-  const colors = {
-    success: 'border-emerald-500/40 text-emerald-300',
-    error: 'border-red-500/40 text-red-300',
-    info: 'border-blue-500/40 text-blue-300'
-  };
-  modal.className = `card-glass border rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col gap-4 ${colors[type]}`;
-  const messageEl = document.createElement('p');
-  messageEl.className = 'text-sm font-mono text-center';
-  messageEl.textContent = message;
-  const btn = document.createElement('button');
-  btn.className = 'py-2.5 accent-bg text-slate-950 font-[\'Orbitron\'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer';
-  btn.textContent = 'Aceptar';
-  btn.addEventListener('click', () => overlay.remove());
-  modal.appendChild(messageEl);
-  modal.appendChild(btn);
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-  // Cerrar con Escape
-  const handleEscape = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      overlay.remove();
-      document.removeEventListener('keydown', handleEscape);
-    }
-  };
-  document.addEventListener('keydown', handleEscape);
-}
+// Antes esto era un modal con botón "Aceptar" para avisos como "Almacén lleno":
+// bloqueaba la partida por un mensaje informativo. Ahora es un toast no bloqueante.
 
 const SAVE_VERSION = 6;
 export const AFK_CARD_DURATION_MS = 10 * 60 * 1000; // Cada tarjeta AFK da 10 min
@@ -75,34 +49,46 @@ export const STORE_ITEMS = {
   passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 (1h)' },
   // Nuevos items
   backpackExpander: { cost: 20000, label: 'Expansor de Almacén (+1 slot)' },
-  companionSlot1: { cost: 50000, label: 'Slot de Compañero 1' },
-  companionSlot2: { cost: 200000, label: 'Slot de Compañero 2' },
+  companionSlot1: { cost: 1200, label: 'Slot de Compañero 2' },
+  companionSlot2: { cost: 16000, label: 'Ranura de Escuadrón (+3 slots)' },
   afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
   clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
   clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },
-  companionCardT1: { cost: 2000, label: 'Compañero Tier 1' },
-  companionCardT2: { cost: 4000, label: 'Compañero Tier 2' },
-  companionCardT3: { cost: 8000, label: 'Compañero Tier 3' },
-  companionCardT4: { cost: 16000, label: 'Compañero Tier 4' },
-  companionCardT5: { cost: 32000, label: 'Compañero Tier 5' },
-  companionCardT6: { cost: 64000, label: 'Compañero Tier 6' },
-  companionCardT7: { cost: 128000, label: 'Compañero Tier 7' },
-  companionCardT8: { cost: 256000, label: 'Compañero Tier 8' },
-  companionCardT9: { cost: 512000, label: 'Compañero Tier 9' },
-  companionCardT10: { cost: 1024000, label: 'Compañero Tier 10' },
+  // Escala 1.5x por tier. El poder por tier crece algo más rápido (1.62x) para
+  // que el coste por punto de poder no se dispare: en T10 sale ~1.3x mejor que
+  // en T1, no 32x peor como antes.
+  companionCardT1: { cost: 900, label: 'Compañero Tier 1' },
+  companionCardT2: { cost: 1600, label: 'Compañero Tier 2' },
+  companionCardT3: { cost: 2700, label: 'Compañero Tier 3' },
+  companionCardT4: { cost: 4500, label: 'Compañero Tier 4' },
+  companionCardT5: { cost: 7400, label: 'Compañero Tier 5' },
+  companionCardT6: { cost: 12000, label: 'Compañero Tier 6' },
+  companionCardT7: { cost: 19500, label: 'Compañero Tier 7' },
+  companionCardT8: { cost: 31000, label: 'Compañero Tier 8' },
+  companionCardT9: { cost: 49000, label: 'Compañero Tier 9' },
+  companionCardT10: { cost: 77000, label: 'Compañero Tier 10' },
   weaponCardT1: { cost: 1000, label: 'Arma Tier 1' },
-  weaponCardT2: { cost: 2000, label: 'Arma Tier 2' },
-  weaponCardT3: { cost: 4000, label: 'Arma Tier 3' },
-  weaponCardT4: { cost: 8000, label: 'Arma Tier 4' },
-  weaponCardT5: { cost: 16000, label: 'Arma Tier 5' },
-  weaponCardT6: { cost: 32000, label: 'Arma Tier 6' },
-  weaponCardT7: { cost: 64000, label: 'Arma Tier 7' },
-  weaponCardT8: { cost: 128000, label: 'Arma Tier 8' },
-  weaponCardT9: { cost: 256000, label: 'Arma Tier 9' },
-  weaponCardT10: { cost: 512000, label: 'Arma Tier 10' }
+  weaponCardT2: { cost: 1500, label: 'Arma Tier 2' },
+  weaponCardT3: { cost: 2250, label: 'Arma Tier 3' },
+  weaponCardT4: { cost: 3400, label: 'Arma Tier 4' },
+  weaponCardT5: { cost: 5100, label: 'Arma Tier 5' },
+  weaponCardT6: { cost: 7600, label: 'Arma Tier 6' },
+  weaponCardT7: { cost: 11500, label: 'Arma Tier 7' },
+  weaponCardT8: { cost: 17200, label: 'Arma Tier 8' },
+  weaponCardT9: { cost: 25800, label: 'Arma Tier 9' },
+  weaponCardT10: { cost: 39000, label: 'Arma Tier 10' }
 };
 
-export const COMPANION_SLOT_COSTS = [0, 1000, 5000, 20000, 75000];
+// Coste de cada slot de compañero adicional (índice = slots ya poseídos).
+// 5 slots es el techo: es lo que hace que los slots valgan más que los tiers.
+export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000];
+
+// Mejora de arma: 20 niveles, coste creciente en cristales y éxito decreciente.
+export const MAX_WEAPON_LEVEL = 20;
+export function weaponUpgradeCost(level: number): number {
+  // 1,1,2,2,3,3,4,5,6,7,8,9,11,13,15,18,21,25,30,35 -> ~190 cristales en total
+  return Math.max(1, Math.floor(1.2 * Math.pow(1.14, level)));
+}
 
 // Consumibles de la tienda. `buffId` es el identificador estable que usa el
 // almacén para aplicar el efecto: cambiar un nombre no puede romper el buff.
@@ -155,21 +141,40 @@ function createCrateItem(crateType: CrateType, quantity: number = 1) {
   };
 }
 
-// Sistema de Tiers para compañeros y armas
+// Sistema de Tiers para compañeros y armas.
+//
+// Curva de poder POR TIER (no por nivel). Antes cada tier daba +5 fijos mientras
+// el coste se duplicaba: el coste por punto de poder pasaba de 667 (T1) a 21.333
+// (T10), 32x peor, así que el jugador óptimo solo compraba T1 y los tiers altos
+// eran trampas. Ahora el poder crece ~1.62x por tier, ligeramente por encima
+// del 1.5x del coste, para que subir de tier siga mereciendo la pena.
+export const TIER_POWER = [
+  { tier: 1, base: 6 },
+  { tier: 2, base: 10 },
+  { tier: 3, base: 16 },
+  { tier: 4, base: 26 },
+  { tier: 5, base: 42 },
+  { tier: 6, base: 68 },
+  { tier: 7, base: 110 },
+  { tier: 8, base: 178 },
+  { tier: 9, base: 288 },
+  { tier: 10, base: 466 }
+];
+
 export const TIER_SYSTEM = {
-  // Rango de clicks/seg por tier: [min, max]
+  // Rango de poder por tier: [min, max]
   ranges: {
-    1: [1, 5],
-    2: [5, 10],
-    3: [10, 15],
-    4: [15, 20],
-    5: [20, 25],
-    6: [25, 30],
-    7: [30, 35],
-    8: [35, 40],
-    9: [40, 45],
-    10: [45, 50]
-  },
+    1: [5, 7],
+    2: [8, 12],
+    3: [13, 19],
+    4: [21, 31],
+    5: [34, 50],
+    6: [55, 81],
+    7: [88, 132],
+    8: [142, 214],
+    9: [230, 346],
+    10: [373, 559]
+  } as Record<number, [number, number]>,
   // Nombres de compañeros por tier (de base a imponente)
   companionNames: {
     1: ['Dron Explorador', 'Dron Centinela', 'Dron Mensajero'],
@@ -249,13 +254,26 @@ export function generateWeaponByTier(tier: number): { id: string; name: string; 
   };
 }
 
-export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaused?: boolean) => void, username?: string) {
+export async function createGameLoop(
+  user: any,
+  onUpdate: (state: any, isAfkPaused?: boolean) => void,
+  username?: string,
+  onAchievement?: (achievement: Achievement) => void
+) {
+  // Se declara antes de la carga de Firestore: `recalculatePassiveIncome` se llama
+  // durante la carga y lee este estado (TDZ si se declarase más abajo).
+  // `unlocked` se sincroniza con state.unlockedAchievements en cada rebuild.
+  const achievementState = createAchievementState();
+
+  // El compañero inicial es un T1 real: mismo poder que compra el jugador, para
+  // que la decisión "comprar otro T1 o guardar" tenga sentido desde el segundo 1.
   const baseCompanion = {
     id: 'companion_base_001',
     name: 'Dron Explorador',
     type: 'click' as const,
-    power: 1,
-    rarity: 'Común'
+    power: 5,
+    rarity: 'Común',
+    tier: 1
   };
 
   // Bonus especial para usuarios de prueba
@@ -267,11 +285,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   let state = {
     saveVersion: SAVE_VERSION,
     nanites: initialNanites,
+    totalNanitesProduced: initialNanites,
     passiveIncome: 0,
     passiveMultiplier: 1, // Multiplicador global aportado por los compañeros tipo 'multiplier'
     totalClicks: 0,
     totalInfraestructure: 0,
     cratesOpened: 0,
+    unlockedAchievements: [] as AchievementId[],
     keys: 3,
     upgradeCrystals: 5,
     warehouseCapacity: 15,
@@ -289,7 +309,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     activeCompanions: [] as string[],
     warehouse: [
       { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
-      { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +1/s', rarity: 'Común', tier: 1, sellPrice: 250 }
+      { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +5/s', rarity: 'Común', tier: 1, sellPrice: 250 }
     ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; damage?: number; equipped?: boolean; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
     buffs: {
       clickBoostExpiresAt: 0,
@@ -316,7 +336,9 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       const data = docSnap.data();
       state.saveVersion = SAVE_VERSION;
       state.nanites = data.nanites ?? 0;
+      state.totalNanitesProduced = data.totalNanitesProduced ?? data.nanites ?? 0;
       state.totalClicks = data.totalClicks ?? 0;
+      state.unlockedAchievements = data.unlockedAchievements ?? [];
       state.totalInfraestructure = data.totalInfraestructure ?? 0;
       state.cratesOpened = data.cratesOpened ?? 0;
       state.keys = data.keys ?? 3;
@@ -378,6 +400,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         userId: user.uid,
         username: user.displayName || 'Operativo',
         nanites: state.nanites,
+        totalNanitesProduced: state.totalNanitesProduced,
         totalClicks: 0,
         totalInfraestructure: 0,
         cratesOpened: 0,
@@ -393,6 +416,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
         buffs: state.buffs,
+        unlockedAchievements: state.unlockedAchievements,
         updatedAt: new Date()
       });
       // Crear documento de ranking
@@ -423,10 +447,41 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         } as any);
       }
     });
-    // Respetar capacidad máxima
-    if (state.warehouse.length > state.warehouseCapacity) {
-      state.warehouse = state.warehouse.slice(0, state.warehouseCapacity);
-    }
+    enforceWarehouseCapacity();
+  }
+
+  /**
+   * Recorta el almacén respetando una prioridad. Antes se hacía
+   * `slice(0, capacity)`, que destruía el último item de la lista sin aviso y
+   * podía borrar el arma equipada o un compañero activo.
+   *
+   * Prioridad de conservación:-inducing el arma equipada, los compañeros activos
+   * y los companions con item. Lo que se descarta es lo más reciente y menos
+   * ligado a la progresión.
+   */
+  function enforceWarehouseCapacity() {
+    if (state.warehouse.length <= state.warehouseCapacity) return;
+
+    const score = (w: any): number => {
+      if (w.id === state.equippedWeaponId) return 1000;
+      if (w.equipped) return 900;
+      if (state.activeCompanions.includes(w.id)) return 800;
+      if (w.type === 'weapon') return 500 + (w.tier || 0);
+      if (w.type === 'companion') return 400 + (w.tier || 0);
+      if (w.type === 'crate') return 300;
+      if (w.type === 'consumable') return 200;
+      return 100;
+    };
+
+    // Mantiene los mejor valorados; ante empate, los más antiguos
+    const kept = state.warehouse
+      .map((w: any, index: number) => ({ w, index, s: score(w) }))
+      .sort((a, b) => (b.s - a.s) || (a.index - b.index))
+      .slice(0, state.warehouseCapacity)
+      .sort((a, b) => a.index - b.index)
+      .map(x => x.w);
+
+    state.warehouse = kept;
   }
 
   // Detecta el tipo de caja a partir del nombre del item
@@ -473,14 +528,42 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
   }
 
   // Sincronizar compañeros con el warehouse después de inicializar
+  rebuildAchievementBonuses();
   syncCompanionsToWarehouse();
   syncCrateCounters();
+  checkAchievements();
 
   // Guardar inmediatamente al iniciar sesión
   await saveToFirebase();
 
   // Los compañeros tipo 'multiplier' no aportan nanitas: multiplican el rendimiento.
   // power es el factor extra (0.5 = +50%, 2.0 = +200%)
+  // `state.unlockedAchievements` es la ÚNICA fuente de verdad. Antes también se
+  // llevaba una copia en achievementState.unlocked, y si ambas se
+  // desincronizaban (un reset o un guardado fallido) los logros ya evaluationados
+  // no volvían a aparecer nunca.
+  function rebuildAchievementBonuses() {
+    achievementState.unlocked = state.unlockedAchievements;
+    achievementState.clickBonus = 0;
+    achievementState.passiveBonus = 0;
+    for (const ach of ACHIEVEMENTS) {
+      if (!state.unlockedAchievements.includes(ach.id)) continue;
+      achievementState.clickBonus += ach.reward.clickBonus;
+      achievementState.passiveBonus += ach.reward.passiveBonus;
+    }
+  }
+
+  function checkAchievements() {
+    const newly = evaluateAchievements(state, achievementState);
+    if (newly.length === 0) return;
+    for (const ach of newly) {
+      if (!state.unlockedAchievements.includes(ach.id)) state.unlockedAchievements.push(ach.id);
+      onAchievement?.(ach);
+    }
+    recalculatePassiveIncome();
+    saveToFirebase();
+  }
+
   function calculateCompanionMultiplier(): number {
     let multiplier = 1;
     state.activeCompanions.forEach(compId => {
@@ -508,8 +591,9 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     }
 
     state.passiveMultiplier = calculateCompanionMultiplier();
-    // Redondear a entero para mantener consistencia
-    state.passiveIncome = Math.floor(base * state.passiveMultiplier);
+    // El bonus de logros entra aquí: son pasivos, noNanitas directas
+    const withAchievements = base * state.passiveMultiplier * (1 + achievementState.passiveBonus);
+    state.passiveIncome = Math.floor(withAchievements);
   }
 
   function calculateClickDamage() {
@@ -519,7 +603,8 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
     const baseDmg = item.damage || 0;
     const levelMultiplier = 1 + ((item.level || 0) * 0.10);
-    return Math.floor(baseDmg * levelMultiplier * calculateCompanionMultiplier());
+    const total = baseDmg * levelMultiplier * calculateCompanionMultiplier() * (1 + achievementState.clickBonus);
+    return Math.floor(total);
   }
 
   function calculateMultiplier() {
@@ -544,6 +629,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         userId: user.uid,
         username: user.displayName || 'Operativo',
         nanites: state.nanites,
+        totalNanitesProduced: state.totalNanitesProduced,
         totalClicks: state.totalClicks,
         totalInfraestructure: state.totalInfraestructure,
         cratesOpened: state.cratesOpened,
@@ -559,6 +645,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
         buffs: state.buffs,
+        unlockedAchievements: state.unlockedAchievements,
         updatedAt: new Date()
       };
       // Guardar datos del juego en users/{uid}
@@ -709,8 +796,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       }
 
       if (state.passiveIncome > 0) {
-        state.nanites += state.passiveIncome / TICKS_PER_SECOND;
+        const gained = state.passiveIncome / TICKS_PER_SECOND;
+        state.nanites += gained;
+        state.totalNanitesProduced += gained;
       }
+      // Los logros se comprueban en el tick: así se desbloquean solos sin que
+      // el jugador tenga que tocar nada
+      checkAchievements();
       onUpdate(state, isAfk && (hasPassiveBuffActive || hasAfkBuff));
     }, TICK_RATE_MS);
   }
@@ -728,6 +820,12 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
     // La UI debe usar esta función para no mostrar un valor distinto al real.
     getClickDamage: () => Math.floor(calculateClickDamage() * calculateMultiplier()),
+    getAchievements: () => ACHIEVEMENTS.map(a => ({
+      ...a,
+      unlocked: state.unlockedAchievements.includes(a.id),
+      current: a.progress(state).current,
+      target: a.progress(state).target
+    })),
     // Cancela un buff activo. El tiempo restante se pierde, no se devuelve el item.
     cancelBuff: (buffKey: BuffKey) => {
       handleUserActivity();
@@ -753,14 +851,13 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
     },
     updateState: (newState: any) => {
       Object.assign(state, newState);
-      // Respetar capacidad máxima del almacén
-      if (state.warehouse.length > state.warehouseCapacity) {
-        state.warehouse = state.warehouse.slice(0, state.warehouseCapacity);
-      }
+      enforceWarehouseCapacity();
       syncCompanionsToWarehouse();
       syncCrateCounters();
       refreshAfkCardCount();
+      rebuildAchievementBonuses();
       recalculatePassiveIncome();
+      checkAchievements();
       onUpdate(state, isAfk);
       saveToFirebase();
     },
@@ -774,7 +871,9 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       const multiplier = calculateMultiplier();
       const totalGain = Math.floor(collectorDamage * multiplier);
       state.nanites += totalGain;
+      state.totalNanitesProduced += totalGain;
       state.totalClicks += 1;
+      checkAchievements();
       onUpdate(state, isAfk);
     },
     upgradeEquippedWeapon: () => {
@@ -782,28 +881,35 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       if (!state.equippedWeaponId) return { success: false, msg: 'No hay ningún arma equipada.' };
       const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
       if (!item) return { success: false, msg: 'Arma no encontrada.' };
-      if ((item.level || 0) >= 20) return { success: false, msg: 'Arma al nivel máximo (+200%).' };
-      if (state.upgradeCrystals < 1) return { success: false, msg: 'Requiere al menos 1 Cristal de Mejora.' };
+      const level = item.level || 0;
+      if (level >= MAX_WEAPON_LEVEL) return { success: false, msg: `Arma al nivel máximo (+${MAX_WEAPON_LEVEL * 10}%).` };
 
-      state.upgradeCrystals -= 1;
+      // Coste en cristales creciente: antes era 1 por nivel, así que 20 niveles
+      // salían por 20 cristales y el timing de mejora era irrelevante
+      const crystalCost = weaponUpgradeCost(level);
+      if (state.upgradeCrystals < crystalCost) {
+        return { success: false, msg: `Requiere ${crystalCost} Cristales de Mejora (tienes ${state.upgradeCrystals}).` };
+      }
 
-      // Probabilidad de éxito disminuye conforme sube de nivel (ej. 90% en nivel 3 hasta 40% en nivel 19)
-      const successChance = Math.max(40, 95 - ((item.level || 0) * 2.5));
+      state.upgradeCrystals -= crystalCost;
+
+      // Probabilidad de éxito: alta al principio, se estrecha al final
+      const successChance = Math.max(35, 95 - level * 3);
       const roll = Math.random() * 100;
 
       if (roll <= successChance) {
-        item.level = (item.level || 0) + 1;
+        item.level = level + 1;
         onUpdate(state, isAfk);
         saveToFirebase();
         return { success: true, msg: `¡Mejora exitosa! ${item.name} ascendió al nivel ${item.level}.` };
       } else {
-        // Falló: baja de nivel (si es mayor a 0)
-        if ((item.level || 0) > 0) {
-          item.level = (item.level || 0) - 1;
-        }
+        // Fallo: conserva el nivel y el cristal gastado. Antes retrocedía un
+        // nivel, y con el coste creciente eso era una escalera sin retorno:
+        // el jugador que fallaba dos veces quedaba atrapado para siempre.
+        // La pérdida real es el cristal, que es el coste que se eligió arriesgar.
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { success: false, msg: `Fallo en el sintonizador. ${item.name} retrocedió al nivel ${item.level}.` };
+        return { success: false, msg: `Fallo en el sintonizador. ${item.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)` };
       }
     },
     expandWarehouse: () => {
@@ -907,7 +1013,7 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
 
       // Validar antes de cobrar: los slots son únicos y no se pueden repetir
       if (itemKey === 'companionSlot1' && state.maxCompanionSlots !== 1) return false;
-      if (itemKey === 'companionSlot2' && state.maxCompanionSlots !== 2) return false;
+      if (itemKey === 'companionSlot2' && state.maxCompanionSlots !== 3) return false;
 
       // Validar mochila llena (excepto para items que no ocupan espacio en el almacén)
       const needsWarehouseSpace = !['key', 'upgradeCrystal', 'warehouseSlot', 'companionSlot1', 'companionSlot2'].includes(itemKey as string);
@@ -969,15 +1075,15 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
           return warehouseItem;
         }
       } else if (itemKey === 'companionSlot1') {
-        state.maxCompanionSlots += 1;
+        state.maxCompanionSlots = 2;
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { id: `slot1_${Date.now()}`, name: 'Slot de Compañero 1', type: 'upgrade', details: '+1 slot de compañero', rarity: 'Épico', tier: 0 };
+        return { id: `slot2_${Date.now()}`, name: 'Slot de Compañero 2', type: 'upgrade', details: '2 slots de compañero activos', rarity: 'Épico', tier: 0 };
       } else if (itemKey === 'companionSlot2') {
-        state.maxCompanionSlots += 1;
+        state.maxCompanionSlots = 5;
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { id: `slot2_${Date.now()}`, name: 'Slot de Compañero 2', type: 'upgrade', details: '+1 slot de compañero', rarity: 'Épico', tier: 0 };
+        return { id: `slot5_${Date.now()}`, name: 'Ranura de Escuadrón', type: 'upgrade', details: '5 slots de compañero activos', rarity: 'Legendario', tier: 0 };
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
@@ -1027,97 +1133,34 @@ export async function createGameLoop(user: any, onUpdate: (state: any, isAfkPaus
       state.crates[crateType] -= 1;
       state.cratesOpened += 1;
 
-      // Verificar capacidad del almacén antes de añadir items
-      if (state.warehouse.length >= state.warehouseCapacity) {
-        // Almacén lleno, dar compensación en nanites
-        const compensation = crateType === 'common' ? 500 : crateType === 'rare' ? 1500 : crateType === 'epic' ? 5000 : 20000;
-        state.nanites += compensation;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { type: 'nanites', amount: compensation, label: `Almacén lleno: +${compensation} Nanitas compensación` };
-      }
-
-      const roll = Math.random() * 100;
-      let reward: { type: string; amount: number; label: string; itemData?: any };
-
-      // Una caja regalada es un item real del almacén. Si no cabe, se compensa
-      // con nanitas para que el jugador no pierda el drop.
-      const grantCrate = (crateType: CrateType) => {
-        if (state.warehouse.length >= state.warehouseCapacity) {
-          const compensation = crateType === 'epic' ? 5000 : 20000;
-          return { type: 'nanites', amount: compensation, label: `Almacén lleno: +${compensation} Nanitas` };
-        }
-        state.warehouse.push(createCrateItem(crateType) as any);
-        return { type: 'crate', amount: 1, label: `+1 ${CRATE_TYPES[crateType].name}` };
-      };
-
-      if (crateType === 'common') {
-        if (roll < 50) reward = { type: 'nanites', amount: 300, label: '+300 Nanitas' };
-        else if (roll < 80) {
-          state.upgradeCrystals += 2;
-          reward = { type: 'crystal', amount: 2, label: '+2 Cristales de Mejora' };
-        } else {
-          const comp = { id: 'comp_' + Math.random().toString(36).substring(2, 9), name: 'Dron Explorador', type: 'passive' as const, power: 2, rarity: 'Común' };
-          if (state.warehouse.length < state.warehouseCapacity) {
-            state.warehouse.push({ id: comp.id, name: comp.name, type: 'companion', details: '+2 Pasivo/s', rarity: comp.rarity });
-            state.companions.push(comp);
-            reward = { type: 'companion', amount: 1, label: 'Compañero: Dron Explorador (+2 Pasivo/s)' };
-          } else {
-            reward = { type: 'nanites', amount: 500, label: 'Almacén lleno: +500 Nanitas compensación' };
+      // El botin lo decide la tabla (crateLoot) y se aplica aqui. La ruleta solo
+      // lo muestra: si la animacion decidiera, mentiria sobre las probabilidades.
+      const reward = rollCrateReward(crateType, {
+        nanites: (n) => { state.nanites += n; },
+        crystals: (n) => { state.upgradeCrystals += n; },
+        keys: (n) => { state.keys += n; },
+        hasSpace: () => state.warehouse.length < state.warehouseCapacity,
+        addItem: (item) => {
+          if (state.warehouse.length >= state.warehouseCapacity) return false;
+          state.warehouse.push(item as any);
+          // El item trae `companionType` y `power` ya resueltos por crateLoot.
+          // Antes se deducían parseando `details` con regex y el multiplicador
+          // 0.75 se guardaba como 0.5.
+          if (item.type === 'companion' && !state.companions.some((c: any) => c.id === item.id)) {
+            state.companions.push({
+              id: item.id,
+              name: item.name,
+              type: item.companionType || 'passive',
+              power: typeof item.power === 'number' ? item.power : 1,
+              rarity: item.rarity,
+              tier: item.tier
+            });
           }
+          return true;
         }
-      } else if (crateType === 'rare') {
-        if (roll < 40) {
-          state.upgradeCrystals += 5;
-          reward = { type: 'crystal', amount: 5, label: '+5 Cristales de Mejora' };
-        } else if (roll < 80) {
-          const comp = { id: 'comp_' + Math.random().toString(36).substring(2, 9), name: 'Artillero Táctico', type: 'click' as const, power: 10, rarity: 'Raro' };
-          if (state.warehouse.length < state.warehouseCapacity) {
-            state.warehouse.push({ id: comp.id, name: comp.name, type: 'companion', details: '+10 Daño de Click', rarity: comp.rarity });
-            state.companions.push(comp);
-            reward = { type: 'companion', amount: 1, label: 'Compañero: Artillero Táctico (+10 Click)' };
-          } else {
-            reward = { type: 'nanites', amount: 1500, label: 'Almacén lleno: +1,500 Nanitas' };
-          }
-        } else {
-          reward = grantCrate('epic');
-        }
-      } else if (crateType === 'epic') {
-        if (roll < 45) {
-          state.upgradeCrystals += 15;
-          reward = { type: 'crystal', amount: 15, label: '+15 Cristales de Mejora' };
-        } else if (roll < 85) {
-          const comp = { id: 'comp_' + Math.random().toString(36).substring(2, 9), name: 'IA Cuántica', type: 'multiplier' as const, power: 0.5, rarity: 'Épico' };
-          if (state.warehouse.length < state.warehouseCapacity) {
-            state.warehouse.push({ id: comp.id, name: comp.name, type: 'companion', details: '+50% Multiplicador Global', rarity: comp.rarity });
-            state.companions.push(comp);
-            reward = { type: 'companion', amount: 1, label: 'Compañero: IA Cuántica (+50% Mult)' };
-          } else {
-            reward = { type: 'nanites', amount: 5000, label: 'Almacén lleno: +5,000 Nanitas' };
-          }
-        } else {
-          reward = grantCrate('legendary');
-        }
-      } else {
-        // Legendary
-        if (roll < 35) {
-          state.upgradeCrystals += 40;
-          reward = { type: 'crystal', amount: 40, label: '+40 Cristales de Mejora' };
-        } else if (roll < 75) {
-          const comp = { id: 'comp_' + Math.random().toString(36).substring(2, 9), name: 'Comandante Supremo', type: 'multiplier' as const, power: 2.0, rarity: 'Legendario' };
-          if (state.warehouse.length < state.warehouseCapacity) {
-            state.warehouse.push({ id: comp.id, name: comp.name, type: 'companion', details: '+200% Multiplicador Global', rarity: comp.rarity });
-            state.companions.push(comp);
-            reward = { type: 'companion', amount: 1, label: 'Compañero Supremo (+200% Mult)' };
-          } else {
-            reward = { type: 'nanites', amount: 20000, label: 'Almacén lleno: +20,000 Nanitas' };
-          }
-        } else {
-          state.keys += 5;
-          reward = { type: 'keys', amount: 5, label: '+5 Llaves de Cifrado' };
-        }
-      }
+      });
 
+      syncCrateCounters();
       recalculatePassiveIncome();
       onUpdate(state, isAfk);
       saveToFirebase();

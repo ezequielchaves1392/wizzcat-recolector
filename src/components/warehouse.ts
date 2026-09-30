@@ -1,5 +1,8 @@
 import { WarehouseItem } from '../types';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS } from '../gameLoop';
+import { showCrateRoulette } from './crateRoulette';
+import { sfx } from '../utils/audio';
+import { showToast } from '../utils/toast';
 
 function formatNumber(num: number): string {
   const floored = Math.floor(num);
@@ -666,11 +669,15 @@ export function renderWarehouseTab(container: HTMLElement, game: any, onBack: ()
                 showConfirmModal('El recolector ya está al nivel máximo.', () => {});
                 return;
             }
-            showConfirmModal(`¿Mejorar ${item.name} al nivel ${(item.level || 0) + 1}?`, () => {
-                state.upgradeCrystals -= 1;
-                item.level = (item.level || 0) + 1;
-                game.updateState(state);
-                renderTemplate();
+            // Se delega en el game loop: alli viven el coste en cristales y la
+            // probabilidad de exito. Aqui solo habia un +1 garantizado.
+            showConfirmModal(`\u00bfIntentar mejorar ${item.name} al nivel ${(item.level || 0) + 1}?`, () => {
+                sfx.use();
+                const result = game.upgradeEquippedWeapon();
+                if (result) {
+                    showToast(result.msg, result.success ? 'success' : 'error');
+                    renderTemplate();
+                }
             });
         });
 

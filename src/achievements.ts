@@ -1,57 +1,150 @@
+// Logros del juego.
+//
+// Antes este archivo no lo importaba nadie y sus condiciones miraban
+// `state.factories`, un campo que ya no existe: los logros no se evaluaban nunca.
+// Las recompensas son pasivas (multiplicador de click y de pasivo) y se aplican
+// al recalcular, así que no necesitan escribirse en el estado del jugador.
+
+import { ACHIEVEMENT_REWARDS, type AchievementId } from './data/achievements';
+
 export interface Achievement {
-  id: string;
+  id: AchievementId;
   title: string;
   description: string;
   icon: string;
+  /** Recompensa legible, para mostrarla en la tarjeta */
   rewardText: string;
-  condition: (gameState: any) => boolean;
-  unlocked: boolean;
+  /** Recompensa pasiva aplicada por el game loop */
+  reward: { clickBonus: number; passiveBonus: number };
+  /** Devuelve el progreso 0..1 y si ya se completó */
+  progress: (state: any) => { current: number; target: number };
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'first_click',
     title: 'Primer Enlace',
-    description: 'Extrae tus primeras 100 Nanitas Puras.',
+    description: 'Extrae 100 Nanitas en total',
     icon: '⚡',
-    rewardText: '+5% Poder de Click',
-    condition: (state) => state.totalNanitesProduced >= 100,
-    unlocked: false
+    rewardText: '+2% poder de click',
+    reward: { clickBonus: 0.02, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(s.totalNanitesProduced ?? 0, 100), target: 100 })
   },
   {
-    id: 'drone_swarm',
+    id: 'collector_10',
+    title: 'Táctico',
+    description: 'Sube un recolector al nivel 10',
+    icon: '🎯',
+    rewardText: '+5% poder de click',
+    reward: { clickBonus: 0.05, passiveBonus: 0 },
+    progress: (s) => ({
+      current: Math.max(0, ...(s.warehouse ?? []).filter((w: any) => w.type === 'weapon').map((w: any) => w.level || 0)),
+      target: 10
+    })
+  },
+  {
+    id: 'swarm',
     title: 'Enjambre Autómata',
-    description: 'Posee al menos 10 Nanodrones Recolectores.',
+    description: 'Equipa 3 compañeros a la vez',
     icon: '🛸',
-    rewardText: 'Automatización Activa',
-    condition: (state) => state.factories.drone >= 10,
-    unlocked: false
+    rewardText: '+8% ingreso pasivo',
+    reward: { clickBonus: 0, passiveBonus: 0.08 },
+    progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 3), target: 3 })
   },
   {
-    id: 'quantum_leap',
-    title: 'Singularidad Cuántica',
-    description: 'Acumula un total histórico de 10,000 Nanitas.',
-    icon: '🌌',
-    rewardText: 'Eficiencia Cuántica',
-    condition: (state) => state.totalNanitesProduced >= 10000,
-    unlocked: false
+    id: 'overclocked',
+    title: 'Fuera de Especificación',
+    description: 'Consigue un recolector Sobrecargado',
+    icon: '🔥',
+    rewardText: '+10% poder de click',
+    reward: { clickBonus: 0.10, passiveBonus: 0 },
+    progress: (s) => ({
+      current: (s.warehouse ?? []).some((w: any) => w.overclock) ? 1 : 0,
+      target: 1
+    })
   },
   {
-    id: 'colossus_awakening',
-    title: 'Despertar Titánico',
-    description: 'Construye tu primer Coloso de Silicio.',
-    icon: '🦾',
-    rewardText: 'Poder Supremo',
-    condition: (state) => state.factories.colossus >= 1,
-    unlocked: false
+    id: 'crate_opener',
+    title: 'Descifrador',
+    description: 'Abre 25 cajas',
+    icon: '📦',
+    rewardText: '+12% ingreso pasivo',
+    reward: { clickBonus: 0, passiveBonus: 0.12 },
+    progress: (s) => ({ current: Math.min(s.cratesOpened ?? 0, 25), target: 25 })
+  },
+  {
+    id: 'jackpot',
+    title: 'Fortuna Divina',
+    description: 'Consigue un compañero Mítico o Divino de caja',
+    icon: '👑',
+    rewardText: '+15% poder de click',
+    reward: { clickBonus: 0.15, passiveBonus: 0 },
+    progress: (s) => ({
+      current: (s.companions ?? []).some((c: any) => c.rarity === 'Mítico' || c.rarity === 'Divino') ? 1 : 0,
+      target: 1
+    })
+  },
+  {
+    id: 'rich',
+    title: 'M magnate',
+    description: 'Acumula 250.000 Nanitas',
+    icon: '💰',
+    rewardText: '+15% ingreso pasivo',
+    reward: { clickBonus: 0, passiveBonus: 0.15 },
+    progress: (s) => ({ current: Math.min(Math.floor(s.nanites ?? 0), 250000), target: 250000 })
+  },
+  {
+    id: 'full_squad',
+    title: 'Escuadrón Completo',
+    description: 'Equipa 5 compañeros a la vez',
+    icon: '🤖',
+    rewardText: '+20% ingreso pasivo',
+    reward: { clickBonus: 0, passiveBonus: 0.20 },
+    progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 5), target: 5 })
+  },
+  {
+    id: 'deep_pockets',
+    title: 'Almacén Masivo',
+    description: 'Amplía el almacén a 20 slots',
+    icon: '🏗️',
+    rewardText: '+25% poder de click',
+    reward: { clickBonus: 0.25, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(s.warehouseCapacity ?? 0, 20), target: 20 })
+  },
+  {
+    id: 'tycoon',
+    title: 'Barón de Nanobots',
+    description: 'Alcanza 5.000 Nanitas por segundo',
+    icon: '🚀',
+    rewardText: '+30% poder de click y +30% pasivo',
+    reward: { clickBonus: 0.30, passiveBonus: 0.30 },
+    progress: (s) => ({ current: Math.min(Math.floor(s.passiveIncome ?? 0), 5000), target: 5000 })
   }
 ];
 
-export function checkAchievements(gameState: any, onUnlock: (achievement: Achievement) => void) {
-  ACHIEVEMENTS.forEach((ach) => {
-    if (!ach.unlocked && ach.condition(gameState)) {
-      ach.unlocked = true;
-      onUnlock(ach);
+export interface AchievementState {
+  unlocked: AchievementId[];
+  /**-click y pasivo acumulados de los logros ya desbloqueados */
+  clickBonus: number;
+  passiveBonus: number;
+}
+
+export function createAchievementState(): AchievementState {
+  return { unlocked: [], clickBonus: 0, passiveBonus: 0 };
+}
+
+/** Recalcula el progreso de todos los logros y devuelve los recién desbloqueados. */
+export function evaluateAchievements(state: any, achState: AchievementState): Achievement[] {
+  const newlyUnlocked: Achievement[] = [];
+  for (const ach of ACHIEVEMENTS) {
+    if (achState.unlocked.includes(ach.id)) continue;
+    const { current, target } = ach.progress(state);
+    if (current >= target) {
+      achState.unlocked.push(ach.id);
+      achState.clickBonus += ach.reward.clickBonus;
+      achState.passiveBonus += ach.reward.passiveBonus;
+      newlyUnlocked.push(ach);
     }
-  });
+  }
+  return newlyUnlocked;
 }

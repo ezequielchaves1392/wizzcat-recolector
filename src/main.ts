@@ -3,12 +3,14 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
 import { createGameLoop, COLLECTOR_BASE_COSTS, STORE_ITEMS, type BuffKey } from './gameLoop';
+import { showToast } from './utils/toast';
 import { renderWarehouseTab } from './components/warehouse';
 import { renderRankings } from './components/rankings';
 import { renderStoreTab } from './components/store';
 
 import { applyTheme, getSavedTheme, setTheme, type ThemeName } from './theme';
 import { showConfirmModal } from './utils/modal';
+import { sfx, isMuted, toggleMute } from './utils/audio';
 
 const app = document.querySelector('#app') as HTMLElement;
 let activeGameInstance: any = null;
@@ -128,6 +130,30 @@ function renderBuffHud(state: any, now: number) {
   }
 }
 
+// Aviso de logro desbloqueado. Aparece abajo al centro para no tapar el HUD
+// de buffs ni el contador de nanitas.
+function showAchievementPopup(achievement: { title: string; description: string; icon: string; rewardText: string }) {
+  sfx.reward(true);
+  const el = document.createElement('div');
+  el.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] card-glass border border-[var(--accent)] rounded-2xl px-5 py-3 flex items-center gap-3 shadow-2xl';
+  el.style.cssText = 'animation: achievementIn 400ms cubic-bezier(0.16, 1, 0.3, 1);';
+  el.innerHTML = `
+    <span class="text-3xl leading-none">${achievement.icon}</span>
+    <span class="flex flex-col gap-0.5">
+      <span class="text-[9px] font-mono uppercase tracking-widest" style="color: var(--text-muted)">Logro desbloqueado</span>
+      <span class="font-['Orbitron'] font-bold text-sm" style="color: var(--accent)">${achievement.title}</span>
+      <span class="text-[10px] font-mono" style="color: var(--text-main)">${achievement.rewardText}</span>
+    </span>
+  `;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity 400ms, transform 400ms';
+    el.style.opacity = '0';
+    el.style.transform = 'translate(-50%, 20px)';
+    setTimeout(() => el.remove(), 420);
+  }, 3200);
+}
+
 // mm:ss, o h:mm:ss a partir de una hora
 function formatCountdown(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -140,13 +166,6 @@ function formatCountdown(ms: number): string {
 
 // Aplicar tema guardado (o por defecto cyber-dark)
 applyTheme(getSavedTheme());
-
-// Verificar build
-console.log('Sistema de audio inicializado correctamente');
-
-
-
-// Nota: initAudioSystem se llama al final de renderGameLayout
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => e.preventDefault());
@@ -172,12 +191,15 @@ onAuthStateChanged(auth, async (user) => {
 async function initGame(user: any, username?: string) {
   activeGameInstance = await createGameLoop(user, (state, isAfk) => {
     updateUI(state, isAfk);
-  }, username);
+  }, username, (achievement) => {
+    showAchievementPopup(achievement);
+  });
 
   // Handle de depuración solo en dev: permite inspeccionar y probar el estado
   // desde la consola. Se elimina del build de producción.
   if (import.meta.env.DEV) {
     (window as any).__cyberforge = activeGameInstance;
+    (window as any).__cyberforgeRelayout = () => renderGameLayout(user, activeGameInstance);
   }
 
   // Esperar a que el DOM esté completamente listo antes de renderizar
@@ -235,7 +257,11 @@ function renderGameLayout(user: any, game: any) {
           <button id="rankings-btn" class="px-3.5 py-2 card-glass border border-[var(--border-color)] rounded-xl text-xs font-mono accent-text hover:border-[var(--accent)] transition cursor-pointer">
             🏆 Rankings
           </button>
-          
+
+          <button id="mute-btn" title="Activar o silenciar sonido" class="w-9 py-2 card-glass border border-[var(--border-color)] rounded-xl text-xs font-mono accent-text hover:border-[var(--accent)] transition cursor-pointer">
+            ${isMuted() ? '🔇' : '🔊'}
+          </button>
+
           <button id="logout-btn" class="px-3.5 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-xs font-mono text-red-400 hover:bg-red-500/25 transition cursor-pointer">
             Salir
           </button>
@@ -360,6 +386,9 @@ function renderGameLayout(user: any, game: any) {
 
   document.querySelector('#click-btn')?.addEventListener('click', (e) => {
     const mouseEvent = e as MouseEvent;
+    // El AudioContext solo puede crearse tras un gesto del usuario: este es el
+    // primer clic real de la partida
+    sfx.click();
     const beforeClick = game.getState().nanites;
     game.click();
     const afterClick = game.getState().nanites;
@@ -390,6 +419,12 @@ function renderGameLayout(user: any, game: any) {
 
   document.querySelector('#rankings-btn')?.addEventListener('click', () => {
     renderRankings(app, user, () => renderGameLayout(user, game));
+  });
+
+  const muteBtn = document.querySelector('#mute-btn');
+  muteBtn?.addEventListener('click', () => {
+    const muted = toggleMute();
+    muteBtn.textContent = muted ? '🔇' : '🔊';
   });
 
   document.querySelector('#logout-btn')?.addEventListener('click', async () => {
@@ -539,28 +574,6 @@ function formatNumber(num: number): string {
   if (floored >= 1e6) return (floored / 1e6).toFixed(2) + ' M';
   if (floored >= 1e3) return (floored / 1e3).toFixed(2) + ' K';
   return floored.toString();
-}
-
-// Sistema de notificaciones personalizado (toasts)
-function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
-  const toast = document.createElement('div');
-  const colors = {
-    success: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300',
-    error: 'bg-red-500/20 border-red-500/40 text-red-300',
-    info: 'bg-blue-500/20 border-blue-500/40 text-blue-300'
-  };
-  toast.className = `fixed top-4 right-4 z-50 px-4 py-3 rounded-xl border text-xs font-mono shadow-2xl transform transition-all duration-300 translate-x-full ${colors[type]}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  
-  // Animar entrada
-  setTimeout(() => toast.classList.remove('translate-x-full'), 10);
-  
-  // Auto-eliminar después de 3 segundos
-  setTimeout(() => {
-    toast.classList.add('translate-x-full');
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
 }
 
 function renderPlayerPanel(state: any) {

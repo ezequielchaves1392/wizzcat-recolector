@@ -63,6 +63,16 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
         extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Cristales: ${state.upgradeCrystals || 0}</div>`;
       } else if (itemKey === 'warehouseSlot') {
         extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Actual: ${state.warehouseCapacity} slots</div>`;
+      } else if (itemKey === 'companionSlot1') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Slots activos: ${state.maxCompanionSlots} → 2</div>`;
+      } else if (itemKey === 'companionSlot2') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Slots activos: ${state.maxCompanionSlots} → 5</div>`;
+      } else if (itemKey === 'clickX2Card' || itemKey === 'clickX3Card') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">Solo 30 s: úsalo en el pico de una racha</div>`;
+      } else if (itemKey === 'clickBuff') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">x2 al daño de click durante 30 min</div>`;
+      } else if (itemKey === 'passiveBuff') {
+        extraInfo = `<div class="text-[9px] text-[var(--text-muted)]">x2 a todo el ingreso pasivo durante 60 min</div>`;
       } else if (itemKey.startsWith('companionCardT') || itemKey.startsWith('weaponCardT')) {
         const tier = parseInt(itemKey.replace(/^(companion|weapon)CardT/, ''));
         const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges];
@@ -137,7 +147,7 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
     if (itemKey === 'backpackExpander') return state.warehouseCapacity >= 20;
     if (itemKey === 'afkCard') return (state.afkCards || 0) >= 3;
     if (itemKey === 'companionSlot1') return state.maxCompanionSlots >= 2;
-    if (itemKey === 'companionSlot2') return state.maxCompanionSlots >= 3;
+    if (itemKey === 'companionSlot2') return state.maxCompanionSlots >= 5;
     return false;
   }
 
@@ -145,7 +155,7 @@ export function renderStoreTab(container: HTMLElement, game: any, onBack: () => 
     if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 20) return 'Máximo alcanzado';
     if (itemKey === 'afkCard' && (state.afkCards || 0) >= 3) return 'Máximo acumulado';
     if (itemKey === 'companionSlot1' && state.maxCompanionSlots >= 2) return 'Ya comprado';
-    if (itemKey === 'companionSlot2' && state.maxCompanionSlots >= 3) return 'Ya comprado';
+    if (itemKey === 'companionSlot2' && state.maxCompanionSlots >= 5) return 'Ya comprado';
     return 'No disponible';
   }
 
