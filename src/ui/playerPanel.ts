@@ -9,8 +9,8 @@ import { AFFIX_BY_ID } from '../data/crafting';
  */
 export function renderPanel(state: any, realDamage: number, effectiveSlots?: number) {
   // --- Recolector equipado ---
-  const equippedItem = state.equippedWeaponId
-    ? state.warehouse.find((w: any) => w.id === state.equippedWeaponId)
+  const equippedItem = state.equippedCollectorId
+    ? state.warehouse.find((w: any) => w.id === state.equippedCollectorId)
     : null;
   const collectorContainer = document.querySelector('#equipped-collector-container');
 
@@ -18,11 +18,11 @@ export function renderPanel(state: any, realDamage: number, effectiveSlots?: num
     if (equippedItem) {
       const tier = equippedItem.tier || 1;
       const level = equippedItem.level || 0;
-      // Las armas crafteadas suben el techo: 20 normal, hasta 35 con 5 estrellas
+      // Las recolectores crafteadas suben el techo: 20 normal, hasta 35 con 5 estrellas
       const maxLevel = equippedItem.maxLevel || 20;
       const rarity = equippedItem.rarity || 'Común';
       const overclocked = Boolean(equippedItem.overclock);
-      // Los afijos son la diferencia entre dos armas del mismo tier
+      // Los afijos son la diferencia entre dos recolectores del mismo tier
       const affixes: string[] = equippedItem.affixes || [];
 
       collectorContainer.innerHTML = `
@@ -31,7 +31,7 @@ export function renderPanel(state: any, realDamage: number, effectiveSlots?: num
                       ${overclocked ? 'rarity-glow-sobrecargado' : ''}"
                style="background: color-mix(in srgb, var(--accent) 12%, transparent);
                       border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
-            <span class="[&>span>svg]:w-5 [&>span>svg]:h-5 accent-text">${ic('weapon')}</span>
+            <span class="[&>span>svg]:w-5 [&>span>svg]:h-5 accent-text">${ic('collector')}</span>
           </div>
 
           <div class="min-w-0 flex-1">
@@ -90,7 +90,7 @@ export function renderPanel(state: any, realDamage: number, effectiveSlots?: num
         <div class="text-center py-5">
           <div class="inline-flex items-center justify-center w-11 h-11 rounded-xl mb-2
                       opacity-40 [&>span>svg]:w-5 [&>span>svg]:h-5 text-[var(--text-muted)]">
-            ${ic('weapon')}
+            ${ic('collector')}
           </div>
           <div class="text-[11px] font-mono text-[var(--text-muted)]">
             Sin recolector equipado

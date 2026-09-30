@@ -9,7 +9,7 @@ export interface Companion {
 export interface WarehouseItem {
   id: string;
   name: string;
-  type: 'weapon' | 'companion' | 'crate' | 'key' | 'crystal' | 'consumable';
+  type: 'collector' | 'companion' | 'crate' | 'key' | 'crystal' | 'consumable';
   details: string;
   rarity: string;
   level?: number;
@@ -42,7 +42,7 @@ export interface GameState {
     epic: number;
     legendary: number;
   };
-  equippedWeaponId: string | null;
+  equippedCollectorId: string | null;
   companions: Companion[];
   activeCompanions: string[];
   warehouse: WarehouseItem[];

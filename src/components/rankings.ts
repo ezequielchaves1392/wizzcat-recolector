@@ -65,7 +65,7 @@ export function renderRankings(
       ${rows.map((r, i) => row(r, i, meId)).join('')}
       <p class="text-[9px] text-[var(--text-muted)] text-center mt-3 leading-relaxed px-2">
         Un logro público vale ${formatNumber(50_000)} puntos, uno secreto
-        ${formatNumber(250_000)} y cada arma que has forjado ${formatNumber(20_000)}.
+        ${formatNumber(250_000)} y cada recolector que has forjado ${formatNumber(20_000)}.
       </p>
     `;
   }).catch(() => {
@@ -99,7 +99,7 @@ function row(r: LeaderboardEntry, i: number, meId?: string): string {
             <span class="medal text-fuchsia-300" title="Logros secretos">${ic('lock', 'w-3 h-3')} ${medals}</span>
           ` : ''}
           ${r.forgedCount ? `
-            <span class="medal text-cyan-300" title="Armas forjadas">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>
+            <span class="medal text-cyan-300" title="Recolectores forjadas">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>
           ` : ''}
         </div>
       </div>

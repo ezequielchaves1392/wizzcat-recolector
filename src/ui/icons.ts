@@ -12,6 +12,8 @@ export const ICONS = {
   // Navegación
   warehouse: svg('<path d="M3 9.5 12 4l9 5.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><path d="M9 21v-7h6v7"/>'),
   store: svg('<path d="M4 8h16l-1 3a3 3 0 0 1-5.5 1.6A3 3 0 0 1 12 13a3 3 0 0 1-1.5-.4A3 3 0 0 1 5 11L4 8Z"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/><path d="M10 20v-5h4v5"/>'),
+  // Trofeo / posicion en el ranking
+  podium: svg('<path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v1a3 3 0 0 0 3 3"/><path d="M17 6h3v1a3 3 0 0 1-3 3"/>'),
   trophy: svg('<path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v1a3 3 0 0 0 3 3"/><path d="M17 6h3v1a3 3 0 0 1-3 3"/><path d="M12 14v3"/><path d="M9 20h6"/><path d="M10 17h4l.5 3h-5l.5-3Z"/>'),
   power: svg('<path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/>'),
   menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
@@ -30,7 +32,7 @@ export const ICONS = {
   globe: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/>'),
 
   // Colección
-  weapon: svg('<path d="M14.5 3.5 20 9l-2 2-1.5-1.5-6 6L8 18l-2.5.5L6 16l1.5-3.5-2-2L4 9"/><path d="M9 12l3 3"/>'),
+  collector: svg('<path d="M14.5 3.5 20 9l-2 2-1.5-1.5-6 6L8 18l-2.5.5L6 16l1.5-3.5-2-2L4 9"/><path d="M9 12l3 3"/>'),
   companion: svg('<rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V4"/><circle cx="9" cy="13" r="1.2" fill="currentColor"/><circle cx="15" cy="13" r="1.2" fill="currentColor"/><path d="M9.5 16.5h5"/>'),
   crate: svg('<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5v-7Z"/><path d="M3 8.5 12 13l9-4.5"/><path d="M12 13v7"/>'),
   achievement: svg('<circle cx="12" cy="9" r="5"/><path d="m8.5 13.5-1.5 7 5-2.5 5 2.5-1.5-7"/>'),
@@ -65,7 +67,15 @@ export const ICONS = {
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6" fill="currentColor"/>'),
   warning: svg('<path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>'),
   sparkle: svg('<path d="M12 3v5M12 16v5M3 12h5M16 12h5"/><path d="M6.5 6.5 9 9M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/>'),
+  // Audio. `sound` es el altavoz (efectos) y `music` la nota (pista): los
+  // dos interruptores de la cabecera necesitan icons que se distingan de un
+  // vistazo en movil, donde no cabe la etiqueta de texto.
   sound: svg('<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/>'),
+  // Nota musical doble: dos corcheas, la forma que todo el mundo asocia con
+  // "esto es musica" y no con "esto suena".
+  music: svg('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'),
+  // Salir de la sesion
+  logout: svg('<path d="M14 4H7a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h7"/><path d="M17 8l4 4-4 4"/><path d="M21 12H10"/>'),
   mute: svg('<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="m17 10 4 4M21 10l-4 4"/>')
 } as const;
 
@@ -73,12 +83,34 @@ export const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-/** Devuelve el marcado del icono listo para insertar. */
+/**
+ * Resuelve un nombre que puede venir de datos guardados, no del código.
+ *
+ * El caso real: los logros traían un emoji en el campo `icon` (`'⚡'`) y se
+ * pintaban con `ic(ach.icon)`. Como un emoji no es una clave del set, la
+ * búsqueda devolvía `undefined` y el HTML resultante llevaba literalmente la
+ * palabra "undefined" dentro del `<span>`, en mitad de la tarjeta.
+ *
+ * Por eso esta función NO falla nunca: si el nombre no existe devuelve el
+ * icono de interrogación. Un dato raro se ve raro; nunca rompe la pantalla.
+ */
+export function resolveIcon(name: unknown): IconName {
+  if (typeof name !== 'string') return 'sparkle';
+  const limpio = name.trim() as IconName;
+  return limpio in ICONS ? limpio : 'sparkle';
+}
+
+/** Igual que `icon()`, pero acepta nombres venidos de datos y nunca falla. */
 export function icon(name: IconName, className = 'w-4 h-4'): string {
   return `<span class="inline-flex ${className}">${ICONS[name]}</span>`;
 }
 
-/** Atajo para usar dentro de plantillas: `html`${icon('bolt')}`` */
+/** Atajo para usar dentro de plantillas: `html`${ic('bolt')}`` */
 export function ic(name: IconName, className = 'w-4 h-4') {
   return icon(name, className);
+}
+
+/** Versión tolerante a datos externos. Es la que debe usarse con `icon:` de logros. */
+export function icSafe(name: unknown, className = 'w-4 h-4') {
+  return icon(resolveIcon(name), className);
 }

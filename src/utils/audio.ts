@@ -5,9 +5,18 @@
 // petición de red, ni un problema de licencias. La música es generativa y el
 // juego va pogando a un acorde distinto, así que nunca se repite literal.
 //
+// Los DOS interruptores son independientes y persistentes:
+//
+//   efectos  (SFX)   -> sfxBus    -> los clics, las monedas, los errores
+//   musica           -> musicBus  -> el pad generativo
+//
+// Antes no lo eran: `toggleMute()` ponía a cero los DOS buses, así que
+// silenciar un efecto apagaba la música sin avisar y viceversa. Además los dos
+// botones de la cabecera no tenían listener: eran HTML puro.
+//
 // Mobile: el AudioContext se crea y se desbloquea en el primer toque, y todo
-// se suspende cuando la pestaña pasa a segundo plano para no)durar la batería
-// en segundo plano. Cada nodo que se crea se desconecta solo: sin fugas.
+// se suspende cuando la pestaña pasa a segundo plano para no gastar la
+// batería en segundo plano. Cada nodo que se crea se desconecta solo: sin fugas.
 // ==========================================================================
 
 let ctx: AudioContext | null = null;
@@ -15,14 +24,48 @@ let sfxBus: GainNode | null = null;
 let musicBus: GainNode | null = null;
 let compressor: DynamicsCompressorNode | null = null;
 
-let muted = localStorage.getItem('cyberforge_muted') === '1';
-let musicEnabled = localStorage.getItem('cyberforge_music') !== '0';
-// Nota: los efectos de audio se versionan con el multiplicador de la racha de
-// clics, que sube un 2.2% por clic hasta un techo de 22 clics.
-const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+/** Volumen de referencia de cada bus. El ajuste fino se hace sobre el bus. */
+const SFX_LEVEL = 0.5;
+const MUSIC_LEVEL = 0.16;
 
-export function isMuted() { return muted; }
+// Dos banderas separadas y dos claves de localStorage distintas. Es lo que
+// permite "música sí, efectos no", que es una combinación que el jugador pide
+// a menudo (jugar en silencio en el tren, con música de fondo en casa).
+let sfxEnabled = localStorage.getItem('cyberforge_sfx') !== '0';
+let musicEnabled = localStorage.getItem('cyberforge_music') !== '0';
+
+/**
+ * Suscriptores del cambio de estado.
+ *
+ * Los botones de la cabecera se redibujan al vuelo, así que quien los pinta
+ * necesita enterarse. Antes el estado se leía una vez al montar la vista, lo
+ * que hacía que el icono no cambiara hasta que se navegaba a otra pantalla.
+ */
+type AudioStateListener = (s: { sfx: boolean; music: boolean }) => void;
+const listeners = new Set<AudioStateListener>();
+
+export function onAudioStateChange(fn: AudioStateListener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function emit() {
+  const snapshot = { sfx: sfxEnabled, music: musicEnabled };
+  listeners.forEach(fn => {
+    try { fn(snapshot); } catch { /* un suscriptor roto no debe cortar al resto */ }
+  });
+}
+
+/** ¿Están los efectos de sonido activos? */
+export function isSfxEnabled() { return sfxEnabled; }
+/** ¿Está la música activa? */
 export function isMusicEnabled() { return musicEnabled; }
+/**
+ * Estado global. Antes `isMuted()` significaba "no suena nada" y se usaba
+ * para pintar el icono de efectos; con dos interruptores esa lectura
+ * ya no vale, así que el nombre se mantiene solo por compatibilidad.
+ */
+export function isMuted() { return !sfxEnabled; }
 
 function ensureContext(): AudioContext | null {
   if (ctx) {
@@ -46,11 +89,11 @@ function ensureContext(): AudioContext | null {
     compressor.connect(ctx.destination);
 
     sfxBus = ctx.createGain();
-    sfxBus.gain.value = muted ? 0 : 0.5;
+    sfxBus.gain.value = sfxEnabled ? SFX_LEVEL : 0;
     sfxBus.connect(compressor);
 
     musicBus = ctx.createGain();
-    musicBus.gain.value = musicEnabled ? 0.16 : 0;
+    musicBus.gain.value = musicEnabled ? MUSIC_LEVEL : 0;
     musicBus.connect(compressor);
     return ctx;
   } catch {
@@ -58,33 +101,72 @@ function ensureContext(): AudioContext | null {
   }
 }
 
-export function toggleMute(): boolean {
-  muted = !muted;
-  localStorage.setItem('cyberforge_muted', muted ? '1' : '0');
-  const audio = ensureContext();
-  if (audio && sfxBus && musicBus) {
-    const t = audio.currentTime;
+/**
+ * Aplica el estado actual a los buses, sin depender del contexto.
+ *
+ * Se separa del toggle para que haya UN solo sitio donde se decide qué
+ * volumen lleva cada bus. Con la lógica repartida entre `toggleMute`,
+ * `toggleMusic` y `ensureContext`, cualquier bandera nueva obligaba a
+ * acordarse de los tres sitios.
+ */
+function applyBusLevels(fade = 0.05) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  if (sfxBus) {
     sfxBus.gain.cancelScheduledValues(t);
-    sfxBus.gain.setTargetAtTime(muted ? 0 : 0.5, t, 0.05);
-    musicBus.gain.setTargetAtTime(muted || !musicEnabled ? 0 : 0.16, t, 0.2);
+    sfxBus.gain.setTargetAtTime(sfxEnabled ? SFX_LEVEL : 0, t, fade);
   }
-  return muted;
+  if (musicBus) {
+    musicBus.gain.cancelScheduledValues(t);
+    musicBus.gain.setTargetAtTime(musicEnabled ? MUSIC_LEVEL : 0, t, Math.max(fade, 0.2));
+  }
 }
 
-export function toggleMusic(): boolean {
-  musicEnabled = !musicEnabled;
-  localStorage.setItem('cyberforge_music', musicEnabled ? '1' : '0');
-  const audio = ensureContext();
-  if (audio && musicBus) {
-    musicBus.gain.setTargetAtTime(muted || !musicEnabled ? 0 : 0.16, audio.currentTime, 0.4);
-  }
+/**
+ * Activa o desactiva los EFECTOS. No toca la música.
+ * Devuelve el estado nuevo para que quien llama pueda pintar el icono.
+ */
+export function setSfxEnabled(on: boolean): boolean {
+  sfxEnabled = on;
+  localStorage.setItem('cyberforge_sfx', on ? '1' : '0');
+  ensureContext();
+  applyBusLevels();
+  emit();
+  return sfxEnabled;
+}
+
+/** Activa o desactiva la MÚSICA. No toca los efectos. */
+export function setMusicEnabled(on: boolean): boolean {
+  musicEnabled = on;
+  localStorage.setItem('cyberforge_music', on ? '1' : '0');
+  ensureContext();
+  applyBusLevels(0.25);
   if (musicEnabled) startMusic();
+  else stopMusic();
+  emit();
   return musicEnabled;
+}
+
+/**
+ * Interruptor de efectos. Se mantiene con el nombre viejo porque el juego
+ * entero lo llama así; ahora solo afecta a `sfxBus`.
+ */
+export function toggleMute(): boolean {
+  return setSfxEnabled(!sfxEnabled);
+}
+
+/** Interruptor de música. Se mantiene con el nombre viejo. */
+export function toggleMusic(): boolean {
+  return setMusicEnabled(!musicEnabled);
 }
 
 /** Un tono con envolvente ADSR corta. Se desconecta sola al terminar. */
 function blip(freq: number, duration: number, type: OscillatorType = 'sine', volume = 1, delay = 0) {
-  const audio = muted ? null : ensureContext();
+  // Si los efectos están apagados no se crea NADA: no hace falta ni el
+  // contexto ni los nodos. Además evita que un efecto se oiga por el retardo
+  // del `setTargetAtTime` en el bus justo después de silenciarlo.
+  if (!sfxEnabled) return;
+  const audio = ensureContext();
   if (!audio || !sfxBus) return;
   const t0 = audio.currentTime + delay;
   const osc = audio.createOscillator();
@@ -281,7 +363,7 @@ function stopPad() {
 }
 
 function musicTick() {
-  if (!musicEnabled || muted || document.hidden) return;
+  if (!musicEnabled || document.hidden) return;
   const audio = ensureContext();
   if (!audio) return;
 
@@ -319,10 +401,42 @@ export function setAudioSuspended(suspended: boolean) {
   }
 }
 
-/** Arranca todo tras el primer gesto real del usuario (requisito del navegador). */
+/**
+ * Arranca todo tras el primer gesto real del usuario.
+ *
+ * Requisito del navegador: un `AudioContext` creado sin un gesto previo nace
+ * en estado `suspended` y no suena. Por eso `ensureContext` por sí solo no
+ * basta: hay que crearlo desde un manejador de evento.
+ *
+ * Se llama desde el click del recolector y desde el toque en cualquier sitio,
+ * porque no siempre el jugador pulsa el botón grande antes de pasar a otra
+ * pantalla.
+ */
 export function primeAudio() {
   const audio = ensureContext();
   if (!audio) return;
   audio.resume().catch(() => {});
   if (musicEnabled) startMusic();
+}
+
+/**
+ * Desbloquea el audio desde cualquier gesto, sin importar qué se pulse.
+ *
+ * Se engancha una sola vez al primer `pointerdown` del documento. Sin esto,
+ * un jugador que entra y va directo al almacén (sin tocar el recolector)
+ * navega en silencio hasta que vuelve a la base.
+ */
+let autoPrimeHooked = false;
+export function installAudioUnlock() {
+  if (autoPrimeHooked) return;
+  autoPrimeHooked = true;
+  const unlock = () => {
+    primeAudio();
+    // `once` no basta: si el usuario silencia todo y vuelve a pulsar,
+    // el contexto ya está creado y solo hay que reanudarlo.
+    window.removeEventListener('pointerdown', unlock);
+    window.removeEventListener('keydown', unlock);
+  };
+  window.addEventListener('pointerdown', unlock, { passive: true });
+  window.addEventListener('keydown', unlock);
 }

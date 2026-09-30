@@ -17,7 +17,7 @@
 //
 // 3. VENTA DINÁMICA. `item.sellPrice` era un número congelado en el save.
 //    Ahora se pide al game loop, que aplica la valoración por tier, potencial,
-//    afijos y la bonificación de venta del árbol de pasivas. Vender un arma
+//    afijos y la bonificación de venta del árbol de pasivas. Vender un recolector
 //    crafteada de 5 estrellas vale 12x lo que valía al comprarla.
 //
 // 4. SIN EMOJIS. Se usan los iconos SVG del set. El emoji 🤖 salía como un
@@ -37,7 +37,7 @@ import { AFFIX_BY_ID } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 
 const TYPE_ICON: Record<string, any> = {
-  weapon: 'weapon',
+  collector: 'collector',
   companion: 'companion',
   crate: 'crate',
   key: 'key',
@@ -46,7 +46,7 @@ const TYPE_ICON: Record<string, any> = {
 };
 
 const TYPE_LABEL: Record<string, string> = {
-  weapon: 'Recolector',
+  collector: 'Recolector',
   companion: 'Compañero',
   crate: 'Caja',
   key: 'Llave',
@@ -92,7 +92,7 @@ function draw(
   // --- Filtrado y orden --------------------------------------------------
   let items = warehouse.filter((w: any) => {
     if (ui.filter === 'all') return true;
-    if (ui.filter === 'otros') return !['weapon', 'companion'].includes(w.type);
+    if (ui.filter === 'otros') return !['collector', 'companion'].includes(w.type);
     return w.type === ui.filter;
   });
 
@@ -115,7 +115,7 @@ function draw(
   // --- Celdas -----------------------------------------------------------
   const cell = (w: any, i: number) => {
     const isSel = w.id === ui.selectedId;
-    const isEquipped = (w.type === 'weapon' && w.equipped) || (w.type === 'companion' && state.activeCompanions.includes(w.id));
+    const isEquipped = (w.type === 'collector' && w.equipped) || (w.type === 'companion' && state.activeCompanions.includes(w.id));
     const count = w.stackable ? (w.stackCount || 1) : 0;
     return `
       <button class="inv-cell ${isSel ? 'is-selected' : ''} ${count > 0 ? 'is-stackable' : ''}"
@@ -170,7 +170,7 @@ function draw(
         <div class="flex flex-wrap items-center gap-1.5 mb-3">
           ${([
             { id: 'all', label: 'Todo' },
-            { id: 'weapon', label: 'Recolectores' },
+            { id: 'collector', label: 'Recolectores' },
             { id: 'companion', label: 'Compañeros' },
             { id: 'otros', label: 'Otros' }
           ]).map(f => `
@@ -255,9 +255,9 @@ function detailPanel(item: any, state: any, game: any): string {
  * cerrarse. Un solo origen para el contenido hace que eso no vuelva a pasar.
  */
 function detailContent(item: any, state: any, game: any): string {
-  const isWeapon = item.type === 'weapon';
+  const isCollector = item.type === 'collector';
   const isCompanion = item.type === 'companion';
-  const isEquipped = (isWeapon && item.equipped) || (isCompanion && state.activeCompanions.includes(item.id));
+  const isEquipped = (isCollector && item.equipped) || (isCompanion && state.activeCompanions.includes(item.id));
   const sellPrice = game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0;
   const maxStack = MAX_STACK[item.type] ?? 1;
   const maxLevel = item.maxLevel ?? 20;
@@ -272,7 +272,7 @@ function detailContent(item: any, state: any, game: any): string {
     </li>`;
   }).join('');
 
-  const valuation = isWeapon ? valuationBreakdown(item) : [];
+  const valuation = isCollector ? valuationBreakdown(item) : [];
 
   return `
         <div class="flex items-start gap-2.5 mb-3">
@@ -323,7 +323,7 @@ function detailContent(item: any, state: any, game: any): string {
           </div>
         ` : ''}
 
-        ${isWeapon && (item.level ?? 0) > 0 ? `
+        ${isCollector && (item.level ?? 0) > 0 ? `
           <div class="mb-2.5">
             <div class="label-caps mb-1">Nivel ${item.level} / ${maxLevel}</div>
             <div class="meter is-tall"><span style="width:${(item.level / maxLevel) * 100}%"></span></div>
@@ -347,7 +347,7 @@ function detailContent(item: any, state: any, game: any): string {
         ` : ''}
 
         <div class="flex flex-col gap-1.5 mt-3">
-          ${isWeapon || isCompanion ? `
+          ${isCollector || isCompanion ? `
             <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="equip">
               ${isEquipped ? 'Desequipar' : 'Equipar'}
@@ -366,7 +366,7 @@ function detailContent(item: any, state: any, game: any): string {
                     data-act="use">Usar</button>
           ` : ''}
 
-          ${isWeapon ? `
+          ${isCollector ? `
             <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="upgrade" ${isEquipped ? '' : 'disabled style="opacity:.4"'}
                     title="${isEquipped ? '' : 'Equípala primero'}">
@@ -452,7 +452,7 @@ function wire(container: HTMLElement, game: any, onBack: () => void, onStateChan
       case 'equip':
         if (!item) return;
         sfx.equip();
-        if (item.type === 'weapon') game.equipCollector(item.id);
+        if (item.type === 'collector') game.equipCollector(item.id);
         else if (item.type === 'companion') {
           const ok = game.equipCompanion(item.id);
           if (!ok) showToast('No hay slots de compañero libres.', 'error');
@@ -471,11 +471,11 @@ function wire(container: HTMLElement, game: any, onBack: () => void, onStateChan
       case 'upgrade':
         if (!item) return;
         sfx.use();
-        if (item.id !== game.getState().equippedWeaponId) {
+        if (item.id !== game.getState().equippedCollectorId) {
           showToast('Equipa el recolector primero.', 'info');
           return;
         }
-        const res = game.upgradeEquippedWeapon();
+        const res = game.upgradeEquippedCollector();
         if (res) showToast(res.msg, res.success ? 'success' : 'error');
         redraw();
         break;
@@ -742,13 +742,13 @@ function useConsumable(game: any, item: any, redraw: () => void) {
 
 function sellItem(game: any, item: any, redraw: () => void) {
   const state = game.getState();
-  const isEquipped = (item.type === 'weapon' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
+  const isEquipped = (item.type === 'collector' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
   if (isEquipped) {
     showToast('Desequípalo antes de venderlo.', 'info');
     return;
   }
   const count = (state.warehouse as any[]).filter((w: any) => w.type === item.type).length;
-  if ((item.type === 'weapon' || item.type === 'companion') && count <= 1) {
+  if ((item.type === 'collector' || item.type === 'companion') && count <= 1) {
     showToast('No puedes vender el último de su tipo.', 'error');
     return;
   }

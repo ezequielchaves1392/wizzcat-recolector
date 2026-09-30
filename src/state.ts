@@ -20,7 +20,7 @@ export const defaultState: GameState = {
     epic: 0,
     legendary: 0
   },
-  equippedWeaponId: null,
+  equippedCollectorId: null,
   companions: [],
   activeCompanions: [],
   warehouse: [],

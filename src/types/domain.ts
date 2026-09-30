@@ -2,7 +2,7 @@
 // Cyber-Forge · Tipos del dominio
 //
 // Un único lugar donde vive la forma de los datos. Antes cada módulo declaraba
-// su propia versión de `WeaponItem` con campos distintos, y el guardado en
+// su propia versión de `CollectorItem` con campos distintos, y el guardado en
 // Firestore terminaba guardando objetos que ningún módulo sabía leer.
 // ==========================================================================
 
@@ -13,7 +13,7 @@ export const RARITY_ORDER: Rarity[] = [
   'Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino', 'Sobrecargado'
 ];
 
-/** Atributo que una arma crafteada hereda de sus materiales. */
+/** Atributo que un recolector crafteado hereda de sus materiales. */
 export interface Affix {
   id: string;
   name: string;
@@ -36,26 +36,26 @@ export interface Affix {
   };
 }
 
-export interface WeaponItem {
+export interface CollectorItem {
   id: string;
   name: string;
-  type: 'weapon';
+  type: 'collector';
   details: string;
   rarity: Rarity;
   tier: number;
   level: number;
   damage: number;
-  /** Techo de nivel. Las armas crafteadas pueden superar el 20 normal. */
+  /** Techo de nivel. Las recolectores crafteadas pueden superar el 20 normal. */
   maxLevel?: number;
-  /** Potencia acumulada de la fusión, 1..5. Solo en armas crafteadas. */
+  /** Potencia acumulada de la fusión, 1..5. Solo en recolectores crafteadas. */
   potential?: number;
-  /** Atributos heredados. Solo en armas crafteadas. */
+  /** Atributos heredados. Solo en recolectores crafteadas. */
   affixes?: string[];
   /** Usuario que la forjó. La torna única e irrepetible. */
   forgedBy?: string;
   /** Fecha de forja, para mostrar antigüedad en el mercado. */
   forgedAt?: number;
-  /** Marca de arma sobrecargada de caja. */
+  /** Marca de recolector sobrecargado de caja. */
   overclock?: boolean;
   /** Rareza de los materiales con los que se forjó, para el valor. */
   lineage?: Rarity[];
@@ -89,7 +89,7 @@ export interface StackableItem {
   sellable?: boolean;
 }
 
-export type WarehouseItem = WeaponItem | CompanionItem | StackableItem;
+export type WarehouseItem = CollectorItem | CompanionItem | StackableItem;
 
 // --------------------------------------------------------------------------
 // Prestige
@@ -191,7 +191,7 @@ export interface PrestigeState {
   nodeLevels: Record<string, number>;
   /** Esquirlas de crafteo acumuladas. */
   shards: number;
-  /** Armas crafteadas por el jugador. */
+  /** Recolectores crafteadas por el jugador. */
   forgedCount: number;
 }
 
@@ -212,6 +212,6 @@ export interface ProfileState {
   /** Logros públicos: id de logro -> fecha. Secretos: solo el contador. */
   achievements: Record<string, number>;
   secretAchievements: string[];
-  forgedWeapons: number;
-  bestWeapon?: { name: string; damage: number; tier: number };
+  forgedCollectors: number;
+  bestCollector?: { name: string; damage: number; tier: number };
 }

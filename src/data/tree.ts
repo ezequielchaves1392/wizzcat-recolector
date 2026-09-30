@@ -32,7 +32,7 @@ export const TREE_NODES: TreeNode[] = [
   },
   {
     id: 'core_edge', name: 'Filo Afilado', description: '+8% al daño de click por nivel.',
-    icon: 'weapon', category: 'multiplicador', tier: 0, requires: [],
+    icon: 'collector', category: 'multiplicador', tier: 0, requires: [],
     baseCost: 1, costGrowth: G, maxLevel: 10,
     bonus: { clickMult: 0.08 }, x: 0, y: 1
   },
@@ -49,7 +49,7 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { costReduction: 0.04 }, x: 0, y: 3
   },
   {
-    id: 'blueprint', name: 'Planos Viejos', description: 'Desbloquea el Crafteo de armas.',
+    id: 'blueprint', name: 'Planos Viejos', description: 'Desbloquea el Crafteo de recolectores.',
     icon: 'sparkle', category: 'exclusivo', tier: 0, requires: [],
     baseCost: 4, costGrowth: 1, maxLevel: 1,
     bonus: {}, x: 0, y: 4
@@ -140,7 +140,7 @@ export const TREE_NODES: TreeNode[] = [
   },
   {
     id: 'master_smith', name: 'Maestro Forjador', description: '+12% a la probabilidad de crafteo.',
-    icon: 'weapon', category: 'crafteo', tier: 3, requires: ['forge_luck', 'multiplier_amp'],
+    icon: 'collector', category: 'crafteo', tier: 3, requires: ['forge_luck', 'multiplier_amp'],
     baseCost: 45, costGrowth: 1.7, maxLevel: 5,
     bonus: { craftLuck: 0.12 }, x: 3, y: 3
   },
@@ -171,8 +171,8 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { storageSlots: 8 }, x: 4, y: 2
   },
   {
-    id: 'chaos_forge', name: 'Forja del Caos', description: '+20% a la probabilidad de crafteo. Armas más caras de reparar.',
-    icon: 'weapon', category: 'crafteo', tier: 4, requires: ['master_smith', 'core_yield'],
+    id: 'chaos_forge', name: 'Forja del Caos', description: '+20% a la probabilidad de crafteo. Recolectores más caras de reparar.',
+    icon: 'collector', category: 'crafteo', tier: 4, requires: ['master_smith', 'core_yield'],
     baseCost: 260, costGrowth: 2.1, maxLevel: 4,
     bonus: { craftLuck: 0.20 }, x: 4, y: 3
   }
@@ -188,7 +188,7 @@ export const TREE_CATEGORY_META: Record<string, { label: string; color: string; 
   automatizacion: { label: 'Automatización', color: 'text-cyan-400', icon: 'bolt' },
   multiplicador: { label: 'Multiplicadores', color: 'text-purple-400', icon: 'sparkle' },
   economia: { label: 'Economía', color: 'text-amber-400', icon: 'store' },
-  crafteo: { label: 'Crafteo', color: 'text-rose-400', icon: 'weapon' },
+  crafteo: { label: 'Crafteo', color: 'text-rose-400', icon: 'collector' },
   exclusivo: { label: 'Exclusivos', color: 'text-emerald-400', icon: 'crystal' }
 };
 

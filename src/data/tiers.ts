@@ -1,5 +1,5 @@
 // ==========================================================================
-// Tiers de companeros y armas.
+// Tiers de companeros y recolectores.
 //
 // Curva de poder POR TIER (no por nivel). Antes cada tier daba +5 fijos mientras
 // el coste se duplicaba: el coste por punto de poder pasaba de 667 (T1) a 21.333
@@ -51,8 +51,8 @@ export const TIER_SYSTEM = {
     9: ['Entidad Primordial', 'Ser Trascendente', 'Conciencia Universal'],
     10: ['Dios de la Guerra', 'El Omnipotente', 'El Infinito']
   },
-  // Nombres de armas por tier
-  weaponNames: {
+  // Nombres de recolectores por tier
+  collectorNames: {
     1: ['Blaster Láser', 'Pistola de Plasma', 'Rifle de Pulso'],
     2: ['Cañón de Partículas', 'Lanzador de Energía', 'Desintegrador Táctico'],
     3: ['Aniquilador Cuántico', 'Devorador de Materia', 'Coloso de Fuego'],
@@ -61,7 +61,7 @@ export const TIER_SYSTEM = {
     6: ['Excalibur', 'Mjolnir', 'Gungnir'],
     7: ['Lanza del Destino', 'Espada del Crepúsculo', 'Hacha del Caos'],
     8: ['Corte del Tiempo', 'Filo del Infinito', 'Navaja Cósmica'],
-    9: ['Arma del Apocalipsis', 'Instrumento de la Muerte', 'Herencia de los Dioses'],
+    9: ['Recolector del Apocalipsis', 'Instrumento de la Muerte', 'Herencia de los Dioses'],
     10: ['El Principio y El Fin', 'La Última Palabra', 'El Todo y La Nada']
   },
   // Rareza por tier

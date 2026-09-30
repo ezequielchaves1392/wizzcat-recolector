@@ -17,7 +17,7 @@
 // necesidad de explaining las conexiones cruzadas con líneas SVG.
 // ==========================================================================
 
-import { ic } from './icons';
+import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip } from './pageShell';
 import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META } from '../data/tree';
 import { canBuyNode, nextCores, treeCompletion, PRESTIGE_MIN_NANITES } from '../data/prestige';
@@ -123,7 +123,7 @@ export function renderPrestigePage(
 
     return `
       <button class="${cls}" data-node="${node.id}" aria-label="${node.name}">
-        <span class="${cat?.color || 'accent-text'} [&>span>svg]:w-4 [&>span>svg]:h-4">${ic(node.icon as any)}</span>
+        <span class="${cat?.color || 'accent-text'} [&>span>svg]:w-4 [&>span>svg]:h-4">${icSafe(node.icon)}</span>
         <span class="text-[9px] leading-[1.15] font-mono text-[var(--text-main)] px-0.5 line-clamp-2">
           ${node.name}
         </span>
@@ -182,7 +182,7 @@ export function renderPrestigePage(
           <div class="label-caps mb-1" style="color:#f87171">Se pierde</div>
           <ul class="space-y-0.5 text-[var(--text-muted)] leading-snug">
             <li>Nanitas y todo el ingreso pasivo</li>
-            <li>Armas, compañeros e infraestructura</li>
+            <li>Recolectores, compañeros e infraestructura</li>
             <li>Llaves, cristales y cajas sin abrir</li>
           </ul>
         </div>
@@ -191,7 +191,7 @@ export function renderPrestigePage(
           <ul class="space-y-0.5 text-[var(--text-muted)] leading-snug">
             <li>Núcleos, nodos del árbol y cosméticos</li>
             <li>Logros y sus bonificaciones</li>
-            <li>Esquirlas y armas que ya forjaste</li>
+            <li>Esquirlas y recolectores que ya forjaste</li>
           </ul>
         </div>
       </div>
@@ -275,7 +275,7 @@ function wireEvents(container: HTMLElement, game: any, onBack: () => void, state
     });
     if (gained <= 0) return;
     showConfirmModal(
-      `Reciclarás todo tu progreso y ganarás ${gained} núcleos. Armas, compañeros, nanitas, cajas y cristales se pierden.`,
+      `Reciclarás todo tu progreso y ganarás ${gained} núcleos. Recolectores, compañeros, nanitas, cajas y cristales se pierden.`,
       () => {
         const res = game.prestige();
         if (res.success) {

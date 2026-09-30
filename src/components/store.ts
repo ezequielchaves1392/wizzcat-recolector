@@ -47,7 +47,7 @@ const CATEGORIES: Category[] = [
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
   { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: ['companionSlot1', 'companionSlot2'] },
   { id: 'companeros', label: 'Compañeros', icon: 'companion', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
-  { id: 'armas', label: 'Armas', icon: 'weapon', items: Array.from({ length: 10 }, (_, i) => `weaponCardT${i + 1}`) }
+  { id: 'recolectores', label: 'Recolectores', icon: 'collector', items: Array.from({ length: 10 }, (_, i) => `collectorCardT${i + 1}`) }
 ];
 
 /**
@@ -60,15 +60,15 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     detail: 'Puede dar nanitas, cristales, llaves, drones T1 o una ranura de almacén. Es la única caja cuyo contenido medio cubre su precio.'
   },
   rareCrate: {
-    what: 'Caja de nivel medio: crystals, compañeros T3 y armas T4 sobrecargadas.',
-    detail: 'Las armas sobrecargadas valen bastante más que una del mismo tier en la tienda. Suele salir rentable si necesitas material de forja.'
+    what: 'Caja de nivel medio: crystals, compañeros T3 y recolectores T4 sobrecargadas.',
+    detail: 'Las recolectores sobrecargadas valen bastante más que una del mismo tier en la tienda. Suele salir rentable si necesitas material de forja.'
   },
   epicCrate: {
-    what: 'Caja alta: compañeros T6, armas T6 y Piedras de Calibración.',
+    what: 'Caja alta: compañeros T6, recolectores T6 y Piedras de Calibración.',
     detail: 'Puede incluir dos compañeros exclusivos que no se compran de ninguna otra forma, y es la mejor fuente de piedras de calibración.'
   },
   legendaryCrate: {
-    what: 'La caja máxima: armas T8, Nanopartículas y tres exclusivos.',
+    what: 'La caja máxima: recolectores T8, Nanopartículas y tres exclusivos.',
     detail: 'El premio habitual son los compañeros Divinos que solo existen aquí. La Nanopartícula de Estabilidad sale casi siempre de esta caja.'
   },
 
@@ -78,7 +78,7 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   },
   upgradeCrystal: {
     what: 'Cristal para subir el nivel del recolector equipado.',
-    detail: 'El nivel multiplica el daño del arma y sube hasta 20 en las de tienda, o 35 en las crafteadas. El coste en cristales crece por nivel y el éxito baja.'
+    detail: 'El nivel multiplica el daño del recolector y sube hasta 20 en las de tienda, o 35 en las crafteadas. El coste en cristales crece por nivel y el éxito baja.'
   },
   warehouseSlot: {
     what: 'Añade 5 ranuras permanentes al almacén.',
@@ -116,7 +116,7 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   },
   stabilityNano: {
     what: 'Sube 8 puntos la probabilidad y garantiza un afijo extra.',
-    detail: 'Es el único consumible que mejora el arma resultante, no solo las probabilidades. Sale de la Caja Legendaria.'
+    detail: 'Es el único consumible que mejora el recolector resultante, no solo las probabilidades. Sale de la Caja Legendaria.'
   },
 
   companionSlot1: {
@@ -130,7 +130,7 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
 };
 
 /** Descripción de las tarjetas de tier, generada: cambia el número, no la idea. */
-function tierDescription(kind: 'companion' | 'weapon', tier: number): { what: string; detail: string } {
+function tierDescription(kind: 'companion' | 'collector', tier: number): { what: string; detail: string } {
   const range = tierRange(tier);
   const r = tierRarity(tier);
   if (kind === 'companion') {
@@ -160,7 +160,7 @@ const ui = { category: 'cajas', detail: null as string | null };
 /** Icono del producto según su clave. */
 function iconFor(itemKey: string): IconName {
   if (itemKey.endsWith('Crate')) return 'crate';
-  if (itemKey.startsWith('weaponCardT')) return 'weapon';
+  if (itemKey.startsWith('collectorCardT')) return 'collector';
   if (itemKey.startsWith('companionCardT')) return 'companion';
   const map: Record<string, IconName> = {
     key: 'key', upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
@@ -176,7 +176,7 @@ function rarityOf(itemKey: string): string | null {
     return ({ commonCrate: 'Común', rareCrate: 'Raro', epicCrate: 'Épico', legendaryCrate: 'Legendario' } as Record<string, string>)[itemKey] ?? null;
   }
   if (itemKey.startsWith('companionCardT')) return tierRarity(parseInt(itemKey.slice(14)));
-  if (itemKey.startsWith('weaponCardT')) return tierRarity(parseInt(itemKey.slice(11)));
+  if (itemKey.startsWith('collectorCardT')) return tierRarity(parseInt(itemKey.slice(11)));
   const map: Record<string, string> = {
     key: 'Común', upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
     afkCard: 'Raro', clickBuff: 'Raro', passiveBuff: 'Épico', clickX2Card: 'Raro', clickX3Card: 'Épico',
@@ -189,7 +189,7 @@ function rarityOf(itemKey: string): string | null {
 function descFor(itemKey: string): { what: string; detail: string } {
   if (DESCRIPTIONS[itemKey]) return DESCRIPTIONS[itemKey];
   if (itemKey.startsWith('companionCardT')) return tierDescription('companion', parseInt(itemKey.slice(14)));
-  if (itemKey.startsWith('weaponCardT')) return tierDescription('weapon', parseInt(itemKey.slice(11)));
+  if (itemKey.startsWith('collectorCardT')) return tierDescription('collector', parseInt(itemKey.slice(11)));
   return { what: '', detail: '' };
 }
 

@@ -1,28 +1,28 @@
 // ==========================================================================
-// Crafteo de armas · Fusión, autoría y potencial
+// Crafteo de recolectores · Fusión, autoría y potencial
 //
 // Reglas de diseño que sostienen el sistema:
 //
-//  1. FUSIÓN: 3 armas del mismo tier T -> 1 arma de tier T+1. Tres en vez de
+//  1. FUSIÓN: 3 recolectores del mismo tier T -> 1 recolector de tier T+1. Tres en vez de
 //     dos porque con dos el jugador solo tiene una decisión binaria; con tres
 //     puede elegir CUALES tres, y eso importa cuando hay afijos en juego.
 //
-//  2. AUTORÍA: toda arma crafteada registra quién la forjó. Es lo que hace que
-//     dos armas del mismo tier no sean el mismo objeto. Un arma de otro
+//  2. AUTORÍA: todo recolector crafteado registra quién la forjó. Es lo que hace que
+//     dos recolectores del mismo tier no sean el mismo objeto. Un recolector de otro
 //     jugador vale más en el mercado, pero no rinde más: son dos ejes separados.
 //
 //  3. POTENCIAL: 1..5 estrellas, determinado por la rareza de los materiales,
 //     su nivel y el uso de Piedras de Calibración. El potencial sube el techo
 //     de nivel (20 normal, hasta 35 con 5 estrellas) y multiplica el valor:
-//     es lo que hace que un arma crafteada sea claramente superior a una de
+//     es lo que hace que un recolector crafteado sea claramente superior a una de
 //     tienda del mismo tier.
 //
-//  4. HERENCIA: la nueva arma conserva 1..3 afijos de los materiales. Con
+//  4. HERENCIA: la nueva recolector conserva 1..3 afijos de los materiales. Con
 //     más estrellas, más afijos. Los afijos se eligen al azar del pool, pero
 //     con pesos: los raros pesan menos.
 //
-//  5. IDENTIDAD: cada arma conserva quién la forjó, para que el objeto sea
-//     único y el mercado tenga historia. Un arma hecha por alguien conocido
+//  5. IDENTIDAD: cada recolector conserva quién la forjó, para que el objeto sea
+//     único y el mercado tenga historia. Un recolector hecha por alguien conocido
 //     vale más en la tienda, pero rinde lo mismo en tu daño: son dos ejes
 //     separados a propósito, para que la fama no se compre con dinero.
 //
@@ -32,7 +32,7 @@
 //     acerca un poco la garantía del siguiente intento.
 // ==========================================================================
 
-import type { Affix, Rarity, WeaponItem } from '../types/domain';
+import type { Affix, Rarity, CollectorItem } from '../types/domain';
 import { TIER_SYSTEM } from './tiers';
 
 // --------------------------------------------------------------------------
@@ -56,15 +56,15 @@ export const AFFIXES: Affix[] = [
     effect: { critChance: 0.08 } },
   { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', rarity: 'Legendario',
     effect: { critChance: 0.14 } },
-  { id: 'aff_luck', name: 'Suerte de Forja', description: '+10% a la probabilidad de crafteo del arma.', rarity: 'Legendario',
+  { id: 'aff_luck', name: 'Suerte de Forja', description: '+10% a la probabilidad de crafteo del recolector.', rarity: 'Legendario',
     effect: { craftLuck: 0.10 } },
   { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', rarity: 'Legendario',
     effect: { clickMult: 0.35, passiveMult: 0.35 } },
-  { id: 'aff_eternal', name: 'Eterno', description: '+8 de daño por cada nivel del arma.', rarity: 'Mítico',
+  { id: 'aff_eternal', name: 'Eterno', description: '+8 de daño por cada nivel del recolector.', rarity: 'Mítico',
     effect: { flatDamage: 8 } },
   { id: 'aff_absorb', name: 'Absorción', description: '+18 de ingreso pasivo por cada 5 niveles.', rarity: 'Mítico',
     effect: { flatPassive: 18 } },
-  { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del arma.', rarity: 'Mítico',
+  { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', rarity: 'Mítico',
     effect: { clickMult: 0.55, passiveMult: 0.55 } },
   { id: 'aff_void', name: 'Vacío Devorador', description: '+25% al daño, +25% al pasivo, +10% crítico.', rarity: 'Divino',
     effect: { clickMult: 0.25, passiveMult: 0.25, critChance: 0.10 } }
@@ -108,10 +108,10 @@ export function successChance(
 /**
  * Potencial 1..5. Sube con:
  *  - Materiales de rareza alta (sobrecargados/míticos)
- *  - Armas de nivel alto (invertidas en experiencia, no en dinero)
+ *  - Recolectores de nivel alto (invertidas en experiencia, no en dinero)
  *  - Piedras de Calibración usadas
  */
-export function rollPotential(materials: WeaponItem[], stonesUsed: number): number {
+export function rollPotential(materials: CollectorItem[], stonesUsed: number): number {
   let score = 1;
 
   // Cada material aporta según rareza y nivel
@@ -133,14 +133,14 @@ const RARITY_WEIGHT: Record<Rarity, number> = {
 };
 
 // --------------------------------------------------------------------------
-// Nombres de armas crafteadas
+// Nombres de recolectores crafteadas
 // --------------------------------------------------------------------------
 
 const FORGE_PREFIX = ['Forja de', 'Espuela de', 'Nucleo de', 'Herencia de', 'Sello de', 'Yunque de'];
 const FORGE_NOUN = ['Vórtice', 'Éclipsis', 'Confín', 'Ceniza', 'Éter', 'Nébula', 'Duna', 'Ónix', 'Zafiro', 'Cobalto'];
 
 /** Nombre generado: "Forja de Ceniza" + sufijo de linaje. */
-export function forgeWeaponName(potential: number, tier: number, rng = Math.random): string {
+export function forgeCollectorName(potential: number, tier: number, rng = Math.random): string {
   const p = FORGE_PREFIX[Math.floor(rng() * FORGE_PREFIX.length)];
   const n = FORGE_NOUN[Math.floor(rng() * FORGE_NOUN.length)];
   const tierSuffix = tier >= 11 ? ' PRIMIGENIA' : tier >= 9 ? ' SINGULAR' : '';
@@ -154,7 +154,7 @@ export function forgeWeaponName(potential: number, tier: number, rng = Math.rand
 
 export interface ForgeResult {
   success: boolean;
-  weapon?: WeaponItem;
+  collector?: CollectorItem;
   /** Esquirlas ganadas por el fallo. */
   shards?: number;
   chanceUsed?: number;
@@ -162,12 +162,12 @@ export interface ForgeResult {
 }
 
 /**
- * Intenta fusionar 3 armas del mismo tier.
- * - Si tiene éxito: devuelve la nueva arma, los materiales se consumen.
+ * Intenta fusionar 3 recolectores del mismo tier.
+ * - Si tiene éxito: devuelve la nueva recolector, los materiales se consumen.
  * - Si falla: se consumen los materiales, se devuelven esquirlas.
  */
 export function attemptForge(
-  materials: WeaponItem[],
+  materials: CollectorItem[],
   tier: number,
   authorName: string,
   options: {
@@ -182,14 +182,14 @@ export function attemptForge(
   const maxTier = options.maxTier ?? 11; // T11 = Divino, techo de forja
 
   if (materials.length !== 3) {
-    return { success: false, error: 'Se necesitan 3 armas del mismo tier.' };
+    return { success: false, error: 'Se necesitan 3 recolectores del mismo tier.' };
   }
   if (tier < 1 || tier >= maxTier) {
-    return { success: false, error: `No se pueden forjar armas de tier ${tier + 1}.` };
+    return { success: false, error: `No se pueden forjar recolectores de tier ${tier + 1}.` };
   }
   // Todos deben ser del mismo tier
   if (materials.some(m => m.tier !== tier)) {
-    return { success: false, error: 'Las 3 armas deben ser del mismo tier.' };
+    return { success: false, error: 'Las 3 recolectores deben ser del mismo tier.' };
   }
 
   // Probabilidad de afijos heredados (para el cálculo de chance)
@@ -206,10 +206,10 @@ export function attemptForge(
     return { success: false, shards, chanceUsed: chance };
   }
 
-  // Éxito: construir el arma
+  // Éxito: construir el recolector
   const potential = rollPotential(materials, options.stonesUsed);
   const newTier = tier + 1;
-  const name = forgeWeaponName(potential, newTier);
+  const name = forgeCollectorName(potential, newTier);
 
   // Herencia: daño base del siguiente tier + bonificación por afijos y potencial
   const baseRange = (TIER_SYSTEM.ranges as Record<number, [number, number]>)[Math.min(newTier, 10)] ?? [1, 5];
@@ -225,12 +225,12 @@ export function attemptForge(
   const potentialMult = 1 + (potential - 1) * 0.12;
   const damage = Math.round(baseDamage * potentialMult);
 
-  const rarity = weaponRarity(newTier, potential);
+  const rarity = collectorRarity(newTier, potential);
 
-  const weapon: WeaponItem = {
+  const collector: CollectorItem = {
     id: `forged_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
     name,
-    type: 'weapon',
+    type: 'collector',
     details: `Daño base: +${damage}`,
     rarity,
     tier: newTier,
@@ -246,10 +246,10 @@ export function attemptForge(
     sellPrice: 0 // se calcula dinámicamente
   };
 
-  return { success: true, weapon, chanceUsed: chance };
+  return { success: true, collector, chanceUsed: chance };
 }
 
-function weaponRarity(tier: number, potential: number): Rarity {
+function collectorRarity(tier: number, potential: number): Rarity {
   const clamped = Math.max(1, Math.min(tier, 10));
   const base = (TIER_SYSTEM.rarityByTier as Record<number, string>)[clamped] as Rarity ?? 'Común';
   if (potential >= 5 && tier >= 9) return 'Divino';
@@ -260,7 +260,7 @@ function weaponRarity(tier: number, potential: number): Rarity {
 }
 
 /** Elige N afijos distintos, con pesos inversos a la rareza. */
-function pickAffixes(count: number, materials: WeaponItem[]): string[] {
+function pickAffixes(count: number, materials: CollectorItem[]): string[] {
   // Un afijo "semilla" por material, para que la herencia tenga sentido
   const candidates = AFFIXES.slice();
   const picked: string[] = [];

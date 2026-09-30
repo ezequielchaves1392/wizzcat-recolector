@@ -1,9 +1,9 @@
 // ==========================================================================
-// Valoración dinámica de armas
+// Valoración dinámica de recolectores
 //
 // El precio de venta ya no es un número escrito en el item: se calcula. Eso
-// hace que dos armas del mismo tier puedan valer muy distinto, y que mejorar
-// una arma tenga un valor de reventa que sube con ella.
+// hace que dos recolectores del mismo tier puedan valer muy distinto, y que mejorar
+// un recolector tenga un valor de reventa que sube con ella.
 //
 // Fórmula base:  valor = tierBase × nivelMult × rarezaMult × potencialMult
 //                       × afijos × autor × mercado
@@ -13,11 +13,11 @@
 // verificar con aritmética en vez de jugando 200 fusiones.
 // ==========================================================================
 
-import type { Rarity, WeaponItem } from '../types/domain';
+import type { Rarity, CollectorItem } from '../types/domain';
 import { AFFIX_BY_ID } from './crafting';
 import { TIER_SYSTEM } from './tiers';
 
-/** Valor de referencia de un arma base de cada tier (sin nivel ni afijos). */
+/** Valor de referencia de un recolector base de cada tier (sin nivel ni afijos). */
 const TIER_BASE_VALUE: Record<number, number> = {
   1: 220, 2: 480, 3: 1000, 4: 2100, 5: 4400,
   6: 9200, 7: 19000, 8: 39000, 9: 80000, 10: 162000, 11: 330000
@@ -41,10 +41,10 @@ const RARITY_VALUE_MULT: Record<Rarity, number> = {
   'Sobrecargado': 2.40
 };
 
-/** Cada nivel del arma suma un porcentaje creciente del valor base. */
+/** Cada nivel del recolector suma un porcentaje creciente del valor base. */
 export function levelValueMult(level: number, maxLevel = 20): number {
   if (level <= 0) return 1;
-  // 0.06 por nivel hasta la mitad, 0.10 después: premia llevar el arma lejos
+  // 0.06 por nivel hasta la mitad, 0.10 después: premia llevar el recolector lejos
   const half = maxLevel / 2;
   let mult = 1;
   for (let i = 0; i < level; i++) {
@@ -58,10 +58,10 @@ export function potentialValueMult(potential: number): number {
   return 1 + (potential - 1) * 0.45;
 }
 
-export function affixValueMult(weapon: WeaponItem): number {
-  if (!weapon.affixes?.length) return 1;
+export function affixValueMult(collector: CollectorItem): number {
+  if (!collector.affixes?.length) return 1;
   let mult = 1;
-  for (const id of weapon.affixes) {
+  for (const id of collector.affixes) {
     const a = AFFIX_BY_ID[id];
     if (!a) continue;
     // Cada afijo aporta según lo que hace, no por su rareza nominal
@@ -78,7 +78,7 @@ export function affixValueMult(weapon: WeaponItem): number {
 }
 
 /**
- * Prima de fama: un arma forjada por alguien conocido vale más, pero no rinde
+ * Prima de fama: un recolector forjado por alguien conocido vale más, pero no rinde
  * más. Es el separador entre "objeto" y "trofeo".
  */
 export function fameValueMult(authorRank: number | null): number {
@@ -93,7 +93,7 @@ export function fameValueMult(authorRank: number | null): number {
 }
 
 /**
- * Deriva del mercado: un arma recién forjada se vende algo más cara y se
+ * Deriva del mercado: un recolector recién forjada se vende algo más cara y se
  * estabiliza. Se calcula con la edad, sin estado global.
  */
 export function marketAgeMult(forgedAt: number | undefined): number {
@@ -113,14 +113,14 @@ export interface ValuationOptions {
   sellMult?: number;
 }
 
-export function weaponValue(weapon: WeaponItem, opts: ValuationOptions = {}): number {
-  const base = TIER_BASE_VALUE[Math.max(1, Math.min(weapon.tier, 11))] ?? 200;
-  const levelMult = levelValueMult(weapon.level || 0, weapon.maxLevel ?? 20);
-  const rarityMult = RARITY_VALUE_MULT[weapon.rarity] ?? 1;
-  const potMult = potentialValueMult(weapon.potential ?? 0);
-  const affMult = affixValueMult(weapon);
+export function collectorValue(collector: CollectorItem, opts: ValuationOptions = {}): number {
+  const base = TIER_BASE_VALUE[Math.max(1, Math.min(collector.tier, 11))] ?? 200;
+  const levelMult = levelValueMult(collector.level || 0, collector.maxLevel ?? 20);
+  const rarityMult = RARITY_VALUE_MULT[collector.rarity] ?? 1;
+  const potMult = potentialValueMult(collector.potential ?? 0);
+  const affMult = affixValueMult(collector);
   const fameMult = fameValueMult(opts.authorRank ?? null);
-  const ageMult = marketAgeMult(weapon.forgedAt);
+  const ageMult = marketAgeMult(collector.forgedAt);
   const passives = opts.sellMult ?? 1;
 
   const raw = base * levelMult * rarityMult * potMult * affMult * fameMult * ageMult * passives;
@@ -134,8 +134,8 @@ export function weaponValue(weapon: WeaponItem, opts: ValuationOptions = {}): nu
  * Precio de venta. El jugador recibe el 42% del valor: el resto cubre el
  * inputs consumidos y deja margen al mercado.
  */
-export function sellPrice(weapon: WeaponItem, opts: ValuationOptions = {}): number {
-  return Math.max(1, Math.floor(weaponValue(weapon, opts) * 0.42));
+export function sellPrice(collector: CollectorItem, opts: ValuationOptions = {}): number {
+  return Math.max(1, Math.floor(collectorValue(collector, opts) * 0.42));
 }
 
 /** Coste de una Piedra de Calibración en la tienda. */
@@ -149,24 +149,24 @@ export const STABILITY_NANOPARTICLE_COST = 220_000;
  * el valor de salida debe superar siempre al input. Se usa en los tests.
  */
 export function fusionIsProfitable(
-  inputs: WeaponItem[],
-  output: WeaponItem,
+  inputs: CollectorItem[],
+  output: CollectorItem,
   opts: ValuationOptions = {}
 ): boolean {
-  const inValue = inputs.reduce((a, w) => a + weaponValue(w, opts), 0);
-  const outValue = weaponValue(output, opts);
+  const inValue = inputs.reduce((a, w) => a + collectorValue(w, opts), 0);
+  const outValue = collectorValue(output, opts);
   return outValue > inValue * 1.15;
 }
 
 /** Resumen legible para la tarjeta del item. */
-export function valuationBreakdown(weapon: WeaponItem, opts: ValuationOptions = {}): string[] {
+export function valuationBreakdown(collector: CollectorItem, opts: ValuationOptions = {}): string[] {
   const out: string[] = [];
-  const base = TIER_BASE_VALUE[Math.max(1, Math.min(weapon.tier, 11))] ?? 200;
-  out.push(`Base T${weapon.tier}: ${fmt(base)}`);
-  if (weapon.level) out.push(`Nivel ${weapon.level}: ×${levelValueMult(weapon.level, weapon.maxLevel ?? 20).toFixed(2)}`);
-  out.push(`Rareza ${weapon.rarity}: ×${(RARITY_VALUE_MULT[weapon.rarity] ?? 1).toFixed(2)}`);
-  if (weapon.potential) out.push(`Potencial ${weapon.potential}★: ×${potentialValueMult(weapon.potential).toFixed(2)}`);
-  if (weapon.affixes?.length) out.push(`${weapon.affixes.length} afijo(s): ×${affixValueMult(weapon).toFixed(2)}`);
+  const base = TIER_BASE_VALUE[Math.max(1, Math.min(collector.tier, 11))] ?? 200;
+  out.push(`Base T${collector.tier}: ${fmt(base)}`);
+  if (collector.level) out.push(`Nivel ${collector.level}: ×${levelValueMult(collector.level, collector.maxLevel ?? 20).toFixed(2)}`);
+  out.push(`Rareza ${collector.rarity}: ×${(RARITY_VALUE_MULT[collector.rarity] ?? 1).toFixed(2)}`);
+  if (collector.potential) out.push(`Potencial ${collector.potential}★: ×${potentialValueMult(collector.potential).toFixed(2)}`);
+  if (collector.affixes?.length) out.push(`${collector.affixes.length} afijo(s): ×${affixValueMult(collector).toFixed(2)}`);
   if (opts.authorRank != null) out.push(`Autor top ${opts.authorRank}: ×${fameValueMult(opts.authorRank).toFixed(2)}`);
   return out;
 }

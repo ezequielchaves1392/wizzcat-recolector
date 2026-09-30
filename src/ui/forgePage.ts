@@ -1,5 +1,5 @@
 // ==========================================================================
-// Forja · Fusión de armas
+// Forja · Fusión de recolectores
 //
 // Es la pantalla con más estados simultáneos del juego: selección de
 // materiales, probabilidad, consumo de piedras, animación y resultado. Se
@@ -52,16 +52,16 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
   const unlocked = (state.nodeLevels?.blueprint || 0) > 0;
   const info = game.getForgeInfo();
 
-  const weapons = ((state.warehouse as any[]) || [])
-    .filter(w => w.type === 'weapon')
+  const collectors = ((state.warehouse as any[]) || [])
+    .filter(w => w.type === 'collector')
     .sort((a, b) => (a.tier - b.tier) || ((b.damage || 0) - (a.damage || 0)));
 
-  const tiers = Array.from(new Set(weapons.map(w => w.tier))).sort((a, b) => a - b);
+  const tiers = Array.from(new Set(collectors.map(w => w.tier))).sort((a, b) => a - b);
 
   // Saneado del estado: si el jugador vendió un material, se quita de la
-  // selección. Sin esto, el yunque mostraría un arma que ya no existe y el
+  // selección. Sin esto, el yunque mostraría un recolector que ya no existe y el
   // botón de forjar fallaría al ejecutarse.
-  ui.selected = ui.selected.filter(id => weapons.some(w => w.id === id));
+  ui.selected = ui.selected.filter(id => collectors.some(w => w.id === id));
   if (ui.selected.length > 3) ui.selected = ui.selected.slice(0, 3);
   if (!tiers.includes(ui.tier)) ui.tier = tiers[0] ?? 1;
 
@@ -75,21 +75,21 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
   // Si el jugador no tiene ninguna, el interruptor se desactiva solo
   if (nanoCount === 0) ui.nano = false;
 
-  const selectedWeapons = ui.selected
-    .map(id => weapons.find(w => w.id === id))
+  const selectedCollectors = ui.selected
+    .map(id => collectors.find(w => w.id === id))
     .filter(Boolean) as any[];
 
-  const matTier = selectedWeapons[0]?.tier ?? 0;
-  const affixLuck = selectedWeapons.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0);
-  const chance = selectedWeapons.length === 3 && matTier
+  const matTier = selectedCollectors[0]?.tier ?? 0;
+  const affixLuck = selectedCollectors.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0);
+  const chance = selectedCollectors.length === 3 && matTier
     ? successChance(matTier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0)
     : 0;
-  const ready = selectedWeapons.length === 3;
+  const ready = selectedCollectors.length === 3;
 
   // --- Fragmentos -------------------------------------------------------
 
   const slot = (i: number) => {
-    const w = selectedWeapons[i];
+    const w = selectedCollectors[i];
     if (!w) {
       return `
         <button class="forge-slot" data-act="clear" data-slot="${i}" aria-label="Hueco ${i + 1}">
@@ -101,7 +101,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
               style="border-color: color-mix(in srgb, var(--accent) 55%, transparent)"
               aria-label="Quitar ${w.name}">
         <span class="flex flex-col items-center gap-0.5 min-w-0 w-full">
-          <span class="${rarityClass(w.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('weapon')}</span>
+          <span class="${rarityClass(w.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('collector')}</span>
           <span class="text-[9px] font-mono text-center leading-tight line-clamp-2">T${w.tier}</span>
           ${w.potential ? `<span class="text-[9px] text-amber-400 leading-none">${'★'.repeat(w.potential)}</span>` : ''}
         </span>
@@ -110,13 +110,13 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
 
   const matCell = (w: any) => {
     const isSel = ui.selected.includes(w.id);
-    const equipped = w.equipped || w.id === state.equippedWeaponId;
+    const equipped = w.equipped || w.id === state.equippedCollectorId;
     return `
       <button class="inv-cell ${isSel ? 'is-selected' : ''} ${equipped ? 'opacity-60' : ''}"
               data-act="pick" data-id="${w.id}"
               title="${equipped ? 'Equipada: desequípala para usarla como material' : w.name}">
         <span class="ring-${raritySlug(w.rarity)} w-9 h-9 rounded-lg grid place-items-center
-                     [&>span>svg]:w-4 [&>span>svg]:h-4 ${rarityClass(w.rarity)}">${ic('weapon')}</span>
+                     [&>span>svg]:w-4 [&>span>svg]:h-4 ${rarityClass(w.rarity)}">${ic('collector')}</span>
         <span class="text-[9px] font-mono text-[var(--text-main)] text-center leading-tight line-clamp-2 w-full">
           ${w.name}
         </span>
@@ -131,7 +131,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
   const body = unlocked ? `
     ${statStrip([
       { label: 'Esquirlas', value: formatNumber(state.shards), tone: 'text-cyan-300' },
-      { label: 'Armas', value: String(weapons.length) },
+      { label: 'Recolectores', value: String(collectors.length) },
       { label: 'Forjadas', value: String(state.forgedCount) },
       { label: 'Piedras', value: String(stoneCount) }
     ])}
@@ -169,7 +169,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
           </p>
         ` : `
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5">
-            Selecciona 3 armas del mismo tier.
+            Selecciona 3 recolectores del mismo tier.
           </p>
         `}
       </div>
@@ -223,10 +223,10 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
         class="w-full mt-3 rounded-xl font-['Orbitron'] font-bold text-[12px] tracking-wide cursor-pointer
                ${ready ? 'btn-primary' : 'btn-ghost opacity-40 cursor-not-allowed'}"
         style="min-height:52px">
-        ${ready ? 'FORJAR' : `FALTAN ${3 - selectedWeapons.length} MATERIALES`}
+        ${ready ? 'FORJAR' : `FALTAN ${3 - selectedCollectors.length} MATERIALES`}
       </button>
       <p class="text-[9px] text-[var(--text-muted)] text-center mt-2 leading-relaxed">
-        Éxito: creas el arma y recuperas 1 de los 3 materiales.
+        Éxito: creas el recolector y recuperas 1 de los 3 materiales.
         Fallo: pierdes los 3 y ganas esquirlas.
       </p>
     </section>
@@ -236,22 +236,22 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
         <span class="text-[10px] font-mono text-[var(--text-muted)]">${ui.selected.length}/3</span>
       `)}
 
-      ${weapons.length === 0
-        ? emptyState('weapon', 'No tienes armas',
-            'Compra armas en la tienda o abre cajas. Necesitas 3 del mismo tier para fusionar.')
+      ${collectors.length === 0
+        ? emptyState('collector', 'No tienes recolectores',
+            'Compra recolectores en la tienda o abre cajas. Necesitas 3 del mismo tier para fusionar.')
         : `
           <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
             ${tiers.map(t => `
               <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer flex-shrink-0 transition
                              ${t === ui.tier ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
                       data-act="tier" data-tier="${t}">
-                T${t} · ${weapons.filter(w => w.tier === t).length}
+                T${t} · ${collectors.filter(w => w.tier === t).length}
               </button>
             `).join('')}
           </div>
           <div class="inv-grid">
-            ${weapons.filter(w => w.tier === ui.tier).map(matCell).join('') ||
-              '<p class="text-[11px] text-[var(--text-muted)] col-span-full">Sin armas en este tier.</p>'}
+            ${collectors.filter(w => w.tier === ui.tier).map(matCell).join('') ||
+              '<p class="text-[11px] text-[var(--text-muted)] col-span-full">Sin recolectores en este tier.</p>'}
           </div>
         `}
     </section>
@@ -306,11 +306,11 @@ function wire(container: HTMLElement, game: any, onBack: () => void) {
   // capturarlo en `draw`, porque cuando llegan los eventos `draw` ya ha
   // terminado y sus variables locales están fuera de alcance.
   const context = () => {
-    const weapons = ((game.getState().warehouse as any[]) || []).filter(w => w.type === 'weapon');
+    const collectors = ((game.getState().warehouse as any[]) || []).filter(w => w.type === 'collector');
     const selected = ui.selected
-      .map(id => weapons.find(w => w.id === id))
+      .map(id => collectors.find(w => w.id === id))
       .filter(Boolean) as any[];
-    return { weapons, selected };
+    return { collectors, selected };
   };
 
   container.addEventListener('click', (e) => {
@@ -334,15 +334,15 @@ function wire(container: HTMLElement, game: any, onBack: () => void) {
         // Si se dejara pasar, el jugador llenaría el yunque, vería la
         // probabilidad de un tier y, al forjar, recibiría un error: la pantalla
         // le habría mentido dos veces seguidas.
-        const { weapons, selected } = context();
-        const picked = weapons.find(w => w.id === btn.dataset.id);
+        const { collectors, selected } = context();
+        const picked = collectors.find(w => w.id === btn.dataset.id);
         if (!picked) return;
         if (selected.length && picked.tier !== selected[0].tier) {
           sfx.error();
           showToast(`Ya hay un T${selected[0].tier} en el yunque. La fusión exige 3 del mismo tier.`, 'info');
           return;
         }
-        if (picked.equipped || picked.id === game.getState().equippedWeaponId) {
+        if (picked.equipped || picked.id === game.getState().equippedCollectorId) {
           sfx.error();
           showToast('Desequipa ese recolector antes de consumirlo como material.', 'info');
           return;
@@ -391,12 +391,12 @@ function wire(container: HTMLElement, game: any, onBack: () => void) {
 
 function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
   const state = game.getState();
-  const weapons = ((state.warehouse as any[]) || []).filter(w => w.type === 'weapon');
+  const collectors = ((state.warehouse as any[]) || []).filter(w => w.type === 'collector');
   const sel = ui.selected
-    .map(id => weapons.find(w => w.id === id))
+    .map(id => collectors.find(w => w.id === id))
     .filter(Boolean) as any[];
   if (sel.length !== 3) {
-    showToast('Selecciona 3 armas del mismo tier.', 'info');
+    showToast('Selecciona 3 recolectores del mismo tier.', 'info');
     return;
   }
 
@@ -406,7 +406,7 @@ function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
   const chance = successChance(tier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0);
 
   showConfirmModal(
-    `Tres armas de tier ${tier} se funden en una de tier ${tier + 1}. ` +
+    `Tres recolectores de tier ${tier} se funden en una de tier ${tier + 1}. ` +
     `Si aciertas recuperas un material; si fallas, pierdes los tres.`,
     () => runForge(game, sel, ui.stones, ui.nano, redraw),
     {
@@ -420,19 +420,19 @@ function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
 /**
  * Ejecuta la fusión y muestra la ruleta.
  *
- * El resultado ya está decidido cuando se llama a `game.forgeWeapon`. La
+ * El resultado ya está decidido cuando se llama a `game.forgeCollector`. La
  * animación solo lo enseña: si la ruleta eligiera el premio, el jugador
  * descubriría en veinte tiradas que la ruleta no es la fuente de verdad, y a
  * partir de ahí ninguna otra cifra del juego le creería.
  */
 function runForge(game: any, materials: any[], stones: number, nano: boolean, redraw: () => void) {
   sfx.hammer();
-  const result = game.forgeWeapon(materials.map(m => m.id), stones, nano ? 1 : 0);
+  const result = game.forgeCollector(materials.map(m => m.id), stones, nano ? 1 : 0);
 
   showForgeRoulette(result, () => {
-    if (result.success && result.weapon) {
+    if (result.success && result.collector) {
       sfx.forgeSuccess();
-      showToast(`${result.weapon.name} — forjada por ti`, 'success');
+      showToast(`${result.collector.name} — forjada por ti`, 'success');
       // La selección se vacía: los materiales ya se consumieron
       ui.selected = [];
     } else {
@@ -452,7 +452,7 @@ function showForgeRoulette(result: any, onDone: () => void) {
   overlay.style.animation = 'riseIn 240ms ease both';
 
   const success = !!result.success;
-  const w = result.weapon;
+  const w = result.collector;
   const label = success ? (w?.name ?? 'Forja completada') : 'FALLO DE FORJA';
   const tone = success ? '#fbbf24' : '#f87171';
 

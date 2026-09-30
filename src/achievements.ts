@@ -25,7 +25,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'first_click',
     title: 'Primer Enlace',
     description: 'Extrae 100 Nanitas en total',
-    icon: '⚡',
+    icon: 'bolt',
     rewardText: '+2% poder de click',
     reward: { clickBonus: 0.02, passiveBonus: 0 },
     progress: (s) => ({ current: Math.min(s.totalNanitesProduced ?? 0, 100), target: 100 })
@@ -34,11 +34,11 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'collector_10',
     title: 'Táctico',
     description: 'Sube un recolector al nivel 10',
-    icon: '🎯',
+    icon: 'medal',
     rewardText: '+5% poder de click',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     progress: (s) => ({
-      current: Math.max(0, ...(s.warehouse ?? []).filter((w: any) => w.type === 'weapon').map((w: any) => w.level || 0)),
+      current: Math.max(0, ...(s.warehouse ?? []).filter((w: any) => w.type === 'collector').map((w: any) => w.level || 0)),
       target: 10
     })
   },
@@ -46,7 +46,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'swarm',
     title: 'Enjambre Autómata',
     description: 'Equipa 3 compañeros a la vez',
-    icon: '🛸',
+    icon: 'companion',
     rewardText: '+8% ingreso pasivo',
     reward: { clickBonus: 0, passiveBonus: 0.08 },
     progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 3), target: 3 })
@@ -55,7 +55,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'overclocked',
     title: 'Fuera de Especificación',
     description: 'Consigue un recolector Sobrecargado',
-    icon: '🔥',
+    icon: 'flame',
     rewardText: '+10% poder de click',
     reward: { clickBonus: 0.10, passiveBonus: 0 },
     progress: (s) => ({
@@ -67,7 +67,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'crate_opener',
     title: 'Descifrador',
     description: 'Abre 25 cajas',
-    icon: '📦',
+    icon: 'crate',
     rewardText: '+12% ingreso pasivo',
     reward: { clickBonus: 0, passiveBonus: 0.12 },
     progress: (s) => ({ current: Math.min(s.cratesOpened ?? 0, 25), target: 25 })
@@ -76,7 +76,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'jackpot',
     title: 'Fortuna Divina',
     description: 'Consigue un compañero Mítico o Divino de caja',
-    icon: '👑',
+    icon: 'crown',
     rewardText: '+15% poder de click',
     reward: { clickBonus: 0.15, passiveBonus: 0 },
     progress: (s) => ({
@@ -88,7 +88,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'rich',
     title: 'M magnate',
     description: 'Acumula 250.000 Nanitas',
-    icon: '💰',
+    icon: 'graph',
     rewardText: '+15% ingreso pasivo',
     reward: { clickBonus: 0, passiveBonus: 0.15 },
     progress: (s) => ({ current: Math.min(Math.floor(s.nanites ?? 0), 250000), target: 250000 })
@@ -97,7 +97,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'full_squad',
     title: 'Escuadrón Completo',
     description: 'Equipa 5 compañeros a la vez',
-    icon: '🤖',
+    icon: 'chip',
     rewardText: '+20% ingreso pasivo',
     reward: { clickBonus: 0, passiveBonus: 0.20 },
     progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 5), target: 5 })
@@ -106,7 +106,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: 'deep_pockets',
     title: 'Almacén Masivo',
     description: 'Amplía el almacén a 20 slots',
-    icon: '🏗️',
+    icon: 'warehouse',
     rewardText: '+25% poder de click',
     reward: { clickBonus: 0.25, passiveBonus: 0 },
     progress: (s) => ({ current: Math.min(s.warehouseCapacity ?? 0, 20), target: 20 })
@@ -123,8 +123,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'first_forge',
     title: 'Primera Chispa',
-    description: 'Forja tu primera arma',
-    icon: 'weapon',
+    description: 'Forja tu primer recolector',
+    icon: 'collector',
     rewardText: '+5% poder de click · Título "Aprendiz de Forja"',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 1), target: 1 })
@@ -132,8 +132,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'smith_25',
     title: 'Maestro de Forja',
-    description: 'Forja 25 armas con éxito',
-    icon: 'weapon',
+    description: 'Forja 25 recolectores con éxito',
+    icon: 'collector',
     rewardText: '+10% click y +10% pasivo · Marco "Brasa"',
     reward: { clickBonus: 0.10, passiveBonus: 0.10 },
     progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 25), target: 25 })
@@ -156,7 +156,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     rewardText: 'Título oculto',
     reward: { clickBonus: 0, passiveBonus: 0 },
     progress: (s) => ({
-      // Afijo Divino en un arma: casi imposible por azar
+      // Afijo Divino en un recolector: casi imposible por azar
       current: (s.warehouse ?? []).some((w: any) => (w.affixes || []).includes('aff_void')) ? 1 : 0,
       target: 1
     })

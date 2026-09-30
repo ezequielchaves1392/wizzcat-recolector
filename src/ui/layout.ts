@@ -20,7 +20,7 @@
 // ==========================================================================
 
 import { ic, type IconName } from './icons';
-import { isMuted, isMusicEnabled } from '../utils/audio';
+import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
 import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
 
 export interface LayoutCallbacks {
@@ -127,16 +127,43 @@ export function renderLayoutHTML(
               <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('trophy')}</span>
             </button>
 
-            <button id="music-btn" title="Música"
-              class="w-9 h-9 md:w-auto md:h-9 md:px-3 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px]">
-              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('sound')}</span>
-              <span class="hidden md:inline font-mono">${isMusicEnabled() ? 'Música' : 'Silencio'}</span>
+            <!--
+              AUDIO: los dos interruptores son independientes y cada uno lleva
+              su PROPIO icono. Antes los dos pintaban el altavoz, así que en
+              móvil —donde la etiqueta de texto no cabe— eran dos botones
+              idénticos y no se sabía cuál era cuál.
+
+                música -> nota musical  (lo que pone, no lo que suena)
+                SFX    -> altavoz       (icono de parlante)
+
+              Apagado baja al icono de silencio y el texto dice "Off": el
+              estado se lee de un vistazo, sin depender del title, que en
+              táctil no aparece hasta mantener pulsado.
+
+              data-audio en vez de dos ids distintos: un solo manejador por
+              delegación cubre los dos, y el estado se lee con querySelector
+              sin acoplarse al id.
+            -->
+            <button id="music-btn" data-audio="music"
+              aria-pressed="${isMusicEnabled()}"
+              aria-label="${isMusicEnabled() ? 'Apagar música' : 'Encender música'}"
+              title="${isMusicEnabled() ? 'Apagar música' : 'Encender música'}"
+              class="w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center
+                     gap-1.5 cursor-pointer text-[11px] transition
+                     ${isMusicEnabled() ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-70'}">
+              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isMusicEnabled() ? 'music' : 'mute')}</span>
+              <span class="hidden md:inline font-mono">${isMusicEnabled() ? 'Música' : 'Off'}</span>
             </button>
 
-            <button id="mute-btn" title="${isMuted() ? 'Activar sonido' : 'Silenciar'}"
-              class="w-9 h-9 md:w-auto md:h-9 md:px-3 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px]">
-              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isMuted() ? 'mute' : 'sound')}</span>
-              <span class="hidden md:inline font-mono">${isMuted() ? 'Mudo' : 'SFX'}</span>
+            <button id="mute-btn" data-audio="sfx"
+              aria-pressed="${isSfxEnabled()}"
+              aria-label="${isSfxEnabled() ? 'Silenciar efectos' : 'Activar efectos'}"
+              title="${isSfxEnabled() ? 'Silenciar efectos' : 'Activar efectos'}"
+              class="w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center
+                     gap-1.5 cursor-pointer text-[11px] transition
+                     ${isSfxEnabled() ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-70'}">
+              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isSfxEnabled() ? 'sound' : 'mute')}</span>
+              <span class="hidden md:inline font-mono">${isSfxEnabled() ? 'SFX' : 'Off'}</span>
             </button>
 
             <select id="theme-selector" aria-label="Tema visual"
@@ -146,10 +173,21 @@ export function renderLayoutHTML(
               ${options}
             </select>
 
-            <button id="logout-btn" title="Salir"
-              class="hidden md:inline-flex h-9 px-3 rounded-lg text-[11px] font-mono cursor-pointer
+            <!--
+              El ancho fijo evita que la etiqueta se descentre cuando los botones
+              de audio alternan entre "Música" y "Off", y hace que el botón
+              "Salir" no parezca moverse respecto al resto de la cabecera.
+
+              items-center es lo que lo centra de verdad: antes era inline-flex
+              a secas, y el nodo de texto, al ser un ítem anónimo de flex, se
+              estiraba a la altura completa y la línea se pegaba arriba.
+            -->
+            <button id="logout-btn" data-logout title="Cerrar sesión"
+              class="hidden md:inline-flex h-9 w-24 shrink-0 items-center justify-center gap-1.5 rounded-lg
+                     text-[11px] font-mono cursor-pointer
                      border border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">
-              Salir
+              <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('logout')}</span>
+              <span>Salir</span>
             </button>
           </div>
         </div>
@@ -256,7 +294,7 @@ export function renderLayoutHTML(
                         background: linear-gradient(to bottom right,
                           color-mix(in srgb, var(--accent) 10%, transparent), transparent)">
               <div class="flex items-center gap-2 mb-2.5">
-                <span class="[&>span>svg]:w-4 [&>span>svg]:h-4 accent-text">${ic('weapon')}</span>
+                <span class="[&>span>svg]:w-4 [&>span>svg]:h-4 accent-text">${ic('collector')}</span>
                 <span class="label-caps" style="color: var(--accent)">Recolector</span>
               </div>
               <div id="equipped-collector-container"></div>

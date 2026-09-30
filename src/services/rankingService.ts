@@ -24,7 +24,7 @@ import { collection, doc, setDoc, getDocs, query, orderBy, limit } from 'firebas
 export const ACHIEVEMENT_WEIGHT = 50_000;
 /** Un logro secreto pesa 5x: son raros y casi nadie los tiene. */
 export const SECRET_ACHIEVEMENT_WEIGHT = 250_000;
-/** Peso de cada arma forjada por el jugador. */
+/** Peso de cada recolector forjado por el jugador. */
 export const FORGED_WEIGHT = 20_000;
 
 export interface LeaderboardEntry {

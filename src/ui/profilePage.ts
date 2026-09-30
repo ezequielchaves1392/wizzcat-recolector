@@ -12,7 +12,7 @@
 // ranking sin duplicar la estructura.
 // ==========================================================================
 
-import { ic } from './icons';
+import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShell';
 import { COSMETICS, COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
@@ -98,9 +98,9 @@ export function renderProfilePage(
   const unlocked = achievements.filter(a => a.unlocked);
   const secrets = (state.unlockedAchievements as string[]).filter(id => SECRET_ACHIEVEMENTS.includes(id as any));
 
-  const weapons = (state.warehouse as any[]).filter(w => w.type === 'weapon');
-  const bestWeapon = weapons.reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
-  const bestForged = weapons
+  const collectors = (state.warehouse as any[]).filter(w => w.type === 'collector');
+  const bestCollector = collectors.reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
+  const bestForged = collectors
     .filter((w: any) => w.forgedBy)
     .reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
 
@@ -171,7 +171,7 @@ export function renderProfilePage(
            style="${a.unlocked ? 'background: color-mix(in srgb, var(--accent) 8%, transparent)' : ''}">
         <span class="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0
                      ${a.unlocked ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
-              aria-hidden="true">${ic((isSecret && !a.unlocked ? 'lock' : a.icon) as any)}</span>
+              aria-hidden="true">${icSafe(isSecret && !a.unlocked ? 'lock' : a.icon)}</span>
         <div class="min-w-0 flex-1">
           <div class="flex items-baseline justify-between gap-2">
             <span class="text-[11px] font-bold text-[var(--text-main)] truncate">
@@ -199,26 +199,26 @@ export function renderProfilePage(
       { label: 'Forjadas', value: String(state.forgedCount) }
     ])}
 
-    <!-- Mejor arma: el objeto del que presume el jugador -->
-    ${bestWeapon ? `
+    <!-- Mejor recolector: el objeto del que presume el jugador -->
+    ${bestCollector ? `
       <section class="card-glass rounded-2xl p-3 mb-3">
         <div class="label-caps mb-2 flex items-center gap-1.5">
-          <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('weapon')}</span>
-          ${bestForged ? 'Mejor arma forjada' : 'Mejor recolector'}
+          <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('collector')}</span>
+          ${bestForged ? 'Mejor recolector forjado' : 'Mejor recolector'}
         </div>
         <div class="flex items-center gap-2.5">
-          <span class="ring-${raritySlug(bestWeapon.rarity)} w-10 h-10 rounded-xl grid place-items-center flex-shrink-0
-                       ${rarityClass(bestWeapon.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('weapon')}</span>
+          <span class="ring-${raritySlug(bestCollector.rarity)} w-10 h-10 rounded-xl grid place-items-center flex-shrink-0
+                       ${rarityClass(bestCollector.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('collector')}</span>
           <div class="min-w-0 flex-1">
-            <div class="text-[12px] font-bold text-[var(--text-main)] truncate">${bestWeapon.name}</div>
+            <div class="text-[12px] font-bold text-[var(--text-main)] truncate">${bestCollector.name}</div>
             <div class="text-[9px] font-mono text-[var(--text-muted)]">
-              T${bestWeapon.tier} · ${bestWeapon.rarity}${bestWeapon.potential ? ` · ${'★'.repeat(bestWeapon.potential)}` : ''}
-              ${bestWeapon.forgedBy ? ` · de <span class="accent-text">${bestWeapon.forgedBy}</span>` : ''}
+              T${bestCollector.tier} · ${bestCollector.rarity}${bestCollector.potential ? ` · ${'★'.repeat(bestCollector.potential)}` : ''}
+              ${bestCollector.forgedBy ? ` · de <span class="accent-text">${bestCollector.forgedBy}</span>` : ''}
             </div>
           </div>
           <div class="text-right flex-shrink-0">
             <div class="label-caps leading-none">Daño</div>
-            <div class="font-['Orbitron'] font-bold text-[13px] accent-text tabular">+${formatNumber(bestWeapon.damage)}</div>
+            <div class="font-['Orbitron'] font-bold text-[13px] accent-text tabular">+${formatNumber(bestCollector.damage)}</div>
           </div>
         </div>
       </section>
@@ -232,7 +232,7 @@ export function renderProfilePage(
           ${identityCard({ name: state.__username || 'Operativo', cosmetics: state.cosmetics, size: 'lg' })}
           <div class="flex items-center gap-2 flex-wrap justify-center mt-1">
             <span class="medal text-[var(--text-muted)]">${ic('core', 'w-3 h-3')} ${state.resets} ascensiones</span>
-            <span class="medal text-[var(--text-muted)]">${ic('anvil', 'w-3 h-3')} ${state.forgedCount} armas</span>
+            <span class="medal text-[var(--text-muted)]">${ic('anvil', 'w-3 h-3')} ${state.forgedCount} recolectores</span>
             <span class="medal text-amber-400">${ic('sparkle', 'w-3 h-3')} ${secrets.length} secretos</span>
           </div>
         </div>

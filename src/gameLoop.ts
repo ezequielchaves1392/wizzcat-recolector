@@ -13,7 +13,12 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 import { TREE_BY_ID, nodeCost } from './data/tree';
 import { attemptForge, AFFIX_BY_ID } from './data/crafting';
-import { sellPrice, weaponValue } from './data/valuation';
+import { sellPrice, collectorValue } from './data/valuation';
+import {
+  KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER,
+  crystalSuccessChance, crystalPowerFromName, keyTierFromName, keyOpens,
+  type KeyTier, type KeyDef, type CrystalDef
+} from './data/items';
 
 
 // Antes esto era un modal con botón "Aceptar" para avisos como "Almacén lleno":
@@ -74,7 +79,7 @@ export const STORE_ITEMS = {
   companionCardT8: { cost: 31000, label: 'Compañero Tier 8' },
   companionCardT9: { cost: 49000, label: 'Compañero Tier 9' },
   companionCardT10: { cost: 77000, label: 'Compañero Tier 10' },
-  // Armas: el precio sigue al DAÑO, no al número de tier.
+  // Recolectores: el precio sigue al DAÑO, no al número de tier.
   //
   // Antes escalaba 1.5x por tier igual que los compañeros, y ahí estaba
   // el error: el daño va de 5 a 77 entre T1 y T10 (15.4x) mientras el
@@ -87,16 +92,16 @@ export const STORE_ITEMS = {
   // el rango: 1.38x de dispersión. Subir de tier sigue siendo algo peor
   // que comprar muchos T1, y ese sobreprecio es deliberado: el T10 es
   // un objeto de escaparate, no una optimización.
-  weaponCardT1: { cost: 850, label: 'Arma Tier 1' },
-  weaponCardT2: { cost: 1600, label: 'Arma Tier 2' },
-  weaponCardT3: { cost: 2500, label: 'Arma Tier 3' },
-  weaponCardT4: { cost: 3700, label: 'Arma Tier 4' },
-  weaponCardT5: { cost: 5300, label: 'Arma Tier 5' },
-  weaponCardT6: { cost: 7200, label: 'Arma Tier 6' },
-  weaponCardT7: { cost: 9400, label: 'Arma Tier 7' },
-  weaponCardT8: { cost: 11900, label: 'Arma Tier 8' },
-  weaponCardT9: { cost: 14600, label: 'Arma Tier 9' },
-  weaponCardT10: { cost: 17500, label: 'Arma Tier 10' }
+  collectorCardT1: { cost: 850, label: 'Recolector Tier 1' },
+  collectorCardT2: { cost: 1600, label: 'Recolector Tier 2' },
+  collectorCardT3: { cost: 2500, label: 'Recolector Tier 3' },
+  collectorCardT4: { cost: 3700, label: 'Recolector Tier 4' },
+  collectorCardT5: { cost: 5300, label: 'Recolector Tier 5' },
+  collectorCardT6: { cost: 7200, label: 'Recolector Tier 6' },
+  collectorCardT7: { cost: 9400, label: 'Recolector Tier 7' },
+  collectorCardT8: { cost: 11900, label: 'Recolector Tier 8' },
+  collectorCardT9: { cost: 14600, label: 'Recolector Tier 9' },
+  collectorCardT10: { cost: 17500, label: 'Recolector Tier 10' }
 };
 
 // Coste de cada slot de compañero adicional (índice = slots ya poseídos).
@@ -104,9 +109,9 @@ export const STORE_ITEMS = {
 // Se llega hasta 9 slots: 5 de tienda + hasta 4 del nodo "Cuadrilla".
 export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_000, 1_400_000, 3_600_000, 9_000_000];
 
-// Mejora de arma: 20 niveles, coste creciente en cristales y éxito decreciente.
-export const MAX_WEAPON_LEVEL = 20;
-export function weaponUpgradeCost(level: number): number {
+// Mejora de recolector: 20 niveles, coste creciente en cristales y éxito decreciente.
+export const MAX_COLLECTOR_LEVEL = 20;
+export function collectorUpgradeCost(level: number): number {
   // 1,1,2,2,3,3,4,5,6,7,8,9,11,13,15,18,21,25,30,35 -> ~190 cristales en total
   return Math.max(1, Math.floor(1.2 * Math.pow(1.14, level)));
 }
@@ -121,16 +126,36 @@ const CONSUMABLES = {
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
   clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
   calibrationStone: { name: 'Piedra de Calibración', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone' },
-  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'Deja el arma forjada con un afijo extra garantizado', rarity: 'Legendario', buffId: 'stabilityNano' }
+  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'Deja el recolector forjado con un afijo extra garantizado', rarity: 'Legendario', buffId: 'stabilityNano' }
 } as const;
 
 // Definición de cada tipo de caja. La fuente de verdad es el item del almacén,
 // `state.crates` se mantiene sincronizado como contador para las migraciones.
+//
+// `details` dice qué trae y qué llave abre. Antes decía "contiene
+// recompensas básicas", que no dice nada: el jugador no tenía forma de saber
+// si le convenía ni de qué llave necesitaba.
 const CRATE_TYPES = {
-  common: { name: 'Caja Común', rarity: 'Común', details: 'Contiene recompensas básicas' },
-  rare: { name: 'Caja Rara', rarity: 'Raro', details: 'Contiene recompensas mejores' },
-  epic: { name: 'Caja Épica', rarity: 'Épico', details: 'Contiene recompensas altas' },
-  legendary: { name: 'Caja Legendaria', rarity: 'Legendario', details: 'Contiene recompensas máximas' }
+  common: {
+    name: 'Caja Común',
+    rarity: 'Común',
+    details: 'Recompensas de partida temprana: nanitas, cristales, algún dron T1. Abre con una Llave de Cifrado.'
+  },
+  rare: {
+    name: 'Caja Rara',
+    rarity: 'Raro',
+    details: 'Material de forja y compañeros T3, con algún recolector T4 sobrecargado. Abre con una Llave Reforzada.'
+  },
+  epic: {
+    name: 'Caja Épica',
+    rarity: 'Épico',
+    details: 'Compañeros T6 y recolectores T6, con piedras de calibración. Abre con una Llave Rúnica.'
+  },
+  legendary: {
+    name: 'Caja Legendaria',
+    rarity: 'Legendario',
+    details: 'Recolectores T8 y compañeros Divinos que no se compran. Sale la Nanopartícula de Estabilidad. Abre con una Llave del Vacío.'
+  }
 } as const;
 
 export type CrateType = keyof typeof CRATE_TYPES;
@@ -183,18 +208,18 @@ export function generateCompanionByTier(tier: number): { id: string; name: strin
   };
 }
 
-// Función para generar un arma aleatoria por tier
-export function generateWeaponByTier(tier: number): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number } {
+// Función para generar un recolector aleatoria por tier
+export function generateCollectorByTier(tier: number): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number } {
   const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
   const power = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
-  const names = TIER_SYSTEM.weaponNames[tier as keyof typeof TIER_SYSTEM.weaponNames] || ['Blaster Láser'];
+  const names = TIER_SYSTEM.collectorNames[tier as keyof typeof TIER_SYSTEM.collectorNames] || ['Blaster Láser'];
   const name = names[Math.floor(Math.random() * names.length)];
   const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
   
   return {
-    id: `weapon_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: `collector_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     name,
-    type: 'weapon',
+    type: 'collector',
     details: `Recolección por click: +${power}`,
     rarity,
     tier,
@@ -226,7 +251,12 @@ export async function createGameLoop(
   };
 
   // Bonus especial para usuarios de prueba
-  const displayName = user.displayName || username || '';
+  // El nombre llega resuelto desde `main.ts`, que ya lo ha buscado en la
+  // sesión, en el registro y en la partida guardada. Aquí solo se normaliza.
+  // Antes se leía solo `user.displayName`, que Firebase puede devolver vacío
+  // tras renovar el token: el juego arrancaba como "Operativo" y el nombre
+  // bueno se perdía en el siguiente guardado.
+  const displayName = (user.displayName || username || 'Operativo').trim();
   const isBlanquician = displayName.toLowerCase() === 'blanquician';
   const isAdmin = displayName.toLowerCase() === 'admin';
   const initialNanites = (isBlanquician || isAdmin) ? 100000000 : 0;
@@ -248,7 +278,7 @@ export async function createGameLoop(
     unlockedNodes: [] as string[], // Nodos comprados
     nodeLevels: {} as Record<string, number>, // Nivel por nodo
     shards: 0, // Esquirlas de crafteo
-    forgedCount: 0, // Armas forjadas con exito
+    forgedCount: 0, // Recolectores forjadas con exito
     // --- Bonificaciones agregadas del arbol (se recalculan al cargar) ---
     bonus: {
       clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
@@ -274,11 +304,17 @@ export async function createGameLoop(
       epic: 0,
       legendary: 0
     },
-    equippedWeaponId: null as string | null,
+    // Contadores DERIVADOS del almacén. Los calcula `syncMaterialCounters()`.
+    // Se guardan porque el árbol de pasivas los lee y porque las partidas
+    // viejas los traen; nunca son la fuente de verdad.
+    keysByTier: { 0: 3, 1: 0, 2: 0, 3: 0 } as Record<number, number>,
+    crystalsByTier: { 1: 5 } as Record<number, number>,
+    crystalTotal: 5,
+    equippedCollectorId: null as string | null,
     companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number }>,
     activeCompanions: [] as string[],
     warehouse: [
-      { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
+      { id: 'collector_blaster_001', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
       { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +5/s', rarity: 'Común', tier: 1, sellPrice: 250 }
     ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; damage?: number; equipped?: boolean; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
     buffs: {
@@ -288,6 +324,147 @@ export async function createGameLoop(
       clickX3ExpiresAt: 0  // Tarjeta Click x3 (30s)
     }
   };
+
+/**
+ * Precio de venta de un item del almacén.
+ *
+ * Vive fuera del objeto devuelto porque lo necesitan dos sitios: la vista, que
+ * lo pinta, y `sellItem()`, que lo cobra. Con la fórmula duplicada, la tarjeta
+ * podía enseñar un precio y el cobro aplicar otro.
+ */
+function getSellPriceFor(item: any): number {
+  if (item.type === 'collector') {
+    return sellPrice(item, { sellMult: 1 + state.bonus.sellMult });
+  }
+  return Math.floor((item.sellPrice || 0) * (1 + state.bonus.sellMult));
+}
+
+/**
+ * Quita una cantidad de un item del almacén.
+ *
+ * Es la ÚNICA forma de consumir un item, y por eso vive aquí y no repartida
+ * entre las vistas. El bug que arreglar era precisamente ese: cada pantalla
+ * mutaba `state.warehouse` por su cuenta con su propia idea de cómo restar una
+ * unidad, y después no recalculaba los contadores derivados.
+ *
+ * Si el item es apilable y le quedan unidades, baja el contador; si se acaba,
+ * desaparece del array. Devuelve cuántas unidades quedan, o 0 si no estaba.
+ */
+function consumeWarehouseItem(itemId: string, amount = 1): number {
+  const idx = state.warehouse.findIndex((w: any) => w.id === itemId);
+  if (idx < 0) return 0;
+
+  const item = state.warehouse[idx];
+
+  if (item.stackable && (item.stackCount || 1) > amount) {
+    item.stackCount = (item.stackCount || 1) - amount;
+    return item.stackCount;
+  }
+
+  state.warehouse.splice(idx, 1);
+  return 0;
+}
+
+/**
+ * Añade N llaves o N cristales del nivel indicado.
+ *
+ * Si el almacén tiene hueco se mete un item apilado; si está lleno, el botín
+ * se pierde. Se avisa por consola porque es el momento donde el jugador pierde
+ * algo sin haberlo decidido, y no hay dónde ponerlo en un aviso en pantalla.
+ */
+function grantKeys(tier: KeyTier, amount: number) {
+  grantMaterial('key', tier, amount);
+}
+
+function grantCrystals(tier: number, amount: number) {
+  grantMaterial('crystal', tier, amount);
+}
+
+function grantMaterial(kind: 'key' | 'crystal', tier: number, amount: number) {
+  if (amount <= 0) return;
+  if (state.warehouse.length >= effectiveWarehouseCapacity()) {
+    console.warn('[inventario] Sin hueco en el almacén: se pierden ' + amount + ' x ' + kind + ' T' + tier + '.');
+    return;
+  }
+
+  const item = createMaterialItem(kind, tier);
+  item.stackCount = amount;
+  state.warehouse.push(item);
+}
+
+/**
+ * Crea un item de llave o cristal listo para el almacén.
+ *
+ * Los tres viven aquí y no en `data/items.ts` porque necesitan un id único y
+ * un precio de reventa, y el precio depende de `STORE_ITEMS`, que está en este
+ * archivo. La tabla de niveles y probabilidades sí está en `data/items.ts`.
+ */
+function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
+  const esLlave = kind === 'key';
+  const def = esLlave ? KEY_DEFS[tier as KeyTier] : CRYSTAL_DEFS[tier];
+  const prefijo = esLlave ? 'key' : 'crystal';
+  const sellPrice = esLlave
+    ? Math.floor((def as KeyDef).cost ?? 1200)
+    : Math.floor((def as CrystalDef).cost ?? 2400) * 3;
+
+  return {
+    id: `${prefijo}_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name: def.name,
+    type: esLlave ? 'key' : 'crystal',
+    details: def.details,
+    rarity: def.rarity,
+    // El nivel viaja en el item para poder ordenar y filtrar sin releer el
+    // nombre. Las partidas viejas no lo tienen: se rellena al migrar.
+    tier,
+    sellPrice,
+    stackable: true,
+    stackCount: 1
+  };
+}
+
+/**
+ * Cuenta el almacén por tipo de material y reconstruye los contadores.
+ *
+ * Los contadores `state.keys` y `state.upgradeCrystals` ya no son la fuente de
+ * verdad —lo es el almacén—, pero se siguen manteniendo porque el árbol de
+ * pasivas y las compras los leen, y porque las partidas viejas los traen.
+ *
+ * Convivir con un valor desincronizado es exactamente el bug que había con las
+ * cajas, así que aquí NO hay conversión de "huérfanos a items": si el contador
+ * dice más de lo que hay en el almacén, se ajusta el contador. El almacén gana
+ * siempre.
+ */
+function syncMaterialCounters() {
+  const keyByTier: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  const crystalByTier: Record<number, number> = {};
+  let crystalTotal = 0;
+
+  state.warehouse.forEach((w: any) => {
+    if (w.type === 'key') {
+      const t = typeof w.tier === 'number' ? w.tier : keyTierFromName(w.name || '');
+      keyByTier[t] = (keyByTier[t] || 0) + (w.stackCount || 1);
+    } else if (w.type === 'crystal') {
+      const t = typeof w.tier === 'number' ? w.tier : 1;
+      crystalByTier[t] = (crystalByTier[t] || 0) + (w.stackCount || 1);
+      crystalTotal += (w.stackCount || 1);
+    }
+  });
+
+  state.keys = keyByTier[0] + keyByTier[1] + keyByTier[2] + keyByTier[3];
+  state.keysByTier = keyByTier;
+  state.crystalsByTier = crystalByTier;
+
+  // El cristal básico es el único que se compra, así que es el que se gasta en
+  // las sintonizaciones: los superiores son de premio y el jugador elige.
+  state.upgradeCrystals = crystalByTier[1] || 0;
+  state.crystalTotal = crystalTotal;
+
+  // Rellena el campo `tier` de los items guardados antes de que existiera.
+  state.warehouse.forEach((w: any) => {
+    if (w.type === 'key' && typeof w.tier !== 'number') w.tier = keyTierFromName(w.name || '');
+    if (w.type === 'crystal' && typeof w.tier !== 'number') w.tier = crystalPowerFromName(w.name || '') === 1 ? 1 : 2;
+  });
+}
 
   let isAfk = false;
   let lastActiveTimestamp = Date.now();
@@ -321,14 +498,14 @@ export async function createGameLoop(
         epic: data.crates?.epic ?? 0,
         legendary: data.crates?.legendary ?? 0
       };
-      state.equippedWeaponId = data.equippedWeaponId ?? null;
+      state.equippedCollectorId = data.equippedCollectorId ?? null;
       state.companions = data.companions ?? [];
       state.activeCompanions = data.activeCompanions ?? [];
       state.warehouse = data.warehouse ?? [];
-      // Migración: agregar 'damage' y actualizar descripción a armas viejas
+      // Migración: agregar 'damage' y actualizar descripción a recolectores viejas
       let warehouseNeedsMigration = false;
       state.warehouse.forEach((w: any) => {
-        if (w.type === 'weapon') {
+        if (w.type === 'collector') {
           if (w.damage === undefined) {
             const tier = w.tier || 1;
             const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
@@ -342,7 +519,7 @@ export async function createGameLoop(
             warehouseNeedsMigration = true;
           }
         }
-        // Migración: consumibles antigos sin buffId (creados antes de existir el campo)
+        // Migración: consumibles antiguos sin buffId (creados antes de existir el campo)
         if (w.type === 'consumable' && !w.buffId) {
           const buffId = inferBuffIdFromName(w.name || '');
           if (buffId) {
@@ -350,7 +527,57 @@ export async function createGameLoop(
             warehouseNeedsMigration = true;
           }
         }
+        // El nivel de llave y de cristal no existía antes. Sin él no se puede
+        // saber qué cofre abre cada llave ni cuánto mejora cada cristal, así que
+        // se deduce del nombre una sola vez.
+        if ((w.type === 'key' || w.type === 'crystal') && typeof w.tier !== 'number') {
+          w.tier = w.type === 'key'
+            ? keyTierFromName(w.name || '')
+            : (crystalPowerFromName(w.name || '') === 1 ? 1 : 2);
+          warehouseNeedsMigration = true;
+        }
       });
+
+      /**
+       * MIGRACIÓN: contadores de llaves y cristales a items del almacén.
+       *
+       * Antes eran contadores sueltos. Si el contador dice 7 llaves y el almacén
+       * está vacío, esas 7 llaves existen en la partida y hay que
+       * materializarlas: si no, el jugador las pierde en el guardado siguiente,
+       * cuando `syncMaterialCounters` ajustaría el contador a cero.
+       *
+       * Aquí se hace al revés que con las cajas, a propósito. Con las cajas el
+       * almacén era la fuente y el contador podía quedar inflado, así que se
+       * ajustaba el contador. Con las llaves el saldo es real y no se puede
+       * volver a contarlo, porque detrás no hay ningún item.
+       */
+      let materialNeedsMigration = false;
+      const meterLlaves = (tier: KeyTier, cantidad: number) => {
+        for (let i = 0; i < cantidad; i++) {
+          if (state.warehouse.length >= effectiveWarehouseCapacity()) break;
+          state.warehouse.push(createMaterialItem('key', tier));
+          materialNeedsMigration = true;
+        }
+      };
+      meterLlaves(0, data.keys ?? 3);
+      meterLlaves(1, data.keysByTier?.[1] ?? 0);
+      meterLlaves(2, data.keysByTier?.[2] ?? 0);
+      meterLlaves(3, data.keysByTier?.[3] ?? 0);
+
+      const meterCristales = (tier: number, cantidad: number) => {
+        if (cantidad <= 0) return;
+        if (state.warehouse.length >= effectiveWarehouseCapacity()) return;
+        const item = createMaterialItem('crystal', tier);
+        item.stackCount = cantidad;
+        state.warehouse.push(item);
+        materialNeedsMigration = true;
+      };
+      meterCristales(1, data.upgradeCrystals ?? 5);
+      meterCristales(2, data.crystalsByTier?.[2] ?? 0);
+      meterCristales(3, data.crystalsByTier?.[3] ?? 0);
+      meterCristales(4, data.crystalsByTier?.[4] ?? 0);
+      if (materialNeedsMigration) warehouseNeedsMigration = true;
+
       if (warehouseNeedsMigration) {
         saveToFirebase();
       }
@@ -391,7 +618,7 @@ export async function createGameLoop(
       await setDoc(userRef, {
         saveVersion: SAVE_VERSION,
         userId: user.uid,
-        username: user.displayName || 'Operativo',
+        username: displayName,
         nanites: state.nanites,
         totalNanitesProduced: state.totalNanitesProduced,
         totalClicks: 0,
@@ -404,7 +631,7 @@ export async function createGameLoop(
         afkCards: state.afkCards,
         afkExpiresAt: state.afkExpiresAt,
         crates: state.crates,
-        equippedWeaponId: state.equippedWeaponId,
+        equippedCollectorId: state.equippedCollectorId,
         companions: state.companions,
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
@@ -457,9 +684,9 @@ export async function createGameLoop(
   /**
    * Recorta el almacén respetando una prioridad. Antes se hacía
    * `slice(0, capacity)`, que destruía el último item de la lista sin aviso y
-   * podía borrar el arma equipada o un compañero activo.
+   * podía borrar el recolector equipado o un compañero activo.
    *
-   * Prioridad de conservación:-inducing el arma equipada, los compañeros activos
+   * Prioridad de conservación:-inducing el recolector equipado, los compañeros activos
    * y los companions con item. Lo que se descarta es lo más reciente y menos
    * ligado a la progresión.
    */
@@ -468,11 +695,11 @@ export async function createGameLoop(
     if (state.warehouse.length <= capacity) return;
 
     const score = (w: any): number => {
-      if (w.id === state.equippedWeaponId) return 1000;
+      if (w.id === state.equippedCollectorId) return 1000;
       if (w.equipped) return 900;
       if (state.activeCompanions.includes(w.id)) return 800;
-      // Un arma crafteada vale más que una de tienda: se conserva antes
-      if (w.type === 'weapon') return 500 + (w.tier || 0) + (w.potential || 0) * 50;
+      // Un recolector crafteado vale más que una de tienda: se conserva antes
+      if (w.type === 'collector') return 500 + (w.tier || 0) + (w.potential || 0) * 50;
       if (w.type === 'companion') return 400 + (w.tier || 0);
       if (w.type === 'crate') return 300;
       if (w.type === 'consumable') return 200;
@@ -538,6 +765,7 @@ export async function createGameLoop(
   rebuildAchievementBonuses();
   syncCompanionsToWarehouse();
   syncCrateCounters();
+  syncMaterialCounters();
   checkAchievements();
 
   // Guardar inmediatamente al iniciar sesión
@@ -635,30 +863,30 @@ export async function createGameLoop(
   }
 
   /**
-   * Bonificaciones de los afijos del arma equipada. Se suman al daño aquí y no
+   * Bonificaciones de los afijos del recolector equipado. Se suman al daño aquí y no
    * se hornean en `item.damage`: si se guardaran, vender y volver a comprar el
    * mismo objeto cambiaría su estadística.
    */
   function equippedAffixEffect(): { clickMult: number; passiveMult: number; flat: number } {
     const out = { clickMult: 0, passiveMult: 0, flat: 0 };
-    if (!state.equippedWeaponId) return out;
-    const item: any = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+    if (!state.equippedCollectorId) return out;
+    const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
     if (!item?.affixes?.length) return out;
     for (const affixId of item.affixes) {
       const affix = AFFIX_BY_ID[affixId];
       if (!affix) continue;
       out.clickMult += affix.effect.clickMult || 0;
       out.passiveMult += affix.effect.passiveMult || 0;
-      // Los afijos planos escalan con el nivel del arma: es lo que hace que
-      // subir un arma crafteada siga valiendo algo.
+      // Los afijos planos escalan con el nivel del recolector: es lo que hace que
+      // subir un recolector crafteado siga valiendo algo.
       out.flat += (affix.effect.flatDamage || 0) * (1 + (item.level || 0) * 0.08);
     }
     return out;
   }
 
   function calculateClickDamage() {
-    if (!state.equippedWeaponId) return 0;
-    const item: any = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
+    if (!state.equippedCollectorId) return 0;
+    const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
     if (!item) return 0;
 
     const affixes = equippedAffixEffect();
@@ -693,7 +921,7 @@ export async function createGameLoop(
       const gameData = {
         saveVersion: SAVE_VERSION,
         userId: user.uid,
-        username: user.displayName || 'Operativo',
+        username: displayName,
         nanites: state.nanites,
         totalNanitesProduced: state.totalNanitesProduced,
         totalClicks: state.totalClicks,
@@ -706,7 +934,7 @@ export async function createGameLoop(
         afkCards: state.afkCards,
         afkExpiresAt: state.afkExpiresAt,
         crates: state.crates,
-        equippedWeaponId: state.equippedWeaponId,
+        equippedCollectorId: state.equippedCollectorId,
         companions: state.companions,
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
@@ -949,12 +1177,159 @@ export async function createGameLoop(
       enforceWarehouseCapacity();
       syncCompanionsToWarehouse();
       syncCrateCounters();
+      syncMaterialCounters();
       refreshAfkCardCount();
       rebuildAchievementBonuses();
       recalculatePassiveIncome();
       checkAchievements();
       onUpdate(state, isAfk);
       saveToFirebase();
+    },
+
+    /**
+     * Reordena el almacén moviendo un item a una posición concreta.
+     *
+     * La libertad total de acomodo es del jugador, no del juego: antes el
+     * arrastre hacía un INTERCAMBIO, así que no se podía llenar el hueco del
+     * final moviendo la última caja al principio sin pasarse por todo lo demás.
+     * Ahora es una inserción en el índice que se le pide.
+     *
+     * `targetIndex` es el índice del array, no el de la vista filtrada: quien
+     * llama lo traduce, porque desde fuera solo se conocen las celdas.
+     */
+    moveItem: (itemId: string, targetIndex: number) => {
+      const from = state.warehouse.findIndex((w: any) => w.id === itemId);
+      if (from < 0) return false;
+
+      // Se recorta al rango válido. Un destino "fuera de límites" desde una
+      // celda vacía del final es un append, no un error.
+      const to = Math.max(0, Math.min(targetIndex, state.warehouse.length - 1));
+      if (to === from) return false;
+
+      const [movido] = state.warehouse.splice(from, 1);
+      state.warehouse.splice(to, 0, movido);
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return true;
+    },
+
+    /**
+     * Vende un item del almacén.
+     *
+     * Todo el borrado ocurre aquí, no en la vista. Antes cada pantalla restaba
+     * el item por su cuenta y luego llamaba a `updateState`, que recalculaba
+     * los contadores de cajas ANTES de que el item se hubiera quitado de
+     * verdad en algunos caminos: la caja volvía a aparecer en el siguiente
+     * guardado.
+     */
+    sellItem: (itemId: string): { ok: boolean; msg?: string; gained?: number } => {
+      handleUserActivity();
+      const idx = state.warehouse.findIndex((w: any) => w.id === itemId);
+      if (idx < 0) return { ok: false, msg: 'Ese item ya no está en el almacén.' };
+
+      const item = state.warehouse[idx];
+      const esEquipado = (item.type === 'collector' && state.equippedCollectorId === item.id) ||
+        (item.type === 'companion' && state.activeCompanions.includes(item.id));
+      if (esEquipado) return { ok: false, msg: 'Desequípalo antes de venderlo.' };
+
+      // No se puede quedar sin la última unidad de un tipo que produce ingreso
+      if (item.type === 'collector' || item.type === 'companion') {
+        const quedan = state.warehouse.filter((w: any) => w.type === item.type).length;
+        if (quedan <= 1) return { ok: false, msg: 'No puedes vender el último de su tipo.' };
+      }
+
+      const qty = item.stackable ? (item.stackCount || 1) : 1;
+      const unitario = getSellPriceFor(item);
+      const ganado = Math.floor(unitario * qty);
+
+      state.nanites += ganado;
+
+      consumeWarehouseItem(item.id, qty);
+
+      if (item.type === 'companion') {
+        state.companions = state.companions.filter((c: any) => c.id !== item.id);
+        state.activeCompanions = state.activeCompanions.filter((id) => id !== item.id);
+      }
+
+      syncCrateCounters();
+      syncMaterialCounters();
+      refreshAfkCardCount();
+      syncCompanionsToWarehouse();
+      recalculatePassiveIncome();
+      checkAchievements();
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return { ok: true, gained: ganado };
+    },
+
+    /**
+     * Consume un consumible del almacén y aplica su efecto.
+     *
+     * El efecto se calcula con la MISMA función que la vista usaba antes, pero
+     * aquí se aplica al estado y después se consume el item. El orden importa:
+     * primero se resuelve el buff, y solo si se ha aplicado bien se gasta.
+     */
+    useConsumable: (itemId: string): { ok: boolean; msg?: string } => {
+      handleUserActivity();
+      const item: any = state.warehouse.find((w: any) => w.id === itemId);
+      if (!item) return { ok: false, msg: 'Ese item ya no está en el almacén.' };
+      if (item.type !== 'consumable') return { ok: false, msg: 'Esto no se puede usar.' };
+
+      // Las partidas viejas no tienen el campo `buffId`: se deduce del nombre.
+      const buffId = item.buffId ?? inferBuffIdFromName(item.name || '');
+      if (!buffId) return { ok: false, msg: 'Este consumible no tiene efecto conocido.' };
+
+      const ahora = Date.now();
+      const afkMs = afkCardDurationMs();
+      let nuevoItem = true;
+
+      switch (buffId) {
+        case 'warehouseExpander':
+          if (state.warehouseCapacity >= 50) return { ok: false, msg: 'Almacén al máximo.' };
+          state.warehouseCapacity += 1;
+          break;
+        case 'afk': {
+          const base = Math.max(ahora, state.afkExpiresAt || 0);
+          // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
+          state.afkExpiresAt = Math.min(base + afkMs, ahora + afkMs * 3);
+          break;
+        }
+        case 'clickBoost': {
+          const base = Math.max(ahora, state.buffs.clickBoostExpiresAt);
+          state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 60 * 60_000);
+          break;
+        }
+        case 'passiveBoost': {
+          const base = Math.max(ahora, state.buffs.passiveBoostExpiresAt);
+          state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60_000, ahora + 2 * 60 * 60_000);
+          break;
+        }
+        case 'clickX2': {
+          const base = Math.max(ahora, state.buffs.clickX2ExpiresAt);
+          state.buffs.clickX2ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
+          break;
+        }
+        case 'clickX3': {
+          const base = Math.max(ahora, state.buffs.clickX3ExpiresAt);
+          state.buffs.clickX3ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
+          break;
+        }
+        case 'calibrationStone':
+        case 'stabilityNano':
+          // No se usan desde el almacén: se consumen en la Forja
+          return { ok: false, msg: 'Este consumible se usa en la Forja.' };
+        default:
+          return { ok: false, msg: 'Este consumible no tiene efecto conocido.' };
+      }
+
+      consumeWarehouseItem(item.id, 1);
+
+      refreshAfkCardCount();
+      recalculatePassiveIncome();
+      checkAchievements();
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return { ok: true, msg: `${item.name}: aplicado` };
     },
     click: () => {
       handleUserActivity();
@@ -971,25 +1346,40 @@ export async function createGameLoop(
       checkAchievements();
       onUpdate(state, isAfk);
     },
-    upgradeEquippedWeapon: () => {
+    upgradeEquippedCollector: (crystalTier = 1) => {
       handleUserActivity();
-      if (!state.equippedWeaponId) return { success: false, msg: 'No hay ningún arma equipada.' };
-      const item = state.warehouse.find((w: any) => w.id === state.equippedWeaponId);
-      if (!item) return { success: false, msg: 'Arma no encontrada.' };
+      if (!state.equippedCollectorId) return { success: false, msg: 'No hay ningún recolector equipado.' };
+      const item = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
+      if (!item) return { success: false, msg: 'Recolector no encontrado.' };
       const level = item.level || 0;
-      if (level >= MAX_WEAPON_LEVEL) return { success: false, msg: `Arma al nivel máximo (+${MAX_WEAPON_LEVEL * 10}%).` };
+      if (level >= MAX_COLLECTOR_LEVEL) return { success: false, msg: `Recolector al nivel máximo (+${MAX_COLLECTOR_LEVEL * 10}%).` };
+
+      // El cristal se busca por nivel en el almacén, no en un contador suelto.
+      // Un cristal de nivel 3 no se gasta por uno de nivel 1: por eso hay que
+      // encontrar el item exacto y consumirlo, en vez de restar una unidad.
+      const crystal = state.warehouse.find((w: any) =>
+        w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : 1) === crystalTier);
+      if (!crystal) {
+        const nombre = CRYSTAL_DEFS[crystalTier]?.name ?? 'Cristal';
+        return { success: false, msg: `No tienes ${nombre}.` };
+      }
 
       // Coste en cristales creciente: antes era 1 por nivel, así que 20 niveles
       // salían por 20 cristales y el timing de mejora era irrelevante
-      const crystalCost = weaponUpgradeCost(level);
-      if (state.upgradeCrystals < crystalCost) {
-        return { success: false, msg: `Requiere ${crystalCost} Cristales de Mejora (tienes ${state.upgradeCrystals}).` };
+      const crystalCost = collectorUpgradeCost(level);
+      const units = crystal.stackCount || 1;
+      if (units < crystalCost) {
+        return {
+          success: false,
+          msg: `Necesitas ${crystalCost} x ${CRYSTAL_DEFS[crystalTier].name} (tienes ${units}).`
+        };
       }
 
-      state.upgradeCrystals -= crystalCost;
+      consumeWarehouseItem(crystal.id, crystalCost);
+      syncMaterialCounters();
 
-      // Probabilidad de éxito: alta al principio, se estrecha al final
-      const successChance = Math.max(35, 95 - level * 3);
+      // La probabilidad la fija el cristal: mejor cristal, más probabilidad.
+      const successChance = crystalSuccessChance(level, CRYSTAL_DEFS[crystalTier]?.power ?? 1);
       const roll = Math.random() * 100;
 
       if (roll <= successChance) {
@@ -1066,25 +1456,25 @@ export async function createGameLoop(
       handleUserActivity();
       // Buscar el item en el warehouse
       const item = state.warehouse.find((w: any) => w.id === itemId);
-      if (!item || item.type !== 'weapon') return false;
+      if (!item || item.type !== 'collector') return false;
 
       // Si ya está equipado, desequiparlo
       if (item.equipped) {
         item.equipped = false;
-        state.equippedWeaponId = null;
+        state.equippedCollectorId = null;
         onUpdate(state, isAfk);
         saveToFirebase();
         return true;
       }
 
-      // Desequipar cualquier arma equipada actualmente
+      // Desequipar cualquier recolector equipado actualmente
       state.warehouse.forEach((w: any) => {
-        if (w.type === 'weapon') w.equipped = false;
+        if (w.type === 'collector') w.equipped = false;
       });
 
       // Equipar el nuevo item
       item.equipped = true;
-      state.equippedWeaponId = item.id;
+      state.equippedCollectorId = item.id;
       onUpdate(state, isAfk);
       saveToFirebase();
       return true;
@@ -1124,25 +1514,29 @@ export async function createGameLoop(
       if (itemKey === 'companionSlot1' && effSlots >= 2) return false;
       if (itemKey === 'companionSlot2' && effSlots >= 5) return false;
 
-      // Validar mochila llena (excepto para items que no ocupan espacio en el almacén)
-      const needsWarehouseSpace = !['key', 'upgradeCrystal', 'warehouseSlot', 'companionSlot1', 'companionSlot2'].includes(itemKey as string);
-      if (needsWarehouseSpace && state.warehouse.length >= effectiveWarehouseCapacity()) {
+      // Validar mochila llena.
+      //
+      // Llaves y cristales AHORA SÍ ocupan ranura: son items físicos. Lo que no
+      // ocupa espacio son las Ampliaciones de almacén y los Huecos de
+      // compañero, porque no son objetos que se guarden: son permisos.
+      const NO_OCUPA_RANURA = ['warehouseSlot', 'backpackExpander', 'companionSlot1', 'companionSlot2'];
+      if (!NO_OCUPA_RANURA.includes(itemKey as string) && state.warehouse.length >= effectiveWarehouseCapacity()) {
         showToast('Almacén lleno. No puedes comprar más items.', 'error');
         return false;
       }
 
       state.nanites -= cost;
 
-      if (itemKey === 'key') {
-        state.keys += 1;
+      if (itemKey === 'key' || itemKey === 'upgradeCrystal') {
+        // Llaves y cristales son items del almacén. Antes eran solo contadores:
+        // el jugador no los veía, no los podía ordenar y no ocupaban ranura.
+        const esLlave = itemKey === 'key';
+        const item = createMaterialItem(esLlave ? 'key' : 'crystal', 1);
+        state.warehouse.push(item);
+        syncMaterialCounters();
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { id: `key_${Date.now()}`, name: 'Llave', type: 'key', details: 'Abre cajas en el almacén', rarity: 'Común', tier: 0 };
-      } else if (itemKey === 'upgradeCrystal') {
-        state.upgradeCrystals += 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { id: `crystal_${Date.now()}`, name: 'Cristal de Mejora', type: 'crystal', details: 'Mejora el arma equipada', rarity: 'Raro', tier: 0 };
+        return item;
       } else if (itemKey === 'warehouseSlot') {
         state.warehouseCapacity += 5;
         onUpdate(state, isAfk);
@@ -1209,12 +1603,12 @@ export async function createGameLoop(
           saveToFirebase();
           return warehouseItem;
         }
-      } else if (itemKey.startsWith('weaponCardT')) {
-        const tier = parseInt(itemKey.replace('weaponCardT', ''));
-        const weapon = generateWeaponByTier(tier);
+      } else if (itemKey.startsWith('collectorCardT')) {
+        const tier = parseInt(itemKey.replace('collectorCardT', ''));
+        const collector = generateCollectorByTier(tier);
         if (state.warehouse.length < effectiveWarehouseCapacity()) {
           const warehouseItem = {
-            ...weapon,
+            ...collector,
             sellPrice: Math.floor(item.cost / 4)
           };
           state.warehouse.push(warehouseItem);
@@ -1224,27 +1618,62 @@ export async function createGameLoop(
         }
       }
 
-      // Si llegamos aquí el item no ocupa espacio (llave, cristal, slot, +5 almacén).
-      // La compra ya está cobrada, así que se devuelve true sin item que mostrar.
+      // Aquí solo llegan Ampliaciones de almacén y Huecos de compañero: no son
+      // objetos que se guarden, son permisos, así que no hay item que devolver.
+      // La compra ya está cobrada y el efecto ya se aplicó más arriba.
 
       onUpdate(state, isAfk);
       saveToFirebase();
       return true;
     },
-    openCrateBox: (crateType: CrateType) => {
-      handleUserActivity();
-      if (state.keys < 1 || state.crates[crateType] < 1) return null;
 
-      state.keys -= 1;
-      state.crates[crateType] -= 1;
+    /**
+     * Abre una caja del almacén consumiendo la llave correcta.
+     *
+     * ANTES: `openCrateBox(crateType)` solo miraba `state.keys`. El almacén no
+     * participaba: el botón de la vista restaba una unidad del item Y el juego
+     * restaba una del contador, sin que nadie se enterara. Resultado: la caja
+     * se quedaba en la rejilla y el contador bajaba, o al revés.
+     *
+     * AHORA: se pasa el ID de la caja y el de la llave. El game loop busca
+     * ambos items, valida que la llave sirva para ese cofre, y los consume a
+     * los dos en la misma operación. Si algo falla, no se toca nada.
+     */
+    openCrateBox: (crateId: string, keyId: string): { ok: boolean; msg?: string; reward?: any; crateType?: CrateType } => {
+      handleUserActivity();
+
+      const caja = state.warehouse.find((w: any) => w.id === crateId && w.type === 'crate');
+      if (!caja) return { ok: false, msg: 'La caja ya no está en el almacén.' };
+
+      const crateType = getCrateTypeFromName(caja.name || '') as CrateType | null;
+      if (!crateType) return { ok: false, msg: 'No se reconoce el tipo de esta caja.' };
+
+      const llave = state.warehouse.find((w: any) => w.id === keyId && w.type === 'key');
+      if (!llave) return { ok: false, msg: 'Ya no tienes esa llave.' };
+
+      const llaveTier = (typeof llave.tier === 'number' ? llave.tier : keyTierFromName(llave.name || '')) as KeyTier;
+      const necesaria = CRATE_KEY_TIER[crateType];
+
+      if (!keyOpens(llaveTier, necesaria)) {
+        return {
+          ok: false,
+          msg: `${llave.name} no abre ${CRATE_TYPES[crateType].name}. Necesitas ${KEY_DEFS[necesaria].name}.`
+        };
+      }
+
+      // Se consumen los dos items ANTES de sortear. Si el sorteo fallara por
+      // una excepción, el jugador ya habria perdido la caja sin recibir nada:
+      // peor que un bug visible.
+      consumeWarehouseItem(caja.id, 1);
+      consumeWarehouseItem(llave.id, 1);
       state.cratesOpened += 1;
 
-      // El botin lo decide la tabla (crateLoot) y se aplica aqui. La ruleta solo
-      // lo muestra: si la animacion decidiera, mentiria sobre las probabilidades.
-      const reward = rollCrateReward(crateType, {
-        nanites: (n) => { state.nanites += n; },
-        crystals: (n) => { state.upgradeCrystals += n; },
-        keys: (n) => { state.keys += n; },
+      // El botín lo decide la tabla (crateLoot) y se aplica aquí. La ruleta solo
+      // lo muestra: si la animación decidiera, mentiría sobre las probabilidades.
+      const premio = rollCrateReward(crateType, {
+        nanites: (n) => { state.nanites += n; state.totalNanitesProduced += n; },
+        crystals: (n) => { grantCrystals(1, n); },
+        keys: (n) => { grantKeys(1, n); },
         hasSpace: () => state.warehouse.length < effectiveWarehouseCapacity(),
         addItem: (item) => {
           if (state.warehouse.length >= effectiveWarehouseCapacity()) return false;
@@ -1266,11 +1695,16 @@ export async function createGameLoop(
         }
       });
 
+      // Los contadores se recalculan DESPUÉS de aplicar el botín, para que
+      // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el
+      // almacén y los contadores desincronizados.
       syncCrateCounters();
+      syncMaterialCounters();
+      refreshAfkCardCount();
       recalculatePassiveIncome();
       onUpdate(state, isAfk);
       saveToFirebase();
-      return reward;
+      return { ok: true, reward: premio, crateType };
     },
 
     // ======================================================================
@@ -1292,17 +1726,17 @@ export async function createGameLoop(
     }),
 
     /**
-     * Recicla el progreso: devuelve nanitas, armas, compañeros e infraestructura
+     * Recicla el progreso: devuelve nanitas, recolectores, compañeros e infraestructura
      * a cambio de núcleos.
      *
-     * Un detalle que parece obvio y no lo es: las armas que el jugador ya
+     * Un detalle que parece obvio y no lo es: las recolectores que el jugador ya
      * forjó también se pierden, porque viven en el almacén. Se conserva a
      * propósito solo lo que importa como identidad (cuántas forjó), no el
      * inventario. Si se conservaran los objetos, la forja dejaría de ser una
      * apuesta y `forgedCount` no significaría nada.
      *
      * Lo que NO se pierde: núcleos, nodos del árbol, cosméticos, logros,
-     * esquirlas y el contador de armas forjadas. Esa es toda la promesa del
+     * esquirlas y el contador de recolectores forjadas. Esa es toda la promesa del
      * reinicio, así que el estado se construye explícitamente en vez de
      * hacer `Object.assign` con un reset parcial: si mañana se añade un campo
      * al save, el reinicio lo limpia solo.
@@ -1346,11 +1780,11 @@ export async function createGameLoop(
         afkCards: 0,
         afkExpiresAt: 0,
         crates: { common: 2, rare: 0, epic: 0, legendary: 0 },
-        equippedWeaponId: null,
+        equippedCollectorId: null,
         companions: [baseCompanion],
         activeCompanions: [],
         warehouse: [
-          { id: 'weapon_blaster_001', name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
+          { id: 'collector_blaster_001', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
           { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +5/s', rarity: 'Común', tier: 1, sellPrice: 250 }
         ],
         buffs: { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 },
@@ -1400,32 +1834,32 @@ export async function createGameLoop(
     // ======================================================================
 
     /**
-     * Fusiona 3 armas del mismo tier en una de tier+1.
+     * Fusiona 3 recolectores del mismo tier en una de tier+1.
      * `stonesUsed` es cuántas Piedras de Calibración se consumen: cada una
      * sube 12 puntos la probabilidad, hasta 5.
      */
-    forgeWeapon: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
+    forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
       handleUserActivity();
       if ((state.nodeLevels.blueprint || 0) < 1) {
         return { success: false, msg: 'Necesitas el nodo "Planos Viejos" para craftear.' };
       }
       if (materialIds.length !== 3) {
-        return { success: false, msg: 'Selecciona exactamente 3 armas.' };
+        return { success: false, msg: 'Selecciona exactamente 3 recolectores.' };
       }
       const materials = materialIds
         .map(id => state.warehouse.find((w: any) => w.id === id))
         .filter((w: any): w is any => !!w);
       if (materials.length !== 3) return { success: false, msg: 'Material no encontrado.' };
-      if (materials.some((m: any) => m.type !== 'weapon')) {
-        return { success: false, msg: 'Solo se pueden fusionar armas.' };
+      if (materials.some((m: any) => m.type !== 'collector')) {
+        return { success: false, msg: 'Solo se pueden fusionar recolectores.' };
       }
       const tier = materials[0].tier || 1;
       if (materials.some((m: any) => (m.tier || 1) !== tier)) {
-        return { success: false, msg: 'Las 3 armas deben ser del mismo tier.' };
+        return { success: false, msg: 'Las 3 recolectores deben ser del mismo tier.' };
       }
-      // El arma equipada no se puede consumir: perderla sería un castigo doble
-      if (materials.some((m: any) => m.equipped || m.id === state.equippedWeaponId)) {
-        return { success: false, msg: 'No puedes fusionar el arma equipada. Desequípala primero.' };
+      // El recolector equipado no se puede consumir: perderla sería un castigo doble
+      if (materials.some((m: any) => m.equipped || m.id === state.equippedCollectorId)) {
+        return { success: false, msg: 'No puedes fusionar el recolector equipado. Desequípala primero.' };
       }
       if (tier >= 11) {
         return { success: false, msg: 'T11 es el techo de la forja.' };
@@ -1477,11 +1911,11 @@ export async function createGameLoop(
         return { success: false, msg: result.error };
       }
 
-      if (result.success && result.weapon) {
-        const w = result.weapon;
+      if (result.success && result.collector) {
+        const w = result.collector;
         w.sellPrice = sellPrice(w as any, { sellMult: 1 + state.bonus.sellMult });
         // Restar 2 y devolver 1 en lugar de perder las tres: la tensión se
-        // mantiene (pierdes 2 armas) sin que un mal rollo vacíe el almacén.
+        // mantiene (pierdes 2 recolectores) sin que un mal rollo vacíe el almacén.
         const keep = materials.reduce((a: any, m: any) => (a.damage < m.damage ? a : m), materials[0]);
         state.warehouse = state.warehouse.filter(
           (x: any) => !materialIds.includes(x.id) || x.id === keep.id
@@ -1494,7 +1928,7 @@ export async function createGameLoop(
         saveToFirebase();
         return {
           success: true,
-          weapon: w,
+          collector: w,
           chance: result.chanceUsed,
           msg: `${w.name} forjada`
         };
@@ -1532,16 +1966,13 @@ export async function createGameLoop(
     getSellPrice: (itemId: string): number => {
       const item: any = state.warehouse.find((w: any) => w.id === itemId);
       if (!item) return 0;
-      if (item.type === 'weapon') {
-        return sellPrice(item, { sellMult: 1 + state.bonus.sellMult });
-      }
-      return Math.floor((item.sellPrice || 0) * (1 + state.bonus.sellMult));
+      return getSellPriceFor(item);
     },
 
-    getWeaponValue: (itemId: string) => {
+    getCollectorValue: (itemId: string) => {
       const item: any = state.warehouse.find((w: any) => w.id === itemId);
-      if (!item || item.type !== 'weapon') return 0;
-      return weaponValue(item, { sellMult: 1 + state.bonus.sellMult });
+      if (!item || item.type !== 'collector') return 0;
+      return collectorValue(item, { sellMult: 1 + state.bonus.sellMult });
     },
 
     // ======================================================================
@@ -1587,6 +2018,18 @@ export async function createGameLoop(
       window.removeEventListener('keydown', handleUserActivity);
       window.removeEventListener('click', handleUserActivity);
       await saveToFirebase();
+    },
+
+    /**
+     * Guarda sin detener nada.
+     *
+     * Existe para el cierre de sesión: `cleanup` para los timers, pero ahí el
+     * guardado ocurre DESPUÉS de quitar los escuchas y justo antes de cerrar
+     * la sesión de Firebase, que ya deja `setDoc` sin permiso. `flush` fuerza
+     * la escritura mientras la sesión sigue viva.
+     */
+    flush: () => {
+      void saveToFirebase();
     }
   };
 }

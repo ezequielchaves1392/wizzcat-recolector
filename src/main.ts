@@ -19,15 +19,34 @@ import { Router, type Route } from './ui/router';
 import { applyTheme, getSavedTheme, setTheme, type ThemeName } from './theme';
 import { showConfirmModal } from './utils/modal';
 import {
-  sfx, isMuted, isMusicEnabled, toggleMute, toggleMusic, primeAudio, setAudioSuspended
+  sfx, isSfxEnabled, isMusicEnabled, toggleMute, toggleMusic, primeAudio,
+  setAudioSuspended, installAudioUnlock, onAudioStateChange
 } from './utils/audio';
 import { renderLayoutHTML } from './ui/layout';
-import { ic } from './ui/icons';
+import { ic, icSafe } from './ui/icons';
 
 const app = document.querySelector('#app') as HTMLElement;
 let activeGameInstance: any = null;
 let activeUser: any = null;
 const router = new Router();
+
+/**
+ * Suscriptores de audio vivos de la vista actual.
+ *
+ * `onAudioStateChange` devuelve la función que lo da de baja. Guardarlas aquí
+ * permite limpiarlas al salir de la base: si no, cada visita a la vista
+ * principal dejaba un suscriptor apuntando a un DOM que ya no existe. Cuatro
+ * visitas bastaban para que un toggle de música intentara pintar cuatro
+ * botones, tres de ellos borrados.
+ */
+const audioUnsubscribers = new Set<() => void>();
+
+function clearAudioUnsubscribers() {
+  audioUnsubscribers.forEach(fn => {
+    try { fn(); } catch { /* un suscriptor ya muerto no debe impedir limpiar al resto */ }
+  });
+  audioUnsubscribers.clear();
+}
 
 /**
  * Manejador de `visibilitychange` con nombre, para poder quitarlo antes de
@@ -51,7 +70,7 @@ function showAchievementPopup(achievement: { title: string; description: string;
   el.style.cssText += 'animation: achievementIn 380ms cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid var(--accent);';
   el.innerHTML = `
     <span class="w-9 h-9 rounded-xl accent-bg flex items-center justify-center flex-shrink-0
-                 [&>span>svg]:w-4 [&>span>svg]:h-4 text-slate-900">${ic((achievement.icon || 'sparkle') as any)}</span>
+                 [&>span>svg]:w-4 [&>span>svg]:h-4 text-slate-900">${icSafe(achievement.icon)}</span>
     <span class="flex flex-col gap-0.5 min-w-0">
       <span class="label-caps" style="color: var(--accent)">Logro desbloqueado</span>
       <span class="font-['Orbitron'] font-bold text-[13px] text-[var(--text-main)] truncate">${achievement.title}</span>
@@ -76,25 +95,122 @@ applyTheme(getSavedTheme());
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    if (activeGameInstance?.cleanup) await activeGameInstance.cleanup();
-    stopCompanionClicks();
-    activeGameInstance = null;
-    activeUser = null;
+// El audio se desbloquea con el primer toque o tecla en cualquier parte.
+// Sin esto, un jugador que entra y navega directo al almacén no oye nada
+// hasta que vuelve a la base y pulsa el recolector.
+installAudioUnlock();
+
+/**
+ * USER ANÓNIMO / SESIÓN PERDIDA.
+ *
+ * El nombre del jugador venía de una única fuente: `user.displayName`. Cuando
+ * esa propiedad llegaba vacía —por ejemplo porque el token se renovó y el
+ * objeto `user` se reconstruyó sin ella, o porque la cuenta se creó antes de
+ * que existiera el `updateProfile`— el juego arrancaba mostrando el texto de
+ * reserva "Operativo", y el jugador veía un nombre que no era el suyo.
+ *
+ * Ahora el nombre se busca en este orden, y el resultado se guarda en
+ * `sessionStorage` para que sobreviva a un refresco de token:
+ *
+ *   1. el nombre con el que se acaba de registrarse (si acabamos de hacerlo)
+ *   2. el que quedó cacheado de una visita anterior de esta sesión
+ *   3. `user.displayName`
+ *   4. el que guardamos en Firestore la última vez
+ *
+ * Si aun así no hay ninguno, se usa "Operativo", pero SOLO como último
+ * recurso, y se avisa por consola para que el fallo sea diagnosticable.
+ */
+const ANON = 'Operativo';
+
+/** Nombre resuelto de la sesión actual, o null si aún no se ha obtenido. */
+let resolvedUsername: string | null = null;
+
+function resolveUsername(user: any, justRegistered?: string): string {
+  const guardado = (() => {
+    try { return sessionStorage.getItem('cyberforge_username'); } catch { return null; }
+  })();
+
+  const candidatos = [
+    justRegistered,
+    guardado,
+    user?.displayName,
+    activeUser?.displayName
+  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+
+  const nombre = candidatos[0] ?? ANON;
+  resolvedUsername = nombre;
+
+  // Se cachea solo si no es el valor de reserva: guardar "Operativo" haría
+  // que el error se auto-perpetuase.
+  if (nombre !== ANON) {
+    try { sessionStorage.setItem('cyberforge_username', nombre); } catch { /* modo privado */ }
+  }
+
+  if (nombre === ANON) {
+    console.warn('[auth] No se ha podido determinar el nombre de usuario; se usa "' + ANON + '".', user);
+  }
+  return nombre;
+}
+
+/**
+ * Devuelve a la pantalla de acceso de forma ordenada.
+ *
+ * Es el camino que se usa tanto al cerrar sesión a mano como al perder la
+ * sesión sola. Centralizarlo evita las dos cosas que se rompían por separado:
+ * dejar el bucle de juego corriendo (las nanitas seguían entrando con la
+ * partida "cerrada") y dejar la pantalla de juego a medias.
+ */
+async function returnToLogin(motivo?: string) {
+  // Evita que dos caídas simultáneas (un signOut manual y un token
+  // caducado) monten dos pantallas de acceso encima.
+  if (returningToLogin) return;
+  returningToLogin = true;
+
+  console.info('[auth] Volviendo al acceso' + (motivo ? ': ' + motivo : '') + '.');
+  clearAudioUnsubscribers();
+  stopCompanionClicks();
+
+  // Se limpia primero el estado local para que un fallo de red no deje la
+  // partida a medias. El estado ya está guardado en Firestore.
+  if (activeGameInstance?.cleanup) {
+    try { await activeGameInstance.cleanup(); } catch { /* igualmente se sigue */ }
+  }
+  activeGameInstance = null;
+  activeUser = null;
+  resolvedUsername = null;
+  try { sessionStorage.removeItem('cyberforge_username'); } catch { /* modo privado */ }
+
+  // Un pequeño retardo evita el parpadeo de "juego → acceso → juego" cuando
+  // el token se renueva, que dispara `onAuthStateChanged` más de una vez.
+  setTimeout(() => {
+    returningToLogin = false;
     renderAuth(app, (loggedInUser, username) => {
       initGame(loggedInUser, username);
     });
-  } else {
-    // Leer username guardado del registro (si existe)
-    const pendingUsername = sessionStorage.getItem('pending_username');
-    if (pendingUsername) {
-      sessionStorage.removeItem('pending_username');
-      initGame(user, pendingUsername);
-    } else {
-      initGame(user);
-    }
+  }, 120);
+}
+
+let returningToLogin = false;
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    // Firebase avisa con `null` tanto de "cerré sesión" como de "el token ya
+    // no vale". Los dos casos terminan aquí: el jugador vuelve a acceder.
+    await returnToLogin();
+    return;
   }
+
+  // Ya hay partida viva para ESTE usuario: no se reinicia nada. Antes,
+  // cualquier disparo de `onAuthStateChanged` con un usuario válido llamaba a
+  // `initGame`, y la renovación periódica del token lo dispara aunque no haya
+  // pasado nada. El efecto era perder la partida en curso y volver a empezar
+  // la carga desde cero.
+  if (activeGameInstance && activeUser?.uid === user.uid) return;
+
+  const justRegistered = sessionStorage.getItem('pending_username');
+  if (justRegistered) sessionStorage.removeItem('pending_username');
+
+  await initGame(user, resolveUsername(user, justRegistered ?? undefined));
 });
 
 async function initGame(user: any, username?: string) {
@@ -141,6 +257,10 @@ function renderRoute(route: Route) {
 
   // El DOM del HUD de buffs se recrea, así que hay que invalidar la marca
   resetBuffHud();
+
+  // Los suscriptores de audio apuntan al DOM de la vista anterior, que este
+  // `innerHTML = ''` acaba de destruir. Se limpian antes de montar la nueva.
+  clearAudioUnsubscribers();
 
   /**
    * Volver. Se intenta el historial y, si ya no queda nada, se cae a la base:
@@ -201,36 +321,90 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
   app.innerHTML = renderLayoutHTML(user, getSavedTheme(), router.current, {
     onNavigate,
     onLogout: () => void doLogout(),
-    onToggleMute: () => {
-      const muted = toggleMute();
-      const btn = document.querySelector('#mute-btn');
-      if (btn) {
-        btn.innerHTML = `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(muted ? 'mute' : 'sound')}</span>` +
-                        `<span class="hidden md:inline font-mono">${muted ? 'Mudo' : 'SFX'}</span>`;
-      }
-    },
-    onToggleMusic: () => {
-      const on = toggleMusic();
-      const btn = document.querySelector('#music-btn');
-      if (btn) {
-        btn.innerHTML = `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('sound')}</span>` +
-                        `<span class="hidden md:inline font-mono">${on ? 'Música' : 'Silencio'}</span>`;
-        (btn as HTMLElement).style.opacity = on ? '1' : '0.5';
-      }
-    },
+    onToggleMute: () => toggleMute(),
+    onToggleMusic: () => toggleMusic(),
     onThemeChange: (theme) => setTheme(theme as ThemeName)
   });
 
-  // --- Navegación: delegación en el contenedor, no por botón ---
+  // --- Navegación y controles: delegación en el contenedor, no por botón ---
   // Con un solo listener en `app` todos los botones `data-nav` funcionan sin
   // registrar nueve manejadores distintos cada vez que se monta la vista.
   app.onclick = (e) => {
-    const nav = (e.target as HTMLElement).closest('[data-nav]') as HTMLElement | null;
+    const target = e.target as HTMLElement;
+
+    // Los interruptores de audio se comprueban ANTES que la navegación: los
+    // botones viven en la cabecera, que está dentro de `app`, así que sin este
+    // orden el click caería en el `closest('[data-nav]')` equivocado.
+    const audioBtn = target.closest('[data-audio]') as HTMLElement | null;
+    if (audioBtn) {
+      e.preventDefault();
+      if (audioBtn.dataset.audio === 'music') toggleMusic();
+      else toggleMute();
+      return;
+    }
+
+    if (target.closest('[data-logout]')) {
+      e.preventDefault();
+      void doLogout();
+      return;
+    }
+
+    const nav = target.closest('[data-nav]') as HTMLElement | null;
     if (!nav) return;
     e.preventDefault();
     sfx.nav();
     onNavigate(nav.dataset.nav as Route);
   };
+
+  /**
+   * Repinta los dos botones de audio con el estado real.
+   *
+   * Se llama tras cada toggle en vez de re-renderizar la vista entera: un
+   * re-render destroys el HUD de buffs y las escuchas del click del
+   * recolector, y perderse eso por cambiar un icono no compensa.
+   *
+   * Hay una sola función que decide cómo se ve cada estado. Cuando el estado
+   * se pintaba en dos sitios —el HTML de `layout.ts` y el manejador del
+   * toggle— cualquier cambio de estilo tenía que hacerse dos veces, y ya se
+   * había desincronizado: el botón de música nunca cambiaba de icono.
+   */
+  const paintAudioButtons = () => {
+    const music = isMusicEnabled();
+    const sfxOn = isSfxEnabled();
+
+    const musicBtn = document.querySelector('#music-btn');
+    if (musicBtn) {
+      musicBtn.innerHTML =
+        `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(music ? 'music' : 'mute')}</span>` +
+        `<span class="hidden md:inline font-mono">${music ? 'Música' : 'Off'}</span>`;
+      musicBtn.className = music
+        ? 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-main)]'
+        : 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-muted)] opacity-70';
+      musicBtn.setAttribute('aria-pressed', String(music));
+      musicBtn.setAttribute('aria-label', music ? 'Apagar música' : 'Encender música');
+      musicBtn.setAttribute('title', music ? 'Apagar música' : 'Encender música');
+    }
+
+    const sfxBtn = document.querySelector('#mute-btn');
+    if (sfxBtn) {
+      sfxBtn.innerHTML =
+        `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(sfxOn ? 'sound' : 'mute')}</span>` +
+        `<span class="hidden md:inline font-mono">${sfxOn ? 'SFX' : 'Off'}</span>`;
+      sfxBtn.className = sfxOn
+        ? 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-main)]'
+        : 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-muted)] opacity-70';
+      sfxBtn.setAttribute('aria-pressed', String(sfxOn));
+      sfxBtn.setAttribute('aria-label', sfxOn ? 'Silenciar efectos' : 'Activar efectos');
+      sfxBtn.setAttribute('title', sfxOn ? 'Silenciar efectos' : 'Activar efectos');
+    }
+  };
+
+  // El propio módulo de audio avisa de cualquier cambio, venga de donde venga
+  // (un toggle, o el estado guardado que se aplica al montar). Así el botón
+  // nunca queda mostrando algo que ya no es verdad.
+  const unsubscribeAudio = onAudioStateChange(paintAudioButtons);
+  audioUnsubscribers.add(unsubscribeAudio);
+  paintAudioButtons();
 
   // ---- Click del recolector ----
   let clickStreak = 0;
@@ -312,10 +486,29 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
   });
 }
 
+/**
+ * Cierra la sesión.
+ *
+ * `signOut` dispara `onAuthStateChanged` con `null`, y ese es el camino que ya
+ * limpia todo y vuelve al acceso. Aquí solo se fuerza el cierre y se espera a
+ * que el propio listener haga el resto: duplicar la limpieza en los dos sitios
+ * es exactamente la forma de que uno se quede sin actualizar.
+ *
+ * El guardado previo evita perder lo jugado en los últimos segundos: el estado
+ * se escribe a Firestore, pero con la sesión ya cerrada la escritura sería
+ * rechazada.
+ */
 async function doLogout() {
   stopCompanionClicks();
-  if (activeGameInstance?.cleanup) await activeGameInstance.cleanup();
+  try {
+    if (activeGameInstance?.flush) activeGameInstance.flush();
+  } catch (e) {
+    console.warn('[auth] No se ha podido guardar antes de salir:', e);
+  }
   await signOut(auth);
+  // `onAuthStateChanged` se encarga de limpiar y de pintar el acceso.
+  // Esta llamada solo cubre el caso de que el listener ya no estuviera vivo.
+  await returnToLogin('cierre de sesión manual');
 }
 
 // Exponer updateUI globalmente para que el almacén pueda actualizar la UI
@@ -350,7 +543,7 @@ function updateUI(state: any, isAfk: boolean = false) {
   }
 
   if (clickDamageDisplay) {
-    // El daño real lo calcula el game loop (nivel del arma + buffs + afijos +
+    // El daño real lo calcula el game loop (nivel del recolector + buffs + afijos +
     // multiplicador de compañeros + árbol). Si aquí se recalcula a mano se
     // desincroniza del valor real.
     const clickDamage = typeof activeGameInstance?.getClickDamage === 'function'
