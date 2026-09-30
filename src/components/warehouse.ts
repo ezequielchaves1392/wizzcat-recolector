@@ -31,10 +31,14 @@ import { ic } from '../ui/icons';
 import { pageShell, mountInto, wireNav, sectionHead } from '../ui/pageShell';
 import { showConfirmModal } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
+import { showCrystalPicker } from './crystalPicker';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
 import { AFFIX_BY_ID } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
+import {
+  KEY_DEFS, CRATE_KEY_TIER, keyNameOpensCrate, keyTierFromName, type KeyTier
+} from '../data/items';
 
 const TYPE_ICON: Record<string, any> = {
   collector: 'collector',
@@ -90,18 +94,11 @@ function draw(
   const capacity = game.getCapacity?.() ?? state.warehouseCapacity ?? 15;
 
   // --- Filtrado y orden --------------------------------------------------
-  let items = warehouse.filter((w: any) => {
-    if (ui.filter === 'all') return true;
-    if (ui.filter === 'otros') return !['collector', 'companion'].includes(w.type);
-    return w.type === ui.filter;
-  });
-
-  if (ui.sort === 'name') items = [...items].sort((a, b) => a.name.localeCompare(b.name));
-  else if (ui.sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
-  else if (ui.sort === 'tier') items = [...items].sort((a, b) => (b.tier || 0) - (a.tier || 0));
-  else if (ui.sort === 'value') {
-    items = [...items].sort((a, b) => (game.getSellPrice?.(b.id) ?? b.sellPrice ?? 0) - (game.getSellPrice?.(a.id) ?? a.sellPrice ?? 0));
-  }
+  // La lista sale de `visibleStacks()`, la MISMA función que usa el arrastre
+  // para traducir una celda a un índice del array. Con dos copias del criterio
+  // de orden, el arrastre movía los items a un sitio distinto del que el
+  // jugador veía: la celda 3 del array no es la celda 3 de una vista ordenada.
+  const items = visibleStacks(game, state).map(c => c!.item);
 
   const stacked = stackItems(items);
 
@@ -357,7 +354,14 @@ function detailContent(item: any, state: any, game: any): string {
           ${item.type === 'crate' ? `
             <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="open">
-              Abrir caja · 1 llave
+              ${llavesQueSirven(state, item).length > 0 ? 'Abrir caja' : 'Falta la llave'}
+            </button>
+          ` : ''}
+
+          ${item.type === 'crystal' ? `
+            <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
+                    data-act="nada" title="Los cristales se gastan desde la Sintonización del recolector">
+              Se usa en Sintonización
             </button>
           ` : ''}
 
@@ -470,15 +474,19 @@ function wire(container: HTMLElement, game: any, onBack: () => void, onStateChan
         break;
       case 'upgrade':
         if (!item) return;
-        sfx.use();
         if (item.id !== game.getState().equippedCollectorId) {
           showToast('Equipa el recolector primero.', 'info');
           return;
         }
-        const res = game.upgradeEquippedCollector();
-        if (res) showToast(res.msg, res.success ? 'success' : 'error');
-        redraw();
+        // El selector de cristal vive en la vista y no en el game loop porque
+        // elegir cristal es una decisión de interfaz. El coste, la probabilidad
+        // y el consumo los calcula el juego.
+        showCrystalPicker(game, redraw);
         break;
+
+      case 'nada':
+        // Botón informativo: no hace nada a propósito.
+        return;
       case 'sell':
         if (!item) return;
         sellItem(game, item, redraw);
@@ -553,7 +561,9 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
     ghost.style.left = `${e.clientX}px`;
     ghost.style.top = `${e.clientY}px`;
 
-    // Resaltar la celda bajo el dedo
+    // Resaltar la celda bajo el dedo. Se resaltan también los huecos: son
+    // destinos válidos, y sin este resaltado no hay forma de saber que el
+    // arrastre va a funcionar.
     const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-cell]') as HTMLElement | null;
     grid.querySelectorAll('.is-over').forEach(el => el.classList.remove('is-over'));
     if (over && over.dataset.cell !== String(fromIndex)) over.classList.add('is-over');
@@ -581,13 +591,19 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
       return;
     }
 
-    // Arrastre: soltar sobre otra celda
+    // Arrastre: soltar sobre cualquier celda, ocupada o vacía.
+    //
+    // Antes solo se aceptaba una celda CON item, porque el movimiento era un
+    // intercambio: soltar en un hueco no tenía sentido. Con `moveItem` —una
+    // inserción, no un intercambio— cualquier posición es válida, incluidas
+    // las vacías del final. Por eso el resaltado ya no excluye los huecos.
     const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-cell]') as HTMLElement | null;
     const dst = target ? Number(target.dataset.cell) : -1;
     if (dst >= 0 && dst !== src) {
-      swapItems(game, draggedId, dst, src);
-      sfx.place();
-      ui.sort = 'default';
+      if (moveItem(game, draggedId, dst)) {
+        sfx.place();
+        ui.sort = 'default';
+      }
     }
     redraw();
   };
@@ -605,66 +621,238 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
   grid.addEventListener('click', (e) => e.stopPropagation());
 }
 
+// ==========================================================================
+//  Mover items
+//
+//  El filtro y la ordenación viven en `visibleStacks()` y los usa tanto el
+//  pintado como el arrastre. Estaban duplicados: el arrastre traducía el
+//  número de celda con `Math.min(dstViewIndex, wh.length - 1)`, que solo daba
+//  el resultado correcto sin filtro y sin orden. Con el almacén ordenado por
+//  valor, soltar un item en la celda 3 lo mandaba a la posición 3 del array,
+//  que no es donde el jugador lo ve.
+//
+//  Con una sola función, celda y array son siempre el mismo sitio.
+// ==========================================================================
+
 /**
- * Intercambia dos items en el array del almacén.
+ * Los grupos de items en el mismo orden en que los pinta la rejilla.
  *
- * Se opera sobre `state.warehouse` en bruto, no sobre la vista apilada: si se
- * moviera sobre la vista, mover "20 tarjetas apiladas en 1 celda" no se podría
- * expresar, porque la pila no tiene posición propia en el array.
- *
- * `srcIndex` es el índice en la vista; se traduce al índice real buscando el
- * id, que sí es único.
+ * Devuelve una entrada por celda: el item si la celda tiene uno, `null` si está
+ * vacía. Se agrupan los apilables igual que en el pintado, así que una celda
+ * con 20 tarjetas sigue siendo una celda y sigue teniendo 20 items detrás.
  */
-function swapItems(game: any, draggedId: string, dstViewIndex: number, srcViewIndex: number) {
+function visibleStacks(game: any, state: any): Array<{ item: any; size: number } | null> {
+  const wh = (state.warehouse || []) as any[];
+  let items = wh.filter((w: any) => matchesFilter(w, ui.filter));
+
+  if (ui.sort === 'name') items = [...items].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  else if (ui.sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
+  else if (ui.sort === 'tier') items = [...items].sort((a, b) => (b.tier || 0) - (a.tier || 0));
+  else if (ui.sort === 'value') {
+    const precio = (w: any) => game.getSellPrice?.(w.id) ?? w.sellPrice ?? 0;
+    items = [...items].sort((a, b) => precio(b) - precio(a));
+  }
+
+  // `stackItems` aplana la lista en grupos; aquí solo hace falta saber cuántos
+  // items hay detrás de cada celda, que es el tamaño del grupo.
+  const grupos: Array<{ item: any; size: number } | null> = [];
+  let actual: any = null;
+  let tamano = 0;
+
+  for (const w of items) {
+    const clave = `${w.type}_${w.name}`;
+    if (w.stackable && actual && `${actual.type}_${actual.name}` === clave) {
+      tamano += w.stackCount || 1;
+      continue;
+    }
+    if (actual) grupos.push({ item: actual, size: tamano });
+    actual = w;
+    tamano = w.stackCount || 1;
+  }
+  if (actual) grupos.push({ item: actual, size: tamano });
+
+  return grupos;
+}
+
+/** Traduce la celda de destino a un índice del array y mueve el item allí. */
+function moveItem(game: any, draggedId: string, dstViewIndex: number): boolean {
   const state = game.getState();
   const wh = state.warehouse as any[];
   const realFrom = wh.findIndex((w: any) => w.id === draggedId);
-  if (realFrom < 0) return;
+  if (realFrom < 0) return false;
 
-  // Índice real del destino: se cuentan los items no apilados hasta la
-  // posición de la vista, que es la posición equivalente en el array real.
-  let realTo = Math.min(dstViewIndex, wh.length - 1);
-  if (realTo === realFrom) return;
+  const celdas = visibleStacks(game, state);
+  const origen = celdas.findIndex(c => c && c.item.id === draggedId);
+  if (origen < 0) return false;
 
-  const [moved] = wh.splice(realFrom, 1);
-  if (realTo > realFrom) realTo -= 1;
-  wh.splice(Math.max(0, Math.min(realTo, wh.length)), 0, moved);
+  // La celda destino se recorta al rango real: soltar más allá de la última
+  // significa "al final", no un error.
+  const destino = Math.max(0, Math.min(dstViewIndex, celdas.length - 1));
+  if (destino === origen) return false;
 
-  game.updateState(state);
+  // Índice del array equivalente: la suma de los tamaños de los grupos que hay
+  // antes de la celda destino. Sin esto, con una pila en medio la cuenta no
+  // cuadraría: la celda 3 puede estar detrás de 8 items del array.
+  let realTo = 0;
+  for (let i = 0; i < destino; i++) realTo += celdas[i]?.size ?? 0;
+
+  if (realTo === realFrom) return false;
+  return game.moveItem(draggedId, realTo);
+}
+
+/** ¿El item pasa el filtro activo de la rejilla? */
+function matchesFilter(w: any, filtro: string): boolean {
+  if (filtro === 'all') return true;
+  if (filtro === 'otros') return !['collector', 'companion'].includes(w.type);
+  return w.type === filtro;
 }
 
 // ==========================================================================
 //  Acciones sobre items
+//
+//  Estas tres funciones ya NO mutan el estado: solo piden la operación al
+//  game loop y enseñan lo que pasó. Antes cada una restaba el item por su
+//  cuenta y llamaba a `updateState`, y ahí estaba el bug de las cajas: el
+//  contador se recalculaba antes de que el item se hubiera quitado de verdad,
+//  así que la caja volvía a aparecer en el guardado siguiente.
+//
+//  Concentrar la mutación en el game loop también evita que la vista y el
+//  cálculo discrepen: el precio que se enseña es el que se cobra, porque los
+//  dos salen del mismo número.
 // ==========================================================================
-
+/**
+ * Abre una caja.
+ *
+ * La llave la elige el jugador de las que tiene, y solo se ofrecen las que
+ * sirven para ese cofre. El filtro no es una comodidad: es lo que comunica que
+ * hay cuatro tipos de llave y que cada cofre pide el suyo.
+ */
 function openCrate(game: any, item: any, redraw: () => void) {
-  const state = game.getState();
-  if (state.keys < 1) {
-    showToast('No tienes llaves.', 'error');
+  const crateType = inferCrateType(item.name);
+
+  const llaves = llavesQueSirven(game.getState(), item);
+
+  if (llaves.length === 0) {
+    const necesaria = KEY_DEFS[CRATE_KEY_TIER[crateType as keyof typeof CRATE_KEY_TIER]];
+    showToast(`Necesitas ${necesaria?.name ?? 'una llave'} para abrir ${item.name}.`, 'info');
     return;
   }
-  const crateType = inferCrateType(item.name);
+
+  const conUnidad = (k: any) => k.stackCount || 1;
+  const total = llaves.reduce((a: number, k: any) => a + conUnidad(k), 0);
+
+  const etiquetaLlave = (k: any) =>
+    `${k.name}${conUnidad(k) > 1 ? ` ×${conUnidad(k)}` : ''}`;
+
+  // Con una sola llave posible no hace falta preguntar: se usa.
+  if (llaves.length === 1) {
+    confirmarYabrir(game, item, crateType, llaves[0], redraw);
+    return;
+  }
+
+  showKeyPicker(llaves, total, (elegida) => {
+    confirmarYabrir(game, item, crateType, elegida, redraw);
+  });
+}
+
+function confirmarYabrir(
+  game: any, item: any, crateType: any, llave: any, redraw: () => void
+) {
   showConfirmModal(
-    `La ruleta decide el premio al terminar la animación.`,
+    `Se gastará <b>${llave.name}</b> y la caja. El botín ya está decidido: la ruleta solo lo enseña.`,
     () => {
-      const reward = game.openCrateBox(crateType);
-      if (!reward) {
-        showToast('No se pudo abrir la caja.', 'error');
+      const res = game.openCrateBox(item.id, llave.id);
+      if (!res.ok) {
+        sfx.error();
+        showToast(res.msg || 'No se pudo abrir la caja.', 'error');
         return;
       }
-      // El game loop ya descontó el contador; el item se recalcula solo al
-      // siguiente syncCrateCounters, pero el stack visible hay que bajarlo aquí
-      if (item.stackCount && item.stackCount > 1) item.stackCount -= 1;
-      else state.warehouse = state.warehouse.filter((w: any) => w.id !== item.id);
-      game.updateState(state);
-
-      showCrateRoulette(reward, crateType, () => {
-        ui.selectedId = null;
-        redraw();
-      });
+      ui.selectedId = null;
+      showCrateRoulette(res.reward, res.crateType ?? crateType, redraw);
     },
     { sublabel: item.name, confirmText: 'Abrir' }
   );
+}
+
+/** Selector de llave. Solo aparece cuando hay más de una opción válida. */
+function showKeyPicker(
+  llaves: any[], total: number, onPick: (llave: any) => void
+) {
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[70] flex items-end justify-center pointer-events-none';
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-black/60 pointer-events-auto" data-cerrar></div>
+    <div class="relative card-glass-elevated w-full max-w-md rounded-t-2xl pointer-events-auto p-4
+                max-h-[80dvh] overflow-y-auto overscroll-contain animate-rise-in"
+         style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+      <div class="flex items-start gap-3 mb-3">
+        <span class="w-11 h-11 rounded-xl grid place-items-center flex-shrink-0 ring-raro rarity-raro
+                     [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('key')}</span>
+        <div class="min-w-0 flex-1">
+          <h3 class="font-['Orbitron'] font-bold text-[14px] text-[var(--text-main)] leading-tight">
+            ¿Con qué llave?
+          </h3>
+          <p class="text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
+            ${llaves.length} tipos disponibles · ${total} llaves en total
+          </p>
+        </div>
+        <button data-cerrar class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
+                aria-label="Cerrar">
+          <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        ${llaves.map((k: any, i: number) => {
+          const t = typeof k.tier === 'number' ? k.tier : keyTierFromName(k.name || '');
+          const def = KEY_DEFS[t as KeyTier];
+          return `
+            <button data-key="${k.id}" data-idx="${i}"
+                    class="w-full rounded-xl border px-3 py-2.5 flex items-center gap-2.5 text-left cursor-pointer
+                           transition active:scale-[0.99] border-[var(--border-color)] hover:border-[var(--accent)]"
+                    style="background: color-mix(in srgb, var(--accent) 7%, transparent)">
+              <span class="flex-shrink-0 ${rarityClass(k.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('key')}</span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${k.name}</span>
+                <span class="block text-[9px] font-mono text-[var(--text-muted)] truncate mt-0.5">${k.details || def?.details || ''}</span>
+              </span>
+              <span class="text-[11px] font-mono accent-text tabular flex-shrink-0">×${k.stackCount || 1}</span>
+            </button>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  const cerrar = () => { overlay.remove(); };
+  overlay.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', cerrar));
+  overlay.querySelectorAll('[data-key]').forEach(b => {
+    b.addEventListener('click', () => {
+      sfx.pick();
+      const idx = Number((b as HTMLElement).dataset.idx);
+      cerrar();
+      onPick(llaves[idx]);
+    });
+  });
+  document.body.appendChild(overlay);
+}
+
+/**
+ * Las llaves del almacén que sirven para abrir este cofre.
+ *
+ * Vive aquí y no en el game loop porque es una lectura: el juego solo necesita
+ * saber si hay alguna y cuál es, y el selector de llave es cosa de la vista.
+ */
+function llavesQueSirven(state: any, caja: any): any[] {
+  const crateType = inferCrateType(caja.name);
+  return ((state.warehouse as any[]) || [])
+    .filter((w: any) => w.type === 'key' && keyNameOpensCrate(w.name || '', crateType))
+    .sort((a: any, b: any) => {
+      const ta = typeof a.tier === 'number' ? a.tier : keyTierFromName(a.name || '');
+      const tb = typeof b.tier === 'number' ? b.tier : keyTierFromName(b.name || '');
+      // De menor a mayor: se gasta la más pobre que sirva, que es la que abunda.
+      // Guardar la rara para cuando toque es decisión del jugador.
+      return ta - tb;
+    });
 }
 
 function inferCrateType(name: string): any {
@@ -675,108 +863,46 @@ function inferCrateType(name: string): any {
   return 'legendary';
 }
 
+/** Aplica un consumible. Toda la lógica vive en el game loop. */
 function useConsumable(game: any, item: any, redraw: () => void) {
-  const state = game.getState();
-  const buffId = item.buffId;
-
   showConfirmModal(
     item.details || 'Aplicar el efecto de este consumible.',
     () => {
-      sfx.use();
-      const now = Date.now();
-      const afkMs = game.getAfkDurationMs?.() ?? 10 * 60 * 1000;
-
-      switch (buffId) {
-        case 'warehouseExpander':
-          if (state.warehouseCapacity >= 50) {
-            showToast('Almacén al máximo.', 'error');
-            return;
-          }
-          state.warehouseCapacity += 1;
-          break;
-        case 'afk': {
-          const base = Math.max(now, state.afkExpiresAt || 0);
-          // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
-          state.afkExpiresAt = Math.min(base + afkMs, now + afkMs * 3);
-          break;
-        }
-        case 'clickBoost': {
-          const base = Math.max(now, state.buffs.clickBoostExpiresAt);
-          state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, now + 60 * 60_000);
-          break;
-        }
-        case 'passiveBoost': {
-          const base = Math.max(now, state.buffs.passiveBoostExpiresAt);
-          state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60_000, now + 2 * 60 * 60_000);
-          break;
-        }
-        case 'clickX2': {
-          const base = Math.max(now, state.buffs.clickX2ExpiresAt);
-          state.buffs.clickX2ExpiresAt = Math.min(base + 30_000, now + 30 * 60_000);
-          break;
-        }
-        case 'clickX3': {
-          const base = Math.max(now, state.buffs.clickX3ExpiresAt);
-          state.buffs.clickX3ExpiresAt = Math.min(base + 30_000, now + 30 * 60_000);
-          break;
-        }
-        case 'calibrationStone':
-        case 'stabilityNano':
-          // No se usan desde el almacén: se consumen en la Forja
-          showToast('Este consumible se usa en la Forja.', 'info');
-          return;
-        default:
-          showToast('Este consumible no tiene efecto.', 'error');
-          return;
+      const res = game.useConsumable(item.id);
+      if (!res.ok) {
+        sfx.error();
+        showToast(res.msg || 'No se pudo usar.', 'error');
+        return;
       }
-
-      if (item.stackCount && item.stackCount > 1) item.stackCount -= 1;
-      else state.warehouse = state.warehouse.filter((w: any) => w.id !== item.id);
-      game.updateState(state);
-      showToast(`${item.name}: aplicado`, 'success');
+      sfx.use();
+      ui.selectedId = null;
+      showToast(res.msg || `${item.name}: aplicado`, 'success');
       redraw();
     },
     { sublabel: item.name, confirmText: 'Usar' }
   );
 }
 
+/** Vende un item. El precio y el borrado los decide el game loop. */
 function sellItem(game: any, item: any, redraw: () => void) {
-  const state = game.getState();
-  const isEquipped = (item.type === 'collector' && item.equipped) || (item.type === 'companion' && state.activeCompanions.includes(item.id));
-  if (isEquipped) {
-    showToast('Desequípalo antes de venderlo.', 'info');
-    return;
-  }
-  const count = (state.warehouse as any[]).filter((w: any) => w.type === item.type).length;
-  if ((item.type === 'collector' || item.type === 'companion') && count <= 1) {
-    showToast('No puedes vender el último de su tipo.', 'error');
-    return;
-  }
-  const price = game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0;
+  const qty = item.stackable ? (item.stackCount || 1) : 1;
+  const unitario = game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0;
+  const total = unitario * qty;
 
   showConfirmModal(
-    `Vendes ${item.name}${item.stackable ? ` ×${item.stackCount || 1}` : ''} por ${formatNumber(price * (item.stackable ? (item.stackCount || 1) : 1))} nanitas.`,
+    `Vendes ${item.name}${qty > 1 ? ` ×${qty}` : ''} por ${formatNumber(total)} nanitas.`,
     () => {
-      sfx.buy();
-      const qty = item.stackable ? (item.stackCount || 1) : 1;
-      state.nanites += price * qty;
-      if (item.stackable && (item.stackCount || 1) > 1) {
-        const live = (state.warehouse as any[]).find((w: any) => w.id === item.id);
-        if (live) live.stackCount = (live.stackCount || 1) - qty;
-        if ((live?.stackCount ?? 0) <= 0) {
-          state.warehouse = (state.warehouse as any[]).filter((w: any) => w.id !== item.id);
-        }
-      } else {
-        state.warehouse = (state.warehouse as any[]).filter((w: any) => w.id !== item.id);
-        if (item.type === 'companion') {
-          state.companions = (state.companions as any[]).filter((c: any) => c.id !== item.id);
-          state.activeCompanions = (state.activeCompanions as string[]).filter((id) => id !== item.id);
-        }
+      const res = game.sellItem(item.id);
+      if (!res.ok) {
+        sfx.error();
+        showToast(res.msg || 'No se pudo vender.', 'error');
+        return;
       }
-      game.updateState(state);
+      sfx.buy();
+      showToast(`Vendido por ${formatNumber(res.gained ?? total)} ◆`, 'success');
       ui.selectedId = null;
       redraw();
     },
-    { sublabel: 'Vender', confirmText: `+${formatNumber(price * (item.stackable ? (item.stackCount || 1) : 1))} ◆` }
+    { sublabel: 'Vender', confirmText: `+${formatNumber(total)} ◆` }
   );
 }

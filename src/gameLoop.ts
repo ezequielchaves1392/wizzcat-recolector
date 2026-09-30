@@ -116,6 +116,28 @@ export function collectorUpgradeCost(level: number): number {
   return Math.max(1, Math.floor(1.2 * Math.pow(1.14, level)));
 }
 
+/**
+ * Probabilidad de éxito con un cristal concreto, en porcentaje.
+ *
+ * Es el mismo número que usa `upgradeEquippedCollector`, expuesto para que las
+ * vistas puedan enseñarlo ANTES de que el jugador gaste. La regla del juego es
+ * que ninguna probabilidad se muestra después de confirmar.
+ */
+export function previewUpgradeChance(level: number, crystalPower: number): number {
+  return crystalSuccessChance(level, crystalPower);
+}
+
+/**
+ * Coste de la sintonización al nivel dado, en unidades de cristal.
+ *
+ * Igual que el anterior: el juego cobra esto, la vista lo enseña. Duplicar el
+ * cálculo en la interfaz sería una forma de que el botón dijera una cifra y el
+ * cobro otra.
+ */
+export function previewUpgradeCost(level: number): number {
+  return collectorUpgradeCost(level);
+}
+
 // Consumibles de la tienda. `buffId` es el identificador estable que usa el
 // almacén para aplicar el efecto: cambiar un nombre no puede romper el buff.
 const CONSUMABLES = {
