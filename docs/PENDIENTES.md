@@ -77,6 +77,50 @@ Ver el ranking solo se esta mostrando un tipo de ribbon.
 > se ve el marco, y si el banner sale en algún sitio dentro del ranking, es cosa
 > tuya. Está en Features y no en Bugs por eso.
 
+### F9 · Los logros tienen que decir qué falta
+
+Quiero que los logros den una "pista" de lo necesario para cumplirlos.
+
+> **La pista YA EXISTE, y es completa.** En Perfil → Logros cada logro enseña su
+> progreso con `actual/objetivo` y una barra de avance (`profilePage.ts:175-202`),
+> y los datos salen del motor por `getAchievements()` (`gameLoop.ts:2270`), que
+> devuelve `current` y `target` de la misma función que decide si el logro está
+> cumplido. La pista no es inventada ni una copia: es el número real.
+>
+> **Lo que no sabías es que estaba ahí**, porque esperabas un cartel que nunca llega
+> (B3). Con el cartel arreglado, esta petición puede quedar en nada.
+>
+> **Si aun así quieres la pista fuera del Perfil, esto es lo que hay que decidir:**
+> dónde se enseña y cuánta. Lo cierto es que el Perfil es el único sitio donde
+> caben quince logros con su barra, y que un "Logro más cercano: 15/20" en el panel
+> principal es un número que cambia cada pocos minutos y hay que decidir si
+> compensa esa luz. Hay tres sitios posibles y cada uno tiene un coste distinto.
+
+### F10 · Que el trompo sea el que sortea
+
+La descripción dice que ya está decidido y en realidad se debería mostrar el tiro y
+decidirlo luego de comprarlo.
+
+> **Esto es justo lo contrario de lo que hace el código, y el código lo hace a
+> propósito en seis sitios.** El motor sortea **y aplica el botín** en el mismo
+> instante (`gameLoop.ts:2966`), y el trompo solo lo enseña. El motivo está escrito
+> en `crateLoot.ts:7`: "la ruleta NO decide el premio. Si se invirtiera, la ruleta
+> estaría mintiendo sobre las probabilidades reales".
+>
+> Y no es una superstición: la cinta se monta antes de girar, con el premio ya
+> puesto en `winIndex`. Si el trompo decidiera, la casilla que se parase tendría que
+> ser la que el azar eligió al principio de la animación; o el premio se aplicaría
+> después de parar, y entonces **la casilla que enseña y el botín que entra son dos
+> cosas distintas**. Es el fallo que el propio código ya cometió una vez con las
+> llaves: la legendaria anunciaba "Llave Rúnica" y entregaba una Llave Reforzada
+> (`gameLoop.ts:2968-2980`).
+>
+> **Mi recomendación: no tocar la mecánica.** Lo que faltaba era la explicación, y
+> se ha arreglado (B5). Si aun así quieres que el sorteo ocurra al final del trompo,
+> hay que rehacer el modelo de la cinta y aceptar que el premio se aplica después de
+> la animación: eso abre la puerta a que el jugador cierre el overlay a mitad y se
+> lleve una caja sin nada dentro.
+
 ---
 
 ## Bugs y cosas que se han visto
@@ -123,6 +167,82 @@ se la monta él mismo.
 >
 > **Es la misma cosa que F8 vista desde los dos lados:** B2 es el defecto y F8 la
 > decisión de qué tiene que verse en la fila. Si se arregla F8, B2 se cierra solo.
+
+### B3 · El logro del almacén a 20 no da cartel
+
+Obtuve el logro del almacen en 20 y no me salió un cartel.
+
+> **Causa raíz, y son DOS, no una.** Por eso está en bugs y no en features: el
+> cartel existe, está montado y es correcto. Lo que falla es que no se llama.
+>
+> 1. **La compra que completa el logro no evalúa los logros.**
+>    `buyStoreItem` con `warehouseSlot` sube la capacidad y sale
+>    (`gameLoop.ts:2821-2825`): `warehouseCapacity += 5`, `onUpdate`,
+>    `saveToFirebase` y sale. **No hay `checkAchievements()`.** Las ocho rutas que
+>    sí lo llaman están en `gameLoop.ts` (1594, 2179, 2317, 2472, 2543, 2560, 3140,
+>    3258) y esa no está. Justo la acción que cumple "Almacén Masivo" es la única
+>    que no lo comprueba.
+> 2. **Al cargar, el cartel es mudo siempre.** `checkAchievements()` se llama
+>    durante la carga (`gameLoop.ts:1594`), o sea dentro del `await
+>    createGameLoop(...)` de `main.ts:323`. `showAchievementPopup` busca
+>    `#achievement-stack` con `querySelector` y **si no está, se sale sin hacer
+>    ruido** (`main.ts:66-67`). Ese contenedor lo pinta `renderLayoutHTML`
+>    (`layout.ts:353`), que se ejecuta en el `requestAnimationFrame` **posterior**
+>    a que `createGameLoop` termine (`main.ts:336-338`). A la hora del logro, el
+>    `#app` todavía no tiene layout. Por eso no hay ni un solo cartel de logro en
+>    toda la partida: los que se detectan en vivo también caen en el mismo `return`.
+>
+> **Por qué ningún banco lo pilla:** `evaluateAchievements` es una función pura y
+> se puede probar (y se prueba), pero **la cadena que tiene que existir —que el
+> callback llegue a un nodo que está en el documento— no**. Es un fallo de cableado,
+> y un banco de números no lo ve.
+>
+> **Cómo se comprueba al arreglar:** meter el callback en una cola si el contenedor
+> no existe, y vaciarla en cuanto se pinte el layout. Con eso los logros de la carga
+> también salen, y hay que decidir si con retraso o solo los de en vivo.
+
+### B4 · La pista del logro del almacén cuenta slots que no tienes
+
+Relacionado con lo que dijiste de la "pista": el progreso de "Almacén Masivo"
+miente.
+
+> `deep_pockets` mide `s.warehouseCapacity` (`achievements.ts:112`), que es la base
+> sola. La capacidad que ve el jugador es `warehouseCapacity + bonus.storageSlots`
+> (`gameLoop.ts:1654-1656`), y el árbol de pasivas da +3 y +8 (`data/tree.ts:87` y
+> `171`). Con los dos nodos el almacén tiene **26 slots** y el logro enseña
+> **15/20** para siempre. Lo mismo le pasa a cualquier otro logro que mida algo
+> compuesto: la pista y el almacén tienen que salir de la misma regla (R3), y aquí
+> salen de dos.
+>
+> El logro tampoco se cumple por la vía del árbol, que es la que el jugador ve
+> funcionar. Se cumple comprando una ampliación de tienda (+5), y solo si ninguna de
+> las dos vías tiene ya la base a 20.
+
+### B5 · Las tarjetas de la tienda contaban cómo está hecho el trompo
+
+Este es el texto de la imagen: "Abrir una da una tirada de ruleta con el botín ya
+decidido antes de girar".
+
+> **Lo que falla no es la frase: es que una frase interna se enseñaba al jugador.**
+> Estaba en dos sitios, los dos a la vista: la tarjeta de la llave en la tienda
+> (`store.ts:83`) y el modal de confirmación de abrir caja (`warehouse.ts:1276`).
+>
+> Decir "el botín ya está decidido" convierte cada tirada en la promesa de que el
+> trompo no sortea nada. Y el jugador llegó a la conclusión correcta a partir de un
+> texto: que la ruleta era un adorno. No lo era —la casilla que se para y el botín
+> que entra son lo mismo— pero el texto lo decía.
+>
+> **POR QUÉ CUENTA COMO BUG Y NO COMO GUSTO.** Hay una regla del proyecto que va
+> exactamente de esto: *no se enseña al jugador cómo está hecho por dentro*. El
+> orden interno de un sorteo es información de diseño, igual que el seed o la tabla
+> de probabilidades. En un sitio es documentación —y tiene que estar, porque es lo
+> que impide que alguien invierta la ruleta sin querer—; en el otro es texto de
+> producto.
+>
+> **Arreglado:** los dos textos ahora cuentan lo que vive el jugador. `build` en
+> verde y la ruleta comprobada en `ruleta-preview.html`: gira, frena en la aguja y
+> la casilla y el cartel dicen lo mismo. La mecánica no se ha tocado (F10 explica
+> por qué no).
 
 ---
 
@@ -193,8 +313,8 @@ programar F7._
 
 ### El cuello de botella no son las features: es un fichero
 
-`src/gameLoop.ts` tiene **3.352 líneas y 38 métodos de API**. Las diez ideas de
-arriba lo tocan **todas**:
+`src/gameLoop.ts` tiene **3.352 líneas y 38 métodos de API**.Casi todas las ideas de
+arriba lo tocan:
 
 | Idea | Ficheros |
 |---|---|
@@ -204,16 +324,18 @@ arriba lo tocan **todas**:
 | F7 slots de compañero | `gameLoop.ts`, `components/store.ts`, `data/prestige.ts` |
 | B1 primer slot | `gameLoop.ts`, `ui/playerPanel.ts` |
 | F8-B2 marco y banner | `gameLoop.ts` (un `setDoc`), `components/rankings.ts`, `services/rankingService.ts` |
+| **B3-B4 cartel y pista de logros** | `gameLoop.ts` (`checkAchievements`), `main.ts`, `achievements.ts`, `ui/profilePage.ts` |
 | P1-P3 balance | `gameLoop.ts`, `data/tiers.ts`, `data/prestige.ts` |
 
-Diez de diez sobre el mismo fichero significa que **con varios agentes a la vez
-se pisan**, y un conflicto ahí no es un conflicto de texto: es economía. Un
+Siete de siete grupos sobre el mismo fichero significa que **con varios agentes a la
+vez se pisan**, y un conflicto ahí no es un conflicto de texto: es economía. Un
 `Math.floor` que se mueve cambia el juego y los bancos siguen en verde.
 
-**La excepción es F8-B2, y por eso puede ir en cualquier momento:** toca
+**Las dos excepciones, y por eso pueden ir en cualquier momento:** F8-B2 toca
 `gameLoop.ts` pero solo en el bloque del `setDoc` de `rankings/{uid}` (dos campos
-más), y el resto del trabajo vive en `rankings.ts`. Es la única de la lista que no
-se pisa con nadie.
+más), y el resto del trabajo vive en `rankings.ts`. Y **F9-F10 no tocan el motor**:
+F9 es una decisión de dónde enseñar una pista que ya existe, y F10 es una decisión
+sobre si se toca la mecánica del trompo (mi recomendación es que no).
 
 ### Los cuatro pasos
 
@@ -225,29 +347,38 @@ se pisa con nadie.
 2. ~~**B1 · el bug del primer slot.**~~ **HECHO.** Los compañeros `passive` no
    anunciaban su ingreso: el Avatar del Vacío, power 65, salía de una caja y no
    producía ninguna señal. La regla ahora vive en el motor.
-3. **Mudanza de las 230 líneas de datos a `src/data/`.** Ver abajo. Riesgo casi
-   nulo, y de paso cumple R2, que ahora se incumple sin que nadie lo notara.
+3. ~~**Mudanza de las 230 líneas de datos a `src/data/`.**~~ **HECHO.** Ahora
+   viven en `data/store.ts`, `data/buffs.ts`, `data/generators.ts` y en
+   `crafting.ts` la fórmula de sintonización. `gameLoop.ts` baja de 3.411 a 3.242
+   líneas y **ningún fichero de `data/` importa del motor**: eso era R29 sin
+   cumplir, y `data/items.ts` llegaba a hacer `import type { CrateType } from
+   '../gameLoop'`.
 4. **F1-F8**, que ya tocan menos sitio.
 
-### El paso 3 en detalle: qué se mudaría
+### El paso 3 en detalle: qué se mudó
 
-Las primeras 380 líneas de `gameLoop.ts` **no son el motor**, son datos puros que
-no tocan `state` ni Firebase:
+Las primeras 250 líneas de `gameLoop.ts` **no eran el motor**, eran datos puros que
+no tocaban `state` ni Firebase. Ahora viven aquí:
 
-| Qué | Líneas |
+| Fichero | Qué tiene |
 |---|---|
-| `STORE_ITEMS`, `CRATE_TYPES`, `BUFF_FIELDS` | 155-232 |
-| `COMPANION_SLOT_COSTS` | 232 |
-| `collectorUpgradeCost`, `previewUpgradeChance`, `previewUpgradeCost` | 242-265 |
-| `generateCompanionByTier`, `generateCollectorByTier` | 344-362 |
+| `data/store.ts` | `STORE_ITEMS` (con la curva de balance), `CRATE_TYPES`, `CONSUMABLES`, `COLLECTOR_BASE_COSTS`, `COMPANION_SLOT_COSTS`, `CrateType` |
+| `data/buffs.ts` | `AFK_CARD_DURATION_MS`, `MAX_AFK_BUFF_DURATION_MS`, `BUFF_FIELDS`, `BuffKey` |
+| `data/generators.ts` | `generateCompanionByTier`, `generateCollectorByTier` |
+| `data/crafting.ts` | `collectorUpgradeCost` (se suma a las que ya tenía) |
 
-Son ~230 líneas de tablas y funciones puras. **Cuatro ficheros ya importan de
-un fichero de 3.352 líneas para leer una tabla**: `store.ts`, `crateLoot.ts`,
-`crystalPicker.ts` e `items.ts`. Y R2 dice que las reglas compartidas viven en
-`src/data/` — aquí se está incumpliendo desde antes de que existiera el banco
-que lo comprueba.
+De 3.411 líneas a 3.242, y lo que se va es lo que no era del motor.
 
-Además: de 3.352 líneas, solo **54 tocan Firebase**. El 98% es lógica de juego.
+**Y el detalle que de verdad merecía la pena:** `data/items.ts` estaba haciendo
+`import type { CrateType } from '../gameLoop'`. Eso es un `data/` que depende de
+donde vive el estado —R29 incumplido sin que nadie lo notara— y se resolvió solo
+al mover `CRATE_TYPES` a su sitio.
+
+**Lo que NO se hizo, y es lo importante:** partir el motor en varios ficheros de
+golpe. Los bancos comprueban números, no estructura: si una mudanza mueve un
+`Math.floor`, los 1.162 tests siguen verdes y el juego cambia. Aquí no hay ninguna
+decisión nueva —solo dónde vive cada cosa— y `balanceCheck` comprueba a posteriori
+que ninguna cifra se movió sin querer.
 
 ### Lo que NO se va a hacer, y por qué
 
@@ -273,7 +404,15 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
 - [x] **P1-P3 · balance.** El precio de las cartas sigue al poder y sube con el
       tier; sintonizar ya no es un botón. `balanceCheck` (29) es el banco nuevo.
 - [x] **B1 · los compañeros `passive` no anunciaban su ingreso.** Regla movida al
-      motor. `senalCheck` grew de 30 a 36.
+      motor. `senalCheck` pasó de 30 a 36.
+- [x] **Paso 3 · las tablas fuera de `gameLoop.ts`.** A `data/store.ts`,
+      `data/buffs.ts`, `data/generators.ts` y `crafting.ts`. Ningún `data/` importa
+      ya del motor.
+- [x] **B5 · el trompo ya no explica cómo está hecho por dentro.** Los dos textos
+      que lo hacían —la tarjeta de la llave en la tienda y el modal de confirmar
+      abrir caja— cuentan ahora lo que vive el jugador. La mecánica no se ha tocado:
+      `ruleta-preview.html` gira, frena y la casilla y el cartel dicen lo mismo.
+      Sin commit todavía.
 
 ---
 
@@ -283,6 +422,20 @@ _Lo que se decidió no hacer, y por qué. Esto vale más que la lista de "hecho"
 una idea que se descartó con un motivo escrito no vuelve a proponerla nadie._
 
 _(vacío)_
+
+### D2 · Un fallo mío en un fichero que no está en git
+
+Un `.Replace()` mal escrito en PowerShell sustituyó **cada `i` por `m`** en
+`src/ruletaPreview.ts` y en `src/components/store.ts`. El primero está en
+`.gitignore`, así que no hay copia en el historial: se reconstruyó a mano. El
+segundo tenía además trabajo sin commitear de otra sesión —el texto de la caja en
+la tienda—, que se recuperó de la conversación.
+
+> **El error de fondo no es el carácter: es que edité ficheros en bloque con un
+> script en vez de con ediciones exactas.** Un `.Replace()` con el patrón
+> equivocado no avisa: escribe. Y en un repo donde `git status` es la única red,
+> un fichero ignorado no tiene red. Los tres ficheros se recuperaron, pero
+> perdimos una herramienta de revisión visual hasta reconstruirla.
 
 ### D1 · Un compañero existe pero no se puede conseguir
 

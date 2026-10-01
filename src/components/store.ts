@@ -33,7 +33,8 @@
 import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
-import { STORE_ITEMS, TIER_SYSTEM } from '../gameLoop';
+import { TIER_SYSTEM } from '../data/tiers';
+import { STORE_ITEMS } from '../data/store';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from './crateLoot';
@@ -80,7 +81,14 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
 
   key: {
     what: 'Una llave. Se gasta una por cada caja que abras.',
-    detail: 'Las cajas del almacén se aperturan aquí. Abrir una da una tirada de ruleta con el botín ya decidido antes de girar.'
+    // POR QUÉ AQUÍ NO SE DICE CÓMO ESTÁ HECHA LA TIRADA. Antes decía "con el
+    // botín ya decidido antes de girar", que era verdad y no era lo que había que
+    // contar: es hablar como si la ruleta no sorteara nada, y el jugador leía que
+    // el trompo es un adorno y que el premio ya estaba escrito. Lo que el jugador
+    // vive es al revés de lo que dice la frase: él no sabe qué va a salir hasta
+    // que la casilla se para. Ese es el trompo, y es lo único que esta tarjeta
+    // tiene que contar.
+    detail: 'Las cajas del almacén se aperturan aquí. Gastas la llave, la ruleta gira y te dice qué ha salido. Cada caja tiene su propia tabla de botín.'
   },
   upgradeCrystal: {
     what: 'Cristal para subir el nivel del recolector equipado.',

@@ -111,6 +111,34 @@ export function collectorMaxLevel(maxLevel?: number | null): number {
   return BASE_COLLECTOR_MAX_LEVEL;
 }
 
+/**
+ * Cristales que cuesta subir del nivel dado al siguiente.
+ *
+ * Vive AQUÍ y no en `gameLoop.ts` por una razón concreta: es la mitad de la
+ * sintonización, y la otra mitad —la probabilidad de éxito,
+ * `crystalSuccessChance()` en `data/items.ts`— ya vivía en `data/`. Una regla
+ * partida en dos sitios es una regla que se puede tocar por un lado y olvidar por
+ * el otro.
+ *
+ * 1,1,2,2,3,3,5,6,8,9,11,14,17,21,26,32,40,50,63,79 -> 456 cristales en total,
+ * 91 200 nanitas con el cristal a 200.
+ *
+ * POR QUÉ SUBIÓ DE 1.14 A 1.26. Antes subir a nivel 20 costaba 100 cristales, que
+ * a 60 cada uno salían 6 000 nanitas: menos del 4% de un T10. No había nada que
+ * decidir, era un botón. Ahora subir al máximo cuesta la mitad del recolector,
+ * que es la relación que hace que "¿llevo esto a 15 o a 16?" sea una pregunta de
+ * verdad.
+ *
+ * Y por qué NO depende del tier del recolector, que es lo tentador: porque el
+ * coste es POR INTENTO, no por item. Sube un T1 y sale carísimo; sube un T10 y
+ * sale la mitad de su precio. La consecuencia buscada es que no se desperdicie
+ * cristal en un recolector malo, que es justo lo que se quiere: el jugador
+ * invierte en lo que le va a durar la partida.
+ */
+export function collectorUpgradeCost(level: number): number {
+  return Math.max(1, Math.floor(1.2 * Math.pow(1.26, level)));
+}
+
 // --------------------------------------------------------------------------
 // Probabilidad de éxito
 // --------------------------------------------------------------------------

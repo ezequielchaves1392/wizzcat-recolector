@@ -1,4 +1,4 @@
-import { COMPANION_SLOT_COSTS } from '../gameLoop';
+import { COMPANION_SLOT_COSTS } from '../data/store';
 
 export function renderUpgradesTab(container: HTMLElement, game: any, onBack: () => void) {
   const renderTemplate = () => {

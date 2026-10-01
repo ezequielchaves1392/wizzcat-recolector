@@ -16,6 +16,69 @@ import { TREE_BY_ID, nodeCost } from './data/tree';
 import { attemptForge, AFFIX_BY_ID, collectorMaxLevel } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
+
+// ==========================================================================
+//  LAS TABLAS Y LAS FUNCIONES PURAS ESTÁN FUERA. AQUÍ ESTÁ POR QUÉ.
+//
+//  Este fichero tenía 3.352 líneas y las primeras 250 eran datos puros: precios,
+//  tipos de caja, buffs y generadores. Cuatro ficheros tenían que importarlo
+//  entero —con Firebase y la cola de nanitas dentro— solo para leer un número, y
+//  `data/items.ts` acababa haciendo `import type { CrateType } from
+//  '../gameLoop'`, que es un `data/` que depende de donde vive el estado. R29
+//  dice que las reglas compartidas viven en `data/`, y aquí no era cierto.
+//
+//  Ahora viven en `data/store.ts`, `data/buffs.ts` y `data/generators.ts`. Lo que
+//  queda en este fichero es lo que de verdad necesita la partida.
+//
+//  Y LA MUDANZA ES LITERAL. Las mismas tablas, los mismos números, las mismas
+//  claves: nada de esto cambia una regla. Lo que no se puede comprobar con un
+//  banco es que no se haya movido nada que no sea un número, y por eso aquí no
+//  hay ninguna decisión nueva que revisar — solo dónde vive cada cosa.
+// ==========================================================================
+import {
+  STORE_ITEMS, CRATE_TYPES, CONSUMABLES, COLLECTOR_BASE_COSTS,
+  COMPANION_SLOT_COSTS, type CrateType
+} from './data/store';
+import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
+import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
+import { collectorUpgradeCost } from './data/crafting';
+
+// Se re-exportan las que el resto del juego ya importaba de aquí, con el mismo
+// motivo que `TIER_SYSTEM` unas líneas más arriba: romper diez imports de golpe
+// no aporta nada y hace la mudanza más difícil de revisar. Lo que importa es que
+// quien los use los use para lo que sirven —una tabla o una fórmula—, no para
+// llegar al motor.
+export { STORE_ITEMS, CRATE_TYPES, COLLECTOR_BASE_COSTS, COMPANION_SLOT_COSTS };
+export { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS };
+export { collectorUpgradeCost };
+export type { CrateType, BuffKey };
+
+/**
+ * Probabilidad de éxito con un cristal concreto, en porcentaje.
+ *
+ * Es el mismo número que usa `upgradeEquippedCollector`, expuesto para que las
+ * vistas puedan enseñarlo ANTES de que el jugador gaste. La regla del juego es
+ * que ninguna probabilidad se muestra después de confirmar.
+ *
+ * Y por qué sigue aquí y no en `data/`: es un alias de una función pura que ya
+ * vive en `crafting.ts`. Mover el alias no quitaría ni una línea, y lo que sí
+ * haría es abrir una segunda puerta a la misma regla: alguien lo tocaría creyendo
+ * que es la fuente, y no lo es.
+ */
+export function previewUpgradeChance(level: number, crystalPower: number): number {
+  return crystalSuccessChance(level, crystalPower);
+}
+
+/**
+ * Coste de la sintonización al nivel dado, en unidades de cristal.
+ *
+ * Igual que el anterior: el juego cobra esto, la vista lo enseña. Duplicar el
+ * cálculo en la interfaz sería una forma de que el botón dijera una cifra y el
+ * cobro otra.
+ */
+export function previewUpgradeCost(level: number): number {
+  return collectorUpgradeCost(level);
+}
 // `KeyDef` y `CrystalDef` se importaban aquí y ya no se usan: el precio de
 // reventa del material salía de `def.cost`, y al salir de `STORE_ITEMS` se han
 // quedado sin uso. Se borran en vez de dejarlos, porque un tipo importado que
@@ -147,200 +210,6 @@ function reconcileEquippedCollector(
   return { id, changed };
 }
 
-export const AFK_CARD_DURATION_MS = 10 * 60 * 1000; // Cada tarjeta AFK da 10 min
-export const MAX_AFK_BUFF_DURATION_MS = 30 * 60 * 1000; // Máximo acumulable (3 tarjetas)
-
-// Buffs que se pueden cancelar desde la interfaz. El buff AFK vive fuera de
-// `state.buffs`, por eso tiene su propio campo.
-export const BUFF_FIELDS = {
-  clickBoost: 'clickBoostExpiresAt',
-  clickX2: 'clickX2ExpiresAt',
-  clickX3: 'clickX3ExpiresAt',
-  passiveBoost: 'passiveBoostExpiresAt'
-} as const;
-
-export type BuffKey = keyof typeof BUFF_FIELDS | 'afk';
-
-export const COLLECTOR_BASE_COSTS = {
-  blaster: 20,
-  plasmaCannon: 150,
-  quantumDisruptor: 1200
-};
-
-export const STORE_ITEMS = {
-  key: { cost: 250, label: 'Llave de Cifrado' },
-  upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
-  warehouseSlot: { cost: 6000, label: 'Ampliar Almacén (+5 slots)' },
-  commonCrate: { cost: 500, label: 'Caja Común' },
-  rareCrate: { cost: 1500, label: 'Caja Rara' },
-  epicCrate: { cost: 5500, label: 'Caja Épica' },
-  legendaryCrate: { cost: 21000, label: 'Caja Legendaria' },
-  clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clicks x2 (30m)' },
-  passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2 (1h)' },
-  // Nuevos items
-  backpackExpander: { cost: 1400, label: 'Expansor de Almacén (+1 slot)' },
-  companionSlot1: { cost: 1200, label: 'Slot de Compañero 2' },
-  companionSlot2: { cost: 16000, label: 'Ranura de Escuadrón (+3 slots)' },
-  afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
-  clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
-  clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },
-  // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
-  // una decisión, no algo que se compre en masa y se gaste sin pensar.
-  calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },
-  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y un afijo extra)' },
-  // Escala 1.62x por tier, IGUAL que el poder, y el coste por punto SUBE un 12%
-  // en cada salto. Esa es toda la regla, y son las dos mitades de lo mismo:
-  //
-  //   · Escalar IGUAL que el poder mantiene el coste por punto plano, así que
-  //     subir de tier nunca es una optimisation. El comentario de abajo promise
-  //     esto desde hace tiempo y era falso: el daño real va de 6 a 466 (78x,
-  //     por `TIER_SYSTEM.ranges`) y el precio iba de 850 a 17 500 (20,6x). El
-  //     arreglo original se hizo sobre un rango de daño que ya no existía.
-  //   · El 12% por tier es el SOBREPRECIO DELIBERADO: el T10 cuesta 416 por
-  //     punto y el T1 150. Subir de tier da un número más grande y peor valor,
-  //     y esa es la promesa del juego: el T10 es un objeto de escaparate.
-  //
-  // POR QUÉ EL 12% Y NO UN NÚMERO PLANO. Con coste por punto constante el tiempo
-  // para cada tier también es constante, y el juego se termina en un rato: medido
-  // sobre la partida real, los diez tiers se compraban en 20 minutos. Con el
-  // sobreprecio el último tier cuesta 193 850 y el accumulated llega a 431 400,
-  // así que la partida se estira sola hacia el final sin tocar el ingreso.
-  //
-  // Y las dos curvas —compañero y recolector— usan la MISMA tabla porque el poder
-  // sale de `TIER_SYSTEM.ranges` en los dos: mismo poder, mismo precio.
-  companionCardT1: { cost: 900, label: 'Compañero Tier 1' },
-  companionCardT2: { cost: 1700, label: 'Compañero Tier 2' },
-  companionCardT3: { cost: 3000, label: 'Compañero Tier 3' },
-  companionCardT4: { cost: 5500, label: 'Compañero Tier 4' },
-  companionCardT5: { cost: 9900, label: 'Compañero Tier 5' },
-  companionCardT6: { cost: 18000, label: 'Compañero Tier 6' },
-  companionCardT7: { cost: 32550, label: 'Compañero Tier 7' },
-  companionCardT8: { cost: 59050, label: 'Compañero Tier 8' },
-  companionCardT9: { cost: 106950, label: 'Compañero Tier 9' },
-  companionCardT10: { cost: 193850, label: 'Compañero Tier 10' },
-  // Recolectores: la MISMA tabla que los compañeros.
-  //
-  // Comparten precio a propósito, y no por pereza: `generateCollectorByTier()` y
-  // `generateCompanionByTier()` sacan el poder del mismo `TIER_SYSTEM.ranges`, así
-  // que un T10 de uno y un T10 del otro dan exactamente el mismo poder. Que
-  // costaran distinto haría que el jugador pagara un sobreprecio invisible por un
-  // número que no existe.
-  //
-  // El arreglo de esto está en el comentario de `companionCardT1`, y el motivo
-  // de que el precio siga al DAÑO es que antes escalaba 1.5x por tier mientras el
-  // poder iba 1.62x: el coste por punto de daño subía y el T10 acababa siendo
-  // 3x peor que el T1, o sea una trampa invisible detrás de un número grande.
-  // Con la tabla de arriba el sobreprecio es al revés y a propósito: el T10 es un
-  // objeto de escaparate, no una optimización.
-  collectorCardT1: { cost: 900, label: 'Recolector Tier 1' },
-  collectorCardT2: { cost: 1700, label: 'Recolector Tier 2' },
-  collectorCardT3: { cost: 3000, label: 'Recolector Tier 3' },
-  collectorCardT4: { cost: 5500, label: 'Recolector Tier 4' },
-  collectorCardT5: { cost: 9900, label: 'Recolector Tier 5' },
-  collectorCardT6: { cost: 18000, label: 'Recolector Tier 6' },
-  collectorCardT7: { cost: 32550, label: 'Recolector Tier 7' },
-  collectorCardT8: { cost: 59050, label: 'Recolector Tier 8' },
-  collectorCardT9: { cost: 106950, label: 'Recolector Tier 9' },
-  collectorCardT10: { cost: 193850, label: 'Recolector Tier 10' }
-};
-
-// Coste de cada slot de compañero adicional (índice = slots ya poseídos).
-// 5 slots es el techo: es lo que hace que los slots valgan más que los tiers.
-// Se llega hasta 9 slots: 5 de tienda + hasta 4 del nodo "Cuadrilla".
-export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_000, 1_400_000, 3_600_000, 9_000_000];
-
-// Mejora de recolector: coste creciente en cristales y éxito decreciente.
-//
-// El TECHO de niveles no vive aquí. Vive en `data/crafting.ts` como
-// `collectorMaxLevel()`, junto a la fórmula que crea el `maxLevel` de un
-// recolector forjado, y se llama desde el game loop y desde las vistas. Aquí
-// hubo un `MAX_COLLECTOR_LEVEL = 20` que solo usaba este fichero, y mientras
-// estuvo el techo mirando solo a 20 la mitad de los recolectores del juego
-// tenían un límite que su propia ficha no enseñaba.
-export function collectorUpgradeCost(level: number): number {
-  // 1,1,2,2,3,4,6,7,9,11,14,17,21,26,33,41,52,66,84,106 -> 456 cristales en
-  // total, 91 200 nanitas con el cristal a 200.
-  //
-  // POR QUÉ SUBIÓ DE 1.14 A 1.26. Antes subir a nivel 20 costaba 100 cristales,
-  // que a 60 cada uno salían 6 000 nanitas: menos del 4% de un T10. No había
-  // nada que decidir, era un botón. Ahora subir al máximo cuesta la mitad del
-  // recolector, que es la relación que hace que "¿llevo esto a 15 o a 16?" sea
-  // una pregunta de verdad.
-  //
-  // Y por qué NO depende del tier del recolector, que es lo tentador: porque el
-  // coste es POR INTENTO, no por item. Sube un T1 y sale carísimo; sube un T10 y
-  // sale la mitad de su precio. La consecuencia buscada es que no se desperdicie
-  // cristal en un recolector malo, que es exactamente lo que se quiere: el
-  // jugador invierte en lo que le va a durar la partida.
-  return Math.max(1, Math.floor(1.2 * Math.pow(1.26, level)));
-}
-
-/**
- * Probabilidad de éxito con un cristal concreto, en porcentaje.
- *
- * Es el mismo número que usa `upgradeEquippedCollector`, expuesto para que las
- * vistas puedan enseñarlo ANTES de que el jugador gaste. La regla del juego es
- * que ninguna probabilidad se muestra después de confirmar.
- */
-export function previewUpgradeChance(level: number, crystalPower: number): number {
-  return crystalSuccessChance(level, crystalPower);
-}
-
-/**
- * Coste de la sintonización al nivel dado, en unidades de cristal.
- *
- * Igual que el anterior: el juego cobra esto, la vista lo enseña. Duplicar el
- * cálculo en la interfaz sería una forma de que el botón dijera una cifra y el
- * cobro otra.
- */
-export function previewUpgradeCost(level: number): number {
-  return collectorUpgradeCost(level);
-}
-
-// Consumibles de la tienda. `buffId` es el identificador estable que usa el
-// almacén para aplicar el efecto: cambiar un nombre no puede romper el buff.
-const CONSUMABLES = {
-  clickBuff: { name: 'Buff Clicks x2', details: 'Otorga x2 al click por 30 minutos', rarity: 'Raro', buffId: 'clickBoost' },
-  passiveBuff: { name: 'Buff Pasivo x2', details: 'Otorga x2 al ingreso pasivo por 60 minutos', rarity: 'Épico', buffId: 'passiveBoost' },
-  backpackExpander: { name: 'Expansor de Almacén', details: 'Aumenta el almacén +1 slot (máx 20)', rarity: 'Raro', buffId: 'warehouseExpander' },
-  afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
-  clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
-  clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
-  calibrationStone: { name: 'Piedra de Calibración', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone' },
-  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'Deja el recolector forjado con un afijo extra garantizado', rarity: 'Legendario', buffId: 'stabilityNano' }
-} as const;
-
-// Definición de cada tipo de caja. La fuente de verdad es el item del almacén,
-// `state.crates` se mantiene sincronizado como contador para las migraciones.
-//
-// `details` dice qué trae y qué llave abre. Antes decía "contiene
-// recompensas básicas", que no dice nada: el jugador no tenía forma de saber
-// si le convenía ni de qué llave necesitaba.
-const CRATE_TYPES = {
-  common: {
-    name: 'Caja Común',
-    rarity: 'Común',
-    details: 'Recompensas de partida temprana: nanitas, cristales, algún dron T1. Abre con una Llave de Cifrado.'
-  },
-  rare: {
-    name: 'Caja Rara',
-    rarity: 'Raro',
-    details: 'Material de forja y compañeros T3, con algún recolector T4 sobrecargado. Abre con una Llave Reforzada.'
-  },
-  epic: {
-    name: 'Caja Épica',
-    rarity: 'Épico',
-    details: 'Compañeros T6 y recolectores T6, con piedras de calibración. Abre con una Llave Rúnica.'
-  },
-  legendary: {
-    name: 'Caja Legendaria',
-    rarity: 'Legendario',
-    details: 'Recolectores T8 y compañeros Divinos que no se compran. Sale la Nanopartícula de Estabilidad. Abre con una Llave del Vacío.'
-  }
-} as const;
-
-export type CrateType = keyof typeof CRATE_TYPES;
-
 // Deduce el buffId de un consumible guardado antes de que existiera el campo.
 // Se usa una sola vez, al migrar saves antiguos.
 function inferBuffIdFromName(name: string): string | null {
@@ -370,44 +239,6 @@ function createCrateItem(crateType: CrateType, quantity: number = 1) {
   };
 }
 
-
-// Función para generar un compañero aleatorio por tier
-export function generateCompanionByTier(tier: number): { id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier: number } {
-  const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
-  const power = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
-  const names = TIER_SYSTEM.companionNames[tier as keyof typeof TIER_SYSTEM.companionNames] || ['Dron Explorador'];
-  const name = names[Math.floor(Math.random() * names.length)];
-  const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
-  
-  return {
-    id: `comp_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    name,
-    type: 'click',
-    power,
-    rarity,
-    tier
-  };
-}
-
-// Función para generar un recolector aleatoria por tier
-export function generateCollectorByTier(tier: number): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number } {
-  const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
-  const power = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
-  const names = TIER_SYSTEM.collectorNames[tier as keyof typeof TIER_SYSTEM.collectorNames] || ['Blaster Láser'];
-  const name = names[Math.floor(Math.random() * names.length)];
-  const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
-  
-  return {
-    id: `collector_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    name,
-    type: 'collector',
-    details: `Recolección por click: +${power}`,
-    rarity,
-    tier,
-    level: 0,
-    damage: power
-  };
-}
 
 export async function createGameLoop(
   user: any,

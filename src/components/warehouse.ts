@@ -1265,6 +1265,13 @@ function confirmarYabrir(
  *
  * El nombre va por `textContent` también: viene del guardado y aquí no se
  * decodifica nada, ni siquiera la parte que sí lleva formato.
+ *
+ * POR QUÉ LA SEGUNDA FRASE NO EXPLICA CÓMO SE SORTEA. Decía "El botín ya está
+ * decidido: la ruleta solo lo enseña". Es cierto —el motor sortea en
+ * `openCrateBox` y el trompo lo enseña—, pero este es justo el sitio donde ese
+ * texto hace daño: es lo último que se lee antes de confirmar, y leerlo convierte
+ * la confirmación en "pago por ver una animación que no hace nada". El jugador
+ * sigue sin saber qué va a salir, que es lo que hace que tires la llave.
  */
 function mensajeAbrirCaja(nombreLlave: string): HTMLElement {
   const texto = document.createElement('span');
@@ -1273,7 +1280,7 @@ function mensajeAbrirCaja(nombreLlave: string): HTMLElement {
   destacada.textContent = nombreLlave;
   texto.append(
     'Se gastará ', destacada,
-    ' y la caja. El botín ya está decidido: la ruleta solo lo enseña.'
+    ' y la caja. La ruleta gira y te dice qué ha salido. Tabla distinta por caja.'
   );
   return texto;
 }

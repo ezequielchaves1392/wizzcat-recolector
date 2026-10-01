@@ -18,7 +18,7 @@ import {
   type CrateReward
 } from './crateLoot';
 import { mountStrip, spinTrack } from './rouletteStrip';
-import type { CrateType } from '../gameLoop';
+import type { CrateType } from '../data/store';
 
 /**
  * Cuánto dura el trompo de las cajas.

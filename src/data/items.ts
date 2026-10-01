@@ -27,7 +27,7 @@ import type { Rarity } from '../types/domain';
  * que las describe— está acoplado al botín. Este módulo lo importa para leer
  * `CRATE_KEY_TIER` sin crear un ciclo con el game loop.
  */
-import type { CrateType } from '../gameLoop';
+import type { CrateType } from './store';
 
 /** Nivel de llave: 0 = base (comprable), 1+ = solo de cajas. */
 export type KeyTier = 0 | 1 | 2 | 3;

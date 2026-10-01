@@ -7,7 +7,8 @@
 //  3. La ruleta NO decide el premio: `rollCrateReward` decide y la animación solo
 //     lo muestra. Si se invirtiera, la ruleta estaría mintiendo sobre las probabilidades.
 
-import { TIER_SYSTEM, type CrateType } from '../gameLoop';
+import { TIER_SYSTEM } from '../data/tiers';
+import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
 import type { KeyTier } from '../data/items';
 import { formatNumber } from '../utils/format';

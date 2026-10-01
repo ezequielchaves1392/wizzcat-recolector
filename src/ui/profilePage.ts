@@ -20,7 +20,7 @@ import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug, CRATE_META } from '../components/crateLoot';
-import type { CrateType } from '../gameLoop';
+import type { CrateType } from '../data/store';
 import type { Cosmetic } from '../types/domain';
 
 /** Cómo se consigue un cosmético, en una frase. */
