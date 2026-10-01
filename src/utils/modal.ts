@@ -14,6 +14,21 @@
 // Y luego con un tercero (`quantity`), por el mismo motivo: el selector de
 // cantidad y la confirmación son el MISMO diálogo visto en dos momentos, y
 // hacerlos aparte duplicaría el armazón, el foco y el Escape por dos veces.
+//
+// ==========================================================================
+// POR QUÉ EL MENSAJE PUEDE SER UN NODO, Y POR QUÉ NO SE INTERPRETA EL HTML
+// ==========================================================================
+//
+// El mensaje se pinta con `textContent`, y no es descuido: también lo escriben
+// el admin (R25) y los datos del guardado, y este módulo no es el sitio donde
+// aparezca HTML. Por eso un `<b>` metido en la cadena salía LITERAL en
+// pantalla —"Se gastará <b>Llave Reforzada</b>"— y no como letra negrita.
+//
+// La salida es que el mensaje admita un nodo: quien necesita énfasis lo
+// construye y lo pasa, y el texto que lo rodea se sigue QCOMPAREciendo por
+// `textContent` en su sitio. Un argumento de tipo `Node` no se puede
+// decodificar como HTML por accidente, que es justo lo que pasaba con el
+// `innerHTML` que NO se ha puesto aquí.
 // ==========================================================================
 
 export interface QuantityPrompt {
@@ -49,7 +64,7 @@ export interface ConfirmOptions {
 }
 
 export function showConfirmModal(
-  message: string,
+  message: string | Node,
   onConfirm: (units?: number) => void,
   options: ConfirmOptions = {}
 ): void {
@@ -88,7 +103,10 @@ export function showConfirmModal(
 
   const messageEl = document.createElement('p');
   messageEl.className = 'text-[13px] font-sans leading-relaxed text-[var(--text-main)]';
-  messageEl.textContent = message;
+  // Una cadena NUNCA se interpreta: aunque traiga `<b>` dentro, sale literal. El
+  // que quiera énfasis trae el nodo ya montado (ver la cabecera del fichero).
+  if (typeof message === 'string') messageEl.textContent = message;
+  else messageEl.appendChild(message);
   content.appendChild(messageEl);
 
   /**

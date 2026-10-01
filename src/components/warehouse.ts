@@ -1294,7 +1294,7 @@ function confirmarYabrir(
   game: any, item: any, crateType: any, llave: any, redraw: () => void
 ) {
   showConfirmModal(
-    `Se gastará <b>${llave.name}</b> y la caja. El botín ya está decidido: la ruleta solo lo enseña.`,
+    mensajeAbrirCaja(llave.name),
     () => {
       const res = game.openCrateBox(item.id, llave.id);
       if (!res.ok) {
@@ -1307,6 +1307,30 @@ function confirmarYabrir(
     },
     { sublabel: item.name, confirmText: 'Abrir' }
   );
+}
+
+/**
+ * El mensaje de "se gastará la llave y la caja", con el nombre de la llave
+ * destacado.
+ *
+ * Se monta con nodos y no con una cadena porque `showConfirmModal` pinta el
+ * texto con `textContent` a propósito: el mensaje también lo escriben el admin
+ * y el guardado (R25), así que un `<b>` dentro de la cadena salía en pantalla
+ * tal cual y el jugador leía "Se gastará <b>Llave Reforzada</b>".
+ *
+ * El nombre va por `textContent` también: viene del guardado y aquí no se
+ * decodifica nada, ni siquiera la parte que sí lleva formato.
+ */
+function mensajeAbrirCaja(nombreLlave: string): HTMLElement {
+  const texto = document.createElement('span');
+  const destacada = document.createElement('span');
+  destacada.className = 'font-bold accent-text';
+  destacada.textContent = nombreLlave;
+  texto.append(
+    'Se gastará ', destacada,
+    ' y la caja. El botín ya está decidido: la ruleta solo lo enseña.'
+  );
+  return texto;
 }
 
 /** Selector de llave. Solo aparece cuando hay más de una opción válida. */
