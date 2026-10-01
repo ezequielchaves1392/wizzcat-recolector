@@ -3,6 +3,11 @@
 > **Para el jugador:** esta es tu lista. Escribe en el apartado que toque, con
 > tus palabras. No hace falta que sea técnico ni marcar casillas.
 >
+> **Cómo se elige por dónde empezar:** hay un apartado **Plan de trabajo** más
+> abajo con el orden y el porqué. Está ahí para que no se empiece por lo que toca
+> primero en el fichero, sino por lo que desbloquea lo demás. Si algo de lo que
+> hay ahí cambia de sitio, se actualiza.
+>
 > **Una idea está pendiente mientras siga en estos apartados.** Cuando se termine
 > se mueve a **Hecho**, y si se decide que no, a **Descartado** con el motivo en
 > una línea. Así que lo único que hay que hacer al acabar algo es **moverlo**, y no
@@ -88,7 +93,73 @@ Los cristales de mejora valen muy baratos, es muy fácil mejorar los ítems...
 _Cualquier cosa que surja implementando otra cosa y haga falta decidir. Se van
 apilando aquí al final, y se suben a "Features" cuando toca hacerlas._
 
-_(vacío)_
+---
+
+## Plan de trabajo
+
+_El orden que se va a seguir, y por qué en ese orden. Es una decisión, no una
+prioridad intangible: cambia si P1-P3 dan información que hace falta antes de
+programar F7._
+
+### El cuello de botella no son las features: es un fichero
+
+`src/gameLoop.ts` tiene **3.352 líneas y 38 métodos de API**. Las nueve ideas de
+arriba lo tocan **todas**:
+
+| Idea | Ficheros |
+|---|---|
+| F1-F3 valoración | `gameLoop.ts`, `ui/playerPanel.ts`, `data/valuation.ts` |
+| F4 buffs | `gameLoop.ts`, `ui/buffHud.ts`, `data/items.ts` |
+| F5-F6 cajas y llaves | `gameLoop.ts`, `data/items.ts`, `components/crateLoot.ts` |
+| F7 slots de compañero | `gameLoop.ts`, `components/store.ts`, `data/prestige.ts` |
+| B1 primer slot | `gameLoop.ts`, `ui/playerPanel.ts` |
+| P1-P3 balance | `gameLoop.ts`, `data/tiers.ts`, `data/prestige.ts` |
+
+Nueve de nueve sobre el mismo fichero significa que **con varios agentes a la vez
+se pisan**, y un conflicto ahí no es un conflicto de texto: es economía. Un
+`Math.floor` que se mueve cambia el juego y los bancos siguen en verde.
+
+### Los cuatro pasos
+
+1. **P1-P3 · balance.** Son números puros en `data/`, se pueden paralelizar sin
+   tocarse, y **dan información**: si el tier 6 llega demasiado rápido, igual F7
+   deja de ser una feature y pasa a ser un ajuste. Programar F7 antes de esto es
+   adivinar.
+2. **B1 · el bug del primer slot.** El único defecto real, y es de los que
+   rompen una regla del proyecto: lo que se enseña tiene que ser lo que se cobra.
+3. **Mudanza de las 230 líneas de datos a `src/data/`.** Ver abajo. Riesgo casi
+   nulo, y de paso cumple R2, que ahora se incumple sin que nadie lo notara.
+4. **F1-F7**, que ya tocan menos sitio.
+
+### El paso 3 en detalle: qué se mudaría
+
+Las primeras 380 líneas de `gameLoop.ts` **no son el motor**, son datos puros que
+no tocan `state` ni Firebase:
+
+| Qué | Líneas |
+|---|---|
+| `STORE_ITEMS`, `CRATE_TYPES`, `BUFF_FIELDS` | 155-232 |
+| `COMPANION_SLOT_COSTS` | 232 |
+| `collectorUpgradeCost`, `previewUpgradeChance`, `previewUpgradeCost` | 242-265 |
+| `generateCompanionByTier`, `generateCollectorByTier` | 344-362 |
+
+Son ~230 líneas de tablas y funciones puras. **Cuatro ficheros ya importan de
+un fichero de 3.352 líneas para leer una tabla**: `store.ts`, `crateLoot.ts`,
+`crystalPicker.ts` e `items.ts`. Y R2 dice que las reglas compartidas viven en
+`src/data/` — aquí se está incumpliendo desde antes de que existiera el banco
+que lo comprueba.
+
+Además: de 3.352 líneas, solo **54 tocan Firebase**. El 98% es lógica de juego.
+
+### Lo que NO se va a hacer, y por qué
+
+**Partir el motor en varios ficheros de golpe**, confiando en que los bancos lo
+detecten. Los bancos comprueban **números, no estructura**: si una mudanza mueve
+un `Math.floor`, los 1.123 tests siguen verdes y el juego cambia. Es el modo de
+fallo que `huecos-almacen.md` ya documenta — un banco que no mira lo que pasó.
+
+Por eso el paso 3 es una mudanza **literal** (cambiar dónde vive la tabla, no qué
+devuelve) y los pasos 1, 2 y 4 van con una prueba nueva en su banco.
 
 ---
 
