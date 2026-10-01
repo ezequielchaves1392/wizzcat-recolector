@@ -1,4 +1,4 @@
-# Cambios macro por actualización
+﻿# Cambios macro por actualización
 
 Historial **macro**: qué cambió de verdad en el juego y por qué, no el detalle de
 fichero. El detalle está en los mensajes de commit (`git log`) y en las cabeceras
@@ -184,14 +184,7 @@ Guardar un incremento habría sido un **truco para farmear núcleos**: prestige 
 cero, se corta la red, se recarga, y el jugador se quedaba con los núcleos *y* el
 saldo.
 
-Y por fin se arregla la causa raíz de la fase 1:
-
-> **`consumeWarehouseItem()` pasa a ser la única vía de borrado.** `sellItem`,
-> `useConsumable` y `openCrateBox` viven en el game loop en vez de mutar el estado
-> desde cada vista.
-
-Las llaves y cristales dejan de ser contadores y pasan a ser **items físicos por
-nivel**, con migración del saldo viejo.
+---
 
 ## Fase 7 — Cierre (2026-09-30, `d3c71ef`) + el lote que lo cerraba
 
@@ -217,7 +210,7 @@ Tres cosas de aquí merecen un párrafo propio, porque son decisiones y no solo
 código:
 
 **La suite de pruebas.** Nace entera en este lote y es lo que sostiene todo lo
-demás: **14 bancos** (el número de pruebas sube con cada tanda), sobre el game loop real con Firebase sustituido
+demás: bancos que crecen con cada tanda, sobre el game loop real con Firebase sustituido
 por un store en memoria. La regla que la gobierna es que **cada comprobación
 termina en `reload()`**, porque lo que solo vive en memoria es el bug que más
 veces ha llegado a producción. `queueCheck` es el ejemplo de por qué: la mitad de
@@ -245,7 +238,7 @@ enseña la tira.
 | Módulo de apilado | `src/data/stacking.ts` |
 | Huecos del almacén | `warehouseGaps` en types/gameLoop/warehouse, `src/dragTest.ts` |
 | Cosméticos de caja | `src/data/cosmetics.ts` (`crateCosmetics`), `crateLoot.ts`, `gameLoop.ts` |
-| **Suite de pruebas** | `verify/` completa (**14 bancos**, kit, stubs) |
+| **Suite de pruebas** | `verify/` completa (kit, stubs, bancos de pantalla y de economía) |
 | Mejoras varias | `auth.ts`, `store.ts`, `warehouse.ts`, `rankings.ts`, `main.ts`, `layout.ts`, `pageShell.ts`, `router.ts`, `audio.ts`, `theme.ts`, `style.css`, `style.modules.css` |
 | Configuración | `vite.config.ts` (multipágina), `tailwind.config.js` |
 | Bancos de pruebas visuales | `ruleta-preview.html`, `src/ruletaPreview.ts`, `drag-test.html`, `src/dragTest.ts` |
@@ -268,7 +261,7 @@ ruleta hay que hacerlo en local, no se puede leer de un `git show`.
 
 ---
 
-## Fase 8 — La ruleta se parte en dos (2026-10-01, lote sin commitear)
+## Fase 8 — La ruleta se parte en dos (2026-10-01, `ce3a346`)
 
 Tres trabajos que chocaron en paralelo sobre la misma ruleta. Lo que tienen en
 común es que los tres son **la misma promesa, aplicada a tres sitios**: lo que el
@@ -372,8 +365,8 @@ arrastrar a un hueco se leía como un arrastre que no iba a hacer nada.
 ### 8.4 Qué se comprobó
 
 - `npm run build`: `tsc` limpio.
-- `npm run verify`: **14 bancos, 1083 pruebas**, todas en verde. `rouletteCheck`
-  aporta 59 y es nuevo.
+- `npm run verify`: todo en verde. `rouletteCheck` (59) es nuevo en esta fase; el
+  total del runner se fue a **16 bancos** con la fase 9, que se mide allí.
 - **Medido, no supuesto**, en `ruleta-preview.html`: el desfase entre el centro de
   la casilla ganadora y la aguja es de **0 px** en las tres ruletas (caja épica,
   sintonizador con acierto y sintonizador con fallo), y los tres sitios que
@@ -383,6 +376,112 @@ arrastrar a un hueco se leía como un arrastre que no iba a hacer nada.
 Lo que `verify/` **no** cubre y no se puede cubrir: el render. La medición de
 píxeles y el ancho de la ventana real quedan fuera del banco, y por eso existe el
 banco visual.
+
+## Fase 9 — El contador deja de enseñar números que nadie cobra (2026-10-01)
+
+Un lote en dos partes, porque hubo dos autores yCronometrarlo como uno sería
+mentir sobre el historial. La parte del tick es de otra sesión; la del reparto y
+la señal, de esta. Las dos persiguen lo mismo, y por eso se cuentan juntas.
+
+### 9.1 El pasivo entra entero y a su ritmo
+
+El HUD de la base anunciaba "+5 Nanitas / segundo" y el tick corría a 500 ms. Cobrar
+`passiveIncome / TICKS_PER_SECOND` hacía que el saldo subiera 2,5 por tick, y como
+`formatNumber` baja el entero, el número grande alternaba +2 y +3 (307 → 309 → 312)
+mientras al lado ponía "+5 / segundo". El ritmo que se enseñaba y el que se veía
+eran dos, y con cualquier ingreso impar el salto era más feo: 7/s daba +3 y +4.
+
+Ahora se acumula el tiempo de tick y **cada segundo completo entra el segundo
+entero de una vez**, con un acumulador que se tira al volver de una pausa para
+que el tiempo ausente no se convierta de golpe en un bloque entero. La
+alternativa descartada era subir el tick a 1000 ms, que también daría +5 entero,
+pero a costa de los buffs, los logros y toda la interfaz, que también viven del
+tick: se arreglaba el contador ralentizando media pantalla.
+
+`tickCheck` lo ata, y con una regla que es la importante: **el ingreso por segundo
+no cambia**. Diez ticks son cinco segundos y tienen que haber dado cinco cobros.
+Un arreglo de ritmo visual que de paso inflara o recortara la economía se vería
+igual de bonito y sería un desastre.
+
+### 9.2 Y el reparto dentro de ese bloque
+
+Arreglado el ritmo, quedaba el número. La ficha del panel pintaba
+`+{power}/s` y el "+N" flotante pintaba `+{power}`: el **valor desnudo** del
+compañero. Lo que entra en la cuenta es ese número después de
+`passiveMultiplier`, de los logros, del árbol y del buff ×2. Con un multiplicador
+de 1,5 la ficha decía "+3 /s" y el contador subía 4,5.
+
+Es el mismo bug que "que la ruleta no mienta", con otro disfraz: la cifra que
+entra en la cuenta y la que se enseña venían por caminos distintos, y el jugador
+no tenía forma de saber cuál era la buena.
+
+**El reparto no puede ser `floor(power × multiplicadores)` en cada ficha.** Los
+floors no suman: con dos compañeros de 3 y ×1,5 el ingreso real es
+`floor((3+3) × 1,5) = 9`, pero `floor(3 × 1,5)` son 4 y 4, que son 8. Así que el
+motor reparte el ingreso **ya entero** entre los que aportan, en proporción a su
+peso, y el sobrante del redondeo se reparte a partes iguales. La suma de las
+fichas es exactamente `state.passiveIncome`, ni un nanita de más ni de menos, y
+ningún compañero se queda sin su parte porque otro se comió el redondeo.
+
+`getCompanionOutput()` vive en la API del motor, así que la vista pide el número
+y no lo reimplementa (R2). `senalCheck` ata que la suma cuadre, y es la prueba
+que falla en silencio si alguien deshace el reparto.
+
+### 9.3 Las tres fuentes del contador, y la que no tenía cartel
+
+El saldo subía por tres sitios a la vez: el click del jugador, el ingreso de los
+compañeros y los **clics automáticos del árbol**. Los dos primeros tenían señal;
+el tercero **no tenía ninguna** —entraban en la cuenta, sumaban `totalClicks`, y
+no se veían por ningún lado—.
+
+Ahora el motor anota cada click del árbol al cobrarlo, con la cifra ya redondeada
+que entró en la cuenta, y la vista los anuncia al vaciar la cola. Dos propiedades
+de esa cola: es **solo de presentación** (el dinero ya está en el saldo, así que
+perder un aviso cuesta cero) y se **descarta al volver de una pausa**, porque si
+no el jugador vería de golpe todos los "+N" de un rato entero.
+
+Y el click del jugador ahora **devuelve** lo que entró. Antes la vista lo deducía
+restando dos lecturas del estado, y esa resta no es un número que exista en
+ningún sitio: con el buff de pasivo activándose en mitad, la diferencia incluía
+dinero de otro origen y el "+N" no era el del click.
+
+### 9.4 Un módulo entero que era código muerto
+
+`src/ui/naniteCounter.ts` (241 líneas) implementaba una "cuenta suave" del saldo:
+un vuelo interpolado para que el número creciera poco a poco en vez de saltar. Se
+verificó contra `HEAD` que **nadie lo importaba nunca** — `updateUI` escribía el
+contador directamente — así que estaba commiteado y era inalcanzable.
+
+Se borró en lugar de conectarlo. Su premisa era que el problema era de suavizado,
+y el problema real resultó ser de reparto: que el número que se enseñaba no era
+el que se cobraba. Suavizar una cifra incorrecta es hacer la mentira más
+conveniente.
+
+### 9.5 Qué se comprobó
+
+`npm run build` (tsc limpio) y `npm run verify`: **16 bancos, 1123 pruebas**, todas
+en verde. `senalCheck` (26) es nuevo, y `tickCheck` (14) vino con la otra parte
+del lote. Los tres fallos que dio al escribirse eran
+del banco y no del código, y los tres son el tipo de cosa que este proyecto ya
+conoce:
+
+- **`bonus.autoClick` en el save no llega a ninguna parte.** `bonus` es un campo
+  derivado: al cargar se recalcula desde `nodeLevels`, que es la fuente de verdad.
+  Ponerlo a mano se quedaba pisado y los clicks no ocurrían nunca. El banco
+  monta el nodo `auto_clicker`, que es el camino real.
+- **Un click automático sin recolector da 0**, porque `calculateClickDamage()` es
+  0 sin recolector equipado. El banco tenía razón sobre el código y la partida
+  mal montada a la vez.
+- **Con 2 clics/s hacen falta dos ticks**, no uno: el acumulador llega a 1
+  completo en el segundo. Comparado de uno en uno, el banco daba verde sobre un
+  código que solo anotaba el último click.
+
+Lo que `verify/` no cubre y se miró en `preview.html`: que las fichas pinten la
+cifra nueva. Con el mock sin multiplicadores el reparto devuelve los mismos
+`power` (65+68+40 = 173), que es lo correcto pero **no distingue** una función
+conectada de una que no lo está: para eso hace falta el caso con multiplicador, y
+ese es el del banco.
+
 
 ---
 

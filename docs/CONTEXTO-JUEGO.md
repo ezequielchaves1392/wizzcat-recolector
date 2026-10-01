@@ -53,7 +53,12 @@ almacén.
 
 - **Click** — `getClickDamage()` es el número que la UI tiene que mostrar. Nunca
   recalcularlo en la vista.
-- **Pasivo** — los compañeros activos suman `passiveIncome` cada 500 ms.
+- **Pasivo** — los compañeros activos suman `passiveIncome`, y se cobra **una vez
+  por segundo y entero**, aunque el tick corra a 500 ms. El HUD lo anuncia como
+  "+5 / segundo", y el número grande tiene que moverse de 5 en 5: al cobrar la
+  fracción del tick el saldo subía 2,5 por vuelta y `Math.floor` lo pintaba como
+  una alternancia de +2 y +3 (307 → 309 → 312 → 314), que se leía como tirón. Lo
+  cubre `tickCheck`.
 
 Ambos multiplican por: compañeros tipo `multiplier` → logros → árbol de pasivas →
 afijos del recolector equipado. El orden está en `calculateClickDamage()`
@@ -350,6 +355,8 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 19 | El historico de nucleos se contaba dos veces en la primera Ascension | **arreglada** |
 | 20 | La Forja y la Ascension se anidaban a si mismas al redibujar | **arreglada** |
 | 21 | La sintonizacion no tenia ruleta: solo un toast | **arreglada** (y de paso, `rolled` en el contrato del motor) |
+| 22 | El HUD y las fichas de companero enseyan un numero que no es el que entra en la cuenta | **arreglada** |
+| 23 | Los clics automaticos del arbol no tenian ninguna senal | **arreglada** |
 
 ### 21. La sintonización no tenía ruleta — ARREGLADA
 
@@ -395,6 +402,47 @@ Lo que `verify/` **no** cubre, y se miró a mano en `ruleta-preview.html`: que l
 casilla que gana se pare **exactamente** bajo la aguja. Esa comprobación no se
 puede escribir en el banco porque necesita medir píxeles. Se midió, y el
 desfase es de 0 px.
+
+### 22. Las fichas de compañero enseñaban un número que nadie cobraba — ARREGLADA
+
+El HUD de la base y la ficha del panel pintaban `+{power}/s`, y el "+N" flotante
+de cada compañero pintaba `+{power}`: el **valor desnudo** de la ficha. Lo que
+entra en la cuenta es ese número después de `passiveMultiplier`, de los logros,
+del árbol y del buff ×2. Con un multiplicador de 1,5 la ficha decía "+3 /s" y el
+contador subía 4,5.
+
+Es el mismo bug que la discrepancia 21 y el de "que la ruleta no mienta", con otro
+disfraz: **la cifra que entra en la cuenta y la que se enseña venían por caminos
+distintos**, y el jugador no tenía forma de saber cuál era la buena.
+
+**El reparto no puede ser `floor(power × multiplicadores)` en cada ficha.** Los
+floors no suman: con dos compañeros de 3 y ×1,5 el ingreso real es
+`floor((3+3) × 1,5) = 9`, pero `floor(3 × 1,5)` son 4 y 4, que son 8. Así que el
+motor reparte el ingreso ya entero, en proporción al peso de cada uno, con el
+sobrante del redondeo repartido a partes iguales. La suma de las fichas es
+exactamente `state.passiveIncome`.
+
+Cubierto por `senalCheck`.
+
+### 23. Los clics del árbol no tenían ninguna señal — ARREGLADA
+
+El saldo subía por tres sitios a la vez: el click del jugador, el ingreso de los
+compañeros y los **clics automáticos del árbol** (`auto_clicker` en el árbol de
+pasivas). Los dos primeros tenían número flotante; el tercero **no tenía nada**:
+entraba en la cuenta, sumaba `totalClicks`, y no se veía por ningún lado.
+
+Ahora el motor anota cada click al cobrarlo, con la cifra ya redondeada que
+entró, y la vista los anuncia al vaciar la cola. La cola es **solo de
+presentación** —el dinero ya está en el saldo, así que perder un aviso cuesta
+cero— y se descarta al volver de una pausa, para que al volver el jugador no
+vea de golpe todos los "+N" de un rato entero.
+
+De paso, `click()` ahora **devuelve** lo que entró. Antes la vista lo deducía
+restando dos lecturas del estado, y esa resta no es un número que exista en
+ningún sitio: con un buff activándose en mitad, la diferencia incluía dinero de
+otro origen.
+
+Cubierto por `senalCheck`.
 
 
 
@@ -462,8 +510,10 @@ viejo hacia `appendChild`—, mientras que sobre el padre encuentra el nodo.
 DOM de verdad.
 ## 7. Lo que NO está verificado
 
-`npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **14 bancos, 1058 pruebas.** El total varía en ±1 según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que depende del botín. Queda fuera a propósito:
+`npm run verify` cubre la **economía, el guardado, el botín y el ritmo del cobro**,
+no el pintado ni la navegación. **16 bancos, 1123 pruebas.** El total varía en ±1
+según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que
+depende del botín. Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.

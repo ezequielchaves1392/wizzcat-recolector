@@ -411,6 +411,21 @@ export async function createGameLoop(
   const isAdmin = displayName.toLowerCase() === 'admin';
   const initialNanites = (isBlanquician || isAdmin) ? 100000000 : 0;
 
+  /**
+   * Cuánto del segundo le toca a cada compañero, indexado por su id.
+   *
+   * POR QUÉ ESTÁ AQUÍ, JUNTO AL ESTADO Y NO JUNTO A SU USUARIO. Se rellena en
+   * `repartirPorCompanion()`, que se llama desde `recalculatePassiveIncome()`, y
+   * esa función se dispara al construir el estado —y también desde
+   * `checkAchievements()` durante esa misma construcción—. Un `const` declarado
+   * más abajo del todo es zona temporal muerta en ese punto, y el fallo sale como
+   * `Cannot access ... before initialization` desde DENTRO del `try/catch` que
+   * informa de fallos de red: un error de código disfrazado de Firebase, que es
+   * exactamente el modo de fallo que este módulo ya Suffrió una vez con
+   * `one.mjs`.
+   */
+  const ingresoPorCompanion = new Map<string, number>();
+
   let state = {
     saveVersion: SAVE_VERSION,
     nanites: initialNanites,
@@ -1623,10 +1638,12 @@ function syncMaterialCounters() {
     let base = 0;
     // SOLO los compañeros activos suman recursos por segundo.
     // Los de tipo 'click' cuentan aquí: es su único origen de ingresos.
+    const contributors: any[] = [];
     state.activeCompanions.forEach(compId => {
       const comp = state.companions.find(c => c.id === compId);
       if (comp && comp.type !== 'multiplier') {
         base += comp.power;
+        contributors.push(comp);
       }
     });
 
@@ -1639,6 +1656,54 @@ function syncMaterialCounters() {
       * (1 + achievementState.passiveBonus)
       * (1 + state.bonus.passiveMult);
     state.passiveIncome = Math.floor(withAchievements);
+
+    repartirPorCompanion(contributors, state.passiveIncome);
+  }
+
+  /**
+   * Cuánto del segundo le toca a cada compañero, y que la suma sea EXACTAMENTE
+   * el ingreso.
+   *
+   * POR QUÉ NO SE PUEDE BASTAR CON `Math.floor(power * multiplicadores)` EN CADA
+   * UNO. Los floors no suman: con dos compañeros de 3 y multiplicador 1,5 el
+   * ingreso real es `floor((3+3) * 1,5) = 9`, pero `floor(3 * 1,5)` son 4 y 4,
+   * que son 8. El resultado del panel y el "+N" flotante dirían 8 y el contador
+   * subiría 9, y volveríamos a tener dos números para la misma cosa.
+   *
+   * POR QUÉ EL REPARTO ES PROPORCIONAL Y NO "EL PRIMERO SE QUEDA EL RESTO". Se
+   * reparte la unidad sobrante a partes iguales entre todos, y cada compañero
+   * redondea a entero. Así el más pequeño nunca se queda sin nada porque el más
+   * grande se comió el redondeo, y con dos la unidad sobrante se reparte entre
+   * los dos en vez de irse entera al primero de la lista.
+   *
+   * El resultado se guarda en un mapa y no se calcula al pintar: la vista pide el
+   * número, no lo reimplementa (R2). Y si algún día el reparto no cuadra, la
+   * diferencia se le da al primero a propósito, para que la suma sea exacta y no
+   * "casi exacta", y no un entero que cuadre por casualidad.
+   */
+  function repartirPorCompanion(contributors: any[], total: number) {
+    ingresoPorCompanion.clear();
+    if (!contributors.length) return;
+
+    const pesos = contributors.map(c => Math.max(0, c.power || 0));
+    const sumaPesos = pesos.reduce((a, b) => a + b, 0);
+    if (sumaPesos <= 0) return;
+
+    let asignado = 0;
+    const partes: number[] = [];
+    for (const peso of pesos) {
+      const exacto = (total * peso) / sumaPesos;
+      const entero = Math.floor(exacto);
+      partes.push(entero);
+      asignado += entero;
+    }
+    // Lo que ha sobrado del redondeo, repartido a partes iguales.
+    let sobrante = total - asignado;
+    for (let i = 0; sobrante > 0; i = (i + 1) % partes.length, sobrante--) {
+      partes[i]++;
+    }
+
+    contributors.forEach((comp, i) => ingresoPorCompanion.set(comp.id, partes[i]));
   }
 
   /**
@@ -1940,12 +2005,63 @@ function syncMaterialCounters() {
 
   // Intervalo de 500ms para actualización fluida sin parpadeo
   const TICK_RATE_MS = 500;
-  const TICKS_PER_SECOND = 1000 / TICK_RATE_MS;
+  const MS_POR_SEGUNDO = 1000;
 
   // Estado para manejar el regreso del AFK
   let awaitingClickAfterAfk = false;
   // Resto fraccionario de los clics automáticos (ver el tick)
   let autoClickAccumulator = 0;
+
+  /**
+   * Clics automáticos del árbol que aún no se han anunciado, y el tope de la
+   * cola.
+   *
+   * POR QUÉ SOLO LOS DEL ÁRBOL Y NO LOS DE LOS COMPAÑEROS. Los del árbol caen
+   * donde caiga el acumulador, a cualquier punto del segundo, así que la vista
+   * no puede adivinar cuándo fueron: hace falta que el motor se los cuente. Los
+   * compañeros van al bloque entero de cada segundo (ver `msParaCobroPasivo`), y
+   * ese bloque es su aviso: no hay evento aparte porque no hay instante aparte.
+   *
+   * POR QUÉ SOLO ES DE PRESENTACIÓN. El dinero ya está en `state.nanites` cuando
+   * el evento se encola, así que perder un evento no cuesta ni un nanita: es una
+   * nota que se pierde, no una transacción. Por eso el tope puede recortar sin
+   * riesgo, y por eso un banco puede vaciar la cola y no perder nada.
+   *
+   * El tope existe porque `drainClickEvents()` lo llama quien actualiza la
+   * pantalla, y si nadie lo llama —una vista donde no hay recolector— la cola
+   * crecería sin límite en una partida larga con muchos nodos de autoClick.
+   */
+  const MAX_CLICKS_PENDIENTES = 40;
+  let clicksPendientes: { cantidad: number }[] = [];
+
+  function anotarClickAutomatico(cantidad: number) {
+    if (clicksPendientes.length >= MAX_CLICKS_PENDIENTES) clicksPendientes.shift();
+    clicksPendientes.push({ cantidad });
+  }
+
+  /**
+   * POR QUÉ EL PASIVO SE COBRA POR SEGUNDOS Y NO POR TICKS.
+   *
+   * `state.passiveIncome` es una cifra POR SEGUNDO —ya viene con `Math.floor`, y el
+   * HUD la enseña como "+5 / segundo"—, pero el tick corre a 500 ms. Cobrar la
+   * fracción del tick dividía por dos lo que toca en cada vuelta: con un
+   * compañero de +5/s el saldo subía 2,5 cada 500 ms, y como `formatNumber` baja
+   * el entero, el número grande de la base alternaba +2 y +3 (307 → 309 → 312 →
+   * 314 → 317 → 319) mientras al lado ponía "+5 / segundo". El ritmo que enseña el
+   * HUD y el que se veían eran dos, y con cualquier ingreso impar el salto era más
+   * feo: 7/s daba +3 y +4, 9/s daba +4 y +5.
+   *
+   * La alternativa descartada era subir el tick a 1000 ms, que también daría +5
+   * de golpe, pero a costa de la barra de buffs, los logros y el resto de la
+   * interfaz, que también viven del tick: se arreglaba el contador ralentizando
+   * media pantalla. Aquí solo cambia el instante en que entra el dinero, y el
+   * resto de la UI sigue a 500 ms.
+   *
+   * Se acumula el tiempo de tick y, cada segundo completo, entra el segundo
+   * entero de una vez. Es el mismo patrón del acumulador de clics automáticos de
+   * abajo, y por el mismo motivo: redondear por tick pierde producción.
+   */
+  let msParaCobroPasivo = 0;
 
   // Variables para intervalos (pueden detenerse y reiniciarse)
   let gameInterval: ReturnType<typeof setInterval> | null = null;
@@ -1953,6 +2069,18 @@ function syncMaterialCounters() {
   function startGameIntervals() {
     // Detener intervalos existentes si los hay
     if (gameInterval) clearInterval(gameInterval);
+
+    // El resto a medio segundo se tira al (re)arrancar. Si se conservara, al
+    // volver de una pausa el primer cobro del pasivo llegaría antes de un
+    // segundo entero desde que el jugador ha vuelto, y el segundo siguiente se
+    // iría al garete: el dinero se repartiría en trozos desiguales.
+    msParaCobroPasivo = 0;
+    // Y la cola de avisos con ella. Los clicks del árbol que ya se cobraron
+    // mientras no había nadie mirando no tienen a quién avisar: si se
+    // conservaran, al volver el jugador vería de golpe todos los "+N" de un
+    // rato entero, y el contador daría la sensación de haber cobrado algo que no
+    // está.
+    clicksPendientes = [];
 
     // Intervalo principal del juego
     gameInterval = setInterval(() => {
@@ -1980,15 +2108,26 @@ function syncMaterialCounters() {
         return;
       }
 
-      if (state.passiveIncome > 0) {
-        const gained = state.passiveIncome / TICKS_PER_SECOND;
-        state.nanites += gained;
-        state.totalNanitesProduced += gained;
+      // El ingreso pasivo entra ENTERO y de una vez: un segundo entero por
+      // segundo, no la mitad del tick (ver `msParaCobroPasivo`). El HUD anuncia
+      // "+5 / segundo" y ahora el saldo se mueve de 5 en 5, como anuncia.
+      msParaCobroPasivo += TICK_RATE_MS;
+      while (msParaCobroPasivo >= MS_POR_SEGUNDO) {
+        msParaCobroPasivo -= MS_POR_SEGUNDO;
+        if (state.passiveIncome > 0) {
+          state.nanites += state.passiveIncome;
+          state.totalNanitesProduced += state.passiveIncome;
+        }
       }
 
       // Clics automáticos del árbol de pasivas. Se acumulan como resto entre
       // ticks en vez de redondear cada tick: a 0.5 clics/s y un tick de 500 ms
       // el redondeo por tick perdería la mitad de la producción.
+      //
+      // Cada uno se anota para que la vista lo anuncie: hasta ahora estos clicks
+      // entraban en la cuenta y no se veían por ningún lado, así que el jugador
+      // tenía tres fuentes alimentando el mismo número —su click, el de sus
+      // compañeros y el del árbol— y solo dos tenían señal.
       if (state.bonus.autoClick > 0) {
         autoClickAccumulator += state.bonus.autoClick * (TICK_RATE_MS / 1000);
         while (autoClickAccumulator >= 1) {
@@ -1997,6 +2136,11 @@ function syncMaterialCounters() {
           state.nanites += dmg;
           state.totalNanitesProduced += dmg;
           state.totalClicks += 1;
+          // La nota lleva la cifra YA redondeada, la misma que entró en la
+          // cuenta. Si aquí se guardara el valor sin floor, el "+N" flotante y
+          // el saldo divergirían en la fracción, que es justo lo que se está
+          // arreglando.
+          anotarClickAutomatico(Math.floor(dmg));
         }
       }
       // Los logros se comprueban en el tick: así se desbloquean solos sin que
@@ -2030,6 +2174,40 @@ function syncMaterialCounters() {
     // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
     // La UI debe usar esta función para no mostrar un valor distinto al real.
     getClickDamage: () => Math.floor(calculateClickDamage() * calculateMultiplier()),
+    /**
+     * Cuánto aporta ESTE compañero al ingreso pasivo, ya con los
+     * multiplicadores, y con el reparto justo de la fracción.
+     *
+     * POR QUÉ ESTA FUNCIÓN EXISTE Y POR QUÉ NO ES `comp.power`. La ficha del
+     * panel pintaba `+{power}/s` y el "+N" flotante pintaba `+{power}`, pero el
+     * motor cobra `power` después de `passiveMultiplier`, de los logros, del
+     * árbol y del buff x2. Con un multiplicador de 1,5 el panel decía "+3 /s"
+     * y el contador subía 4,5: dos números para la misma cosa, y el que se
+     * equivoca es el que se enseña (R3).
+     *
+     * El reparto sale de `repartirPorCompanion()`, que reparte el ingreso ENTERO
+     * entre los que aportan. Por eso la suma de lo que da esta función es
+     * exactamente `state.passiveIncome`, sin un nanita de diferencia: si
+     * calculase cada uno por su cuenta, los floors no sumarían y volveríamos al
+     * mismo descuadre.
+     *
+     * Un compañero que no está activo devuelve 0, que es lo que paga.
+     */
+    getCompanionOutput: (companionId: string) => ingresoPorCompanion.get(companionId) ?? 0,
+    /**
+     * Los clicks del árbol que aún no se han anunciado, y vacía la cola.
+     *
+     * Vaciar en el mismo acto es lo que evita el doble anuncio: la nota se
+     * entrega una vez y se queda sin copia. Si quien llama está en una vista sin
+     * recolector puede no llamarla nunca, y eso no cuesta nada —ver
+     * `anotarClickAutomatico()`.
+     */
+    drainClickEvents: (): { cantidad: number }[] => {
+      if (!clicksPendientes.length) return [];
+      const salida = clicksPendientes;
+      clicksPendientes = [];
+      return salida;
+    },
     getAchievements: () => ACHIEVEMENTS.map(a => ({
       ...a,
       unlocked: state.unlockedAchievements.includes(a.id),
@@ -2322,6 +2500,16 @@ function syncMaterialCounters() {
       state.totalClicks += 1;
       checkAchievements();
       onUpdate(state, isAfk);
+      // POR QUÉ DEVUELVE EL ENTERO Y NO DEJA QUE LA VISTA LO CALCULE. La vista
+      // pintaba `+{formatNumber(estado.nanites - antes)}`: restaba dos lecturas
+      // del estado para deducir lo que había entrado, y esa resta no es un número
+      // que exista en ningún sitio. Con el buff de pasivoactivatingse en mitad,
+      // o con cualquier cobro que lande entre las dos lecturas, la diferencia
+      // incluía dinero de otro origen y el "+N" no era el del click.
+      //
+      // El motor es el único que sabe cuánto entró, así que el motor lo dice
+      // (R1, R3). Lo que se paint es lo que se cobró, no una resta.
+      return totalGain;
     },
     /**
      * Sintoniza el recolector equipado con un cristal del nivel pedido.

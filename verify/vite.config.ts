@@ -45,7 +45,9 @@ export default defineConfig({
         queueCheck: resolve(here, 'queueCheck.ts'),
         playthroughCheck: resolve(here, 'playthroughCheck.ts'),
         toastCheck: resolve(here, 'toastCheck.ts'),
-        rouletteCheck: resolve(here, 'rouletteCheck.ts')
+        rouletteCheck: resolve(here, 'rouletteCheck.ts'),
+        tickCheck: resolve(here, 'tickCheck.ts'),
+        senalCheck: resolve(here, 'senalCheck.ts')
       },
       formats: ['es']
     }

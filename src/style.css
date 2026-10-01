@@ -186,12 +186,21 @@ body {
 .accent-border { border-color: var(--accent); }
 
 /* Superficie vidriada con borde luminoso en el canto superior: es lo que
-   separa una tarjeta "plana" de una que parece vidrio de verdad. */
+   separa una tarjeta "plana" de una que parece vidrio de verdad.
+
+   LA TRANSPARENCIA SE OBTIENE MEZCLANDO CON `transparent`, NO CON UN
+   MODIFICADOR `/alfa`. `color-mix(in srgb, A 92%, B 8% / 0.72)` no es válido:
+   el motor rechaza la declaración COMPLETA, y como el `background` es un atajo
+   que la envuelve, se queda en `none` y la superficie salía totalmente
+   transparente —se veía la página entera a través de los modales—. El efecto es
+   silencioso: el `backdrop-filter` de abajo sigue aplicando, así que el panel
+   parecía "vidrioso" con el texto de la página legibles detrás. Anidando el
+   mix, el color y el 0.72 salen idénticos pero con una regla que sí parsea. */
 .card-glass {
   background:
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--bg-app) 92%, var(--text-main) 8% / 0.72),
+      color-mix(in srgb, color-mix(in srgb, var(--bg-app) 92%, var(--text-main) 8%) 72%, transparent),
       color-mix(in srgb, var(--bg-app) 88%, transparent)
     );
   backdrop-filter: blur(20px) saturate(1.3);
@@ -217,12 +226,17 @@ body {
   pointer-events: none;
 }
 
-/* Variante elevada para elementos en primer plano (modales,ruleta) */
+/* Variante elevada para elementos en primer plano (modales,ruleta).
+
+   Mismo apaño que `.card-glass` y por el mismo motivo: el `/ 0.94` de más está
+   PROHIBIDO en `color-mix()` y hacía que este panel se quedara sin fondo. Aquí
+   era más grave, porque es la superficie de los modales: se leía la página
+   entera por detrás y el texto del diálogo se cruzaba con el de la tienda. */
 .card-glass-elevated {
   background:
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--bg-app) 96%, var(--text-main) 4% / 0.94),
+      color-mix(in srgb, color-mix(in srgb, var(--bg-app) 96%, var(--text-main) 4%) 94%, transparent),
       color-mix(in srgb, var(--bg-app) 92%, transparent)
     );
   backdrop-filter: blur(28px) saturate(1.4);

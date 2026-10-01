@@ -7,7 +7,12 @@ import { AFFIX_BY_ID, collectorMaxLevel } from '../data/crafting';
  * Vive en su propio modulo para que el banco de pruebas visuales (/preview.html)
  * reuse exactamente el mismo marcado que la partida real.
  */
-export function renderPanel(state: any, realDamage: number, effectiveSlots?: number) {
+export function renderPanel(
+  state: any,
+  realDamage: number,
+  effectiveSlots?: number,
+  ingresoDe?: (companionId: string) => number
+) {
   // --- Recolector equipado ---
   const equippedItem = state.equippedCollectorId
     ? state.warehouse.find((w: any) => w.id === state.equippedCollectorId)
@@ -130,9 +135,19 @@ export function renderPanel(state: any, realDamage: number, effectiveSlots?: num
         const isMult = comp.type === 'multiplier';
         const rarity = comp.rarity || 'Común';
         const sweep = ['Épico', 'Legendario', 'Mítico', 'Divino', 'Sobrecargado'].includes(rarity);
-        const value = isMult
+        // POR QUÉ PIDE LA CIFRA AL MOTOR Y NO USA `comp.power`. `power` es el
+        // valor desnudo del compañero: lo que entra en la cuenta es ese número
+        // después de `passiveMultiplier`, de los logros, del árbol y del buff x2.
+        // Con un multiplicador de 1,5 la ficha decía "+3 /s" y el contador subía
+        // 4,5 — el panel enseñando un número que no se cobraba nunca (R3).
+        //
+        // El reparto es proporcional y la suma de todas las fichas da
+        // exactamente `state.passiveIncome`, así que los números de aquí y el
+        // bloque que entra cada segundo son la misma cifra contada dos veces.
+        const aporta = ingresoDe?.(comp.id);
+        const valor = isMult
           ? `×${(1 + comp.power).toFixed(2).replace(/\.?0+$/, '')}`
-          : `+${formatNumber(comp.power)}/s`;
+          : `+${formatNumber(aporta ?? comp.power)}/s`;
         const label = isMult ? 'MULT' : 'INGRESO';
 
         html += `
@@ -151,7 +166,7 @@ export function renderPanel(state: any, realDamage: number, effectiveSlots?: num
                  style="border-color: color-mix(in srgb, var(--accent) 20%, transparent)">
               <div class="label-caps" style="font-size:8px">${label}</div>
               <div class="text-[11px] font-mono font-bold tabular mt-0.5"
-                   style="color: var(--accent)">${value}</div>
+                   style="color: var(--accent)">${valor}</div>
             </div>
           </div>
         `;

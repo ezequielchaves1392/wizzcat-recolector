@@ -30,7 +30,9 @@ for (const banco of [
   'queueCheck',
   'playthroughCheck',
   'toastCheck',
-  'rouletteCheck'
+  'rouletteCheck',
+  'tickCheck',
+  'senalCheck'
 ]) {
   console.log(`\n=== ${banco} ===`);
   try {

@@ -525,9 +525,12 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
     if (streakTimer) clearTimeout(streakTimer);
     streakTimer = window.setTimeout(() => { clickStreak = 0; }, 1200);
 
-    const before = game.getState().nanites;
-    game.click();
-    const collected = game.getState().nanites - before;
+    // Lo que entró lo dice el motor. Antes se deducía restando dos lecturas del
+    // estado (`antes` y `después`), y esa resta no es un número que exista en
+    // ningún sitio: si entre las dos entraba un cobro del pasivo, el "+N"
+    // incluía dinero de otro origen. El motor ya sabe cuánto cobró y lo
+    // devuelve, así que aquí no hay nada que recalcular (R1, R3).
+    const collected = game.click();
 
     // El rótulo de debajo NO se toca aquí. `game.click()` ya dispara `onUpdate`,
     // que termina en `updateUI`, y ese es el sitio que escribe
@@ -640,6 +643,20 @@ function updateUI(state: any, isAfk: boolean = false) {
   const passiveIncomeDisplay = document.querySelector('#passive-income-display');
   const clickDamageDisplay = document.querySelector('#click-damage-display');
 
+  // Los clicks del árbol que el motor ya ha cobrado y que aún no se han
+  // enseñado. Se vacían aquí, que es el único sitio que repinta en cada tick.
+  //
+  // POR QUÉ NO SE PINTAN EN EL SITIO QUE LOS COBRA. El tick no sabe dónde está
+  // el recolector ni si el jugador lo está mirando, y el "+N" necesita las dos
+  // cosas. La cifra, en cambio, la sabe el motor y llega en el evento: si se
+  // calculara aquí, estaríamos pintando un número que el motor ya aplicó, que
+  // es la forma más fácil de volver a tener dos verdades.
+  if (activeGameInstance && typeof activeGameInstance.drainClickEvents === 'function') {
+    for (const evento of activeGameInstance.drainClickEvents()) {
+      showCompanionClickInCollector(evento.cantidad);
+    }
+  }
+
   // El saldo de nanitas vive en varios sitios según la vista, y solo se
   // refrescaba el de la base. Los otros se pintaban una vez al montar la página
   // y se quedaban congelados: en el almacén, que es donde se vende y se usan
@@ -713,7 +730,13 @@ function renderPlayerPanel(state: any) {
   const slots = typeof activeGameInstance?.getCompanionSlots === 'function'
     ? activeGameInstance.getCompanionSlots()
     : undefined;
-  renderPanel(state, realDamage, slots);
+  // Lo que aporta cada compañero, con los multiplicadores ya puestos y el
+  // reparto justo. Sin esto la ficha pintaría `comp.power`, que es el valor
+  // desnudo y no el que entra en la cuenta.
+  const ingresoDe = typeof activeGameInstance?.getCompanionOutput === 'function'
+    ? (id: string) => activeGameInstance.getCompanionOutput(id)
+    : undefined;
+  renderPanel(state, realDamage, slots, ingresoDe);
 }
 
 // Cuánto vive en pantalla un "+X" flotante. El companion click usa un valor
@@ -954,33 +977,53 @@ function showCompanionClickInCollector(power: number) {
   playHitEffect(0.62);
 }
 
-// Clics automáticos de compañeros (cada segundo)
-let companionClickInterval: number | null = null;
+// Avisos del ingreso por segundo.
+//
+// POR QUÉ SIGUE SIENDO UN INTERVALO DE LA VISTA Y NO UN EVENTO DEL MOTOR. El
+// ingreso pasivo entra entero y de una vez cada segundo (`msParaCobroPasivo`),
+// así que el segundo es la unidad real del cobro: un aviso por segundo y un
+// bloque por segundo son la misma cosa, y montarlo como evento del motor sería
+// una segunda vía para lo que el tick ya resuelve. Lo que sí estaba mal era la
+// CIFRA, y de eso se encarga el motor (ver `getCompanionOutput`).
+let avisoIngresoInterval: number | null = null;
+
+function avisoDeIngreso(game: any) {
+  // Solo efectos visuales: con la pestaña oculta no hay nada que dibujar. El
+  // dinero tampoco entra ahí —el tick se detiene antes de acumulado—, así que
+  // esta guarda no oculta ningún cobro, solo su número.
+  if (document.hidden) return;
+  // Solo en la vista principal: en las demás el recolector no existe.
+  if (!document.querySelector('#click-btn')) return;
+
+  const state = game.getState();
+  const clickCompanions = state.activeCompanions
+    .map((compId: string) => state.companions.find((c: any) => c.id === compId))
+    .filter((c: any) => c && c.type === 'click');
+
+  clickCompanions.forEach((comp: any, index: number) => {
+    // Lo que aporta ESTE compañero, ya con multiplicadores y con el reparto
+    // justo de la fracción. Se pintaba `comp.power`, que es su valor desnudo:
+    // con un multiplicador de 1,5 la ficha decía "+3 /s" y el contador subía
+    // 4,5, así que el "+3" flotante era una cifra que no había entrado en la
+    // cuenta. Y como el ingreso es UN bloque por segundo, la suma de estos
+    // números es exactamente lo que sube el contador.
+    const aporta = typeof game.getCompanionOutput === 'function'
+      ? game.getCompanionOutput(comp.id)
+      : comp.power;
+    setTimeout(() => {
+      showCompanionClickInCollector(aporta);
+    }, index * 100);
+  });
+}
 
 function startCompanionClicks(game: any) {
-  if (companionClickInterval) clearInterval(companionClickInterval);
-  companionClickInterval = window.setInterval(() => {
-    // Solo efectos visuales: con la pestaña oculta no hay nada que dibujar
-    if (document.hidden) return;
-    // Solo en la vista principal: en las demás el recolector no existe
-    if (!document.querySelector('#click-btn')) return;
-
-    const state = game.getState();
-    const clickCompanions = state.activeCompanions
-      .map((compId: string) => state.companions.find((c: any) => c.id === compId))
-      .filter((c: any) => c && c.type === 'click');
-
-    clickCompanions.forEach((comp: any, index: number) => {
-      setTimeout(() => {
-        showCompanionClickInCollector(comp.power);
-      }, index * 100);
-    });
-  }, 1000);
+  if (avisoIngresoInterval) clearInterval(avisoIngresoInterval);
+  avisoIngresoInterval = window.setInterval(() => avisoDeIngreso(game), 1000);
 }
 
 function stopCompanionClicks() {
-  if (companionClickInterval) {
-    clearInterval(companionClickInterval);
-    companionClickInterval = null;
+  if (avisoIngresoInterval) {
+    clearInterval(avisoIngresoInterval);
+    avisoIngresoInterval = null;
   }
 }

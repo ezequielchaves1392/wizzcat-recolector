@@ -150,7 +150,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 14 bancos
+### Los 16 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -164,10 +164,14 @@ en producción.
 | `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, **sintonización del recolector** (el acierto, el fallo que no retrocede, y los tres rechazos), prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** | 212 |
 | `gapCheck` | Los huecos del almacén. El ancla es el **id del item**, nunca un índice de celda. Reimplementa el criterio del pintor a propósito, para que el test no sea tautológico. | 65 |
 | `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
+| `tickCheck` | El ritmo del ingreso pasivo: entra **entero y de una vez**, una vez por segundo, aunque el tick sea de 500 ms. Con ingreso impar (7/s daba +3 y +4). Todos los orígenes, incluido el compañero de tipo `click`. Nada sin mirar. Y sobre todo que **el ingreso por segundo no cambia**: diez ticks son cinco cobros. |
 | `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 42 |
 | `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. | 98 |
 | `toastCheck` | **La pila de avisos flotantes.** `showToast` es el overlay más llamado del juego (71 llamadas entre las siete pantallas, la terminal y el propio `gameLoop`) y no estaba cubierto por nada. Que no haya un nodo por aviso, que lo repetido se cuente (`×5`) en vez de apilar cinco iguales, el tope de cuatro vivos, que se coloque midiendo la cabecera y no con una constante, y que lo retirado no se quede apuntado en la lista. Ver abajo, porque necesita un stub con DOM de verdad. | 25 |
 | `rouletteCheck` | **La matemática del trompo.** Que la curva frene de verdad —es el ajuste de `2t - t²`, deceleración constante— y no un `ease-out` cualquiera, que `instante()` la deshaga, que **la casilla ganadora para en el marcador**, que las vueltas se cuenten en ventanas visibles para que el trompo dure igual en móvil y en escritorio, y que **cada chasquido caiga en una frontera de casilla** con los intervalos espaciándose al frenar. Es la otra mitad de "que la ruleta no mienta": `lootCheck` comprueba que el número de la casilla sea el que entra en la cuenta, este que el desplazamiento deje esa casilla bajo la aguja. Y una segunda mitad, la **ruleta del sintonizador**: que el motor distinga *el dado salió mal* de *no se llegó a tirar* (`rolled`), que un rechazo no gaste cristal ni mueva el nivel, y que la flecha del acierto sea `4 → 5` y no el `5 → 5` que sale de releer el item después del sorteo. | 59 |
+
+| `tickCheck` | **El ritmo del cobro pasivo.** Que el ingreso entre ENTERO y de una vez, no la mitad del tick: el HUD anuncia "+5 / segundo" y con un tick de 500 ms el saldo subía 2,5, así que el entero alternaba +2 y +3. Y la que no se puede perder de vista: **el ingreso por segundo NO cambia** —diez ticks son cinco segundos y tienen que haber dado cinco cobros—, porque un arreglo de ritmo visual que de paso inflara o recortara la economía se vería igual de bonito y sería un desastre. También que un compañero de tipo `click` cuente igual, y que con la pestaña oculta no entre nada ni se acumule para después. | 14 |
+| `senalCheck` | **Que lo que se enseña sea lo que se cobra.** El `tickCheck` ata el ritmo del bloque entero; este ata **el reparto dentro de ese bloque**. Que las fichas sumen EXACTAMENTE `state.passiveIncome` —ni un nanita de más ni de menos— y que no se pueda deshacer repartiendo `floor(power × multiplicadores)` por separado, porque los floors no suman: con dos compañeros de 3 y ×1,5 el ingreso es 9 y los floors son 4 y 4. Que el `+N` flotante y la ficha digan 9 y no el `power` desnudo. Y que los **clics del árbol tengan señal**, que no la tenían: entran en la cuenta, suman `totalClicks` y no se veían por ningún lado, así que de las tres fuentes del contador solo dos tenían cartel. | 26 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).
@@ -241,7 +245,14 @@ $env:ONE_BANK="gapCheck"; npx vite build --config verify/vite.one.config.ts
 node verify/one.mjs gapCheck
 ```
 
-**Los catorce bancos funcionan así.** Antes no: `one.mjs` arrastraba un entorno más
+**Los bancos que disparan el tick funcionan así.** `tickCheck` y `senalCheck`
+sustituyen `setInterval` por uno que aparta los callbacks y disparan a mano el de
+500 ms: es el tick de verdad —el mismo closure que en el navegador—, y sin esa
+sustitución el runner no terminaría nunca. El `boot()` va **dentro** del
+sustituto, porque el intervalo solo se registra si el jugador está presente en el
+momento de construir el game loop.
+
+Antes no: `one.mjs` arrastraba un entorno más
 pobre que `run.mjs` y cuatro bancos morían antes de imprimir, con un error que no
 señalaba su causa. Los dos runners toman el entorno de `verify/entorno.mjs`, así
 que ya no pueden separarse. Si añades un banco y no se puede depurar en solitario,
@@ -664,7 +675,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              14 bancos.
+  <subject>Check.ts              16 bancos.
 docs/                           Este directorio.
 ```
 
@@ -687,7 +698,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los **14 bancos** dan **1083 pruebas**, todas en verde.
+   cambiar nada. Los **16 bancos** dan **1123 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que
@@ -698,10 +709,10 @@ docs/                           Este directorio.
 > **Las cifras de la tabla de arriba se comprueban, pero no se acumulan.** Cuando
 > se añadió un banco o se amplió una sección, la tabla se quedó con los números
 > de entonces en tres filas (`buyCheck`, `stateCheck`, `playthroughCheck`) mientras
-> el total de abajo sí se actualizaba: 1041 contra 1083, que no cuadran. Un
-> documento con cifras que no cuadran entre sí enseña a no fiarte de las que
-> sí importan. Si añades pruebas, actualiza la fila **y** comprueba que la suma
-> da el total.
+> el total de abajo sí se actualizaba, así que la suma de las filas no daba el
+> total. Un documento con cifras que no cuadran entre sí enseña a no fiarte de
+> las que sí importan. Si añades pruebas, actualiza la fila **y** comprueba que
+> la suma da el total.
 6. Para lo que `verify/` no cubre: `preview.html`, `nav-test.html`,
    `drag-test.html`, `ruleta-preview.html`.
 
