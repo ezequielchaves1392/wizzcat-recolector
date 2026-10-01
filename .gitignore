@@ -1,20 +1,86 @@
-# La página del juego se publica en GitHub Pages.
+﻿# Dependencies
+node_modules/
 
-# `dist/` NO se sube a propósito. El workflow de `.github/workflows/publicar.yml`
-# lo construye en GitHub desde el código, así que dejarlo en el repositorio solo
-# añadiría ruido al historial y una forma de que se publique una versión vieja por
-# error. Lo mismo con `node_modules/` y `verify/out*/`: son artefactos.
+# Build output
+dist/
+dist-ssr/
 
-# ----------------------------------------------------------------------
-#  LO QUE SÍ SE SUBE, Y POR QUÉ ESTÁ SEPARADO DE `dist/`
-# ----------------------------------------------------------------------
-#  GitHub Pages tiene una carpeta especial llamada `/docs` que sirve desde la raíz
-#  del dominio en vez de desde un subcamino. Publicar ahí **no** es lo mismo que
-#  desplegar Actions, así que la carpeta queda documentada pero vacía.
+# Banco de pruebas del game loop
+# out/, out-one/ y out-repro/ son los tres sitios donde cae el bundle:
+# verify.config, verify.vite.one.config y verify.vite.repro.config.
+# Con el comodín, añadir un cuarto config no mete artefactos en el historial.
+verify/out*/
+
+# Local env files
+.env.local
+.env.*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Vite
+.vite/
+
+# Banco de pruebas visual (solo desarrollo)
+# Entradas o NONE. O el utillaje está ignorado entero, o se versiona entero:
+# dejarlos a medias hace que git status insinúe que drag-test.html es código
+# nuevo cuando en realidad es montarlo con `npx vite`.
+preview.html
+src/preview.ts
+src/previewAudio.ts
+auth-preview.html
+src/authPreview.ts
+nav-test.html
+src/navTest.ts
+drag-test.html
+src/dragTest.ts
+ruleta-preview.html
+src/ruletaPreview.ts
+
+# Firebase
+.firebase
+firebase-debug.log
+
+# ZIP files
+*.zip
+
+# --------------------------------------------------------------------------
+#  GitHub Pages
+# --------------------------------------------------------------------------
+#  La página del juego se publica con `.github/workflows/publicar.yml`, que la
+#  construye en GitHub desde el código. `dist/` ya está ignorado más arriba, y
+#  que lo esté **por esa razón**: el despliegue no usa lo que hay en tu disco,
+#  así que subirlo solo añadiría ruido al historial y una forma de publicar
+#  una versión vieja por error.
 #
-#  Este proyecto usa el despliegue oficial (Actions + Pages), que además es el que
-#  sabe saltarse Jekyll, poner el `base` relativo para el subcamino y no publicar
-#  `admin.html`. Si algún día se usa `/docs`, hay que tener en cuenta que el
-#  subcamino desaparece y el `base: './'` deja de ser necesario.
-# ----------------------------------------------------------------------
-docs/
+#  OJO con `docs/`: aquí NO va una regla para `docs/`, y el motivo es de los
+#  que cuestan un disgusto. GitHub Pages tiene una carpeta reservada llamada
+#  `/docs` que sirve desde la raíz del dominio en lugar de un subcamino, y por
+#  eso ignorar `docs/` "por si acaso" parece prudente. Aquí es exactamente
+#  contrario: **`docs/` es el directorio de documentación del proyecto** —las
+#  reglas, el contexto, el historial de cambios y `PENDIENTES.md`—, y está
+#  versionado. Ignorarlo no sería preventivo: sería borrar del control de
+#  versiones el fichero que dice qué hay que hacer.
+#
+#  De hecho, la carpeta de Pages `/docs` es de otro proyecto, no de este: aquí
+#  se despliega con Actions + Pages, que además es lo que sabe saltarse
+#  Jekyll, poner el `base` relativo para el subcamino y no publicar
+#  `admin.html`. Si algún día se usara `/docs`, el subcamino desaparecería y
+#  el `base: './'` de `vite.config.ts` dejaría de hacer falta.
