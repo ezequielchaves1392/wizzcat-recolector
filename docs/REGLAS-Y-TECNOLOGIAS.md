@@ -137,7 +137,7 @@ solo.**
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
-| `sellCheck` | `sellItem` borra de verdad y no resucita al re-sincronizar ni al recargar. Cajas, llaves, cristales, consumibles, compañeros, recolectores, migraciones de contadores, renombre `weapon`→`collector`, y que **el total que enseña el botón sea el que entra en la cuenta**. | 96 |
+| `sellCheck` | `sellItem` borra de verdad y no resucita al re-sincronizar ni al recargar. Cajas, llaves, cristales, consumibles, compañeros, recolectores, migraciones de contadores, renombre `weapon`→`collector`, que **el total que enseña el botón sea el que entra en la cuenta**, y la **venta por unidades**: qué queda en la pila, qué sobrevive a la recarga, que pedir más de lo que hay se recorta en vez de fabricar dinero, y que 0, negativos, `NaN` e `Infinity` se rechazan sin cobrar. | 121 |
 | `equipCheck` | Equipar/desequipar, y que **un click llega al manejador exactamente una vez** por muchos renders. Nodo falso con `addEventListener`/`click()` reales para contar acumulación. | 24 |
 | `buyCheck` | `buyStoreItem` y `buyNode`: **lo que se cobra es lo que se muestra**, lo que se paga llega, y lo que no cabe no se compra. Sobrevive a la recarga. | 145 |
 | `filterCheck` | `matchesFilter`, `visibleStacksFor` y `moveItemTo` **juntas**, porque la rejilla que ve el jugador y la que usa el arrastre tienen que ser la misma. Los 5 órdenes. | 67 |
@@ -628,7 +628,13 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los 11 bancos dan **826 pruebas**, todas en verde.
+   cambiar nada. Los **12 bancos** dan **987 pruebas**, todas en verde.
+
+   Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
+   `check()` dentro de un `if` que depende de qué botín salió de la caja, así que
+   esa prueba solo existe cuando el premio son nanitas. Por eso dos commits
+   seguidos discutieron si eran 962 o 963. Un total exacto no es un dato que se
+   pueda comprobar: lo que se comprueba es que todos los bancos impriman.
 6. Para lo que `verify/` no cubre: `preview.html`, `nav-test.html`,
    `drag-test.html`, `ruleta-preview.html`.
 

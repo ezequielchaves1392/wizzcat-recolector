@@ -1,4 +1,4 @@
-// ==========================================================================
+﻿// ==========================================================================
 //  Banco de pruebas de la COMPRA
 //
 //  Cubre `buyStoreItem` (la tienda entera) y `buyNode` (el arbol de pasivas).
@@ -456,6 +456,81 @@ async function main() {
     const g = await boot(baseSave([crate('c1'), { ...crate('k1'), type: 'key', name: 'Llave de Cifrado', tier: 0 }],
       { warehouseCapacity: 1 }));
     check('capacidad: la partida respeta la capacidad al cargar', wh(g).length <= 1, 'items=' + wh(g).length);
+  }
+
+  // =========================================================================
+  //  9. NADA DE LO QUE SE COMPRA PUEDE REVENDERSE POR MÁS DE LO QUE COSTÓ
+  // =========================================================================
+  //
+  // La invariante, no un caso. Se compra una carta, se vende lo comprado y se
+  // mira el saldo: si no ha bajado, o ha SUBIDO, hay una máquina de imprimir
+  // nanitas. Hace falta una prueba así porque las que ya había no la cubren:
+  // comprueban que el botón y el cargo coincidan (que es otra cosa) y que el
+  // total sea el unitario por las unidades.
+  {
+    // Las cartas que METER un item en el almacén. Las de ranura y las de
+    // "ampliar" no dejan nada que vender, así que no tienen nada que comprobar.
+    const cartasConItem = [
+      'key', 'upgradeCrystal', 'commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate',
+      'clickBuff', 'passiveBuff', 'backpackExpander', 'afkCard', 'clickX2Card', 'clickX3Card',
+      'calibrationStone', 'stabilityNano',
+      'companionCardT1', 'companionCardT5', 'companionCardT10',
+      'collectorCardT1', 'collectorCardT5', 'collectorCardT10'
+    ];
+
+    const abusos: string[] = [];
+    for (const carta of cartasConItem) {
+      const g = await boot(baseSave([], { nanites: 1_000_000, warehouseCapacity: 40 }));
+
+      // El saldo se mide ANTES de comprar. Medirlo despues mediria el precio
+      // de reventa solo, que siempre es positivo, y la prueba pasaria con el
+      // bug puesto: que es exactamente lo que hacia la primera version.
+      const antes = nanites(g);
+
+      const comprados: any = g.buyStoreItem(carta);
+      if (!comprados || comprados.ok === false) continue;
+      const id = comprados.id;
+      if (!id || !find(g, id)) continue;
+
+      const trasComprar = nanites(g);
+      if (trasComprar >= antes) {
+        abusos.push(`${carta}: la compra no cobro (antes=${antes} despues=${trasComprar})`);
+        continue;
+      }
+
+      g.sellItem(id);
+      const delta = nanites(g) - antes;   // negativo = perdida, positivo = imprimir
+
+      // Se admite que den algo: un recolector o un companero se valoran con la
+      // tabla dinamica y no con `sellPrice`. Lo que no se admite NUNCA es que den
+      // mas de lo que costo la carta, que es lo unico que importa en esta prueba.
+      if (delta > 0) {
+        abusos.push(`${carta}: cuesta ${STORE_ITEMS[carta as keyof typeof STORE_ITEMS].cost} y compra+venta deja +${delta}`);
+      }
+    }
+    check('tienda: NINGUNA carta se revende por mas de lo que costo',
+      abusos.length === 0, abusos.join(' | ') || `${cartasConItem.length} cartas comprobadas, ninguna imprime`);
+  }
+  {
+    // Y el caso que de verdad estaba roto, con los números a la vista.
+    //
+    // Comprar y vender en bucle, diez veces. Con el bug anterior el saldo
+    // crecía sin límite: +950 por llave y +4.260 por cristal.
+    const g = await boot(baseSave([], { nanites: 10_000, warehouseCapacity: 40 }));
+    const antes = nanites(g);
+    for (let i = 0; i < 10; i++) {
+      const k = g.buyStoreItem('key');
+      if (!k || !find(g, (k as any).id)) continue;
+      g.sellItem((k as any).id);
+      const c = g.buyStoreItem('upgradeCrystal');
+      if (!c || !find(g, (c as any).id)) continue;
+      g.sellItem((c as any).id);
+    }
+    check('tienda: comprar y vender 10 veces NO crea nanitas',
+      nanites(g) <= antes,
+      `antes=${antes} despues=${nanites(g)} · delta=${nanites(g) - antes}`);
+    check('tienda: y el almacen queda como estaba',
+      wh(g).length === 0, 'quedan=' + wh(g).length + ' ids=' + ids(g).join(','));
   }
 
   resumen('compra');

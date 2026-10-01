@@ -513,6 +513,152 @@ async function main() {
       `unitario=${g.getSellPrice('nada')} total=${g.getSellTotal('nada')}`);
   }
 
+  // --- Venta por unidades: el caso que pidió el jugador -------------------
+  //
+  // Una pila se puede querer a medias: 19 llaves y solo vas a abrir dos cajas.
+  // Antes la única palanca era vender la pila entera, y para un material de
+  // consumo eso es una decisión equivocada por defecto.
+  {
+    // Una parte de una pila: qué queda, qué se cobra y qué se guarda.
+    const g = await boot(baseSave([key('k1', 0, 10)]));
+    const antes = nanites(g);
+    const r = g.sellItem('k1', 4);
+    const pila = find(g, 'k1');
+    check('parcial: devuelve cuántas se vendieron', r.ok && r.sold === 4, 'sold=' + r.sold);
+    check('parcial: la pila conserva lo que sobra', !!pila && pila.stackCount === 6,
+      'quedan=' + (pila ? pila.stackCount : 'no existe'));
+    check('parcial: cobra 4, no la pila', r.gained === 4 * 480 && nanites(g) === antes + 1920,
+      'ganado=' + r.gained + ' nanitas=' + nanites(g));
+    check('parcial: el contador de llaves baja a 6', g.getState().keys === 6,
+      'keys=' + g.getState().keys);
+
+    const g2 = await reload();
+    const pila2 = find(g2, 'k1');
+    check('parcial: las 6 que sobran sobreviven a la recarga',
+      !!pila2 && pila2.stackCount === 6, 'quedan=' + (pila2 ? pila2.stackCount : 'no existe'));
+    check('parcial: y no se Readmite lo vendido', nanites(g2) === antes + 1920,
+      'nanitas=' + nanites(g2));
+    check('parcial: el contador tras recargar sigue en 6', g2.getState().keys === 6,
+      'keys=' + g2.getState().keys);
+  }
+  {
+    // R3: el botón, el texto del modal y el cargo leen el MISMO número.
+    //
+    // Se comprueba en las DIEZ cantidades por separado y no en un bucle sobre la
+    // misma pila: vendiendo 1+2+3+4 ya se han gastado las diez unidades y de la
+    // quinta en adelante el item ya no existe, así que el bucle mediría "no
+    // existe" en vez de "el número no cuadra". Cada cantidad necesita su partida.
+    const desajustes: string[] = [];
+    for (let n = 1; n <= 10; n++) {
+      const g = await boot(baseSave([key('k1', 0, 10)]));
+      const esperado = g.getSellTotal('k1', n);
+      const r = g.sellItem('k1', n);
+      if (r.gained !== esperado) desajustes.push(`n=${n} cargo=${r.gained} anunciaba=${esperado}`);
+    }
+    check('parcial: el cargo es EXACTAMENTE el que anunciaba getSellTotal, en las 10 cantidades',
+      desajustes.length === 0, desajustes.join(' | ') || 'las 10 cuadran');
+  }
+  {
+    // Pedir MÁS de lo que hay no puede fabricar dinero: se recorta a lo que hay.
+    // Un recorte devuelve menos de lo anunciado, y el botón se lo pregunta a la
+    // MISMA función, así que no puede haber discrepancia; lo que no puede pasar
+    // es cobrar por unidades que no estaban.
+    const g = await boot(baseSave([key('k1', 0, 3)]));
+    const antes = nanites(g);
+    const r = g.sellItem('k1', 99);
+    check('parcial: pedir 99 en una pila de 3 se recorta a 3', r.ok && r.sold === 3,
+      'sold=' + r.sold + ' ganado=' + r.gained);
+    check('parcial: y cobra lo de 3, no lo de 99', r.gained === 3 * 480 && nanites(g) === antes + 1440,
+      'ganado=' + r.gained);
+    check('parcial: la pila se queda vacía', !find(g, 'k1'), ids(g).join(','));
+    check('parcial: y getSellTotal también se recorta', g.getSellTotal('k1', 99) === 0,
+      'total=' + g.getSellTotal('k1', 99));
+  }
+  {
+    // Una cantidad que no es una cantidad NO es una intención de compra. Se
+    // rechaza SIN cobrar: es el único caso que `sellItem` rechaza de verdad.
+    const g = await boot(baseSave([key('k1', 0, 5)]));
+    const antes = nanites(g);
+    const malos = [0, -3, NaN, Infinity];
+    const acepto: string[] = [];
+    for (const n of malos) {
+      const r = g.sellItem('k1', n as number);
+      if (r.ok) acepto.push(`${n} -> ok`);
+    }
+    check('parcial: 0, negativos, NaN e Infinity se rechazan',
+      acepto.length === 0, acepto.join(' | ') || 'los 4 rechazados');
+    check('parcial: y rechazar no cobra nada', nanites(g) === antes,
+      `nanitas=${nanites(g)} antes=${antes}`);
+    check('parcial: y la pila sigue entera', find(g, 'k1')?.stackCount === 5,
+      'quedan=' + find(g, 'k1')?.stackCount);
+
+    // Un decimal NO se rechaza: se redondea ABAJO a una unidad. No hay unidades
+    // fraccionables, así que "vender 1,7" solo tiene una lectura posible y
+    // quedarse con 1 es más útil que dejar el botón muerto. Y por debajo de 1 sí
+    // es rechazo, porque ahí no queda ni una unidad entera.
+    const g3 = await boot(baseSave([key('k1', 0, 5)]));
+    const a3 = nanites(g3);
+    const rDecimal = g3.sellItem('k1', 1.7);
+    check('parcial: un decimal se redondea ABAJO y se vende 1, no 2',
+      rDecimal.ok && rDecimal.sold === 1 && nanites(g3) === a3 + 480,
+      'sold=' + rDecimal.sold + ' ganado=' + rDecimal.gained);
+    const g4 = await boot(baseSave([key('k1', 0, 5)]));
+    check('parcial: por debajo de 1 no queda ni una unidad y se rechaza',
+      g4.sellItem('k1', 0.5).ok === false, 'vendido 0.5');
+
+    // Un texto llega si alguien tipa en vez de usar el campo. `Number('abc')`
+    // es NaN, así que cae en el mismo rechazo; un número en texto, no.
+    const rTexto = g.sellItem('k1', '2' as any);
+    check('parcial: un "2" escrito como texto se acepta y son 2 unidades',
+      rTexto.ok && rTexto.sold === 2, 'sold=' + rTexto.sold);
+  }
+  {
+    // Vender la pila por partes tiene que sumar lo mismo que venderla de una vez.
+    const g1 = await boot(baseSave([key('k1', 0, 10)]));
+    const a1 = nanites(g1);
+    g1.sellItem('k1', 3);
+    g1.sellItem('k1', 4);
+    const r3 = g1.sellItem('k1', 3);
+
+    const g2 = await boot(baseSave([key('k2', 0, 10)]));
+    const a2 = nanites(g2);
+    const rTodo = g2.sellItem('k2');
+
+    check('parcial: tres ventas suman lo mismo que una de la pila entera',
+      nanites(g1) - a1 === nanites(g2) - a2,
+      `por partes=${nanites(g1) - a1} de una vez=${nanites(g2) - a2}`);
+    check('parcial: y la tercera vació la pila', r3.sold === 3 && !find(g1, 'k1'), ids(g1).join(','));
+    check('parcial: vender sin decir cantidad sigue vendiendo la pila entera',
+      rTodo.sold === 10 && !find(g2, 'k2'), 'sold=' + rTodo.sold);
+  }
+  {
+    // Una caja se puede vender a medias igual que una llave: son apilables por la
+    // misma regla y el contador de cajas tiene que bajar en la misma proporción.
+    const g = await boot(baseSave([crate('c1', 'common', 8)]));
+    const r = g.sellItem('c1', 5);
+    check('parcial: una pila de cajas también se vende a medias',
+      r.ok && r.sold === 5 && find(g, 'c1')?.stackCount === 3,
+      'sold=' + r.sold + ' quedan=' + find(g, 'c1')?.stackCount);
+    check('parcial: y el contador de cajas sigue a la pila', g.getState().crates.common === 3,
+      'crates.common=' + g.getState().crates.common);
+    const g2 = await reload();
+    check('parcial: las 3 cajas que sobran sobreviven', find(g2, 'c1')?.stackCount === 3,
+      'quedan=' + find(g2, 'c1')?.stackCount);
+  }
+  {
+    // Un recolector NO es apilable, así que una cantidad mayor que uno tiene que
+    // recortarse a uno y no cambiar su comportamiento de ninguna manera.
+    const g = await boot(baseSave([collector('r1'), collector('r2')]));
+    // El precio se lee ANTES de vender: después de venderlo el item ya no está
+    // y `getSellPrice` devuelve 0, así que compararlo después mediría 0 contra
+    // un cobro y fallaría por la razón equivocada.
+    const unitario = g.getSellPrice('r1');
+    const r = g.sellItem('r1', 7);
+    check('parcial: un recolector se vende de una en una aunque se pidan 7',
+      r.ok && r.sold === 1 && r.gained === unitario,
+      `sold=${r.sold} ganado=${r.gained} unitario=${unitario}`);
+  }
+
   // --- Resumen -----------------------------------------------------------
   const fallos = rows.filter(r => !r.ok);
   rows.forEach(r => console.log(`${r.ok ? 'PASA' : 'FALLA'}  ${r.name}${r.detail ? '   [' + r.detail + ']' : ''}`));

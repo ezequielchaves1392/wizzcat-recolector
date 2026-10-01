@@ -62,6 +62,17 @@ const TYPE_LABEL: Record<string, string> = {
   consumable: 'Consumible'
 };
 
+// Cómo se nombra UNA unidad en el selector de cantidad. Va aparte de
+// `TYPE_LABEL` porque ahí el plural es un rótulo ("Caja") y aquí tiene que
+// concordar con el número: "3 × caja". El sustantivo va en singular porque el
+// número ya está delante y es el que concuerda.
+const UNIDAD_SINGULAR: Record<string, string> = {
+  crate: 'caja',
+  key: 'llave',
+  crystal: 'cristal',
+  consumable: 'consumible'
+};
+
 // La regla de apilado vive en `data/stacking` porque el game loop necesita la
 // MISMA para saber si un item cabe. Con una copia aquí, el contador de ranuras y
 // la rejilla acaban contando cosas distintas otra vez.
@@ -80,10 +91,9 @@ export function renderWarehouseTab(
   game: any,
   onBack: () => void,
   onStateChange?: () => void,
-  onHome?: () => void,
   go?: (r: any) => void
 ) {
-  draw(container, game, onBack, onStateChange, onHome, go);
+  draw(container, game, onBack, onStateChange, go);
 }
 
 function draw(
@@ -91,7 +101,6 @@ function draw(
   game: any,
   onBack: () => void,
   onStateChange?: () => void,
-  onHome?: () => void,
   go?: (r: any) => void
 ) {
   const state = game.getState();
@@ -295,16 +304,15 @@ function draw(
     subtitle: 'Arrastra para reordenar · toca para inspeccionar',
     icon: 'warehouse',
     onBack,
-    onHome,
     state,
     // El contador va junto a las ranuras, dentro del cuerpo de la página.
     hideNanites: true
   }, body));
 
-  wireNav(root, { back: onBack, home: onHome, go });
+  wireNav(root, { back: onBack, go });
   // `wire` recibe `root` (el nodo que se recrea), no `container`. Es lo que
   // evita que los listeners se acumulen de un repintado a otro.
-  wire(root, game, onBack, onStateChange, onHome, go);
+  wire(root, game, onBack, onStateChange, go);
 }
 
 /** Hoja de detalle. En móvil va abajo con arrastre de salida; en escritorio, arriba. */
@@ -483,7 +491,13 @@ function detailContent(item: any, state: any, game: any): string {
                          border border-amber-500/30 text-amber-400"
                   style="background: color-mix(in srgb, #f59e0b 12%, transparent)"
                   data-act="sell" ${isEquipped ? 'disabled style="opacity:.4"' : ''}>
-            Vender · ${formatNumber(sellTotal)} ◆
+            ${stackUnits(item) > 1
+              // Con pila, el número del botón es el MÁXIMO, no lo que se va a
+              // cobrar: por eso lleva el × delante. "Vender · 9.120 ◆" con 19
+              // llaves debajo insinúa que eso es lo que se lleva, y en realidad
+              // se lleva lo que elija en el selector.
+              ? `Vender ×${stackUnits(item)} · ${formatNumber(sellTotal)} ◆`
+              : `Vender · ${formatNumber(sellTotal)} ◆`}
           </button>
 
           <!--
@@ -553,13 +567,12 @@ function esEquipado(w: any, state: any): boolean {
  * sobre `root`: viven en nodos nuevos, así que no acumulan, y por cada uno hay
  * un solo elemento.
  */
-function wire(root: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void, onHome?: () => void, go?: (r: any) => void) {
+function wire(root: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void, go?: (r: any) => void) {
   // El re-render tiene que recibir lo mismo que el render original. Aquí se
-  // perdían el botón de inicio y las rutas de navegación: al mover un item la
-  // página se repintaba sin ellos y a partir de ahí no se podía volver a
-  // casa ni saltar a otra sección.
+  // perdían las rutas de navegación: al mover un item la página se repintaba
+  // sin ellas y a partir de ahí no se podía saltar a otra sección.
   const container = root.parentElement as HTMLElement;
-  const redraw = () => draw(container, game, onBack, onStateChange, onHome, go);
+  const redraw = () => draw(container, game, onBack, onStateChange, go);
 
   // --- Filtro y orden ---
   root.querySelectorAll<HTMLElement>('[data-filter]').forEach(btn => {
@@ -1403,30 +1416,69 @@ function useConsumable(game: any, item: any, redraw: () => void) {
   );
 }
 
-/** Vende un item. El precio y el borrado los decide el game loop. */
+/**
+ * Vende un item. El precio, la cantidad y el borrado los decide el game loop.
+ *
+ * POR QUÉ SOLO PREGUNTA CUANDO HAY PILA. Con una sola unidad no hay nada que
+ * decidir: preguntar "¿cuántas?" sobre un item único es un paso de más que
+ * solo estorba. Y preguntar cuando la pila es de 1 dejaría un camino de "vender
+ * todo" que nadie usaría nunca, porque el jugador que quiere venderlo todo
+ * quiere precisamente eso y por eso es el valor por defecto del selector.
+ *
+ * El importe de cada cantidad lo PREGUNTA al game loop (`getSellTotal`) en vez
+ * de multiplicar aquí: es la misma cuenta que hace `sellItem`, y por eso el
+ * número que ve el jugador y el que se cobra no pueden separarse (R3).
+ */
 function sellItem(game: any, item: any, redraw: () => void) {
-  // El total también lo decide el game loop (`getSellTotal`), que es el mismo
-  // cálculo que hace `sellItem`. Pedirlo en vez de multiplicar aquí es lo que
-  // garantiza que el botón, este texto y el cargo dicen lo mismo: los tres
-  // leen el mismo número, no tres copias de la misma fórmula.
   const qty = stackUnits(item);
   const total = game.getSellTotal?.(item.id)
     ?? Math.floor((game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0) * qty);
 
+  // Sin pila no hay selector: el diálogo de antes, tal cual.
+  if (qty <= 1) {
+    showConfirmModal(
+      `Vendes ${item.name}${qty > 1 ? ` ×${qty}` : ''} por ${formatNumber(total)} nanitas.`,
+      () => confirmarVenta(game, item, undefined, redraw),
+      { sublabel: 'Vender', confirmText: `+${formatNumber(total)} ◆` }
+    );
+    return;
+  }
+
   showConfirmModal(
-    `Vendes ${item.name}${qty > 1 ? ` ×${qty}` : ''} por ${formatNumber(total)} nanitas.`,
-    () => {
-      const res = game.sellItem(item.id);
-      if (!res.ok) {
-        sfx.error();
-        showToast(res.msg || 'No se pudo vender.', 'error');
-        return;
+    `Tienes ${qty} × ${item.name}. Elige cuántas vender.`,
+    (units) => confirmarVenta(game, item, units, redraw),
+    {
+      sublabel: 'Vender',
+      confirmText: 'Vender',
+      quantity: {
+        max: qty,
+        itemName: item.name,
+        unitName: UNIDAD_SINGULAR[item.type] ?? 'unidad',
+        amount: (n) => formatNumber(game.getSellTotal?.(item.id, n) ?? 0)
       }
-      sfx.buy();
-      showToast(`Vendido por ${formatNumber(res.gained ?? total)} ◆`, 'success');
-      ui.selectedId = null;
-      redraw();
-    },
-    { sublabel: 'Vender', confirmText: `+${formatNumber(total)} ◆` }
+    }
   );
+}
+
+/** Cierra el diálogo y cobra. Separado para que las dos rutas compartan el cobro. */
+function confirmarVenta(game: any, item: any, units: number | undefined, redraw: () => void) {
+  const res = game.sellItem(item.id, units);
+  if (!res.ok) {
+    sfx.error();
+    showToast(res.msg || 'No se pudo vender.', 'error');
+    return;
+  }
+  sfx.buy();
+  const n = res.sold ?? 1;
+  showToast(
+    `Vendido${n > 1 ? ` ×${n}` : ''} por ${formatNumber(res.gained ?? 0)} ◆`,
+    'success'
+  );
+  // Solo se deselecciona si la pila se ha ido entera: si quedan unidades, el
+  // jugador sigue trabajando con el mismo item y quitarle la ficha debajo de las
+  // manos es un salto sin motivo.
+  if (!game.getState().warehouse.some((w: any) => w.id === item.id)) {
+    ui.selectedId = null;
+  }
+  redraw();
 }

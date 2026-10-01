@@ -10,7 +10,30 @@
 // en vez de crear un segundo tipo de diálogo: en la forja y en el reciclaje la
 // consecuencia de equivocarse es irreversible, y "Aceptar" a secas no dice
 // nada de lo que se está aceptando.
+//
+// Y luego con un tercero (`quantity`), por el mismo motivo: el selector de
+// cantidad y la confirmación son el MISMO diálogo visto en dos momentos, y
+// hacerlos aparte duplicaría el armazón, el foco y el Escape por dos veces.
 // ==========================================================================
+
+export interface QuantityPrompt {
+  /** Unidades disponibles. Es el máximo y también el valor inicial. */
+  max: number;
+  /** Nombre de lo que se vende, para el texto: "Llave Reforzada". */
+  itemName: string;
+  /** La unidad en singular: "llave", "caja", "cristal", "tarjeta". */
+  unitName: string;
+  /**
+   * El importe para una cantidad dada, YA FORMATEADO.
+   *
+   * Lo recibe un callback y no se calcula aquí a propósito: el precio de venta
+   * vive en el game loop y depende de la bonificación del árbol. Si este módulo
+   * multiplicara por su cuenta volvería a haber dos fórmulas del mismo número,
+   * que es exactamente el bug que R3 prohíbe (y el que ya rompió el botón
+   * "Vender" una vez: pintaba el unitario y cobraba el total).
+   */
+  amount: (units: number) => string;
+}
 
 export interface ConfirmOptions {
   /** Título corto arriba del mensaje. */
@@ -21,18 +44,21 @@ export interface ConfirmOptions {
   cancelText?: string;
   /** Estilo de peligro: el botón de confirmar pasa a rojo. */
   danger?: boolean;
+  /** Pide cuántas unidades, en vez de confirmar de golpe. */
+  quantity?: QuantityPrompt;
 }
 
 export function showConfirmModal(
   message: string,
-  onConfirm: () => void,
+  onConfirm: (units?: number) => void,
   options: ConfirmOptions = {}
 ): void {
   const {
     sublabel,
     confirmText = 'Confirmar',
     cancelText = 'Cancelar',
-    danger = false
+    danger = false,
+    quantity
   } = options;
 
   // Si ya hay un diálogo abierto, se sustituye en vez de apilarse
@@ -64,6 +90,102 @@ export function showConfirmModal(
   messageEl.className = 'text-[13px] font-sans leading-relaxed text-[var(--text-main)]';
   messageEl.textContent = message;
   content.appendChild(messageEl);
+
+  /**
+   * El selector de cantidad, si lo hay.
+   *
+   * `fijar()` se declara a nivel de `showConfirmModal` y no dentro del `if` que
+   * construye el selector: se llama después de crear los botones, y una
+   * `function` dentro de un bloque solo se ve dentro de ese bloque.
+   */
+  let input: HTMLInputElement | null = null;
+  let totalEl: HTMLElement | null = null;
+  let unidades = quantity ? quantity.max : 0;
+
+  /**
+   * Fija la cantidad y repinta lo que depende de ella.
+   *
+   * Recorta a `[1, max]` en vez de fiarse de lo que hay en el campo: un
+   * `type=number` deja teclear cualquier cosa, incluidos negativos y decimales,
+   * y el recorte es la misma cuenta que hace el game loop en
+   * `unidadesVendibles()`. Si el modal dejara pasar un 40 en una pila de 19, el
+   * botón prometería 40 y el cargo serían 19.
+   */
+  function fijar(n: number, repintarCampo = true) {
+    const q = quantity!;
+    unidades = Math.min(q.max, Math.max(1, Math.floor(n) || 1));
+    if (repintarCampo && input) input.value = String(unidades);
+    const importe = q.amount(unidades);
+    if (totalEl) totalEl.textContent = `${unidades} × ${q.unitName} · ${importe} ◆`;
+    confirmBtn.textContent = `${confirmText} · ${importe} ◆`;
+  }
+
+  if (quantity) {
+    const wrap = document.createElement('div');
+    wrap.className = 'flex flex-col gap-2.5 mt-1';
+
+    // --- Stepper: menos, campo, más ---
+    const stepper = document.createElement('div');
+    stepper.className = 'flex items-center gap-2';
+
+    const mkStep = (glyph: string, delta: number, aria: string) => {
+      const b = document.createElement('button');
+      b.className = 'h-11 w-11 flex-shrink-0 rounded-xl btn-ghost font-[\'Orbitron\'] font-bold text-[15px] cursor-pointer transition active:scale-[0.98]';
+      b.textContent = glyph;
+      b.setAttribute('aria-label', aria);
+      b.addEventListener('click', () => fijar(unidades + delta));
+      return b;
+    };
+
+    input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(quantity.max);
+    input.step = '1';
+    input.inputMode = 'numeric';
+    input.value = String(quantity.max);
+    input.setAttribute('aria-label', `Unidades de ${quantity.itemName} a vender`);
+    input.className = 'flex-1 min-w-0 h-11 app-bg border border-[var(--border-color)] rounded-xl px-3 ' +
+      'text-center font-mono text-[14px] font-bold tabular text-[var(--text-main)]';
+
+    stepper.appendChild(mkStep('−', -1, 'Vender una unidad menos'));
+    stepper.appendChild(input);
+    stepper.appendChild(mkStep('+', 1, 'Vender una unidad más'));
+    wrap.appendChild(stepper);
+
+    // --- Atajo "Todo" y el total en vivo ---
+    const foot = document.createElement('div');
+    foot.className = 'flex items-center justify-between gap-2';
+
+    const todoBtn = document.createElement('button');
+    todoBtn.className = 'h-9 px-3 flex-shrink-0 rounded-lg btn-ghost font-mono text-[10px] cursor-pointer transition';
+    todoBtn.textContent = `Todo (${quantity.max})`;
+    todoBtn.addEventListener('click', () => fijar(quantity.max));
+
+    const live = document.createElement('span');
+    live.className = 'font-mono text-[11px] tabular text-[var(--text-muted)] text-right';
+    totalEl = live;
+
+    foot.appendChild(todoBtn);
+    foot.appendChild(live);
+    wrap.appendChild(foot);
+    content.appendChild(wrap);
+
+    // `repintarCampo=false` al teclear: el campo ya tiene lo que se ha escrito
+    // y reasignarlo mientras se teclea mueve el cursor al final.
+    input.addEventListener('input', () => {
+      const n = Math.floor(Number(input!.value));
+      fijar(Number.isFinite(n) && n >= 1 ? n : 1, false);
+    });
+    // Enter confirma, como en cualquier formulario: teclear la cantidad y dar a
+    // Enter es el camino rápido, y el `click` del botón no lo dispara.
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      confirmar();
+    });
+  }
+
   modal.appendChild(content);
 
   const buttonContainer = document.createElement('div');
@@ -95,11 +217,24 @@ export function showConfirmModal(
     document.removeEventListener('keydown', handleEscape);
   };
 
-  cancelBtn.addEventListener('click', close);
-  confirmBtn.addEventListener('click', () => {
+  /**
+   * Confirmar. Se declara como `function` y no como `const` porque la manejan
+   * el `keydown` del campo y el `click` del botón, que se ligan antes de que
+   * exista la constante.
+   *
+   * Sin selector, `onConfirm` no recibe nada: los tres diálogos que ya lo usaban
+   * (forja, Ascensión, aplicar consumible) no saben qué hacer con un número.
+   */
+  function confirmar() {
     close();
-    onConfirm();
-  });
+    onConfirm(quantity ? unidades : undefined);
+  }
+
+  // El primer pintado del selector, ahora que ya existe el botón a retocar.
+  if (quantity) fijar(quantity.max);
+
+  cancelBtn.addEventListener('click', close);
+  confirmBtn.addEventListener('click', confirmar);
 
   buttonContainer.appendChild(cancelBtn);
   buttonContainer.appendChild(confirmBtn);
@@ -116,6 +251,10 @@ export function showConfirmModal(
     if (e.target === overlay) close();
   });
 
-  // El foco arranca en confirmar: con teclado, Enter es la acción esperada.
-  confirmBtn.focus();
+  // Sin selector, el foco arranca en confirmar: con teclado, Enter es la
+  // acción esperada. Con selector, en el campo: la primera intención de quien
+  // ha abierto "cuántas" es cambiar el número, y saltar al botón le obliga a
+  // tabular para volver.
+  if (input) input.focus();
+  else confirmBtn.focus();
 }

@@ -338,14 +338,26 @@ async function main() {
       .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
 
     const r = g12.openCrateBox('c1', 'k1');
+
+    // CUÁNTAS LLAVES SOLTÓ EL BOTÍN DE ESTA CAJA.
+    //
+    // La caja común tiene una fila de llaves con peso 12 sobre un total de 100, así
+    // que una de cada ocho aperturas deja material nuevo. Estas tres pruebas miran el
+    // recuento de llaves del almacén, y sin restar el botín fallan solas una de cada
+    // ocho veces: el juego está haciendo lo correcto y la prueba se equivoca de más.
+    // Es el peor tipo de prueba —la que sale verde casi siempre—, porque el día que
+    // falle del todo nadie sabrá si es ella o el juego.
+    const sueltas = r.reward?.kind === 'keys' ? (r.reward.amount ?? 0) : 0;
+    const llavesDeFabrica = llaves - 1 + sueltas;
+    const totalLlaves = (gg: any) => wh(gg).filter((w: any) => w.type === 'key')
+      .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
+
     check('caja: se abre', r.ok === true, r.msg ?? '');
     check('caja: la caja se consume',
       deType(g12, 'crate') < cajas, 'cajas=' + deType(g12, 'crate'));
     check('caja: y se gasta UNA llave',
-      wh(g12).filter((w: any) => w.type === 'key')
-        .reduce((a, w: any) => a + (w.stackCount ?? 1), 0) === llaves - 1,
-      'llaves=' + wh(g12).filter((w: any) => w.type === 'key')
-        .reduce((a, w: any) => a + (w.stackCount ?? 1), 0));
+      totalLlaves(g12) === llavesDeFabrica,
+      `llaves=${totalLlaves(g12)} esperado=${llavesDeFabrica} (botín soltó ${sueltas})`);
     check('caja: el contador de cajas abiertas sube', s(g12).cratesOpened === 1,
       'abiertas=' + s(g12).cratesOpened);
 
@@ -397,10 +409,11 @@ async function main() {
     check('caja: la caja abierta no vuelve',
       cajas13 < cajas, `cajas=${cajas13} (antes ${cajas})`);
     check('caja: abrir una caja NO multiplica el material',
-      llaves13 <= llaves, `llaves=${llaves13} antes=${llaves}`);
+      totalLlaves(g13) <= llavesDeFabrica,
+      `llaves=${llaves13} tope=${llavesDeFabrica} (antes ${llaves}, botín soltó ${sueltas})`);
     check('caja: la llave consumida no vuelve al recargar',
-      llaves13 === llaves - 1,
-      `llaves=${llaves13} esperado=${llaves - 1} · doc=${JSON.stringify((guardado() as any)?.keys ?? 'sin campo keys')}`);
+      totalLlaves(g13) === llavesDeFabrica,
+      `llaves=${llaves13} esperado=${llavesDeFabrica} · doc=${JSON.stringify((guardado() as any)?.keys ?? 'sin campo keys')}`);
   }
 
   // =========================================================================

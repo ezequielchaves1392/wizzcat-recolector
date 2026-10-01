@@ -16,10 +16,14 @@ import { TREE_BY_ID, nodeCost } from './data/tree';
 import { attemptForge, AFFIX_BY_ID, collectorMaxLevel } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
+// `KeyDef` y `CrystalDef` se importaban aquí y ya no se usan: el precio de
+// reventa del material salía de `def.cost`, y al salir de `STORE_ITEMS` se han
+// quedado sin uso. Se borran en vez de dejarlos, porque un tipo importado que
+// no lee nadie es la señal de que la regla se movió y nadie lo anotó.
 import {
   KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER,
   crystalSuccessChance, crystalPowerFromName, keyTierFromName, keyOpens,
-  type KeyTier, type KeyDef, type CrystalDef
+  type KeyTier
 } from './data/items';
 
 
@@ -490,6 +494,31 @@ export async function createGameLoop(
 }
 
 /**
+ * Cuántas unidades de una pila se pueden vender, ya recortadas a lo que hay.
+ *
+ * Sin `pedidas` devuelve la pila entera: es el comportamiento de siempre, y por
+ * eso todos los bancos que llamaban a `sellItem(id)` siguen vendiéndolo todo.
+ *
+ * POR QUÉ SE RECORTA Y POR QUÉ NO SE RECHAZA. Entre que el jugador abre la ficha
+ * y pulsa "Vender" la pila puede haber bajado: abrió una caja, vendió otra cosa,
+ * le Reseteó la Ascensión. Recortar devuelve menos de lo que el botón anunciaba,
+ * pero el botón se lo pregunta a ESTA misma función, así que el número que se
+ * pintó y el que se cobra salen de aquí y no pueden discrepar. Rechazar, en
+ * cambio, deja un botón muerto — que es peor que un bug visible, porque el
+ * jugador no entiende por qué no ocurre nada.
+ *
+ * 0 significa "cantidad no válida", que es el único caso que `sellItem` rechaza
+ * de verdad: un 0 o un texto no es una intención de compra.
+ */
+function unidadesVendibles(item: any, pedidas?: number): number {
+  const disponibles = stackUnits(item);
+  if (pedidas === undefined || pedidas === null) return disponibles;
+  const n = Math.floor(Number(pedidas));
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return Math.min(n, disponibles);
+}
+
+/**
  * Mete un item en el almacén, sumándolo a la pila que ya hubiera.
  *
  * Es la ÚNICA forma de añadir un item al almacén, y el motivo de que exista es
@@ -689,9 +718,7 @@ function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
   const esLlave = kind === 'key';
   const def = esLlave ? KEY_DEFS[tier as KeyTier] : CRYSTAL_DEFS[tier];
   const prefijo = esLlave ? 'key' : 'crystal';
-  const sellPrice = esLlave
-    ? Math.floor((def as KeyDef).cost ?? 1200)
-    : Math.floor((def as CrystalDef).cost ?? 2400) * 3;
+  const sellPrice = precioReventaMaterial(kind);
 
   return {
     id: `${prefijo}_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -706,6 +733,41 @@ function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
     stackable: true,
     stackCount: 1
   };
+}
+
+/**
+ * Lo que se recupera al vender una llave o un cristal.
+ *
+ * Una cuarta parte del precio de la carta de la tienda, que es la MISMA cuenta
+ * que ya usan las cajas, los consumibles y las cartas de compañero y recolector
+ * (`Math.floor(cost / 4)`). Material, cajas y consumibles son lo mismo: cosas
+ * que se gastan. Por eso comparten la regla, y por eso comprar y vender nunca
+ * sale rentable.
+ *
+ * POR QUÉ NO SALE DE `KEY_DEFS` NI DE `CRYSTAL_DEFS`, QUE ES DONDE ESTÁN LOS
+ * PRECIOS. Porque en esas tablas `cost` es `null` para todo lo que no se vende
+ * en la tienda, y el material que suelta una caja es justo eso. Con un número
+ * inventado en el `??` pasaba esto:
+ *
+ *   - Llave comprada por 250, revendida por 1.200.  +950 por operación.
+ *   - Cristal comprado por 60, revendido por 4.320.  +4.260 por operación.
+ *
+ * Ninguno de los dos es un desajuste de balance: es una máquina de imprimir
+ * nanitas comprando y vendiendo en bucle, sin límite y sin ganar nada. Y ningún
+ * banco lo veía, porque `buyCheck` comprueba que el botón y el cargo coincidan —
+ * que es otra cosa— y no que vender un item sea una pérdida.
+ *
+ * El precio de venta tampoco sale de aquí, y a propósito: el juego ya sabe lo
+ * que el jugador pagó, porque lo acaba de restar. Lo que no puede saber es de
+ * dónde vino un item que no compró, y por eso la reventa es una propiedad del
+ * item y no un recuerdo de su procedencia. Una llave de la tienda y una llave de
+ * una caja son el mismo objeto y valen lo mismo al venderlo.
+ */
+function precioReventaMaterial(kind: 'key' | 'crystal'): number {
+  const carta = (STORE_ITEMS as Record<string, { cost: number }>)[
+    kind === 'key' ? 'key' : 'upgradeCrystal'
+  ];
+  return Math.floor(carta.cost / 4);
 }
 
 /**
@@ -2108,7 +2170,19 @@ function syncMaterialCounters() {
      * item recién vendido porque comparaba el contador del guardado anterior
      * contra el almacén. Ver `materializePendingCrates`.
      */
-    sellItem: (itemId: string): { ok: boolean; msg?: string; gained?: number } => {
+    /**
+     * Vende `units` unidades de un item, o la pila entera si no se dice nada.
+     *
+     * La cantidad se acepta porque una pila se puede querer a medias: 19 llaves
+     * y solo vas a abrir dos cajas, y en los otros 17 quieres otra cosa. Antes
+     * la única palanca era vender la pila entera, que para un material de
+     * consumo es una decisión equivocada por defecto.
+     *
+     * `units` llega desde un `<input type=number>`, así que se coacciona y se
+     * recorta con `unidadesVendibles()`: el que enseña el botón y el que cobra
+     * son la misma expresión, que es lo que R3 exige.
+     */
+    sellItem: (itemId: string, units?: number): { ok: boolean; msg?: string; gained?: number; sold?: number } => {
       handleUserActivity();
       const idx = state.warehouse.findIndex((w: any) => w.id === itemId);
       if (idx < 0) return { ok: false, msg: 'Ese item ya no está en el almacén.' };
@@ -2118,19 +2192,22 @@ function syncMaterialCounters() {
         (item.type === 'companion' && state.activeCompanions.includes(item.id));
       if (esEquipado) return { ok: false, msg: 'Desequípalo antes de venderlo.' };
 
-      // No se puede quedar sin la última unidad de un tipo que produce ingreso
+      const vender = unidadesVendibles(item, units);
+      if (vender <= 0) return { ok: false, msg: 'Elige una cantidad mayor que cero.' };
+
+      // No se puede quedar sin la última unidad de un tipo que produce ingreso.
+      // Cuenta ITEMS, no unidades, y sigue valiendo igual: recolectores y
+      // compañeros no son apilables, así que `vender` siempre es 1 aquí.
       if (item.type === 'collector' || item.type === 'companion') {
         const quedan = state.warehouse.filter((w: any) => w.type === item.type).length;
         if (quedan <= 1) return { ok: false, msg: 'No puedes vender el último de su tipo.' };
       }
 
-      const qty = stackUnits(item);
-      const unitario = getSellPriceFor(item);
-      const ganado = Math.floor(unitario * qty);
+      const ganado = Math.floor(getSellPriceFor(item) * vender);
 
       state.nanites += ganado;
 
-      consumeWarehouseItem(item.id, qty);
+      consumeWarehouseItem(item.id, vender);
       syncWarehouseGaps();
 
       if (item.type === 'companion') {
@@ -2146,7 +2223,7 @@ function syncMaterialCounters() {
       checkAchievements();
       onUpdate(state, isAfk);
       saveToFirebase();
-      return { ok: true, gained: ganado };
+      return { ok: true, gained: ganado, sold: vender };
     },
 
     /**
@@ -2941,15 +3018,20 @@ function syncMaterialCounters() {
      * modal de al lado decía "por 9.600 nanitas". El jugador ve un número, lo
      * acepta y se le cobra otro (R3).
      *
+     * `units` es la cantidad a cotizar. Sin él, la pila entera: es lo que
+     * pintan la ficha y el botón. Con él, lo que el jugador está a punto de
+     * vender, y lo pinta el selector de cantidad en vivo mientras teclea.
+     *
      * Vive aquí y no en la vista para que el botón, el modal y el cobro no puedan
      * discrepar por redondeo o por una pila olvidada: es la misma expresión que
      * usa `sellItem`, y si algún día cambia la fórmula cambia en los tres sitios
      * porque son el mismo código.
      */
-    getSellTotal: (itemId: string): number => {
+    getSellTotal: (itemId: string, units?: number): number => {
       const item: any = state.warehouse.find((w: any) => w.id === itemId);
       if (!item) return 0;
-      return Math.floor(getSellPriceFor(item) * stackUnits(item));
+      const vender = unidadesVendibles(item, units);
+      return vender > 0 ? Math.floor(getSellPriceFor(item) * vender) : 0;
     },
 
     getCollectorValue: (itemId: string) => {
