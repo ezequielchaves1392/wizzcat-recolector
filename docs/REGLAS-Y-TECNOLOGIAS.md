@@ -153,7 +153,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 17 bancos
+### Los 19 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -162,7 +162,7 @@ en producción.
 | `buyCheck` | `buyStoreItem` y `buyNode`: **lo que se cobra es lo que se muestra**, lo que se paga llega, y lo que no cabe no se compra. Sobrevive a la recarga. | 148 |
 | `filterCheck` | `matchesFilter`, `visibleStacksFor` y `moveItemTo` **juntas**, porque la rejilla que ve el jugador y la que usa el arrastre tienen que ser la misma. Los 5 órdenes. | 67 |
 | `moveCheck` | `moveItems` **reordena, nunca edita**: ni número de items, ni nanitas, ni contadores. El destino imposible se rechaza en vez de corromper. | 54 |
-| `stackCheck` | Una pila es una ranura. Comprar y abrir van a la pila existente. La migración colapsa saves viejos sin perder unidades. Que el botón de la tienda y el cobro pregunten lo mismo. | 62 |
+| `stackCheck` | Una pila es una ranura. Comprar y abrir van a la pila existente. La migración colapsa saves viejos sin perder unidades. Que el botón de la tienda y el cobro pregunten lo mismo. **Las cuatro cartas de llave por separado**, una partida por carta: que dos unidades del mismo nivel caigan en una pila vale para las cuatro, y medirlas todas en una partida compartida mide cuatro llaves de tres niveles distintos. | 71 |
 | `consumableCheck` | `useConsumable`, la operación más condicional. Tres fallos con nombre: gastar sin aplicar, aplicar sin gastar, romper el tope. | 88 |
 | `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, **sintonización del recolector** (el acierto, el fallo que no retrocede, y los tres rechazos), prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** | 212 |
 | `gapCheck` | Los huecos del almacén. El ancla es el **id del item**, nunca un índice de celda. Reimplementa el criterio del pintor a propósito, para que el test no sea tautológico. | 65 |
@@ -176,6 +176,9 @@ en producción.
 | `tickCheck` | **El ritmo del cobro pasivo.** Que el ingreso entre ENTERO y de una vez, no la mitad del tick: el HUD anuncia "+5 / segundo" y con un tick de 500 ms el saldo subía 2,5, así que el entero alternaba +2 y +3. Y la que no se puede perder de vista: **el ingreso por segundo NO cambia** —diez ticks son cinco segundos y tienen que haber dado cinco cobros—, porque un arreglo de ritmo visual que de paso inflara o recortara la economía se vería igual de bonito y sería un desastre. También que un compañero de tipo `click` cuente igual, y que con la pestaña oculta no entre nada ni se acumule para después. | 14 |
 | `senalCheck` | **Que lo que se enseña sea lo que se cobra.** El `tickCheck` ata el ritmo del bloque entero; este ata **el reparto dentro de ese bloque**. Que las fichas sumen EXACTAMENTE `state.passiveIncome` —ni un nanita de más ni de menos— y que no se pueda deshacer repartiendo `floor(power × multiplicadores)` por separado, porque los floors no suman: con dos compañeros de 3 y ×1,5 el ingreso es 9 y los floors son 4 y 4. Que el `+N` flotante y la ficha digan 9 y no el `power` desnudo. Y que los **clics del árbol tengan señal**, que no la tenían: entran en la cuenta, suman `totalClicks` y no se veían por ningún lado, así que de las tres fuentes del contador solo dos tenían cartel. | 26 |
 | `balanceCheck` | **Que el precio siga al poder, y que no se rompa en silencio.** El coste por punto de poder es la regla entera de las cartas: tiene que SUBIR con el tier —150 en T1 hasta ~416 en T10, el sobreprecio deliberado del que habla el código—, y **un tier superior NUNCA puede salir mejor por punto que el anterior**. Esa segunda regla es la que ata el bug real: los precios escalaban 1.5x y el poder 1.62x, así que el T10 salía a 38 por punto contra 142 del T1 y comprarlo era 3.7x más rentable que comprar T1. También que compañero y recolector cuesten lo mismo (mismo `TIER_SYSTEM.ranges`), que el final de la partida se estire (los dos últimos tiers son más de la mitad del total) y que sintonizar no sea un botón (nivel 20 cuesta ~47% del recolector, no un 4%). | 29 |
+
+| `desgloseCheck` | **Que las partes del daño sumen el total.** El panel enseña el click partido en base, nivel y bonos, y el reparto sale del motor. Que `base + nivel + bonos` sea **exactamente** `getClickDamage()` en cinco casos raros, con buff x2 puesto y al expirar, y que ninguna parte salga negativa. Y la que no es cosmética: **con buff la parte de nivel no se mueve**. El buff multiplica el total entero, así que adjudicárselo a "nivel" hacía que el panel dijera "+200 nivel" para un item cuyo nivel vale 50, y se leía que subir de nivel rendía el doble. El efecto entero del buff tiene que caer en "bonos", que es donde uno lo espera. | 31 |
+| `llaveCheck` | **Que el sistema de llaves cerrara.** Tres mitades que fallaban a la vez: la **cadena** (la del Vacío no salía de ninguna parte y la caja legendaria era imposible de abrir; la Rúnica solo salía de la legendaria; la épica no soltaba llave ninguna — tres peldaños y faltaban los tres), el **texto** (los cuatro `details` mentían) y la **tienda** (una carta que entregaba otra llave, con el precio en un tercer sitio). Comprueba que cada caja suelte la llave que la abre, por **las dos vías**: botín y tienda, porque una llave que solo existe en la tienda y una que solo sale de cajas dejan de ser el mismo sistema. Que el texto no prometa ninguna caja que la llave no abra, en las dos direcciones. Que cada carta entregue la llave que dice. Y que el botín no anuncie una llave que no entrega, con el **plural entero**: una versión anterior miraba `includes('Llaves')` y daba por buena una etiqueta que decía "+2 Llaves Rúnica". | 92 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).
@@ -679,7 +682,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              17 bancos.
+  <subject>Check.ts              19 bancos.
 docs/                           Este directorio.
 ```
 
@@ -702,7 +705,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los **17 bancos** dan **1162 pruebas**, todas en verde.
+   tocar nada. Los **19 bancos** dan **1293 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

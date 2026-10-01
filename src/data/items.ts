@@ -21,13 +21,18 @@
 import type { Rarity } from '../types/domain';
 
 /**
- * Tipos de cofre.
+ * Tipos de cofre y sus nombres.
  *
- * No se reexportan aquí: viven en `gameLoop` porque `CRATE_TYPES` —el objeto
- * que las describe— está acoplado al botín. Este módulo lo importa para leer
- * `CRATE_KEY_TIER` sin crear un ciclo con el game loop.
+ * Se importan como VALOR, no solo como tipo, y es lo que hace que el `details` de
+ * una llave pueda escribirse solo: el texto sale de `CRATE_TYPES`, que es donde
+ * vive el nombre de cada caja, y de `CRATE_KEY_TIER`, que es donde vive la regla
+ * de qué llave la abre. Las dos mitades de la frase salen de las dos tablas que
+ * ya existían y no se añade ninguna tercera.
+ *
+ * Este módulo ya dependía de `store.ts` (por el tipo `CrateType`), así que esto
+ * no crea un ciclo nuevo: la flecha va en el mismo sentido.
  */
-import type { CrateType } from './store';
+import { CRATE_TYPES, KEY_COSTS, type CrateType } from './store';
 
 /** Nivel de llave: 0 = base (comprable), 1+ = solo de cajas. */
 export type KeyTier = 0 | 1 | 2 | 3;
@@ -47,6 +52,17 @@ export type KeyTier = 0 | 1 | 2 | 3;
 export interface KeyDef {
   tier: KeyTier;
   name: string;
+  /**
+   * El nombre en plural, y va aparte a propósito.
+   *
+   * No sale de `name` con un regla, porque el plural en español no lo es: de
+   * "Llave Rúnica" sale "Llaves Rúnicas" (con la "s" en el adjetivo) y de
+   * "Llave de Cifrado" sale "Llaves de Cifrado" (sin nada que cambiar al final).
+   * Añadirle una "s" a la primera palabra leyó "+2 Llaves Rúnica", que está mal,
+   * y un banco que solo miraba si la etiqueta contenía "Llaves" lo daba por
+   * bueno. Es un nombre, y un nombre se escribe entero.
+   */
+  namePlural: string;
   details: string;
   rarity: Rarity;
   /** ¿Se puede comprar en la tienda? */
@@ -63,51 +79,117 @@ export interface KeyDef {
  */
 export const KEY_TIER_ORDER: KeyTier[] = [0, 1, 2, 3];
 
-export const KEY_DEFS: Record<KeyTier, KeyDef> = {
-  0: {
-    tier: 0,
-    name: 'Llave de Cifrado',
-    details: 'Abre Cofres Comunes y Raros.',
-    rarity: 'Común',
-    buyable: true,
-    cost: 480,
-    dropRate: 0
-  },
-  1: {
-    tier: 1,
-    name: 'Llave Reforzada',
-    details: 'Abre Cofres Raros, Épicos y Legendarios.',
-    rarity: 'Raro',
-    buyable: false,
-    cost: null,
-    dropRate: 22
-  },
-  2: {
-    tier: 2,
-    name: 'Llave Rúnica',
-    details: 'Abre Cofres Épicos y Legendarios.',
-    rarity: 'Épico',
-    buyable: false,
-    cost: null,
-    dropRate: 14
-  },
-  3: {
-    tier: 3,
-    name: 'Llave del Vacío',
-    details: 'Abre cualquier cofre. La más rara.',
-    rarity: 'Legendario',
-    buyable: false,
-    cost: null,
-    dropRate: 4
-  }
-};
-
 /** Qué llave necesita cada cofre. */
 export const CRATE_KEY_TIER: Record<CrateType, KeyTier> = {
   common: 0,
   rare: 1,
   epic: 2,
   legendary: 3
+};
+
+/**
+ * Los cofre que abre una llave de este nivel, de menor a mayor.
+ *
+ * ES LA MISMA PREGUNTA QUE `keyOpens`, CON EL MISMO CRITERIO, y por eso no es
+ * una segunda regla: sale de llamar a `keyOpens`. Antes esta lista estaba
+ * escrita a mano en el `details` de cada llave, y las cuatro mentían (B6): la
+ * Cifrada decía "Comunes y Raros" sin abrir las raras, y la Rúnica decía
+ * "Épicos y Legendarios" sin abrir las legendarias. Un texto derivado no puede
+ * mentir porque no hay nadie que lo escriba.
+ */
+export function cratesOpenedBy(keyTier: KeyTier): CrateType[] {
+  return (Object.keys(CRATE_KEY_TIER) as CrateType[])
+    .filter(c => keyOpens(keyTier, CRATE_KEY_TIER[c]))
+    .sort((a, b) => CRATE_KEY_TIER[a] - CRATE_KEY_TIER[b]);
+}
+
+/** El `details` de una llave, generado con el mismo criterio que la regla. */
+function detailsDeLlave(keyTier: KeyTier): string {
+  const nombres = cratesOpenedBy(keyTier).map(c => CRATE_TYPES[c].name);
+  if (nombres.length === 0) return 'No abre ningún cofre.';
+  if (nombres.length === 1) return `Abre ${nombres[0]}.`;
+  const ultimo = nombres.pop();
+  return `Abre ${nombres.join(', ')} y ${ultimo}.`;
+}
+
+/**
+ * Las cuatro llaves, con su texto generado. Su PRECIO no está aquí: está en
+ * `KEY_COSTS` (`data/store.ts`), que es el fichero de los precios, y las cuatro
+ * cartas de la tienda lo leen de ahí. Con el precio en dos sitios fue como la
+ * tienda acabó vendiendo una carta llamada "Llave de Cifrado" que entregaba la
+ * Reforzada (B7): nombre en un sitio, entrega en otro, precio en un tercero.
+ *
+ * POR QUÉ LAS CUATRO SON COMPRABLES. La cadena de llaves era una escalera
+ * imposible (B6): la del Vacío no salía de ninguna parte, así que la caja
+ * legendaria no se podía abrir nunca, y la Rúnica solo salía de la legendaria.
+ * Cerrar el botín arregla medio problema, pero deja la tienda como una red de
+ * seguridad cara: si un jugador llega a la legendaria sin llave, tiene que poder
+ * comprarla. Con las cuatro a la venta, ningún cofre es inalcanzable por
+ * defecto y la tienda deja de ser un callejón sin salida.
+ */
+export const KEY_DEFS: Record<KeyTier, KeyDef> = {
+  0: {
+    tier: 0,
+    name: 'Llave de Cifrado',
+    namePlural: 'Llaves de Cifrado',
+    details: detailsDeLlave(0),
+    rarity: 'Común',
+    buyable: true,
+    cost: KEY_COSTS[0],
+    dropRate: 0
+  },
+  1: {
+    tier: 1,
+    name: 'Llave Reforzada',
+    namePlural: 'Llaves Reforzadas',
+    details: detailsDeLlave(1),
+    rarity: 'Raro',
+    buyable: true,
+    cost: KEY_COSTS[1],
+    dropRate: 22
+  },
+  2: {
+    tier: 2,
+    name: 'Llave Rúnica',
+    namePlural: 'Llaves Rúnicas',
+    details: detailsDeLlave(2),
+    rarity: 'Épico',
+    buyable: true,
+    cost: KEY_COSTS[2],
+    dropRate: 14
+  },
+  3: {
+    tier: 3,
+    name: 'Llave del Vacío',
+    namePlural: 'Llaves del Vacío',
+    details: detailsDeLlave(3),
+    rarity: 'Legendario',
+    buyable: true,
+    cost: KEY_COSTS[3],
+    dropRate: 4
+  }
+};
+
+/**
+ * Qué carta de la tienda vende cada llave: `keyT0` → nivel 0, y así.
+ *
+ * ESTE MAPA ES LO QUE ARREGLA B7, y existe para que nadie tenga que escribir el
+ * nivel otra vez. El fallo era que la compra usaba un `STORE_MATERIAL_TIER`
+ * único para todas las llaves: una sola carta, un solo nivel, y el nombre de la
+ * carta ('Llave de Cifrado') no tenía nada que ver con lo que entraba al
+ * almacén. Con el nivel saliendo del nombre de la carta, el nombre y el item
+ * son lo mismo por construcción.
+ *
+ * Va al revés que un parseo de nombre: aquí el nombre de la carta decide el
+ * nivel y el nivel decide el nombre del item, en vez de adivinar el nivel a
+ * partir del nombre del item. Un item guardado por una partida vieja puede
+ * tener cualquier nombre; una carta de tienda es de este fichero.
+ */
+export const STORE_KEY_TIER: Record<string, KeyTier> = {
+  keyT0: 0,
+  keyT1: 1,
+  keyT2: 2,
+  keyT3: 3
 };
 
 /**
@@ -230,6 +312,24 @@ export function keyTierFromName(name: string): KeyTier {
  *
  * La regla es "igual o superior": una llave del Vacío abre una caja común.
  * Al revés no, porque entonces el nivel de la llave no comunicaría nada.
+ *
+ * Y LA REGLA NO ES EL BUG DE B6, aunque lo parecía. Con "igual o superior" la
+ * Reforzada no abre la épica (1 < 2) ni la legendaria, así que **cada nivel
+ * sigue siendo el único que abre su caja** y no hay contenido muerto. Lo que
+ * estaba roto era otra cosa, y son tres cosas distintas:
+ *
+ *   1. los cuatro `details` estaban escritos a mano y los cuatro mentían
+ *      (ahora se generan con esta misma función, así que no pueden);
+ *   2. la llave del Vacío no salía de ninguna parte, así que la caja
+ *      legendaria era imponible de abrir (B6);
+ *   3. la tienda vendía una sola llave, con un nombre y un precio que no eran
+ *      los de la llave que entregaba (B7).
+ *
+ * Dejar la regla como estaba, y documentar por qué, aunque cueste leerlo. Se
+ * probó la igualdad exacta ("una llave, una caja") y se volvió atrás: rompe a
+ * propósito que la llave del Vacío sirva para las cajas de abajo, que es la
+ * mitad de la comodidad del sistema, y F5 no la pedía — pedía que exista una
+ * llave por tipo de caja, y con cuatro llaves y cuatro cajas eso ya se cumple.
  */
 export function keyOpens(keyHeld: KeyTier, keyNeeded: KeyTier): boolean {
   return KEY_TIER_ORDER.indexOf(keyHeld) >= KEY_TIER_ORDER.indexOf(keyNeeded);

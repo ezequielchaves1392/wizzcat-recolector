@@ -50,22 +50,27 @@ export const CRATE_TYPES = {
   common: {
     name: 'Caja Común',
     rarity: 'Común',
-    details: 'Recompensas de partida temprana: nanitas, cristales, algún dron T1. Abre con una Llave de Cifrado.'
+    // POR QUÉ AQUÍ NO DICE "Abre con una Llave de Cifrado". Lo decía, escrito a
+    // mano, y era una quinta copia de la regla de qué llave abre qué (B6): los
+    // cuatro textos de las llaves mentían, y este también. La llave que hace
+    // falta se enseña en la tarjeta del cofre, y sale de `KEY_DEFS` +
+    // `CRATE_KEY_TIER` —una sola vez—, así que aquí solo va lo que es botín.
+    details: 'Recompensas de partida temprana: nanitas, cristales, algún dron T1.'
   },
   rare: {
     name: 'Caja Rara',
     rarity: 'Raro',
-    details: 'Material de forja y compañeros T3, con algún recolector T4 sobrecargado. Abre con una Llave Reforzada.'
+    details: 'Material de forja y compañeros T3, con algún recolector T4 sobrecargado.'
   },
   epic: {
     name: 'Caja Épica',
     rarity: 'Épico',
-    details: 'Compañeros T6 y recolectores T6, con piedras de calibración. Abre con una Llave Rúnica.'
+    details: 'Compañeros T6 y recolectores T6, con piedras de calibración.'
   },
   legendary: {
     name: 'Caja Legendaria',
     rarity: 'Legendario',
-    details: 'Recolectores T8 y compañeros Divinos que no se compran. Sale la Nanopartícula de Estabilidad. Abre con una Llave del Vacío.'
+    details: 'Recolectores T8 y compañeros Divinos que no se compran. Sale la Nanopartícula de Estabilidad.'
   }
 } as const;
 
@@ -102,8 +107,28 @@ export const COLLECTOR_BASE_COSTS = {
 //
 //  Y las dos curvas —compañero y recolector— usan la MISMA tabla porque el poder
 //  sale de `TIER_SYSTEM.ranges` en los dos: mismo poder, mismo precio.
+//  LOS PRECIOS DE LAS LLAVES, y son de aquí y no de `items.ts` porque este es el
+//  fichero de los precios: `KEY_DEFS` los lee, y las cuatro cartas de la tienda
+//  los usan. Con el precio en dos sitios fue como la tienda acabó vendiendo una
+//  carta llamada "Llave de Cifrado" que entregaba la Reforzada (B7).
+//
+//  Cada llave cuesta algo menos que la caja que abre (250 / 1.500 / 5.500 /
+//  21.000), y por dos motivos. Primero, si la llave costara MÁS que la caja, la
+//  caja sería la mitad barata del par y comprarla sin llave sería tirar el
+//  dinero: una forma muy clara de confuso en una tienda. Segundo, como cada caja
+//  suelta llaves de su nivel, comprar llave y caja sale siempre más caro que
+//  abrir cajas. La tienda nunca es el camino bueno, que es lo que hace que abrir
+//  un cofre siga siendo una decisión y no una tarea.
+//  Y las cuatro son comprables porque la cadena de llaves era una escalera
+//  imposible (B6) y la tienda tiene que poder ser la red de seguridad de un
+//  jugador al que le faltan llaves.
+export const KEY_COSTS = [250, 900, 3_000, 11_000] as const;
+
 export const STORE_ITEMS = {
-  key: { cost: 250, label: 'Llave de Cifrado' },
+  keyT0: { cost: KEY_COSTS[0], label: 'Llave de Cifrado' },
+  keyT1: { cost: KEY_COSTS[1], label: 'Llave Reforzada' },
+  keyT2: { cost: KEY_COSTS[2], label: 'Llave Rúnica' },
+  keyT3: { cost: KEY_COSTS[3], label: 'Llave del Vacío' },
   upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
   warehouseSlot: { cost: 6000, label: 'Ampliar Almacén (+5 slots)' },
   commonCrate: { cost: 500, label: 'Caja Común' },

@@ -49,7 +49,8 @@ export default defineConfig({
         tickCheck: resolve(here, 'tickCheck.ts'),
         senalCheck: resolve(here, 'senalCheck.ts'),
         balanceCheck: resolve(here, 'balanceCheck.ts'),
-        desgloseCheck: resolve(here, 'desgloseCheck.ts')
+        desgloseCheck: resolve(here, 'desgloseCheck.ts'),
+        llaveCheck: resolve(here, 'llaveCheck.ts')
       },
       formats: ['es']
     }

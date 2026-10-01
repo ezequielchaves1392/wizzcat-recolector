@@ -18,7 +18,7 @@ Lista de comprobación, en este orden:
 1. `git status` y `LastWriteTime` de los ficheros que vas a tocar. Si hay otro
    agente trabajando ahí, **no los edites**: dilo y para. Las features de esta
    lista tocan casi todas `src/gameLoop.ts`, que es de donde vienen los choques.
-2. `npm run build` + `npm run verify` como línea base (**17 bancos, 1162
+2. `npm run build` + `npm run verify` como línea base (**19 bancos, 1293
    pruebas**, ±1).
 3. Antes de escribir, busca si la regla que necesitas ya existe en `src/data/`.
    Si no está, **va a `src/data/`**, no al game loop ni a la vista (R2). Y el

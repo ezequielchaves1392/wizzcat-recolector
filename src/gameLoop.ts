@@ -84,7 +84,7 @@ export function previewUpgradeCost(level: number): number {
 // quedado sin uso. Se borran en vez de dejarlos, porque un tipo importado que
 // no lee nadie es la señal de que la regla se movió y nadie lo anotó.
 import {
-  KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER,
+  KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER, STORE_KEY_TIER,
   crystalSuccessChance, crystalPowerFromName, keyTierFromName, keyOpens,
   type KeyTier
 } from './data/items';
@@ -483,10 +483,9 @@ function cabeLaCompra(itemKey: string): boolean {
  * la compra fallaba, porque lo que de verdad se crea es una "Llave Reforzada",
  * que necesita ranura nueva. Botón y cargo discrepando (R3).
  *
- * OJO: el nivel 1 es una discrepancia conocida del juego
- * (`docs/CONTEXTO-JUEGO.md` nº 1): la carta pone "Llave de Cifrado" y entrega una
- * de nivel 1. Arreglar eso cambia la economía y no es de aquí; lo que se
- * arregla aquí es que la pregunta "¿cabe?" mire la misma llave que se entrega.
+ * El nivel 1 de `STORE_MATERIAL_TIER` ya no afecta a las llaves: cada carta
+ * `keyT0`..`keyT3` lleva el suyo (B7). La constante se queda para el cristal de
+ * mejora, que es el único material que sigue siendo de un solo nivel.
  */
 const STORE_MATERIAL_TIER = 1;
 
@@ -503,7 +502,12 @@ const STORE_MATERIAL_TIER = 1;
  * huecos), que no ocupan ranura por ser permisos.
  */
 function previewStoreItem(itemKey: string): any {
-  if (itemKey === 'key') return { type: 'key', name: KEY_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
+  // El nivel de la llave sale de la carta, igual que en `buyStoreItem`. Con
+  // `STORE_MATERIAL_TIER` fijo aquí, la preview anunciaba nivel 0 mientras la
+  // compra creaba nivel 1: botón encendido y compra rechazada (R3).
+  if (STORE_KEY_TIER[itemKey] !== undefined) {
+    return { type: 'key', name: KEY_DEFS[STORE_KEY_TIER[itemKey]].name, stackable: true };
+  }
   if (itemKey === 'upgradeCrystal') return { type: 'crystal', name: CRYSTAL_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
   if (itemKey.endsWith('Crate') && CRATE_TYPES[itemKey.replace('Crate', '').toLowerCase() as CrateType]) {
     const t = itemKey.replace('Crate', '').toLowerCase() as CrateType;
@@ -595,7 +599,7 @@ function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
   const esLlave = kind === 'key';
   const def = esLlave ? KEY_DEFS[tier as KeyTier] : CRYSTAL_DEFS[tier];
   const prefijo = esLlave ? 'key' : 'crystal';
-  const sellPrice = precioReventaMaterial(kind);
+  const sellPrice = precioReventaMaterial(kind, tier);
 
   return {
     id: `${prefijo}_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -640,11 +644,16 @@ function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
  * item y no un recuerdo de su procedencia. Una llave de la tienda y una llave de
  * una caja son el mismo objeto y valen lo mismo al venderlo.
  */
-function precioReventaMaterial(kind: 'key' | 'crystal'): number {
-  const carta = (STORE_ITEMS as Record<string, { cost: number }>)[
-    kind === 'key' ? 'key' : 'upgradeCrystal'
-  ];
-  return Math.floor(carta.cost / 4);
+function precioReventaMaterial(kind: 'key' | 'crystal', tier: number): number {
+  // La reventa sale del precio DEL NIVEL. Antes el cálculo usaba el precio de la
+  // carta de llave, que era uno solo para las cuatro; con cuatro llaves distintas
+  // eso cobra cuatro veces el mismo cuarto y se convierte en la máquina de
+  // imprimir nanitas que este comentario lleva tres versiones avisando.
+  const precio = kind === 'key'
+    ? KEY_DEFS[(tier ?? 0) as KeyTier].cost
+    : STORE_ITEMS.upgradeCrystal.cost;
+  if (!precio) return 0;
+  return Math.floor(precio / 4);
 }
 
 /**
@@ -2712,11 +2721,18 @@ function syncMaterialCounters() {
       // cabe, hay que DEVOLVER el dinero antes de salir: un "no compres" que
       // descuenta las nanitas es peor que un bug visible, porque el jugador
       // pierde el saldo sin ver por qué.
-      if (itemKey === 'key' || itemKey === 'upgradeCrystal') {
+      if (STORE_KEY_TIER[itemKey] !== undefined || itemKey === 'upgradeCrystal') {
         // Llaves y cristales son items del almacén. Antes eran solo contadores:
         // el jugador no los veía, no los podía ordenar y no ocupaban ranura.
-        const esLlave = itemKey === 'key';
-        const item = createMaterialItem(esLlave ? 'key' : 'crystal', STORE_MATERIAL_TIER);
+        //
+        // El nivel de la llave lo dice la CARTA (`keyT2` → nivel 2), no una
+        // constante del motor. Con una constante única, la carta se llamaba
+        // "Llave de Cifrado" y entregaba la Reforzada: el nombre, el precio y
+        // el item eran tres cosas distintas y ninguna se deducía de las otras
+        // dos (B7).
+        const esLlave = STORE_KEY_TIER[itemKey] !== undefined;
+        const tier = esLlave ? STORE_KEY_TIER[itemKey] : STORE_MATERIAL_TIER;
+        const item = createMaterialItem(esLlave ? 'key' : 'crystal', tier);
         if (!addToWarehouse(item)) { state.nanites += cost; return false; }
         syncMaterialCounters();
         onUpdate(state, isAfk);

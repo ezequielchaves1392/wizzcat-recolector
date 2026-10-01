@@ -27,9 +27,24 @@ _Cosas que quieres que existan._
 
 Sacar los buffs pasivos y dejar las tarjetas únicamente.
 
-### F5 · Una llave por tipo de caja, con precio creciente
+### F5 · Una llave por tipo de caja, con precio creciente — HECHO
 
 Debe existir una llave para cada tipo de caja y crece el precio de las mismas.
+
+> **Hecho junto con B6 y B7**, que eran las otras dos mitades del mismo problema.
+> Hay cuatro cartas de llave en la tienda (`keyT0`..`keyT3`), con precios
+> crecientes 250 / 900 / 3.000 / 11.000, y cada una es la llave de su caja.
+>
+> **El precio tiene una regla y no es "sube": la llave nunca es más cara que la
+> caja que abre.** Si lo fuera, la caja sería la mitad barata del par y comprarla
+> sin llave sería tirar el dinero. Y como cada caja suelta llaves de su nivel,
+> comprar llave y caja sale más caro que abrir cajas: la tienda nunca es el camino
+> bueno, que es lo que hace que abrir un cofre siga siendo una decisión.
+>
+> **Y una decisión que se tomó y se documentó:** se arrived a probar la regla
+> "una llave abre exactamente una caja" y se volvió atrás, porque rompe a
+> propósito que la Llave del Vacío sirva para las cajas de abajo, que es la mitad
+> de la comodidad del sistema. La regla sigue siendo "igual o superior".
 
 ### F6 · Probabilidad baja de botín de tier superior en las cajas
 
@@ -238,7 +253,7 @@ decidido antes de girar".
 > la casilla y el cartel dicen lo mismo. La mecánica no se ha tocado (F10 explica
 > por qué no).
 
-### B6 · Las llaves no abren lo que dicen, y las de arriba no se pueden conseguir
+### B6 · Las llaves no abren lo que dicen, y las de arriba no se pueden conseguir — HECHO
 
 Me gustaría que hayan distintas llaves que abran distintos tiers. Hoy como está la
 cosa esta llave dice que abre épicos y legendarios y no es verdad. Reveamos el
@@ -277,8 +292,23 @@ sistema de llaves, ¿está funcionando bien?
 > rara ya suelta la Reforzada al 14% y la legendaria suelta la Rúnica al 8%. Si la
 > legendaria suelta la Del Vacío, la cadena cierra. Probabilidades exactas a
 > decidir, y ahí hay que medir cuántas cajas hay que abrir para llegar.
+>
+> **Arreglado, y el diagnosticado estaba incompleto:** la escalera tenía **tres**
+> peldaños rotos, no dos. La del Vacío no salía de ninguna parte, la Rúnica solo
+> salía de la legendaria, y **la caja épica no soltaba ninguna llave** — eso no
+> estaba medido y fue lo que apareció al arreglarlo.
+>
+> **La reparación es una tabla, no tocar textos:** ahora cada caja suelta la llave
+> que la abre, y sale de `CRATE_KEY_TIER` (`buildKeyLoot` en `crateLoot.ts`). Los
+> cuatro `details` de las llaves **se generan** con `cratesOpenedBy()`, que llama a
+> `keyOpens()`, así que ya no hay nadie que pueda escribirlos mal. Y las cuatro
+> llaves son comprables, para que un jugador al que le falte una pueda
+> comprarla en vez de encontrarse con un tramo de juego cerrado.
+>
+> Cubre `llaveCheck` (92 pruebas), validado-rompiendo el arreglo: con la llave
+> fija a propósito, tres de cuatro cajas dan la llave que no es.
 
-### B7 · La tienda dice una llave y entrega otra
+### B7 · La tienda dice una llave y entrega otra — HECHO
 
 Aparte de B6, hay un descuadre corto en la misma familia: la carta de la tienda se
 llama "Llave de Cifrado" y el motor entrega otra.
@@ -295,6 +325,18 @@ llama "Llave de Cifrado" y el motor entrega otra.
 > F5 ("una llave por tipo de caja, con precio creciente") toca este mismo sitio, y
 > B6-B7 son las dos mitades: **B6 es la regla, F5 es la tienda.** Conviene hacerlas
 > juntas o la tienda se arregla dos veces.
+>
+> **Arreglado con B6 y F5, que es lo que este mismo texto pedía.** Ya no hay
+> `STORE_MATERIAL_TIER` para las llaves: el nivel sale de la carta
+> (`STORE_KEY_TIER`, `keyT0` → 0), así que el nombre de la carta y el item que
+> entra son lo mismo por construcción. El precio vive en `KEY_COSTS`
+> (`data/store.ts`), que es el fichero de los precios, y las cuatro cartas lo leen
+> de ahí — el `KEY_DEFS[0].cost = 480` que no usaba nadie ya no existe.
+>
+> **Y un cuarto sitio que nadie había mirado, con el mismo bug:** la reventa. Un
+> cuarto del precio de la carta, con carta única para cuatro llaves; ahora es un
+> cuarto del precio del nivel. Ese número se toca en `buyCheck` con las cuatro
+> cartas, porque un abuso de compra-venta puede salir solo en las caras.
 
 ### B8 · No hay forma de ver el perfil de otro jugador
 
@@ -703,12 +745,13 @@ contenido, F9-F10-F21-F22 son decisiones.
 El paso 3 está hecho, así que **el cuello de botella ya no es el mismo** y el orden
 anterior hay que corregirlo:
 
-- **Lo primero ya no es una feature: es B6-B7, las llaves.** No porque sea la más
-  urgente, sino porque es la única que hace el juego **imposible de completar**: la
-  caja legendaria no tiene llave en ninguna parte del juego. Un tramo entero del
-  contenido no existe. Y tiene la virtud de que ya no toca el motor, así que se
-  puede hacer con el árbol en paz.
-- **Después, B9 (AFK solo) y B3 (el cartel de logro).** Los dos sonmedianteros: son
+- **Lo primero ya no es una feature: es B6-B7, las llaves.** ~~Ya no es lo
+  primero: están hechas, con F5.~~ No porque fuera la más urgente, sino porque
+  era la única que hacía el juego **imposible de completar**: la caja legendaria
+  no tenía llave en ninguna parte. Un tramo entero del contenido no existía. Y
+  tenía la virtud de que ya no tocaba el motor, así que se pudo hacer con el
+  árbol en paz.
+- **Después, B9 (AFK solo) y B3 (el cartel de logro).** Los dos son medianeros: son
   medianos y R10, que es una regla, no una opinión.
 - **F17 y F18 van juntas, en ese orden.** Abrir cajas en lote sin poder saltar el
   trompo son 26 segundos de espera por tanda: F17 es la condición de F18.
@@ -780,6 +823,11 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
       y las tres partes suman el total exacto porque las calcula el motor, no la
       vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
+- [x] **B6-B7-F5 · las llaves.** La cadena cierra: cada caja suelta la llave que
+      la abre, y los cuatro textos se generan con la regla que decide si abre, así
+      que no pueden mentir. Cuatro cartas en la tienda con nombres y precios que
+      ya son los del item. La caja legendaria se puede abrir. Banco nuevo:
+      `llaveCheck` (92).
 - [x] **B5 · el trompo ya no explica cómo está hecho por dentro.** Los dos textos
       que lo hacían —la tarjeta de la llave en la tienda y el modal de confirmar
       abrir caja— cuentan ahora lo que vive el jugador. La mecánica no se ha tocado:
@@ -794,6 +842,26 @@ _Lo que se decidió no hacer, y por qué. Esto vale más que la lista de "hecho"
 una idea que se descartó con un motivo escrito no vuelve a proponerla nadie._
 
 _(vacío)_
+
+### D3 · La llave de una caja no puede ser más cara que la caja
+
+> Salió al intentar cerrar B6: los primeros precios que puse eran 250 / 1.500 /
+> 7.500 / 30.000, y entonces la llave épica (7.500) salía **más cara que su caja**
+> (5.500) y la del Vacío (30.000) que la legendaria (21.000).
+>
+> **El banco lo cazó, y no por el balance: por la regla.** `llaveCheck` comprueba
+> que la llave de cada caja cueste menos que la caja, y falló en dos.
+>
+> **El porqué de la regla:** si la llave cuesta más que la caja, la caja es la
+> mitad barata del par, y un jugador que reúna la llave y se quede sin nanitas
+> para la caja tiene que elegir entre las dos. La decisión de qué comprar primero
+> no es interesante: es un embudo. Y hay algo mejor que una regla de "más cara
+> o más barata": **cada caja suelta llaves de su nivel**, así que comprar llave y
+> caja en la tienda siempre sale más caro que abrir cajas, y la tienda nunca es
+> el camino óptimo por una razón que el jugador puede entender.
+>
+> El precio final queda en 250 / 900 / 3.000 / 11.000, algo menos de la mitad de
+> la caja que abre en los cuatro casos.
 
 ### D2 · Un fallo mío en un fichero que no está en git
 

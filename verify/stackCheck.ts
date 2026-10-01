@@ -97,7 +97,7 @@ async function main() {
   // =========================================================================
   {
     const g = await boot(baseSave([collector('r1')], { nanites: 10_000_000 }));
-    for (let i = 0; i < 19; i++) g.buyStoreItem('key');
+    for (let i = 0; i < 19; i++) g.buyStoreItem('keyT0');
     const pilas = wh(g).filter((w: any) => w.type === 'key');
 
     check('tienda: 19 llaves compradas son 19 unidades', unidades(g, 'key') === 19, String(unidades(g, 'key')));
@@ -193,8 +193,8 @@ async function main() {
     // Y después de jugar: comprar, abrir y regalar cosas tiene que seguir
     // cuadrando. El descuadre reaparece en cuanto un camino se olvida de la regla.
     const g = await boot(baseSave([collector('r1')], { nanites: 10_000_000 }));
-    g.buyStoreItem('key');
-    g.buyStoreItem('key');
+    g.buyStoreItem('keyT0');
+    g.buyStoreItem('keyT0');
     g.buyStoreItem('upgradeCrystal');
     g.buyStoreItem('commonCrate');
     g.buyStoreItem('commonCrate');
@@ -274,7 +274,7 @@ async function main() {
     // Y con hueco de sobra, nada se rechaza: un boton apagado sin motivo es un
     // jugador que cree que no le llega la nanita cuando si le llega.
     const g = await boot(baseSave([collector('r1')], { warehouseCapacity: 30, nanites: 10_000_000 }));
-    for (const k of ['key', 'upgradeCrystal', 'commonCrate', 'afkCard', 'companionCardT1', 'collectorCardT1']) {
+    for (const k of ['keyT0', 'upgradeCrystal', 'commonCrate', 'afkCard', 'companionCardT1', 'collectorCardT1']) {
       if (g.canBuyStoreItem(k) === false) {
         check(`tienda: ${k} se puede comprar con el almacen vacio`, false, 'dice que no cabe');
       }
@@ -309,11 +309,19 @@ async function main() {
   // el jugador solo compro una vez cada vez.
   {
     const g = await boot(baseSave([collector('r1')], { warehouseCapacity: 30, nanites: 10_000_000 }));
-    for (const k of ['key', 'upgradeCrystal']) {
-      g.buyStoreItem(k as any);
-      g.buyStoreItem(k as any);
-      const tipo = k === 'key' ? 'key' : 'crystal';
-      const pilas = wh(g).filter((w: any) => w.type === tipo);
+    // Las cuatro llaves, no solo una. Que dos unidades del mismo nivel caigan en
+    // una pila vale para las cuatro cartas, y comprobar solo la barata dejaría
+    // sin mirar las otras tres.
+    // Una partida por carta, y no una compartida. Con una sola partida, la T1 se
+    // apila junto a la T0, y entonces la prueba de "caen en UNA pila" mide
+    // cuatro llaves de tres niveles distintos y falla sin que haya ningún bug:
+    // el error estaba en la prueba.
+    for (const k of ['keyT0', 'keyT1', 'keyT2', 'keyT3', 'upgradeCrystal']) {
+      const gk = await boot(baseSave([collector('r1')], { nanites: 10_000_000 }));
+      gk.buyStoreItem(k as any);
+      gk.buyStoreItem(k as any);
+      const tipo = k.startsWith('key') ? 'key' : 'crystal';
+      const pilas = wh(gk).filter((w: any) => w.type === tipo);
       check(`tienda: dos "${k}" caen en UNA pila, no en dos`,
         pilas.length === 1, `pilas=${pilas.length} (${pilas.map((w: any) => w.name).join(' | ')})`);
       check(`tienda: y la pila lleva las 2 unidades`,
@@ -331,7 +339,11 @@ async function main() {
     // se monta COMPRANDO el producto, que es la unica forma de saber con
     // certeza que nivel se entrega sin duplicar la tabla.
     const g = await boot(baseSave([collector('r1')], { warehouseCapacity: 30, nanites: 10_000_000 }));
-    g.buyStoreItem('key');
+    // `keyT0` y la pila del almacén viejo es de nivel 0. Antes la carta se llamaba
+    // 'key' pero entregaba la Reforzada (nivel 1), y por eso el relleno de abajo
+    // era de nivel 1: el test estaba atado al bug sin quererlo. Las dos mitades
+    // tienen que coincidir en el nivel o la compra no se funde con la pila.
+    g.buyStoreItem('keyT0');
     const nombrePila = wh(g).find((w: any) => w.type === 'key')?.name;
 
     // Se rellena el almacen con items que no se funden entre si, hasta llenarlo.
@@ -342,17 +354,17 @@ async function main() {
     }
     // Ajusta la capacidad para que quepa justo lo que ya hay.
     const g2 = await boot(baseSave(
-      [collector('r1'), { id: 'k0', name: nombrePila, type: 'key', details: 'x', rarity: 'Común', tier: 1, sellPrice: 480, stackable: true, stackCount: 3 },
+      [collector('r1'), { id: 'k0', name: nombrePila, type: 'key', details: 'x', rarity: 'Común', tier: 0, sellPrice: 480, stackable: true, stackCount: 3 },
         ...rellenos.slice(0, 20).map((w, i) => ({ ...w, id: `x${i}` }))],
-      { warehouseCapacity: 22, keys: 3, keysByTier: { 0: 0, 1: 3, 2: 0, 3: 0 }, nanites: 10_000_000 }
+      { warehouseCapacity: 22, keys: 3, keysByTier: { 0: 3, 1: 0, 2: 0, 3: 0 }, nanites: 10_000_000 }
     ));
     const ocupada = countOccupiedSlots(wh(g2));
     check('tienda: el almacen de la prueba esta lleno', ocupada === g2.getCapacity(),
       `${ocupada}/${g2.getCapacity()}`);
 
     check('tienda: con el almacen lleno, la llave SÍ cabe (es su propia pila)',
-      g2.canBuyStoreItem('key') === true, String(g2.canBuyStoreItem('key')));
-    const r = g2.buyStoreItem('key');
+      g2.canBuyStoreItem('keyT0') === true, String(g2.canBuyStoreItem('keyT0')));
+    const r = g2.buyStoreItem('keyT0');
     const k = wh(g2).find((w: any) => w.type === 'key');
     check('tienda: y la compra va con ella en vez de fallar',
       r !== false && k?.stackCount === 4, `ok=${r !== false} pila=${k?.stackCount}`);

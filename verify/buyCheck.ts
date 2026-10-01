@@ -30,11 +30,15 @@ async function main() {
   {
     const g = await boot(baseSave([], { nanites: 10_000 }));
     const antes = nanites(g);
-    const item = g.buyStoreItem('key');
+    // `keyT0` y no `key`: la tienda vendía una sola carta para las cuatro llaves,
+    // y esa carta entregaba la Reforzada mientras se llamaba Cifrado (B7). Ahora
+    // hay cuatro cartas y el test usa la más barata. El detalle de que cada
+    // carta entregue su llave lo comprueba `llaveCheck`.
+    const item = g.buyStoreItem('keyT0');
 
     check('tienda: devuelve el item comprado', !!item && item.type === 'key', JSON.stringify(item?.id));
-    check('tienda: cobra el precio de carta', nanites(g) === antes - STORE_ITEMS.key.cost,
-      `cobrado=${antes - nanites(g)} precio=${STORE_ITEMS.key.cost}`);
+    check('tienda: cobra el precio de carta', nanites(g) === antes - STORE_ITEMS.keyT0.cost,
+      `cobrado=${antes - nanites(g)} precio=${STORE_ITEMS.keyT0.cost}`);
     check('tienda: la llave entra en el almacen', deType(g, 'key') === 1, ids(g).join(','));
     check('tienda: el contador de llaves sube a 1', s(g).keys === 1, 'keys=' + s(g).keys);
     check('tienda: el item devuelto es el que esta en el almacen', !!item?.id && !!find(g, item.id));
@@ -491,7 +495,11 @@ async function main() {
     // Las cartas que METER un item en el almacén. Las de ranura y las de
     // "ampliar" no dejan nada que vender, así que no tienen nada que comprobar.
     const cartasConItem = [
-      'key', 'upgradeCrystal', 'commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate',
+      // Las cuatro cartas de llave, y no solo la barata: la reventa es un cuarto
+      // del precio de cada nivel, así que un abuso podría salir solo en las
+      // caras y comprobar una no lo habría visto.
+      'keyT0', 'keyT1', 'keyT2', 'keyT3',
+      'upgradeCrystal', 'commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate',
       'clickBuff', 'passiveBuff', 'backpackExpander', 'afkCard', 'clickX2Card', 'clickX3Card',
       'calibrationStone', 'stabilityNano',
       'companionCardT1', 'companionCardT5', 'companionCardT10',
@@ -539,7 +547,7 @@ async function main() {
     const g = await boot(baseSave([], { nanites: 10_000, warehouseCapacity: 40 }));
     const antes = nanites(g);
     for (let i = 0; i < 10; i++) {
-      const k = g.buyStoreItem('key');
+      const k = g.buyStoreItem('keyT0');
       if (!k || !find(g, (k as any).id)) continue;
       g.sellItem((k as any).id);
       const c = g.buyStoreItem('upgradeCrystal');

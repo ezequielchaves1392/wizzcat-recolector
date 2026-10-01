@@ -10,7 +10,11 @@
 import { TIER_SYSTEM } from '../data/tiers';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
-import type { KeyTier } from '../data/items';
+// `CRATE_KEY_TIER` y `KEY_DEFS` entran como VALOR porque la entrada de llaves de
+// cada caja se construye desde ellos. Antes iban escritos a mano y por eso la
+// llave del Vacío no salía de ninguna parte: la caja legendaria era imposible
+// de abrir (B6). Ver `buildKeyLoot`.
+import { CRATE_KEY_TIER, KEY_DEFS, type KeyTier } from '../data/items';
 import { formatNumber } from '../utils/format';
 import type { WarehouseItem } from '../types';
 
@@ -291,12 +295,67 @@ export interface LootBuildContext {
 
 const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
+/**
+ * La entrada de llaves de una caja, y sale de `CRATE_KEY_TIER`: **cada caja
+ * suelta la llave que la abre**.
+ *
+ * POR QUÉ ESTA FUNCIÓN Y NO CUATRO ENTRADAS ESCRITAS A MANO. Antes las cuatro
+ * estaban escritas una por una, con su nombre, su texto y su nivel, y por eso la
+ * cadena era una escalera imposible (B6): la legendaria soltaba la Rúnica, la
+ * Rúnica solo salía de la legendaria, y **la del Vacío no salía de ninguna
+ * parte**, así que la caja legendaria no se podía abrir nunca. Con la tabla, la
+ * leyenda del Vacío sale de la legendaria porque es lo que la tabla dice, no
+ * porque alguien lo escribiera.
+ *
+ * Y EL NOMBRE Y EL TEXTO TAMBIÉN SALEN DE AQUÍ, y no están en la línea de
+ * abajo, por la misma razón que la tienda: nombre, texto y nivel tenían tres
+ * copias y ninguna se deducía de las otras. Un botín que anuncia una llave con
+ * un nombre que no es el de esa llave vuelve a ser el bug, solo que en la
+ * ruleta.
+ *
+ * LA CANTIDAD ES 1 O 2 PARA TODAS, a propósito. Es lo justo para devolver parte
+ * de lo que costó la llave y no más: si una caja devolviera la llave entera,
+ * comprar llave y caja en la tienda sería indiferente y el cofre dejaría de ser
+ * una decisión de riesgo. Con 1 o 2, abrir es siempre una pérdida neta de
+ * nanitas y la tienda nunca es el camino bueno.
+ */
+function buildKeyLoot(crateType: CrateType): LootEntry {
+  const tier = CRATE_KEY_TIER[crateType];
+  const def = KEY_DEFS[tier];
+  return {
+    id: 'keys',
+    weight: 10,
+    // LA CANTIDAD SE TIRA AQUÍ DENTRO, y no al construir la tabla. `CRATE_LOOT`
+    // se escribe una vez al cargar el módulo, así que un `rand()` al lado de
+    // `def` la fijaría para toda la partida: se vería "+1 Llave de Cifrado" en las
+    // mil cajas comunes que abrieras. Un banco que mirase una sola tirada no lo
+    // vería nunca.
+    build: () => {
+      const a = rand(1, 2);
+      // El plural sale de `def.namePlural` y no de retocar el singular: el plural
+      // de "Llave Rúnica" es "Llaves Rúnicas", con la "s" en el adjetivo, y el de
+      // "Llave de Cifrado" es "Llaves de Cifrado", sin nada que añadir al final.
+      const etiqueta = a > 1 ? def.namePlural : def.name;
+      return {
+        kind: 'keys',
+        amount: a,
+        name: def.name,
+        label: `+${a} ${etiqueta}`,
+        details: def.details,
+        rarity: def.rarity,
+        icon: 'key',
+        keyTier: tier
+      };
+    }
+  };
+}
+
 export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
   common: [
     { id: 'nanites', weight: 34, build: () => { const a = rand(250, 400); return { kind: 'nanites', amount: a, name: 'Nanitas', label: `+${a} Nanitas`, details: 'Materia prima básica', rarity: 'Común', icon: 'bolt' }; } },
     { id: 'crystals', weight: 26, build: () => { const a = rand(2, 4); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Raro', icon: 'crystal', materialTier: 1 }; } },
     { id: 'dron', weight: 22, build: () => ({ kind: 'companion', amount: 1, name: 'Dron Explorador', label: 'Dron Explorador', details: 'Recolección por segundo: +2/s', rarity: 'Común', icon: 'companion', tier: 1, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +2/s', rarity: 'Común', companionType: 'passive', power: 2, sellPrice: 100 } }) },
-    { id: 'keys', weight: 12, build: () => { const a = rand(1, 2); return { kind: 'keys', amount: a, name: 'Llave de Cifrado', label: `+${a} Llave${a > 1 ? 's' : ''}`, details: 'Abre Cofres Comunes y Raros', rarity: 'Raro', icon: 'key', keyTier: 0 }; } },
+    buildKeyLoot('common'),
     { id: 'expander', weight: 6, build: () => ({ kind: 'consumable', amount: 1, name: 'Ranura de Almacén', label: '+1 ranura de almacén', details: 'Amplía el almacén +1 slot', rarity: 'Raro', icon: 'plus', item: { id: `crate_slot_${Date.now()}`, name: 'Ranura de Almacén', type: 'consumable', details: 'Amplía el almacén +1 slot', rarity: 'Raro', buffId: 'warehouseExpander', stackable: true, stackCount: 1, sellPrice: 125 } }) },
     { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
   ],
@@ -305,7 +364,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'companion_t3', weight: 24, build: () => { const t = TIER_SYSTEM.ranges[3]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Artillero Táctico', label: 'Artillero Táctico', details: `Recolección por segundo: +${p}/s`, rarity: 'Épico', icon: 'bolt', tier: 3, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Artillero Táctico', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Épico', tier: 3, companionType: 'passive', power: p, sellPrice: 400 } }; } },
     { id: 'collector_t4', weight: 20, build: () => { const w = makeOverclockCollector(4); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 4, item: w.item }; } },
     { id: 'epic_crate', weight: 16, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Épica', label: '+1 Caja Épica', details: 'Abre una caja de botín superior', rarity: 'Épico', icon: 'crystal', item: { id: `crate_epic_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0, sellPrice: 1125, stackable: true, stackCount: 1 } }) },
-    { id: 'keys', weight: 14, build: () => { const a = rand(2, 4); return { kind: 'keys', amount: a, name: 'Llave Reforzada', label: `+${a} Llaves Reforzadas`, details: 'Abre Cofres Raros, Épicos y Legendarios', rarity: 'Épico', icon: 'key', keyTier: 1 }; } },
+    buildKeyLoot('rare'),
     { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
   ],
   epic: [
@@ -316,6 +375,11 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'ghost', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
     { id: 'phoenix', weight: 10, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
     { id: 'legendary_crate', weight: 10, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Legendaria', label: '+1 Caja Legendaria', details: 'Abre una caja de botín máximo', rarity: 'Legendario', icon: 'trophy', item: { id: `crate_legendary_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0, sellPrice: 4500, stackable: true, stackCount: 1 } }) },
+    // Esta faltaba: la caja épica no soltaba NINGUNA llave, así que la Rúnica
+    // solo se conseguía abriendo una legendaria, que a su vez necesitaba una
+    // llave que no salía de ninguna parte. La escalera de B6 era de tres peldaños
+    // y faltaban los tres.
+    buildKeyLoot('epic'),
     { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
   ],
   legendary: [
@@ -325,7 +389,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'avatar', weight: 16, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
     { id: 'oracle', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
     { id: 'sentinel', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
-    { id: 'keys', weight: 8, build: () => { const a = rand(5, 8); return { kind: 'keys', amount: a, name: 'Llave Rúnica', label: `+${a} Llaves Rúnicas`, details: 'Abre Cofres Épicos y Legendarios', rarity: 'Legendario', icon: 'key', keyTier: 2 }; } },
+    buildKeyLoot('legendary'),
     { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
   ]
 };

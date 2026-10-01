@@ -34,7 +34,10 @@ import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM } from '../data/tiers';
-import { STORE_ITEMS } from '../data/store';
+import { STORE_ITEMS, CRATE_TYPES } from '../data/store';
+// Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
+// nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
+import { STORE_KEY_TIER, KEY_DEFS, cratesOpenedBy } from '../data/items';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from './crateLoot';
@@ -48,8 +51,9 @@ interface Category {
 }
 
 const CATEGORIES: Category[] = [
+  { id: 'llaves', label: 'Llaves', icon: 'key', items: ['keyT0', 'keyT1', 'keyT2', 'keyT3'] },
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
-  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['key', 'upgradeCrystal', 'warehouseSlot', 'backpackExpander'] },
+  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'warehouseSlot', 'backpackExpander'] },
   { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickBuff', 'passiveBuff', 'clickX2Card', 'clickX3Card'] },
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
   { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: ['companionSlot1', 'companionSlot2'] },
@@ -182,7 +186,8 @@ function iconFor(itemKey: string): IconName {
   if (itemKey.startsWith('collectorCardT')) return 'collector';
   if (itemKey.startsWith('companionCardT')) return 'companion';
   const map: Record<string, IconName> = {
-    key: 'key', upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
+    keyT0: 'key', keyT1: 'key', keyT2: 'key', keyT3: 'key',
+    upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
     afkCard: 'clock', clickBuff: 'bolt', passiveBuff: 'graph', clickX2Card: 'bolt', clickX3Card: 'bolt',
     calibrationStone: 'flask', stabilityNano: 'flask',
     companionSlot1: 'layers', companionSlot2: 'layers'
@@ -191,13 +196,17 @@ function iconFor(itemKey: string): IconName {
 }
 
 function rarityOf(itemKey: string): string | null {
+  // La rareza de una llave sale de su definición, no de una tabla de aquí: si
+  // se escribiera aparte, añadir una llave obligaría a acordarse de tocarla en
+  // tres sitios y el olvido es silencioso.
+  if (STORE_KEY_TIER[itemKey] !== undefined) return KEY_DEFS[STORE_KEY_TIER[itemKey]].rarity;
   if (itemKey.endsWith('Crate')) {
     return ({ commonCrate: 'Común', rareCrate: 'Raro', epicCrate: 'Épico', legendaryCrate: 'Legendario' } as Record<string, string>)[itemKey] ?? null;
   }
   if (itemKey.startsWith('companionCardT')) return tierRarity(parseInt(itemKey.slice(14)));
   if (itemKey.startsWith('collectorCardT')) return tierRarity(parseInt(itemKey.slice(11)));
   const map: Record<string, string> = {
-    key: 'Común', upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
+    upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
     afkCard: 'Raro', clickBuff: 'Raro', passiveBuff: 'Épico', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
     companionSlot1: 'Épico', companionSlot2: 'Legendario'
@@ -207,6 +216,13 @@ function rarityOf(itemKey: string): string | null {
 
 function descFor(itemKey: string): { what: string; detail: string } {
   if (DESCRIPTIONS[itemKey]) return DESCRIPTIONS[itemKey];
+  // Las llaves tampoco tienen texto aquí, y por el mismo motivo que la rareza:
+  // el `details` de `KEY_DEFS` ya lo dice con el mismo criterio que la regla que
+  // decide si la abre. Escribirlo otra vez es la forma de volver a mentir.
+  if (STORE_KEY_TIER[itemKey] !== undefined) {
+    const def = KEY_DEFS[STORE_KEY_TIER[itemKey]];
+    return { what: `Abre ${cratesOpenedBy(def.tier).map(c => CRATE_TYPES[c].name).join(', ')}.`, detail: `Las cajas sueltan llaves de su propio nivel, así que se repone sola.` };
+  }
   if (itemKey.startsWith('companionCardT')) return tierDescription('companion', parseInt(itemKey.slice(14)));
   if (itemKey.startsWith('collectorCardT')) return tierDescription('collector', parseInt(itemKey.slice(11)));
   return { what: '', detail: '' };
