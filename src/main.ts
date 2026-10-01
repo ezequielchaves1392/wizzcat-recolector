@@ -6,6 +6,8 @@ import './style.modules.css';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
+import { renderBloqueado } from './components/blocked';
+import { consultarBloqueo } from './services/bloqueoService';
 import { createGameLoop, type BuffKey } from './gameLoop';
 import { showToast } from './utils/toast';
 import { renderWarehouseTab } from './components/warehouse';
@@ -161,6 +163,13 @@ function resolveUsername(user: any, justRegistered?: string): string {
  * partida "cerrada") y dejar la pantalla de juego a medias.
  */
 async function returnToLogin(motivo?: string) {
+  // Una cuenta bloqueada NO vuelve al formulario: se queda en su pantalla.
+  // Este camino se dispara por el `signOut` que hace el propio bloqueo, y sin
+  // esta guarda el formulario de acceso se montaba encima del aviso un segundo
+  // después — el jugador veía "nombre o contraseña incorrectos" justo cuando le
+  // acababan de explicar el motivo, y tenía que adivinar que era un bloqueo.
+  if (bloqueadoEnCurso) return;
+
   // Evita que dos caídas simultáneas (un signOut manual y un token
   // caducado) monten dos pantallas de acceso encima.
   if (returningToLogin) return;
@@ -192,6 +201,96 @@ async function returnToLogin(motivo?: string) {
 
 let returningToLogin = false;
 
+/**
+ * CUENTA BLOQUEADA
+ *
+ * Cuando la terminal suspende una cuenta, el juego tiene que enterarse. Se
+ * comprueba en DOS momentos, y son los dos únicos que cubren los casos reales:
+ *
+ *  1. Al arrancar. Cubre al jugador que recarga la página o abre el juego en
+ *     otro dispositivo con la cuenta suspendida.
+ *  2. Al volver a la pestaña. Cubre al jugador que ya estaba jugando cuando le
+ *     bloquearon: no se le corta la partida en mitad de un click —eso sería
+ *     un problema de sincronización del que salir es más difícil que el
+ *     propio bloqueo—, pero en cuanto vuelve a mirar la pantalla se le cierra
+ *     la sesión y ve el motivo.
+ *
+ * Lo que NO se puede hacer desde aquí es cerrar la sesión en remoto. Un
+ * `signOut()` solo afecta a la pestaña que lo llama, así que el jugador del
+ * otro dispositivo sigue dentro hasta que él mismo cambie de pestaña. Para
+ * cortar eso de raíz hay que revocar los tokens con el Admin SDK, desde un
+ * servidor.
+ */
+
+/**
+ * Ya se está mostrando la pantalla de bloqueo.
+ *
+ * Vive fuera de la función porque lo consultan dos caminos distintos: el
+ * propio bloqueo, y `returnToLogin()` —que la firma de sesión dispara un
+ * instante después y que si no lo supiera, pintaría el acceso encima.
+ *
+ * No se reinicia nunca: si un administrador levanta el bloqueo, el jugador lo
+ * nota recargando, que es lo que ofrece el botón de la propia pantalla.
+ */
+let bloqueadoEnCurso = false;
+
+async function comprobarBloqueo(uid: string, nombre: string): Promise<boolean> {
+  // Dos comprobaciones a la vez (pestaña y arranque) se solaparían: la segunda
+  // volvería a pintar la pantalla de bloqueo encima de la primera.
+  if (bloqueadoEnCurso) return true;
+
+  const estado = await consultarBloqueo(uid);
+  if (!estado.bloqueado) return false;
+
+  bloqueadoEnCurso = true;
+  console.warn('[bloqueo] Cuenta suspendida:', nombre, '-', estado.motivo);
+
+  // Se guarda antes de cerrar. `signOut` deja las escrituras sin permisos, y
+  // perder lo jugado en los últimos segundos sería un castigo doble por algo
+  // que el jugador no ha hecho mal ahora mismo.
+  try {
+    activeGameInstance?.flush?.();
+  } catch (e) {
+    console.warn('[bloqueo] No se ha podido guardar antes de bloquear:', e);
+  }
+
+  clearAudioUnsubscribers();
+  stopCompanionClicks();
+  if (activeGameInstance?.cleanup) {
+    try { await activeGameInstance.cleanup(); } catch { /* igualmente se sigue */ }
+  }
+  activeGameInstance = null;
+  activeUser = null;
+  resolvedUsername = null;
+  try { sessionStorage.removeItem('cyberforge_username'); } catch { /* modo privado */ }
+
+  // La sesión se cierra para que no quede una sesión viva detrás de la
+  // pantalla. Si el jugador recarga, `onAuthStateChanged` lo encontrará
+  // bloqueado otra vez y no podrá saltárselo.
+  try { await signOut(auth); } catch { /* la pantalla ya está puesta */ }
+
+  renderBloqueado(app, { nombre, motivo: estado.motivo, desde: estado.desde });
+  return true;
+}
+
+/**
+ * Al volver a la pestaña.
+ *
+ * Solo si hay partida viva: sin juego no hay nada que cortar, y el arranque ya
+ * hizo la comprobación. Se consulta en cuanto la pestaña vuelve a verse, que es
+ * justo cuando el jugador puede leer un aviso.
+ */
+function handleVisibilityCheckBlock() {
+  if (document.hidden) return;
+  const uid = activeUser?.uid;
+  if (!uid || bloqueadoEnCurso) return;
+
+  const nombre = resolvedUsername || ANON;
+  void comprobarBloqueo(uid, nombre).then((bloqueado) => {
+    if (bloqueado) console.info('[bloqueo] Sesión cerrada al volver a la pestaña.');
+  });
+}
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     // Firebase avisa con `null` tanto de "cerré sesión" como de "el token ya
@@ -210,7 +309,13 @@ onAuthStateChanged(auth, async (user) => {
   const justRegistered = sessionStorage.getItem('pending_username');
   if (justRegistered) sessionStorage.removeItem('pending_username');
 
-  await initGame(user, resolveUsername(user, justRegistered ?? undefined));
+  const nombre = resolveUsername(user, justRegistered ?? undefined);
+
+  // Antes de arrancar nada. Si la cuenta está suspendida, el juego no llega a
+  // crearse: ni bucle, ni guardado, ni pantalla de juego un solo instante.
+  if (await comprobarBloqueo(user.uid, nombre)) return;
+
+  await initGame(user, nombre);
 });
 
 async function initGame(user: any, username?: string) {
@@ -253,6 +358,7 @@ function renderRoute(route: Route) {
   if (!activeGameInstance) return;
   app.innerHTML = '';
   app.removeAttribute('style');
+  app.onclick = null;
   document.body.setAttribute('data-theme', getSavedTheme());
 
   // El DOM del HUD de buffs se recrea, así que hay que invalidar la marca
@@ -299,13 +405,13 @@ function renderRoute(route: Route) {
       renderForgePage(app, activeGameInstance, goBack, goHome, go);
       break;
     case 'tienda':
-      renderStoreTab(app, activeGameInstance, goBack, goHome);
+      renderStoreTab(app, activeGameInstance, goBack, goHome, go);
       break;
     case 'perfil':
       renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'), goHome, go);
       break;
     case 'ranking':
-      renderRankings(app, activeUser, goBack, goHome);
+      renderRankings(app, activeUser, goBack, goHome, go);
       break;
     case 'prestigio':
       renderPrestigePage(app, activeGameInstance, goBack, goHome, go);
@@ -423,9 +529,13 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
     game.click();
     const collected = game.getState().nanites - before;
 
-    const el = document.querySelector('#click-damage-display');
-    if (el) el.textContent = `+${formatNumber(collected)} por click`;
-
+    // El rótulo de debajo NO se toca aquí. `game.click()` ya dispara `onUpdate`,
+    // que termina en `updateUI`, y ese es el sitio que escribe
+    // "+X Nanitas por click". Este bloque escribía además su propia versión,
+    // "+X por click", con otro formato: como llegaba después, el texto
+    // alternaba entre las dos frases en cada click y el tick siguiente lo
+    // devolvía, y de ahí el "+X por click" que parpadeaba. Un solo escritor.
+    playHitEffect(1);
     showFloatingText(mouseEvent.clientX, mouseEvent.clientY, `+${formatNumber(collected)}`);
   });
 
@@ -473,6 +583,14 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
   // trabajo de audio.
   document.removeEventListener('visibilitychange', handleVisibility);
   document.addEventListener('visibilitychange', handleVisibility);
+
+  // ---- Comprobación de bloqueo al volver a la pestaña ----
+  // Junto al resto de listeners de `document`, que sobreviven a los re-renders
+  // de la vista. El `removeEventListener` previo es el mismo apaño que el de
+  // arriba y por el mismo motivo: sin él, cada vuelta a la base añadiría un
+  // manejador más y volver a la pestaña consultaría N veces lo mismo.
+  document.removeEventListener('visibilitychange', handleVisibilityCheckBlock);
+  document.addEventListener('visibilitychange', handleVisibilityCheckBlock);
 
   // ---- Primer render ----
   const initialState = game.getState();
@@ -522,7 +640,19 @@ function updateUI(state: any, isAfk: boolean = false) {
   const passiveIncomeDisplay = document.querySelector('#passive-income-display');
   const clickDamageDisplay = document.querySelector('#click-damage-display');
 
-  if (nanitesCounter) nanitesCounter.textContent = formatNumber(state.nanites);
+  // El saldo de nanitas vive en varios sitios según la vista, y solo se
+  // refrescaba el de la base. Los otros se pintaban una vez al montar la página
+  // y se quedaban congelados: en el almacén, que es donde se vende y se usan
+  // llaves, el precio se decidía contra una cifra vieja mientras el ingreso
+  // pasivo seguía subiendo; en el mercado, directamente no se podía saber si
+  // algo era asequible. Se recorren por id en vez de buscar clases para que
+  // añadir otro contador sea añadir una entrada a la lista.
+  const nanitesValue = formatNumber(state.nanites || 0);
+  if (nanitesCounter) nanitesCounter.textContent = nanitesValue;
+  for (const id of ['#page-nanites-val', '#wh-nanites-val', '#store-nanites', '#profile-nanites']) {
+    const el = document.querySelector(id);
+    if (el) el.textContent = nanitesValue;
+  }
 
   const now = Date.now();
   const passiveBuffRemaining = Math.max(0, state.buffs.passiveBoostExpiresAt - now);
@@ -586,8 +716,43 @@ function renderPlayerPanel(state: any) {
   renderPanel(state, realDamage, slots);
 }
 
-// Texto flotante para clicks del jugador
-function showFloatingText(x: number, y: number, text: string, color: string = 'var(--accent)') {
+// Cuánto vive en pantalla un "+X" flotante. El companion click usa un valor
+// mayor a propósito: el golpe llega solo, sin que nadie esté mirando el
+// recolector en ese instante, así que necesita margen de sobra para leerse.
+const FLOAT_MS_PLAYER = 1150;
+const FLOAT_MS_COMPANION = 1750;
+
+/**
+ * Flotantes vivos ahora mismo.
+ *
+ * Los golpes automáticos caen uno por segundo y por compañero, así que con
+ * varios activos se juntan varios números a la vez. Cuando se apilan encima unos
+ * de otros ya no hay nada legible por muy larga que sea su duración: lo que
+ * hace falta en ese caso es apurar, no esperar. El más viejo se retira antes
+ * de crear el siguiente.
+ */
+const liveFloatingTexts: HTMLElement[] = [];
+const MAX_FLOATING_TEXTS = 12;
+
+/**
+ * Texto flotante para clicks del jugador
+ *
+ * @param duration vida total en ms. La animación usa porcentajes, así que
+ *   cualquier duración reparte las fases (pique / lectura / desvanecido) en la
+ *   misma proporción; el elemento se retira al terminar la animación, nunca con
+ *   un `setTimeout` aparte que pudiera desfasarse de ella.
+ */
+function showFloatingText(
+  x: number,
+  y: number,
+  text: string,
+  color: string = 'var(--accent)',
+  duration: number = FLOAT_MS_PLAYER
+) {
+  while (liveFloatingTexts.length >= MAX_FLOATING_TEXTS) {
+    liveFloatingTexts.shift()?.remove();
+  }
+
   const el = document.createElement('div');
   el.textContent = text;
   el.style.cssText = `
@@ -598,17 +763,179 @@ function showFloatingText(x: number, y: number, text: string, color: string = 'v
     color: ${color};
     font-family: 'Orbitron', sans-serif;
     font-weight: 900;
-    font-size: 14px;
+    font-size: 16px;
+    line-height: 1;
+    white-space: nowrap;
     pointer-events: none;
     z-index: 100;
-    text-shadow: 0 0 10px ${color};
-    animation: floatUp 1s ease-out forwards;
+    text-shadow: 0 0 10px ${color}, 0 0 2px ${color}, 0 1px 3px rgba(0, 0, 0, 0.9);
+    animation: floatUp ${duration}ms linear forwards;
   `;
+  // Lo engancha el CSS a `floatHold` cuando el sistema pide menos movimiento.
+  el.setAttribute('data-float-text', '');
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 1000);
+  liveFloatingTexts.push(el);
+
+  const remove = () => {
+    el.remove();
+    const i = liveFloatingTexts.indexOf(el);
+    if (i !== -1) liveFloatingTexts.splice(i, 1);
+  };
+  // `animationend` es la fuente de verdad: el nodo se va cuando termina el
+  // desvanecido, no cuando le da la gana a un temporizador aparte (que es como
+  // se quedaba vivo un número ya invisible al cambiar la duración). El
+  // `setTimeout` es solo la red de seguridad por si la animación no llegara a
+  // terminar; `remove()` es idempotente, así que correr las dos no hace daño.
+  el.addEventListener('animationend', remove, { once: true });
+  window.setTimeout(remove, duration + 600);
 }
 
-// Efecto de click de compañero en posición random dentro del recolector
+// ==========================================================================
+//  Golpe: la reaccion del recolector al recibir un impacto
+// ==========================================================================
+
+/**
+ * Squash del boton: se hunde y vuelve con rebote.
+ *
+ * Va por la Web Animations API y no por una clase CSS a proposito. El boton
+ * lleva `animate-core-breathe`, una animacion infinita sobre `transform`, y las
+ * animaciones CSS ganan a las declaraciones normales: por eso el
+ * `active:scale-95` de Tailwind no hacia nada, el boton no se hundia nunca al
+ * pulsarlo. Una animacion creada con `element.animate()` entra despues en la
+ * pila de animaciones y si manda sobre la anterior mientras corre; al terminar
+ * devuelve el control a `coreBreathe`.
+ *
+ * El `easing` va por keyframe y no en las opciones de la animacion: cada tramo
+ * lleva su curva. El hundimiento arranca de golpe (es el impacto), el rebote
+ * sale disparado y frena, y el cierre es lineal para que no se note.
+ */
+interface HitKeyframe {
+  transform: string;
+  offset: number;
+  easing?: string;
+}
+
+const HIT_SQUASH: HitKeyframe[] = [
+  { transform: 'scale(1)', offset: 0, easing: 'cubic-bezier(0.2, 0, 0.4, 1)' },
+  { transform: 'scale(0.9)', offset: 0.16, easing: 'cubic-bezier(0.2, 0.9, 0.35, 1)' },
+  { transform: 'scale(1.07)', offset: 0.46, easing: 'ease-in-out' },
+  { transform: 'scale(0.985)', offset: 0.72, easing: 'linear' },
+  { transform: 'scale(1)', offset: 1 }
+];
+
+/** Onda expansiva: el anillo que se abre hacia fuera. */
+const HIT_WAVE = [
+  { transform: 'scale(0.72)', opacity: 0.85, offset: 0 },
+  { transform: 'scale(1.12)', opacity: 0.4, offset: 0.4 },
+  { transform: 'scale(1.5)', opacity: 0, offset: 1 }
+];
+
+/** El squash vivo, para poder cancelarlo si vuelve a llegar otro golpe. */
+let squashAnimation: Animation | null = null;
+
+/**
+ * Ondas vivas, en-desuso-ya.
+ *
+ * Un golpe por segundo y por companero apilaria anillos sin limite si cada uno
+ * crease su propio elemento, asi que se reciclan: el que ya se apago vuelve al
+ * bolso y el siguiente golpe lo saca. Cuatro de sobra para que dos golpes
+ * seguidos no se pisen nunca.
+ */
+const hitWaves: HTMLElement[] = [];
+
+/**
+ * Reaccion de golpe del recolector, para clicks del jugador y de los companeros.
+ *
+ * El jugador pega mas fuerte (`strength` 1) que un companero (0.62): un golpe
+ * automatico por segundo no deberia sacudir el boton tanto como pulsarlo a
+ * proposito.
+ *
+ * El anillo vive DENTRO del boton, no encima. Antes, el efecto expansivo
+ * (`companionClick`) se pintaba sobre el recolector y con `z-index` 9999, justo
+ * encima del "+X": el fondo translucido con glow se comia la cifra, que es lo
+ * unico que decia cuanto trae el companero. Asi el "+X" vive en `body` con
+ * `z-index: 100` y el anillo no lo toca nunca.
+ *
+ * Con `prefers-reduced-motion` se quita la onda y el squash se reduce a un
+ * hundimiento corto y sin sobreimpulso (~0.03): el rebote y el anillo son
+ * justo lo que ese ajuste pide quitar. El hundimiento se queda porque es la
+ * unica confirmacion de que el click ha entrado, y no hay alternativa: el
+ * `active:scale-95` del boton no sirve, `coreBreathe` lo pisa siempre. Menos
+ * movimiento, no menos confirmacion.
+ */
+function playHitEffect(strength: number = 1) {
+  const btn = document.querySelector('#click-btn');
+  if (!btn) return;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion) strength = Math.min(strength, 0.35);
+
+  // --- Squash ---
+  // `strength` aprieta el rebote hacia 1: el companionclick se queda en un
+  // 0.93/1.04 suave y el del jugador baja a 0.9 y sube a 1.07.
+  //
+  // El easing global es `linear` a proposito. Con un `cubic-bezier` con rebote
+  // hacia atras, el progreso se adelantaba tanto que la curva entera se
+  // disparaba en el primer 40% de la duracion y el 60% restante se quedaba
+  // quieto en 1: el golpe se veia a medias. Aqui el ritmo lo llevan los
+  // `offset` de cada keyframe, que se traducen a milisegundos reales.
+  //
+  // Ojo al copiar `offset` en el `.map`: si se olvida, los cinco keyframes se
+  // reparten en partes iguales (0/25/50/75/100) en vez de donde de verdad toca,
+  // y el squash deja de hundirse al ritmo del golpe. Pasa igual con el
+  // `easing` por keyframe, que tampoco sobrevive a un objeto nuevo.
+  squashAnimation?.cancel();
+  squashAnimation = btn.animate(
+    HIT_SQUASH.map(k => ({
+      transform: `scale(${(1 + (parseFloat(k.transform.slice(6)) - 1) * strength).toFixed(4)})`,
+      offset: k.offset,
+      easing: k.easing
+    })),
+    { duration: 240 + 80 * strength, easing: 'linear' }
+  );
+
+  if (reduceMotion) return;
+
+  // --- Onda ---
+  // Se reutiliza el mismo anillo para todos los golpes. Es un elemento sin
+  // listeners y con la animacion controlada desde aqui, asi que reiniciarla es
+  // cancelarla y volvarla a lanzar; no hay estado que limpiar entre golpes.
+  let wave = hitWaves.pop();
+  if (!wave) {
+    wave = document.createElement('span');
+    wave.setAttribute('aria-hidden', 'true');
+    wave.className = 'hit-wave';
+    // `prepend` y no `append`: el icono y el texto del boton son hermanos
+    // posicionados, y entre ellos pinta el ultimo. Anadido al final, el anillo
+    // se dibujaria encima del rayo; asi queda detras y solo se ve el borde.
+    btn.prepend(wave);
+  }
+  wave.getAnimations().forEach(a => a.cancel());
+  wave.animate(HIT_WAVE, {
+    duration: 460 + 160 * strength,
+    easing: 'cubic-bezier(0.16, 1, 0.3, 1)'
+  });
+  // Vuelve al pool cuando se apaga. El timeout va con margen de sobra: si la
+  // animacion se perdiera (pestaña en segundo plano), el anillo se recicla igual
+  // y no se queda a media luz en la pantalla.
+  window.setTimeout(() => {
+    if (hitWaves.length < 4) hitWaves.push(wave as HTMLElement);
+  }, 700 + 160 * strength);
+}
+
+/**
+ * Golpe automático de un compañero, dentro del recolector y en posición
+ * aleatoria.
+ *
+ * Solo se pinta el número, nada más. Antes encima se dibujaba un círculo
+ * expansivo (el keyframe `companionClick`): iba en el mismo punto, con
+ * `z-index` 9999 y creciendo hasta 60px de diámetro, así que su fondo
+ * translúcido con glow se comía el número de 14px que iba justo debajo. El
+ * efecto se leía como un disparo en seco y la cifra — que es lo único que
+ * dice cuánto trae ese compañero — se perdía. El número también sube: es la
+ * misma señal que usa el clic del jugador, así que el golpe se lee sin aprender
+ * nada nuevo y la posición aleatoria lo hace propio.
+ */
 function showCompanionClickInCollector(power: number) {
   const collector = document.querySelector('#click-btn');
   if (!collector) return;
@@ -618,26 +945,13 @@ function showCompanionClickInCollector(power: number) {
   const x = rect.left + margin + Math.random() * (rect.width - margin * 2);
   const y = rect.top + margin + Math.random() * (rect.height - margin * 2);
 
-  const clickEffect = document.createElement('div');
-  clickEffect.style.cssText = `
-    position: fixed;
-    left: ${x}px;
-    top: ${y}px;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 3px solid var(--accent);
-    background: color-mix(in srgb, var(--accent) 40%, transparent);
-    box-shadow: 0 0 15px var(--accent);
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 9999;
-    animation: companionClick 0.8s ease-out forwards;
-  `;
-  document.body.appendChild(clickEffect);
-  setTimeout(() => clickEffect.remove(), 800);
-
-  showFloatingText(x, y, `+${formatNumber(power)}`, 'var(--accent)');
+  // Se queda en pantalla bastante más que el click del jugador: este número es
+  // la única señal de cuánto trae el compañero y aparece solo, sin aviso.
+  showFloatingText(x, y, `+${formatNumber(power)}`, 'var(--accent)', FLOAT_MS_COMPANION);
+  // Mismo golpe que el del jugador, más suave. El número ya sube desde un punto
+  // aleatorio, así que el recoil va en el botón: el efecto va en el recolector,
+  // que es lo que ha recibido el golpe, no en el número.
+  playHitEffect(0.62);
 }
 
 // Clics automáticos de compañeros (cada segundo)

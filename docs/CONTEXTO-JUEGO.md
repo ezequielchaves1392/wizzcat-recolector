@@ -1,0 +1,240 @@
+# Contexto del juego — Cyber-Forge: Imperio de Nanobots
+
+> **Estado de este documento:** refleja el árbol de trabajo tal y como estaba cuando
+> se escribió. Ojo: hay otro agente editando `src/` y `verify/` en este mismo
+> directorio de forma activa, así que el contenido puede quedar viejo en horas.
+> Si algo no cuadra con el código, el código manda.
+
+---
+
+## 1. Qué es
+
+Un **juego incremental web** (tipo clicker/idle) en español. El jugador recolecta
+**nanitas**, las gasta en una tienda, las deja producir solas, acumula
+recolectores y compañeros, y de vez en cuando reinicia todo (**Ascensión**) a
+cambio de núcleos que desbloquean un árbol de pasivas permanente.
+
+- **Dónde se juega:** navegador, una sola página, sin instalación.
+- **Cómo se guarda:** en Firestore, por usuario. No hay servidor propio.
+- **Cómo se entra:** Firebase Auth. El "nombre" del jugador se convierte en un
+  email interno (`<nombre>@cyberforge.game`) con contraseña.
+- **Idioma:** todo el texto de cara al jugador es español, incluidos errores y
+  avisos. No hay i18n y no hay intención de añadirlo.
+- **Dónde NO se juega:** `admin.html` es una terminal de administración aparte,
+  con su propio entry de Vite. No es una vista del juego.
+
+## 2. La pantalla
+
+Siete vistas enrutadas, sin URLs — el estado vive en un único objeto guardado,
+así que recargar tiene que devolver exactamente lo mismo (`src/ui/router.ts:1-22`).
+
+| Ruta | Nombre | Qué se hace ahí |
+|---|---|---|
+| `base` | Base | El recolector grande que se clickea, el escuadrón, el HUD de buffs y el ingreso pasivo. Es la única vista con el botón de recolector. |
+| `almacen` | Almacén | Rejilla de celdas con arrastre, filtros, orden, venta, uso, apertura de cajas y huecos. |
+| `tienda` | Mercado | 7 categorías: cajas, recursos, cartas, forja, mejoras, compañeros, recolectores. |
+| `forja` | Forja | 3 materiales → 1 recolector, con probabilidad visible antes de confirmar. |
+| `perfil` | Perfil | Tarjeta de identidad (título/marco/banner), mejor recolector, logros, cosméticos. |
+| `prestigio` | Ascensión | Núcleos, qué se pierde y qué se conserva, y el árbol de 24 nodos. |
+| `ranking` | Ranking | 4 tablas globales. Solo accesible desde la cabecera. |
+
+En móvil la navegación es una **barra inferior de 5 destinos** (Base, Almacén,
+Forja, Tienda, Perfil) y en escritorio pasa a la cabecera. Ranking y Ascensión se
+alcanzan desde arriba. La barra vive en `pageShell`, así que **las seis páginas
+secundarias también la tienen** (`ui/pageShell.ts`).
+
+**El tick del juego (500 ms) nunca se detiene al navegar.** Sigue corriendo en
+cualquier vista. Esto se corrigió explícitamente: antes se congelaba al entrar al
+almacén.
+
+## 3. El bucle de juego
+
+### 3.1 Las dos fuentes de ingreso
+
+- **Click** — `getClickDamage()` es el número que la UI tiene que mostrar. Nunca
+  recalcularlo en la vista.
+- **Pasivo** — los compañeros activos suman `passiveIncome` cada 500 ms.
+
+Ambos multiplican por: compañeros tipo `multiplier` → logros → árbol de pasivas →
+afijos del recolector equipado. El orden está en `calculateClickDamage()`
+(`gameLoop.ts:1479-1494`) y en `recalculatePassiveIncome()` (`gameLoop.ts:1435-1455`).
+
+### 3.2 El tiempo que no corre
+
+Este es el eje del que más se ha hablado en el proyecto, y la regla es tajante:
+
+> **Nada de ingreso pasivo si el jugador no está mirando la pantalla.**
+
+Se unificó en `isPlayerPresent()`: pestaña visible **Y** ventana con foco. Se
+cubre `blur/focus`, `visibilitychange`, `pageshow/pagehide` y Page Lifecycle
+(`freeze`/`resume`). El tick se detiene al ausentarse y el watchdog comprueba la
+presencia en cada tick, por si se pierde algún evento del sistema operativo.
+
+Cuando el jugador vuelve, el cobro del tiempo ausente usa **`performance.now()`**
+(reloj monótono): cambiar la hora del sistema no puede inflarlo. Y se acota por
+tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
+
+### 3.3 El almacén
+
+- Capacidad en **pilas**, no en entradas del array. 20 llaves apiladas = 1 ranura.
+- Tres tipos de objeto: `collector`, `companion`, y apilables (`crate`,
+  `consumable`, `key`, `crystal`).
+- **Huecos**: el jugador puede dejar una celda vacía a propósito delante de un item
+  (`warehouseGaps`). Es una preferencia de disposición, **no consume capacidad**.
+  Solo se puede crear desde un botón en la ficha del item, nunca arrastrando.
+  Especificación completa en `docs/huecos-almacen.md`.
+
+## 4. Los sistemas
+
+| Sistema | Qué hace | Dónde vive |
+|---|---|---|
+| **Recolectores** | Clickers equipables. Daño × nivel. Se afinan con cristales (sube el nivel, puede fallar). T1-T10. | `gameLoop.ts`, `data/tiers.ts` |
+| **Compañeros** | Aportan ingreso. Tipos `click` / `passive` / `multiplier`. 1 ranura de base, 5 de tope. | `gameLoop.ts`, `data/tiers.ts` |
+| **Cajas** | 4 tipos (común/rara/épica/legendaria). Necesita llave de nivel igual o superior. Tabla de botín con pesos en `crateLoot.ts`. | `components/crateLoot.ts` |
+| **Ruleta** | 26 casillas, 4.2 s. **Solo muestra**: el premio ya está decidido antes de girar. | `components/crateRoulette.ts` |
+| **Forja** | 3 recolectores del mismo tier → 1 del siguiente. Potencial 1-5, afijos heredados, autor, fecha. | `data/crafting.ts`, `ui/forgePage.ts` |
+| **Afijos** | 14 afijos en 6 rarezas. Modifican daño, pasivo y suerte de forja. | `data/crafting.ts:42-71` |
+| **Valoración** | El precio es dinámico: tier × nivel × rareza × potencial × afijos × fama × antigüedad. El jugador se queda el 42 %. | `data/valuation.ts` |
+| **Ascensión** | Reinicia progreso a cambio de núcleos. Umbral: 1 M de producción. Curva `(produccion / 1e6)^0.6`. | `data/prestige.ts`, `ui/prestigePage.ts` |
+| **Árbol de pasivas** | 24 nodos, 5 columnas, requisitos cruzados. Se paga con núcleos. | `data/tree.ts`, `ui/prestigePage.ts` |
+| **Logros** | 15 (13 públicos + 2 secretos). Recompensa pasiva de click y pasivo. | `achievements.ts`, `data/achievements.ts` |
+| **Cosméticos** | 25 títulos, marcos y banners. Casi nada se vende: se obtiene con logros, núcleos, ranking o cajas. | `data/cosmetics.ts` |
+| **Ranking** | 4 tablas. Puntuación = nanitas + logros×50 000 + secretos×250 000 + firmas×20 000. Se reordena en cliente. | `services/rankingService.ts`, `components/rankings.ts` |
+| **Cola offline** | Write-ahead log en `localStorage`. Antes de tocar la red, el saldo está en disco. | `services/naniteQueue.ts` |
+| **Bloqueo** | Un admin puede suspender una cuenta. Fail-open a propósito. | `services/bloqueoService.ts` |
+| **Terminal admin** | Otorgar/fijar nanitas, editar campos, bloquear, borrar. | `src/admin.ts`, `services/adminService.ts` |
+
+### 4.1 La Ascensión: qué se pierde y qué se conserva
+
+Esto se muestra explícitamente al jugador en la página, y es la decisión de
+diseño más discutida del proyecto.
+
+**Se pierde:** nanitas, producción total, ingreso pasivo, clics, cajas abiertas,
+llaves, cristales, **toda** la capacidad del almacén (vuelve a 15), las ranuras de
+compañero (vuelve a 1), las tarjetas AFK, el recolector equipado, todos los
+compañeros menos el de inicio, **y el almacén entero — incluidos los recolectores
+forjados a mano**.
+
+**Se conserva:** núcleos, `totalCores`, número de reinicios, el árbol de pasivas,
+esquirlas, firmas realizadas, logros y cosméticos.
+
+El almacén vacío después de la Ascensión es intencionado. Forjar de nuevo es el
+bucle de progresión.
+
+## 5. Guardado y su red de seguridad
+
+`saveToFirebase()` es un protocolo de tres pasos (`gameLoop.ts:1510-1607`):
+
+1. **`localStorage` primero, síncrono.** El saldo queda en disco antes de tocar
+   la red. Esto es lo que hace que un fallo de red cueste cero.
+2. **`setDoc(users/{uid})` + `setDoc(rankings/{uid})`**, con `merge: true`.
+3. **Solo si ambos confirman, se vacía la cola.**
+
+La cola guarda un **snapshot absoluto con marca de tiempo**, no un incremento.
+Por eso un reinicio de prestigio no se deshace al recargar sin red, y por eso un
+documento más nuevo (otro dispositivo) gana. La mitad de `queueCheck` son
+pruebas de *abuso*: casos en los que la cola **no** debe aplicarse.
+
+Un fallo de guardado **nunca** propaga: se registra, se avisa **una sola vez** y
+el juego sigue. La cola conserva el saldo para el siguiente intento.
+
+## 6. Discrepancias conocidas
+
+Documentadas a propósito. No son secretos que arreglar de golpe: son trampas
+conocidas, y escribirlas aquí es más útil que olvidarlas.
+
+1. **La "Llave de Cifrado" de la tienda es en realidad una llave de nivel 1.**
+   La carta pone `label: 'Llave de Cifrado'` y lo que entra es una de nivel 1
+   ("Llave Reforzada"): el jugador paga por una llave y recibe otra, y por poco
+   (`cost: 480` en `KEY_DEFS[1]` frente a los 250 que cobra la carta).
+   **Lo que sí se arregló** fue la mitad que rompía la coherencia de la pantalla:
+   `previewStoreItem` anunciaba `KEY_DEFS[0]` (nivel 0) mientras la compra creaba
+   nivel 1, así que la pregunta "¿cabe esto en el almacén?" miraba una pila que
+   no era la del item entregado. Con el almacén lleno y una pila de nivel 0, el
+   botón se encendía y al pulsarlo la compra fallaba (R3). Ahora las dos rutas
+   leen `STORE_MATERIAL_TIER`. Lo cubre `stackCheck`.
+2. **El nivel de llave/cristal se pierde al aplicarlo desde una caja.**
+   `rollCrateReward` pasa `keyTier`/`materialTier`, pero los aplicadores del game
+   loop ignoran el segundo argumento: `gameLoop.ts:2544-2545` son
+   `crystals: (n) => grantCrystals(1, n)` y `keys: (n) => grantKeys(1, n)`, con el
+   1 fijo. Una caja legendaria entrega su llave rúnica y sus cristales de fase
+   como si fueran de nivel 1.
+
+   Con el módulo de apilado esto se nota más: como todas las llaves de caja caen
+   en el nivel 1, se funden en **una sola pila**. La rúnica de la legendaria
+   entra en la misma celda que la de Cifrado de la común y el jugador no tiene
+   forma de recuperarla. Arreglar el segundo argumento que se ignora separa las
+   pilas por nivel y son dos líneas, pero altera lo que da cada caja.
+3. **`crystalPicker` lee el flag equivocado.** `upgradeEquippedCollector`
+   devuelve `{success, msg}` pero `crystalPicker.ts:119` ramifica sobre `res.ok`,
+   siempre `undefined` → toda sintonización muestra el toast de error.
+4. **Dos tablas de precio de caja.** `STORE_ITEMS` (500/1500/5500/21000) frente a
+   `CRATE_META` (`crateLoot.ts:113-116` = 400/1200/4500/18000). La segunda es la
+   que manda en los drops de nanitas y en la compensación cuando el almacén está
+   lleno.
+5. **La nanopartícula cuesta 90 000 en la tienda (`gameLoop.ts:186`) y 220 000 en
+   `valuation.ts:145`.** El valor de la tienda es el que se cobra.
+6. ~~**Los cosméticos nunca se desbloquean.**~~ **ARREGLADO.** `unlockCosmetic` ya
+   tiene llamadores (`gameLoop.ts:2550` y `:2873`) y las cajas reparten cosméticos
+   vía `crateCosmetics` (`data/cosmetics.ts:173`). Lo cubre `lootCheck`.
+7. **Las esquirlas se acumulan y nunca se gastan**, aunque el JSDoc de
+   `getForgeInfo` prometa lo contrario.
+8. **Bonificaciones que no se consumen:** `crateLuck`, `offlineClicks`, y el
+   `critChance` / `passiveMult` de los afijos en el ingreso pasivo.
+9. **Código muerto:** `state.totalInfraestructure`, `COLLECTOR_BASE_COSTS`,
+   `TIER_POWER`, `types.ts` (`GameState`, `defaultState`), `ProfileState`,
+   `UserProfile`, y las pantallas `components/crates.ts` y
+   `components/upgrades.ts` (huérfanas desde `f90abea`).
+10. **`MAX_COLLECTOR_LEVEL = 20` ignora `item.maxLevel`.** La comprobación está en
+    `gameLoop.ts:2194`, así que un recolector forjado con `maxLevel` 23-35 queda
+    bloqueado en 20 por el game loop, aunque la UI siga enseñando el techo real.
+11. **`syncWarehouseGaps()` está documentado en inglés** (`gameLoop.ts:1188-1200`),
+    el único bloque del juego en ese idioma. Cosmético, pero rompe el patrón.
+12. **`docs/huecos-almacen.md` dice "sin implementar"** en su línea 3. La
+    funcionalidad **sí** está implementada (`gapCheck.ts`, 65 pruebas). El estado
+    nunca se actualizó.
+
+### Resumen
+
+| # | Discrepancia | Estado |
+|---|---|---|
+| 1 | La llave de la tienda es de nivel 1, se anuncia de nivel 0 | **parcial**: la incoherencia de "¿cabe?" está arreglada, la etiqueta sigue mintiendo |
+| 2 | El nivel de llave/cristal se pierde al aplicar el botín de caja | rota |
+| 3 | `crystalPicker` lee `res.ok` en vez de `res.success` | rota |
+| 4 | Dos tablas de precio de caja | sigue |
+| 5 | La nanopartícula cuesta 90 000 en un sitio y 220 000 en otro | sigue |
+| 6 | Los cosméticos nunca se desbloquean | **arreglada** |
+| 7 | Las esquirlas nunca se gastan | sigue |
+| 8 | `crateLuck` y `offlineClicks` no se consumen | sigue |
+| 9 | Código muerto | sigue |
+| 10 | `MAX_COLLECTOR_LEVEL` ignora `item.maxLevel` | sigue |
+| 11 | Un docblock en inglés | sigue |
+| 12 | `huecos-almacen.md` desactualizado | sigue |
+
+## 7. Lo que NO está verificado
+
+`npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
+la navegación. **11 bancos, 806 pruebas.** Queda fuera a propósito:
+
+- Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
+- `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
+- `services/*` salvo la cola, `utils/*`, `theme.ts`, `data/tree`.
+- `data/cosmetics` solo está cubierto en lo que toca las cajas (`lootCheck`); los
+  Caminos de logros, núcleos y ranking no.
+- El **arrastre real por puntero**: solo se prueba a mano con `drag-test.html`,
+  porque el destino se lee con `document.elementFromPoint` y si eso no devuelve la
+  celda señalada el arrastre es un no-op aunque la lógica sea correcta.
+
+Esos huecos se cubren con bancos de pruebas visuales, no automáticos:
+`preview.html` (monta cualquier pantalla con datos de ejemplo y viewport real),
+`nav-test.html` (recorrido automático de navegación), `drag-test.html`
+(escenarios de arrastre), `auth-preview.html`, `ruleta-preview.html`.
+
+## 8. Antes de tocar nada
+
+Lee [`REGLAS-Y-TECNOLOGIAS.md`](./REGLAS-Y-TECNOLOGIAS.md) (reglas y stack) y
+[`CAMBIOS-MACRO.md`](./CAMBIOS-MACRO.md) (por qué el juego es como es). Si vas a
+tocar el almacén, lee también [`huecos-almacen.md`](./huecos-almacen.md).
+
+Y antes de nada, `git status`: hay otro agente trabajando en este directorio y el
+working tree va muy por delante del último commit.

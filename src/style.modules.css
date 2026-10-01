@@ -6,6 +6,68 @@
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
+   Terminal de administración
+   Solo las cuatro piezas que se repiten en `src/admin.ts`. El resto de la
+   terminal va con utilidades de Tailwind: son clases que no aparecen en
+   ningún otro sitio del proyecto, y una capa de estilos propia para ellas solo
+   añadiría un sitio más donde buscar por qué algo no se ve.
+   -------------------------------------------------------------------------- */
+
+/* Pestañas de la cabecera. El estado activo no se pinta con utilidades sueltas
+   porque hay que cambiar a la vez fondo, color y sombra: tres declaraciones que
+   siempre van juntas. */
+.admin-tab {
+  padding: 0 0.75rem;
+  height: 1.75rem;
+  border-radius: 0.5rem;
+  font-family: 'Orbitron', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.admin-tab:hover { color: var(--text-main); }
+
+.admin-tab-on {
+  color: var(--bg-app);
+  background-color: var(--accent);
+}
+
+/* Selector de orden de la lista. Mismo motivo que las pestañas, pero en
+   miniatura: son cuatro botones del mismo tipo y sería absurdo repetir las
+   tres declaraciones en cada uno. */
+.admin-chip {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.admin-chip:hover { color: var(--text-main); border-color: var(--accent); }
+
+.admin-chip-on {
+  color: var(--bg-app);
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Atajo de cantidad: sin borde propio, el hover solo cambia de color al
+   accent para que se lea como pulsable sin gritar. */
+.admin-quick {
+  color: var(--text-muted);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.admin-quick:hover { color: var(--accent); border-color: var(--accent); }
+
+/* --------------------------------------------------------------------------
    Árbol de pasivas
    El árbol se dibuja con una rejilla de CSS, no con SVG ni con un canvas:
    es texto seleccionable, escala con el zoom del navegador y hereda las
@@ -463,6 +525,18 @@
   }
 }
 
+/* Cuando el elemento que se expande va POSICIONADO —el botón del ojo dentro de
+   un input, por ejemplo— hace falta devolverle el `absolute`.
+
+   Sin esto la utilidad `absolute` de Tailwind no gana: `.hit-expand` pone
+   `position: relative` y, al importarse este archivo después de las utilidades,
+   le gana por orden de cascada. El botón se sale del flujo y aparece debajo
+   del campo en vez de dentro. Dos selectores de clase (0,2,0) le ganan a uno
+   (0,1,0), así que el pseudo-elemento del área táctil se conserva. */
+.hit-expand.absolute {
+  position: absolute;
+}
+
 /* --------------------------------------------------------------------------
    Preferencia del sistema
    -------------------------------------------------------------------------- */
@@ -471,4 +545,302 @@
   .cosmetic-banner::after,
   .tree-node.is-affordable::after { animation: none !important; }
   .inv-cell, .tree-node, .forge-slot { transition: none !important; }
+}
+
+/* ==========================================================================
+ * Pantalla de acceso
+ *
+ * El fondo animado va en style.modules.css y no en el HTML: son ~15
+ * reglas de animacion y un canvas, y meterlas en la plantilla convertia el
+ * archivo de acceso en un bloque ilegible.
+ * ==========================================================================
+// ==========================================================================
+//  Pantalla de acceso
+//
+//  Todo lo que se mueve aquí está detrás de `@media (prefers-reduced-motion)`.
+//  Si el sistema pide menos movimiento, las animaciones no arrancan y la
+//  pantalla se queda en un estado que ya es legible: no hay contenido que
+//  dependa de una animación para verse.
+//
+//  Los tres degradados usan `--accent`, así que cambian de color con el tema
+//  sin tocar el CSS.
+// ==========================================================================
+
+/*
+ * Columna con la marca encima y la tarjeta debajo, centradas verticalmente.
+ *
+ * `flex-col` viene del marcado y aquí solo se define el reparto del alto
+ * restante: `justify-content: center` es lo que hace que el conjunto se quede
+ * en el medio cuando sobra sitio, y `gap` lo que lo separa cuando no.
+ *
+ * Sin `min-height: 0` en el primer hijo, un título largo podría empujar la
+ * tarjeta fuera de la pantalla en un móvil bajo.
+ */
+.auth-scene {
+  position: relative;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+/* En pantallas muy bajas la marca se encoge: la tarjeta es lo que importa. */
+@media (max-height: 680px) {
+  .auth-scene { gap: 0.75rem; padding-block: 0.75rem; }
+  .auth-brand { margin-bottom: 0 !important; }
+  .auth-brand h1 { font-size: 1.05rem; }
+  .auth-logo { width: 38px; height: 38px; margin-bottom: 0.5rem !important; }
+}
+
+/* --- Fondo ---------------------------------------------------------------- */
+
+.auth-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Tres manchas de luz que se desplazan. Los ciclos duran 18-30 s a propósito:
+   un movimiento lento se percibe como textura, uno rápido distrae. */
+.auth-glow {
+  position: absolute;
+  width: 62vmax;
+  height: 62vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.22;
+}
+
+.auth-glow-1 {
+  top: -22%;
+  left: -14%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 68%);
+  animation: auth-drift-1 26s ease-in-out infinite;
+}
+
+.auth-glow-2 {
+  bottom: -28%;
+  right: -16%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 68%);
+  opacity: 0.16;
+  animation: auth-drift-2 31s ease-in-out infinite;
+}
+
+.auth-glow-3 {
+  top: 32%;
+  left: 46%;
+  width: 34vmax;
+  height: 34vmax;
+  opacity: 0.1;
+  animation: auth-drift-3 22s ease-in-out infinite;
+}
+
+@keyframes auth-drift-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(14vw, 10vh, 0) scale(1.14); }
+}
+
+@keyframes auth-drift-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+  50%      { transform: translate3d(-12vw, -8vh, 0) scale(0.94); }
+}
+
+@keyframes auth-drift-3 {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(-16vw, 12vh, 0); }
+}
+
+/* Rejilla en perspectiva: sugiere suelo industrial sin coste de render. */
+.auth-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--accent) 16%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--accent) 16%, transparent) 1px, transparent 1px);
+  background-size: 46px 46px;
+  /* El degradado de máscara hace que la rejilla se difumine hacia abajo: si
+     llega hasta el borde inferior, parece una tabla de cálculo. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 38%, black 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 38%, black 72%, transparent 100%);
+  transform: perspective(520px) rotateX(58deg) scale(1.7) translateY(12%);
+  transform-origin: center 78%;
+  opacity: 0.5;
+}
+
+.auth-rain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.55;
+}
+
+/* Banda de escaneo. Es el detalle que más dice "terminal" y cuesta una sola
+   animacion: una franja de luz que baja y se desvanece. */
+.auth-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 140px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 9%, transparent) 55%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 92%,
+    transparent 100%
+  );
+  animation: auth-scan 7.5s linear infinite;
+}
+
+@keyframes auth-scan {
+  0%   { transform: translateY(-160px); }
+  100% { transform: translateY(100vh); }
+}
+
+/* Oscurece los bordes: hace que la tarjeta sea lo único con contraste. */
+.auth-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 28%, color-mix(in srgb, var(--bg-app) 88%, transparent) 100%);
+}
+
+/* --- Marca ---------------------------------------------------------------- */
+
+.auth-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--bg-app);
+  background: var(--accent);
+  box-shadow:
+    0 0 30px -6px color-mix(in srgb, var(--accent) 78%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  animation: auth-logo-pulse 4.2s ease-in-out infinite;
+}
+
+@keyframes auth-logo-pulse {
+  0%, 100% { box-shadow: 0 0 30px -6px color-mix(in srgb, var(--accent) 78%, transparent), inset 0 1px 0 rgba(255,255,255,0.28); }
+  50%      { box-shadow: 0 0 46px -4px color-mix(in srgb, var(--accent) 95%, transparent), inset 0 1px 0 rgba(255,255,255,0.28); }
+}
+
+.auth-brand h1 {
+  text-shadow: 0 0 26px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* --- Tarjeta -------------------------------------------------------------- */
+
+.auth-card {
+  position: relative;
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border-color)) !important;
+  box-shadow:
+    0 24px 70px -28px rgba(0, 0, 0, 0.9),
+    0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+/* Filamento superior: una línea de luz en el borde de arriba. Es lo que
+   separa una tarjeta translúcida de un rectángulo gris. */
+.auth-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14%;
+  right: 14%;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--accent) 85%, transparent),
+    transparent
+  );
+}
+
+/* Punto de estado del terminal. Pulsa despacio: si parpadea rápido parece un
+   error. */
+.auth-dot {
+  box-shadow: 0 0 8px var(--accent);
+  animation: auth-blink 2.6s ease-in-out infinite;
+}
+
+@keyframes auth-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
+/* --- Campos --------------------------------------------------------------- */
+
+.auth-input {
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.auth-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.auth-submit {
+  transition: opacity 180ms ease, transform 120ms ease;
+}
+
+.auth-submit:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+/* Barrido de luz sobre el botón al pasar por encima: un detalle pequeño que
+   hace que el botón parezca una máquina y no un rectángulo. */
+.auth-submit::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.34),
+    transparent
+  );
+  transition: left 520ms ease;
+}
+
+.auth-submit:hover:not(:disabled)::after {
+  left: 115%;
+}
+
+/* --- Menos movimiento ------------------------------------------------------ */
+
+/* Con `reduced-motion` no se arrancan las animaciones, pero el estado final de
+   cada una tiene que quedar bien: la banda de escaneo se sale de pantalla, los
+   degradados se quedan donde los pone `0%` y el logo se queda con su brillo. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-glow,
+  .auth-scan,
+  .auth-logo,
+  .auth-dot,
+  .auth-submit::after {
+    animation: none !important;
+  }
+
+  .auth-submit::after {
+    display: none;
+  }
+
+  .auth-grid {
+    transform: none;
+    opacity: 0.28;
+  }
+
+  .auth-rain {
+    display: none;
+  }
+
+  .auth-card,
+  .auth-input,
+  .auth-submit {
+    transition: none;
+  }
 }

@@ -15,9 +15,10 @@
 //   - conservar el estado de la partida mientras se navega (no se reinicia el
 //     game loop al cambiar de vista; el tick sigue corriendo en segundo plano)
 //
-// Además decide qué se re-renderiza y qué no: la barra inferior y la cabecera
-// sobreviven a los cambios de vista, así que el reproductor, los buffs y el
-// contador de nanitas no parpadean al abrir la tienda.
+// La barra inferior es el índice del menú principal y solo se pinta en la
+// base. Desde un sector se vuelve con `back()` (el `‹` de la esquina superior
+// izquierda), que además tiene el historial como red de seguridad: si no queda
+// nada atrás, quien llama cae a la base.
 // ==========================================================================
 
 export type Route = 'base' | 'almacen' | 'forja' | 'tienda' | 'perfil' | 'ranking' | 'prestigio';
@@ -39,7 +40,7 @@ export const ROUTES: RouteDef[] = [
   { id: 'base', label: 'Base', icon: 'chip', inBottomBar: true, inHeader: true, title: 'Panel Principal' },
   { id: 'almacen', label: 'Almacén', icon: 'warehouse', inBottomBar: true, inHeader: true, title: 'Almacén' },
   { id: 'forja', label: 'Forja', icon: 'anvil', inBottomBar: true, inHeader: true, title: 'Forja de Recolectores' },
-  { id: 'tienda', label: 'Tienda', icon: 'store', inBottomBar: true, inHeader: true, title: 'Mercado' },
+  { id: 'tienda', label: 'Mercado', icon: 'store', inBottomBar: true, inHeader: true, title: 'Mercado' },
   { id: 'perfil', label: 'Perfil', icon: 'user', inBottomBar: true, inHeader: true, title: 'Perfil y Logros' },
   { id: 'ranking', label: 'Ranking', icon: 'trophy', inBottomBar: false, inHeader: true, title: 'Ranking Global' },
   { id: 'prestigio', label: 'Prestigio', icon: 'recycle', inBottomBar: false, inHeader: false, title: 'Ascensión' }
@@ -53,10 +54,27 @@ export function routeTitle(route: Route): string {
 }
 
 /**
- * Pila de navegación. El botón "volver" de una página hace pop(); si la pila
- * se queda vacía vuelve a la base, que es el único sitio donde siempre se
- * puede estar.
+ * Pila de navegación.
+ *
+ * El botón "volver" hace pop(); si la pila se queda vacía, `back()` devuelve
+ * `false` y quien llama cae a la base, que es el único sitio donde siempre se
+ * puede estar. Así no puede haber un "atrás" que no lleve a ninguna parte.
+ *
+ * LÍMITE DE LA PILA.
+ *
+ * Navegar siempre hace push, y eso hace que una sesión larga acumule: base →
+ * almacén → forja → tienda → base → almacén deja cinco entradas, y el jugador
+ * tiene que pulsarlo cinco veces para llegar al principio. Se siente como un
+ * botón de atrás roto.
+ *
+ * Con el tope, tras varias navegaciones se empieza a olvidar el principio, que
+ * es justo lo que se quiere: `back()` vuelve "a donde estabas hace un rato",
+ * y el botón de inicio lleva a la base sin ninguna ambigüedad. Diez es un
+ * número alto a propósito: da para una exploración larga sin castigar al que
+ * solo mira dos pantallas.
  */
+const MAX_STACK = 10;
+
 export class Router {
   private stack: Route[] = ['base'];
   private listeners = new Set<(route: Route, previous: Route) => void>();
@@ -72,7 +90,12 @@ export class Router {
     // Navegar a la base limpia la pila: si no, volver tres veces para llegar
     // al panel principal sería absurdo.
     if (route === 'base') this.stack = ['base'];
-    else this.stack.push(route);
+    else {
+      this.stack.push(route);
+      // Se descarta el principio, nunca la entrada actual: `back()` siempre
+      // tiene adónde ir después de una navegación.
+      if (this.stack.length > MAX_STACK) this.stack.shift();
+    }
     this.emit(previous);
   }
 
@@ -83,6 +106,11 @@ export class Router {
     this.stack.pop();
     this.emit(previous);
     return true;
+  }
+
+  /** Pila actual, para depurar. */
+  get history(): readonly Route[] {
+    return this.stack;
   }
 
   canGoBack(): boolean {

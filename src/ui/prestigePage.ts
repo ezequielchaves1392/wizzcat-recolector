@@ -250,7 +250,6 @@ export function renderPrestigePage(
     icon: 'recycle',
     onBack,
     onHome,
-    activeRoute: 'perfil',
     state,
     actions: `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]

@@ -110,7 +110,9 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
 
   const matCell = (w: any) => {
     const isSel = ui.selected.includes(w.id);
-    const equipped = w.equipped || w.id === state.equippedCollectorId;
+    // Por el id, no por la bandera `equipped`: es lo que lee el cálculo de
+    // daño, y la bandera es su proyección (ver `esEquipado` en warehouse.ts).
+    const equipped = w.id === state.equippedCollectorId;
     return `
       <button class="inv-cell ${isSel ? 'is-selected' : ''} ${equipped ? 'opacity-60' : ''}"
               data-act="pick" data-id="${w.id}"
@@ -263,7 +265,6 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
     icon: 'anvil',
     onBack,
     onHome,
-    activeRoute: 'forja',
     state,
     actions: unlocked ? `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
@@ -342,7 +343,7 @@ function wire(container: HTMLElement, game: any, onBack: () => void) {
           showToast(`Ya hay un T${selected[0].tier} en el yunque. La fusión exige 3 del mismo tier.`, 'info');
           return;
         }
-        if (picked.equipped || picked.id === game.getState().equippedCollectorId) {
+        if (picked.id === game.getState().equippedCollectorId) {
           sfx.error();
           showToast('Desequipa ese recolector antes de consumirlo como material.', 'info');
           return;

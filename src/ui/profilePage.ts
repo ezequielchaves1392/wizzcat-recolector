@@ -19,7 +19,8 @@ import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
-import { rarityClass, raritySlug } from '../components/crateLoot';
+import { rarityClass, raritySlug, CRATE_META } from '../components/crateLoot';
+import type { CrateType } from '../gameLoop';
 import type { Cosmetic } from '../types/domain';
 
 /** Cómo se consigue un cosmético, en una frase. */
@@ -32,7 +33,9 @@ function unlockHint(cos: Cosmetic): string {
     case 'ranking': return u.value === 1 ? 'Solo para quien ocupe el 1er puesto'
       : u.value === 3 ? 'Solo para el Top 3 sostenido 7 días'
       : `Solo para el Top ${u.value} sostenido 7 días`;
-    case 'crate': return 'Sale de una caja';
+    // Se nombra la caja concreta en vez de decir "una caja": el jugador tiene que
+    // poder decidir cuál abrir. "Sale de una caja" le obligaba a probarlas todas.
+    case 'crate': return `Sale de una ${CRATE_META[u.value as CrateType]?.name ?? 'caja'}`;
     case 'secret': return u.hint ?? 'Condición oculta';
     default: return 'No disponible';
   }
@@ -97,6 +100,14 @@ export function renderProfilePage(
   const achievements = game.getAchievements() as any[];
   const unlocked = achievements.filter(a => a.unlocked);
   const secrets = (state.unlockedAchievements as string[]).filter(id => SECRET_ACHIEVEMENTS.includes(id as any));
+
+  // El nombre sale de la API del juego, no de `state`. Antes se leía
+  // `state.__username`, un campo que no existe en ningún sitio: la expresión
+  // siempre era falsa y la tarjeta de identidad mostraba "Operativo" —el texto
+  // de reserva— aunque el nombre real estuviera resuelto y visible en la
+  // cabecera. `getDisplayName` es exactamente el mismo valor que se envía al
+  // ranking, así que nombre y tarjeta no pueden contradecirse.
+  const displayName = game.getDisplayName?.() || state.displayName || 'Operativo';
 
   const collectors = (state.warehouse as any[]).filter(w => w.type === 'collector');
   const bestCollector = collectors.reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
@@ -193,7 +204,7 @@ export function renderProfilePage(
 
   const body = `
     ${statStrip([
-      { label: 'Nanitas', value: formatNumber(state.nanites) },
+      { label: 'Nanitas', value: formatNumber(state.nanites), glyph: '◆', valueId: 'profile-nanites' },
       { label: 'Logros', value: `${unlocked.length}/${achievements.length}`, tone: 'text-amber-300' },
       { label: 'Núcleos', value: formatNumber(state.cores), tone: 'text-purple-300' },
       { label: 'Forjadas', value: String(state.forgedCount) }
@@ -229,7 +240,7 @@ export function renderProfilePage(
       <div class="cosmetic-banner" style="${cosmeticStyle(COSMETICS_BY_ID[state.cosmetics.banner])}">
         <div class="p-4 md:p-5 flex flex-col items-center text-center gap-2"
              style="background: color-mix(in srgb, var(--bg-app) 72%, transparent)">
-          ${identityCard({ name: state.__username || 'Operativo', cosmetics: state.cosmetics, size: 'lg' })}
+          ${identityCard({ name: displayName, cosmetics: state.cosmetics, size: 'lg' })}
           <div class="flex items-center gap-2 flex-wrap justify-center mt-1">
             <span class="medal text-[var(--text-muted)]">${ic('core', 'w-3 h-3')} ${state.resets} ascensiones</span>
             <span class="medal text-[var(--text-muted)]">${ic('anvil', 'w-3 h-3')} ${state.forgedCount} recolectores</span>
@@ -301,8 +312,12 @@ export function renderProfilePage(
     icon: 'user',
     onBack,
     onHome,
-    activeRoute: 'perfil',
-    state
+    state,
+    // La píldora de nanitas de la cabecera se retiraba: el perfil ya trae su
+    // propia cifra en la franja de estadísticas, con el mismo rombo delante de
+    // la etiqueta, y tener las dos era leer el mismo saldo dos veces. El valor
+    // sigue vivo porque la franja lleva `valueId` y `updateUI` la refresca.
+    hideNanites: true
   }, body));
 
   // --- Eventos ---

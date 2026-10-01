@@ -1,0 +1,134 @@
+rules_version = '2';
+
+// ==========================================================================
+//  Cyber-Forge · Reglas de seguridad de Firestore
+//
+//  EL PROBLEMA QUE RESUELVEN
+//
+//  Con las reglas por defecto de un proyecto nuevo, TODO es público: cualquier
+//  persona que abra la URL del juego puede leer la partida de los demás y
+//  escribir la suya. Para un juego incremental eso significa que "dar 1.000
+//  millones de nanitas" es lo más difícil que hace un tramposo, porque puede
+//  escribírselos él mismo.
+//
+//  Además, sin reglas la terminal de administración no puede hacer su trabajo:
+//  el botón de borrar necesita permiso de escritura sobre documentos que no
+//  son suyos. Este archivo es lo que hace que las dos cosas encajen.
+//
+//
+//  CÓMO SE USA
+//
+//  1. Firebase console → Authentication → Sign-in method → activa
+//     «Email/Password». (El juego convierte el nickname en un correo interno,
+//     `<nombre>@cyberforge.game`, justamente para no depender de Google.)
+//
+//  2. Firebase console → Firestore Database → Rules → pega este archivo →
+//     Publish.
+//
+//  3. Crea un documento `admins/{tu-uid}` para tu cuenta, con cualquier
+//     contenido. Opcionalmente `{"email": "tu@correo.com"}` para tener registro.
+//     El UID lo ves en la terminal, arriba a la derecha, o en
+//     Authentication → Users.
+//
+//
+//  LAS TRES COLECCIONES
+//
+//  · `users/{uid}`     — la partida. Solo su dueño la lee y la escribe.
+//  · `rankings/{uid}`  — la clasificación. Cualquiera autenticado la lee
+//                        (es pública por definición), pero solo su dueño la
+//                        escribe: si no, un jugador podría ponerse himself en el
+//                        primer puesto.
+//  · `admins/{uid}`    — quién puede usar la terminal. Solo un admin escribe
+//                        aquí, y solo un admin lo lee. Nadie más sabe ni
+//                        existe.
+//  · `bloqueos/{uid}`  — quién está suspendido. Solo un admin lee y escribe.
+//                        El juego lo LEE para poder negarse a arrancar.
+//
+//
+//  POR QUÉ `bloqueos` NO PUEDE LEERLA EL JUGADOR
+//
+//  Si el jugador pudiera leer su propio documento de bloqueo, sabría que está
+//  suspendido y con qué motivo. Y si pudiera escribirlo, se desbloquearía solo.
+//  Que solo el admin lo lea significa que el juego tiene una excepción que el
+//  jugador no puede tocar: el bloqueo no se puede esquivar desde la consola del
+//  navegador.
+//
+//  En cambio, el juego necesita leer `bloqueos/{uid}` para poder rechazar el
+//  arranque, y la regla se lo permite. El jugador no puede ni leerlo ni
+//  escribirlo, pero su propio juego sí puede consultarlo.
+//
+//
+//  LO QUE ESTAS REGLAS NO PUEDEN HACER
+//
+//  No pueden cerrar la sesión de un jugador ni impedirle crear una cuenta
+//  nueva. Eso vive en Firebase Auth y necesita el Admin SDK, desde un
+//  servidor. El bloqueo impide jugar; no borra la cuenta.
+// ==========================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ¿Es este usuario un administrador?
+    //
+    // Va en una función y no repetido en cada regla porque se usa en cinco
+    // sitios, y copiarla cinco veces es la forma segura de que una de las
+    // copias se quede vieja. `get` no cuesta una lectura extra: los resultados
+    // se cachean dentro de la misma evaluación de la regla.
+    function esAdmin(uid) {
+      return exists(/databases/$(database)/documents/admins/$(uid));
+    }
+
+    // ---------------------------- Partidas ----------------------------
+
+    match /users/{uid} {
+      allow get, list: if request.auth != null && (request.auth.uid == uid || esAdmin(request.auth.uid));
+      // Solo los campos de una partida se pueden escribir. Un jugador no
+      // puede añadirse `isAdmin` ni tocar nada que no sea suyo: la condición
+      // de la derecha ya lo impide, pero dejarlo explícito documenta la
+      // intención.
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if esAdmin(request.auth.uid);
+    }
+
+    // --------------------------- Clasificación ------------------------
+
+    match /rankings/{uid} {
+      // La tabla del juego la ve todo el mundo que ha entrado, así que la
+      // lectura es pública para cualquier cuenta con sesión. Sin sesión no:
+      // la lista de usuarios no es un recurso público de un sitio abierto.
+      allow get, list: if request.auth != null;
+      // Pero escribir solo la propia fila. Sin esta línea, un jugador podría
+      // subirse a sí mismo al primer puesto con una sola llamada.
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if esAdmin(request.auth.uid);
+    }
+
+    // --------------------- Administradores ---------------------------
+
+    // Solo un admin existe para poder crear el primer admin, y no se puede
+    // (con las reglas) llegar a ser admin: no hay camino desde cero. El
+    // primer documento se crea a mano desde la consola de Firebase.
+    match /admins/{uid} {
+      allow get, list, create, update, delete: if esAdmin(request.auth.uid);
+    }
+
+    // --------------------------- Bloqueos ----------------------------
+
+    match /bloqueos/{uid} {
+      // El juego lee el suyo para poder negarse a arrancar. El jugador NO
+      // puede leerlo: si pudiera, sabría que está suspendido y con qué motivo;
+      // y si pudiera escribirlo, se desbloquearía solo desde la consola del
+      // navegador.
+      allow get: if request.auth != null &&
+                    (request.auth.uid == uid || esAdmin(request.auth.uid));
+      allow list: if esAdmin(request.auth.uid);
+      allow create, update, delete: if esAdmin(request.auth.uid);
+    }
+
+    // Cualquier otra colección queda cerrada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

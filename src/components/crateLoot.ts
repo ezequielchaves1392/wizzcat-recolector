@@ -8,9 +8,11 @@
 //     lo muestra. Si se invirtiera, la ruleta estaría mintiendo sobre las probabilidades.
 
 import { TIER_SYSTEM, type CrateType } from '../gameLoop';
+import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
+import { formatNumber } from '../utils/format';
 import type { WarehouseItem } from '../types';
 
-export type LootKind = 'nanites' | 'crystals' | 'keys' | 'companion' | 'collector' | 'crate' | 'consumable';
+export type LootKind = 'nanites' | 'crystals' | 'keys' | 'companion' | 'collector' | 'crate' | 'consumable' | 'cosmetic';
 
 export interface CrateReward {
   kind: LootKind;
@@ -24,6 +26,15 @@ export interface CrateReward {
   icon: string;
   /** Relleno si el drop se materializó como item del almacén */
   item?: any;
+  /**
+   * Cosmético que se desbloquea con este botín.
+   *
+   * Viaja aparte de `name`/`rarity` porque el cosmético NO es un item: no ocupa
+   * ranura, no se vende y no entra en el almacén. Va directo a
+   * `state.cosmetics.unlocked`, y por eso el botín no puede pasar por la
+   * compensación de "almacén lleno": no hay nada que no cupiera.
+   */
+  cosmeticId?: string;
   /** Exclusivo de caja: no se puede comprar en la tienda */
   exclusive: boolean;
   /**
@@ -118,6 +129,15 @@ export const CRATE_ONLY_COMPANIONS = [
   { name: 'Espectro Azulado',  type: 'passive',    power: 18,   rarity: 'Épico',      icon: 'companion' }
 ] as const;
 
+// Icono de cada tipo de cosmético en la ruleta. Sin esto, título, marco y
+// banner indistinguishable saldrían todos con el mismo icono y el jugador leería
+// tres premios distintos con la misma cara.
+const COSMETIC_ICON: Record<string, string> = {
+  title: 'medal',
+  frame: 'sparkle',
+  banner: 'layers'
+};
+
 /** Recolectores sobrecargadas: mismo tier, daño por encima del rango normal del tier. */
 export function makeOverclockCollector(tier: number): { item: any; name: string; rarity: string; details: string } {
   const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
@@ -171,15 +191,82 @@ export function makeCrateOnlyCompanion(entry: typeof CRATE_ONLY_COMPANIONS[numbe
   };
 }
 
+/**
+ * Un cosmético de esta caja, de entre los que el jugador todavía no tiene.
+ *
+ * Filtra por los que ya posee a propósito. Sortear a ciegas entre los que ya
+ * tiene convertiría la segunda legendaria de la tarde en un cosmético repetido,
+ * y el jugador leería "La Señal" en la ruleta y "ya lo tienes" en el inventario:
+ * la casilla volvería a mentir sobre el premio. Con el filtro, la ruleta
+ * enseña siempre algo que de verdad entra.
+ *
+ * `null` si ya los tiene todos, que es la única forma de que esto no dé nada.
+ */
+function rollCrateCosmetic(crate: CrateType, owned: string[]) {
+  const libres = crateCosmetics(crate as CrateCosmeticSource).filter(c => !owned.includes(c.id));
+  if (libres.length === 0) return null;
+  const cos = libres[Math.floor(Math.random() * libres.length)];
+  return {
+    kind: 'cosmetic' as const,
+    amount: 1,
+    name: cos.name,
+    label: cos.name,
+    details: cos.description,
+    rarity: cos.rarity,
+    icon: COSMETIC_ICON[cos.type],
+    cosmeticId: cos.id,
+    exclusive: true
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tablas de botín. `weight` es peso relativo dentro de la caja.
+//
+// Las sumas no son 100 y no hace falta que lo sean: `pickLoot` normaliza con el
+// total. Al añadir la entrada `cosmetic` el total de cada caja subió, así que
+// el resto de botines quedó diluido (en la común, las nanitas pasaron de 34 % a
+// 32,4 %). Es el precio de añadir un premio nuevo, y se paga en todo a la vez
+// en vez de rebajar a mano una entrada que alguien ajustó a su gusto.
 // ---------------------------------------------------------------------------
+
+/**
+ * Una casilla de la ruleta. `amount` solo viene en los premios que se cuentan
+ * (nanitas, cristales, llaves): es la cifra que el jugador se lleva, no un
+ * adorno, y por eso se enseña en la casilla y no solo en el cartel final.
+ */
+export interface RouletteTile {
+  label: string;
+  amount?: string;
+  sub: string;
+  rarity: string;
+  icon: string;
+}
 
 interface LootEntry {
   id: string;
   weight: number;
-  /** Construye el premio. `exclusive: true` marca lo que no se puede comprar. */
-  build: () => Omit<CrateReward, 'exclusive'> & { exclusive?: boolean };
+  /**
+   * Construye el premio. `exclusive: true` marca lo que no se puede comprar.
+   *
+   * Devolver `null` significa "esta vez no hay nada que dar": hoy solo lo hace
+   * el cosmético cuando el jugador ya tiene todos los de esta caja. No es un
+   * fallo del sorteo, es el premio decidido, y quien sortea lo convierte en
+   * nanitas para que la ruleta enseñe lo que de verdad se lleva en vez de
+   * prometer un cosmético repetido.
+   */
+  build: (ctx: LootBuildContext) => (Omit<CrateReward, 'exclusive'> & { exclusive?: boolean }) | null;
+}
+
+/**
+ * Lo que la tabla necesita saber del jugador para construir un premio.
+ *
+ * Solo se pasa en el sorteo real, nunca al pintar las distracciones de la tira:
+ * esas son decorado y pueden enseñar un cosmético que el jugador ya tenga, como
+ * se enseña cualquier otra cosa que no va a ganar.
+ */
+export interface LootBuildContext {
+  /** Ids de cosméticos que el jugador ya tiene desbloqueados. */
+  ownedCosmetics: string[];
 }
 
 const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -190,14 +277,16 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'crystals', weight: 26, build: () => { const a = rand(2, 4); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Raro', icon: 'crystal', materialTier: 1 }; } },
     { id: 'dron', weight: 22, build: () => ({ kind: 'companion', amount: 1, name: 'Dron Explorador', label: 'Dron Explorador', details: 'Recolección por segundo: +2/s', rarity: 'Común', icon: 'companion', tier: 1, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +2/s', rarity: 'Común', companionType: 'passive', power: 2, sellPrice: 100 } }) },
     { id: 'keys', weight: 12, build: () => { const a = rand(1, 2); return { kind: 'keys', amount: a, name: 'Llave de Cifrado', label: `+${a} Llave${a > 1 ? 's' : ''}`, details: 'Abre Cofres Comunes y Raros', rarity: 'Raro', icon: 'key', keyTier: 0 }; } },
-    { id: 'expander', weight: 6, build: () => ({ kind: 'consumable', amount: 1, name: 'Ranura de Almacén', label: '+1 ranura de almacén', details: 'Amplía el almacén +1 slot', rarity: 'Raro', icon: 'plus', item: { id: `crate_slot_${Date.now()}`, name: 'Ranura de Almacén', type: 'consumable', details: 'Amplía el almacén +1 slot', rarity: 'Raro', buffId: 'warehouseExpander', stackable: true, stackCount: 1, sellPrice: 125 } }) }
+    { id: 'expander', weight: 6, build: () => ({ kind: 'consumable', amount: 1, name: 'Ranura de Almacén', label: '+1 ranura de almacén', details: 'Amplía el almacén +1 slot', rarity: 'Raro', icon: 'plus', item: { id: `crate_slot_${Date.now()}`, name: 'Ranura de Almacén', type: 'consumable', details: 'Amplía el almacén +1 slot', rarity: 'Raro', buffId: 'warehouseExpander', stackable: true, stackCount: 1, sellPrice: 125 } }) },
+    { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
   ],
   rare: [
     { id: 'crystals', weight: 26, build: () => { const a = rand(6, 10); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Épico', icon: 'crystal', materialTier: 1 }; } },
     { id: 'companion_t3', weight: 24, build: () => { const t = TIER_SYSTEM.ranges[3]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Artillero Táctico', label: 'Artillero Táctico', details: `Recolección por segundo: +${p}/s`, rarity: 'Épico', icon: 'bolt', tier: 3, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Artillero Táctico', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Épico', tier: 3, companionType: 'passive', power: p, sellPrice: 400 } }; } },
     { id: 'collector_t4', weight: 20, build: () => { const w = makeOverclockCollector(4); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 4, item: w.item }; } },
     { id: 'epic_crate', weight: 16, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Épica', label: '+1 Caja Épica', details: 'Abre una caja de botín superior', rarity: 'Épico', icon: 'crystal', item: { id: `crate_epic_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0, sellPrice: 1125, stackable: true, stackCount: 1 } }) },
-    { id: 'keys', weight: 14, build: () => { const a = rand(2, 4); return { kind: 'keys', amount: a, name: 'Llave Reforzada', label: `+${a} Llaves Reforzadas`, details: 'Abre Cofres Raros, Épicos y Legendarios', rarity: 'Épico', icon: 'key', keyTier: 1 }; } }
+    { id: 'keys', weight: 14, build: () => { const a = rand(2, 4); return { kind: 'keys', amount: a, name: 'Llave Reforzada', label: `+${a} Llaves Reforzadas`, details: 'Abre Cofres Raros, Épicos y Legendarios', rarity: 'Épico', icon: 'key', keyTier: 1 }; } },
+    { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
   ],
   epic: [
     { id: 'crystals', weight: 22, build: () => { const a = rand(16, 24); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Legendario', icon: 'crystal', materialTier: 1 }; } },
@@ -206,7 +295,8 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'collector_oc6', weight: 16, build: () => { const w = makeOverclockCollector(6); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 6, item: w.item }; } },
     { id: 'ghost', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
     { id: 'phoenix', weight: 10, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
-    { id: 'legendary_crate', weight: 10, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Legendaria', label: '+1 Caja Legendaria', details: 'Abre una caja de botín máximo', rarity: 'Legendario', icon: 'trophy', item: { id: `crate_legendary_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0, sellPrice: 4500, stackable: true, stackCount: 1 } }) }
+    { id: 'legendary_crate', weight: 10, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Legendaria', label: '+1 Caja Legendaria', details: 'Abre una caja de botín máximo', rarity: 'Legendario', icon: 'trophy', item: { id: `crate_legendary_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0, sellPrice: 4500, stackable: true, stackCount: 1 } }) },
+    { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
   ],
   legendary: [
     { id: 'crystals', weight: 20, build: () => { const a = rand(45, 65); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Mítico', icon: 'crystal', materialTier: 2 }; } },
@@ -216,6 +306,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'oracle', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
     { id: 'sentinel', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
     { id: 'keys', weight: 8, build: () => { const a = rand(5, 8); return { kind: 'keys', amount: a, name: 'Llave Rúnica', label: `+${a} Llaves Rúnicas`, details: 'Abre Cofres Épicos y Legendarios', rarity: 'Legendario', icon: 'key', keyTier: 2 }; } },
+    { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
   ]
 };
 
@@ -238,7 +329,71 @@ export type LootApplier = {
   keys: (n: number, tier: number) => void;
   addItem: (item: any) => boolean;
   hasSpace: () => boolean;
+  /** Desbloquea un cosmético. `false` si ya lo tenía. */
+  unlockCosmetic: (cosmeticId: string) => boolean;
+  /** Cosméticos que ya tiene, para no sortear un duplicado. */
+  ownedCosmetics: () => string[];
 };
+
+/**
+ * Cuánto vale realmente el botín de una entrada de la tabla.
+ *
+ * La tabla guarda números "de autor": 250-400 nanitas, 2-4 cristales. Eso es lo
+ * que cuesta la caja, no lo que recibe el jugador. La conversión va aquí para
+ * que la cifra que la ruleta enseña y la que entra en la cuenta sean SIEMPRE la
+ * misma. Si cada sitio calculara su propia versión, la casilla podría prometer
+ * +350 y el saldo sumar +11.667, y el jugador no sabría si el número es premio
+ * o error.
+ *
+ * Solo devuelve el botín: aplicarlo es cosa de quien sortea, porque aplicar
+ * implica tocar el estado del jugador.
+ */
+export function resolveLootAmount(crateType: CrateType, entry: Omit<CrateReward, 'exclusive'> & { exclusive?: boolean }): CrateReward {
+  const base: CrateReward = { ...entry, exclusive: entry.exclusive ?? false };
+
+  if (base.kind === 'nanites') {
+    const value = Math.round(base.amount * CRATE_META[crateType].cost / 12);
+    return { ...base, amount: value, label: `+${value} Nanitas` };
+  }
+  if (base.kind === 'crystals') {
+    const value = Math.round(base.amount * (1 + RARITY_RANK[base.rarity] * 0.25));
+    return { ...base, amount: value, label: `+${value} Cristales de Mejora` };
+  }
+  // Las llaves no se reescalan: la entrada ya trae su cantidad y su `label`
+  // redactado ("+2 Llaves Reforzadas"). Concatenarle un "s" al nombre salía
+  // "Llave de Cifrados", que es peor que no escribir nada.
+  return base;
+}
+
+/**
+ * ¿Este premio tiene una cifra que el jugador debería ver?
+ *
+ * Las monedas y los materiales siempre (aunque caiga uno solo: "1 llave" sigue
+ * siendo una cantidad, y el jugador la contaría con los dedos). Los objetos,
+ * solo cuando caen varios de una vez: un "+1 Dron" es ruido, el nombre ya lo
+ * dice.
+ */
+export function isCountedLoot(reward: CrateReward): boolean {
+  if (reward.kind === 'nanites' || reward.kind === 'crystals' || reward.kind === 'keys') return true;
+  if (reward.kind === 'crate' || reward.kind === 'consumable') return reward.amount > 1;
+  return false;
+}
+
+/**
+ * La cifra del premio, formateada para pantalla: `+250`, `+8.33 K`.
+ *
+ * Usa el mismo `formatNumber` que los contadores del juego a propósito: si la
+ * ruleta escribiera `8.332` y el saldo `8.33 K`, el jugador leería dos números
+ * distintos para la misma cantidad.
+ *
+ * Vive aquí y no en la ruleta porque la usan los tres sitios que enseñan botín
+ * (la casilla que gana, el cartel del resultado y las distracciones de la tira).
+ * Tres copias de un `toLocaleString` divergen tarde: una se olvidaría del `+` y
+ * el jugador leería un gasto donde tenía un premio.
+ */
+export function lootAmountText(reward: CrateReward): string {
+  return `+${formatNumber(reward.amount)}`;
+}
 
 /**
  * Decide el premio y lo aplica. Si el almacén está lleno y el drop es un item,
@@ -246,45 +401,77 @@ export type LootApplier = {
  */
 export function rollCrateReward(crateType: CrateType, applier: LootApplier): CrateReward {
   const entry = pickLoot(crateType);
-  const built = entry.build();
-  const reward: CrateReward = { ...built, exclusive: built.exclusive ?? false };
+  const ctx: LootBuildContext = { ownedCosmetics: applier.ownedCosmetics() };
+  const built = entry.build(ctx);
+
+  // La entrada sorteó un cosmético que el jugador ya tenía todos. No es un fallo:
+  // es el premio que toca, y la ruleta tiene que poder enseñarlo. Se compensa
+  // en nanitas con el MISMO criterio que el almacén lleno, para que el jugador
+  // no salga peor que si el botín hubiera caído en cualquier otra cosa.
+  if (!built) {
+    const dup = naniteCompensation(crateType, 'Ya tienes todos los cosméticos de esta caja');
+    applier.nanites(dup.amount);
+    return dup;
+  }
+
+  const reward = resolveLootAmount(crateType, built);
 
   switch (reward.kind) {
     case 'nanites': {
-      const value = Math.round(reward.amount * CRATE_META[crateType].cost / 12);
-      applier.nanites(value);
-      return { ...reward, amount: value, label: `+${value} Nanitas` };
+      applier.nanites(reward.amount);
+      return reward;
     }
     case 'crystals': {
-      const value = Math.round(reward.amount * (1 + RARITY_RANK[reward.rarity] * 0.25));
       // El botín da el cristal del nivel que declara la entrada. Los
       // superiores no se sortean: son premio de la caja legendaria.
-      applier.crystals(value, reward.materialTier ?? 1);
-      return { ...reward, amount: value, label: `+${value} Cristales de Mejora` };
+      applier.crystals(reward.amount, reward.materialTier ?? 1);
+      return reward;
     }
     case 'keys': {
       applier.keys(reward.amount, reward.keyTier ?? 0);
       return reward;
     }
+    case 'cosmetic': {
+      // Un cosmético no ocupa ranura ni se vende: va directo a la lista de
+      // desbloqueados, así que aquí no cabe la compensación de "almacén lleno".
+      if (applier.unlockCosmetic(reward.cosmeticId!)) return reward;
+      // Si aun así lo tenía, `ownedCosmetics` mentía o alguien lo desbloqueó
+      // entre la consulta y el sorteo. Se compensa igual: no se pierde nada.
+      const dup = naniteCompensation(crateType, 'Ya lo tenías');
+      applier.nanites(dup.amount);
+      return dup;
+    }
     default: {
       // El resto son items: entran al almacén o se compensan
       const stored = reward.item ? applier.addItem(reward.item) : false;
       if (stored) return reward;
-      const compensation = Math.round(CRATE_META[crateType].cost * 1.5);
-      applier.nanites(compensation);
-      return {
-        ...reward,
-        kind: 'nanites',
-        item: undefined,
-        amount: compensation,
-        name: 'Compensación',
-        label: `Almacén lleno: +${compensation} Nanitas`,
-        details: 'No cabía el objeto, se compensó en nanitas',
-        rarity: 'Común',
-        icon: 'bolt'
-      };
+      const full = naniteCompensation(crateType, 'No cabía el objeto, se compensó en nanitas');
+      applier.nanites(full.amount);
+      return { ...full, name: 'Compensación', label: `Almacén lleno: +${full.amount} Nanitas` };
     }
   }
+}
+
+/**
+ * El premio de consolación: las mismas nanitas que dejaría un objeto sin sitio.
+ *
+ * Una sola función para los dos casos (almacén lleno y cosmético repetido) a
+ * propósito. Si cada uno calculara su propio importe, el repetido acabaría
+ * pagándose más que el premio de verdad y la ruleta enseñaría un número que
+ * contradice a la tabla.
+ */
+function naniteCompensation(crateType: CrateType, details: string): CrateReward {
+  const compensation = Math.round(CRATE_META[crateType].cost * 1.5);
+  return {
+    kind: 'nanites',
+    amount: compensation,
+    name: 'Compensación',
+    label: `+${compensation} Nanitas`,
+    details,
+    rarity: 'Común',
+    icon: 'bolt',
+    exclusive: false
+  };
 }
 
 /**
@@ -294,7 +481,12 @@ export function rollCrateReward(crateType: CrateType, applier: LootApplier): Cra
  */
 export function buildRouletteStrip(crateType: CrateType, length = 26) {
   const table = CRATE_LOOT[crateType];
-  const tiles: { label: string; sub: string; rarity: string; icon: string }[] = [];
+  const tiles: RouletteTile[] = [];
+
+  // Las distracciones no son premios: se muestran con la lista de cosméticos
+  // VACÍA a propósito, para que aparezcan y el jackpot se lea como "ha estado a
+  // punto". Una casilla de adorno no puede saber qué tiene el jugador.
+  const ctx: LootBuildContext = { ownedCosmetics: [] };
 
   // Sesgo hacia lo común: los exclusivos aparecen menos en la tira que en la
   // probabilidad real, así el final se lee como "ha estado a punto"
@@ -308,13 +500,22 @@ export function buildRouletteStrip(crateType: CrateType, length = 26) {
     const src = useExclusive
       ? exclusiveEntries[Math.floor(Math.random() * exclusiveEntries.length)]
       : table[Math.floor(Math.random() * table.length)];
-    const preview = src.build();
-    tiles.push({
-      label: preview.name.length > 16 ? preview.name.slice(0, 15) + '…' : preview.name,
-      sub: preview.rarity,
-      rarity: preview.rarity,
-      icon: preview.icon
-    });
+    // `null` solo si la entrada sorteada no tiene nada que dar, y con la lista
+    // vacía eso no ocurre. Aun así se salta: una casilla de adorno no puede
+    // quedarse sin contenido y dejar un hueco en la tira.
+    const preview = src.build(ctx);
+    if (preview) tiles.push(makeRouletteTile(resolveLootAmount(crateType, preview)));
   }
   return { tiles };
+}
+
+/** Casilla de la ruleta: nombre, cifra si el botín se cuenta, y rareza. */
+export function makeRouletteTile(reward: CrateReward): RouletteTile {
+  return {
+    label: reward.name.length > 16 ? reward.name.slice(0, 15) + '…' : reward.name,
+    amount: isCountedLoot(reward) ? lootAmountText(reward) : undefined,
+    sub: reward.rarity,
+    rarity: reward.rarity,
+    icon: reward.icon
+  };
 }

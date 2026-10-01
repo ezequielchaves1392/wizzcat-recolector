@@ -23,6 +23,11 @@
 //    clases del botón, lo que además obligaba a re-renderizar la lista entera.
 //    Ahora hay un indicador que se desplaza, y las pestañas no cambian de
 //    ancho al activarse.
+//
+// 6. LA PESTAÑA ACTIVA AL COMIENZO. Siete pestañas no caben en un móvil, así
+//    que elegir "Compañeros" dejaba el indicador resaltando un botón fuera de
+//    pantalla. Ahora la tira se desplaza y deja la categoría activa en el
+//    primer botón, que es donde el jugador está mirando.
 // ==========================================================================
 
 import { formatNumber } from '../utils/format';
@@ -32,6 +37,7 @@ import { STORE_ITEMS, TIER_SYSTEM } from '../gameLoop';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from './crateLoot';
+import { countOccupiedSlots } from '../data/stacking';
 
 interface Category {
   id: string;
@@ -155,7 +161,12 @@ function tierRarity(tier: number): string {
 }
 
 /** Estado de la pantalla. Sobrevive a los re-renders. */
-const ui = { category: 'cajas', detail: null as string | null };
+const ui = {
+  category: 'cajas',
+  detail: null as string | null,
+  /** Desplazamiento horizontal de la tira de pestañas antes del último render. */
+  stripScroll: 0
+};
 
 /** Icono del producto según su clave. */
 function iconFor(itemKey: string): IconName {
@@ -199,16 +210,13 @@ function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; 
   if (itemKey === 'companionSlot1' && effSlots >= 2) return { disabled: true, reason: 'Comprado' };
   if (itemKey === 'companionSlot2' && effSlots >= 5) return { disabled: true, reason: 'Comprado' };
   if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 50) return { disabled: true, reason: 'Al máximo' };
-  if (!NO_SPACE.includes(itemKey)) {
-    if (state.warehouse.length >= (game.getCapacity?.() ?? state.warehouseCapacity)) {
-      return { disabled: true, reason: 'Almacén lleno' };
-    }
-  }
+  // "¿Cabe esta compra?" lo contesta el game loop, que es quien cobra. Preguntar
+  // aquí solo por el fullness del almacén apagaba el botón de una caja que sí
+  // cabía en la pila de cajas que ya había, y al revés: dejaba encendido lo
+  // que `buyStoreItem` iba a rechazar. Una ranura es una pila, no una unidad.
+  if (game.canBuyStoreItem?.(itemKey) === false) return { disabled: true, reason: 'Almacén lleno' };
   return { disabled: false, reason: null };
 }
-
-/** Productos que no ocupan una ranura del almacén. */
-const NO_SPACE = ['key', 'upgradeCrystal', 'warehouseSlot', 'backpackExpander', 'companionSlot1', 'companionSlot2'];
 
 export function renderStoreTab(
   container: HTMLElement,
@@ -239,7 +247,7 @@ export function renderStoreTab(
     // Nota contextual: el número que cambia con la partida
     let note = '';
     if (itemKey === 'backpackExpander') {
-      note = `Capacidad real: ${state.warehouse.length}/${game.getCapacity?.() ?? state.warehouseCapacity}`;
+      note = `Capacidad real: ${countOccupiedSlots(state.warehouse)}/${game.getCapacity?.() ?? state.warehouseCapacity}`;
     } else if (itemKey === 'warehouseSlot') {
       note = `Ranuras de tienda: ${state.warehouseCapacity}`;
     } else if (itemKey === 'afkCard') {
@@ -289,14 +297,16 @@ export function renderStoreTab(
             clase. Antes el manejador sniffaba className, así que cambiar el
             estilo de un botón rompía en silencio la lógica de la compra: se
             veía gris pero dejaba comprar.
+
+            El precio también va en el DOM (data-price) y el aspecto sale de
+            .store-buy en CSS: la hoja se refresca sin re-pintarse y asi el
+            refresco tiene con comparar precio contra saldo.
           -->
-          <span class="text-[10px] font-mono px-2.5 h-8 rounded-lg grid place-items-center flex-shrink-0
-                       ${blocked
-                          ? 'border border-[var(--border-color)] text-[var(--text-muted)] opacity-55'
-                          : canAfford
-                            ? 'btn-primary text-slate-950'
-                            : 'border border-[var(--border-color)] text-[var(--text-muted)] opacity-70'}"
-                data-buy="${itemKey}" ${blocked ? 'data-blocked="1"' : ''}
+          <span class="store-buy text-[10px] font-mono px-2.5 h-8 rounded-lg
+                       grid place-items-center flex-shrink-0"
+                data-buy="${itemKey}" data-price="${price}"
+                ${blocked ? 'data-blocked="1"' : ''}
+                ${canAfford && !disabled ? 'data-afford="1"' : ''}
                 role="button" tabindex="0"
                 aria-label="${item.label}: ${reason ?? (canAfford ? 'Comprar' : 'No alcanza')}">
             ${reason ?? 'Comprar'}
@@ -311,8 +321,8 @@ export function renderStoreTab(
 
   const body = `
     ${statStrip([
-      { label: 'Nanitas', value: formatNumber(state.nanites) },
-      { label: 'Almacén', value: `${state.warehouse.length}/${game.getCapacity?.() ?? state.warehouseCapacity}` },
+      { label: 'Nanitas', value: formatNumber(state.nanites), glyph: '◆', valueId: 'store-nanites' },
+      { label: 'Almacén', value: `${countOccupiedSlots(state.warehouse)}/${game.getCapacity?.() ?? state.warehouseCapacity}` },
       { label: 'Descuento', value: discount > 0 ? `−${Math.round(discount * 100)}%` : '—', tone: discount > 0 ? 'text-emerald-400' : undefined },
       { label: 'Llaves', value: String(state.keys) }
     ])}
@@ -357,8 +367,8 @@ export function renderStoreTab(
     icon: 'store',
     onBack,
     onHome,
-    activeRoute: 'tienda',
-    state
+    state,
+    hideNanites: true
   }, body));
 
   wireNav(root, { back: onBack, home: onHome, go });
@@ -367,6 +377,7 @@ export function renderStoreTab(
   // anchos. Antes que nada se deja fuera de pantalla: si se pinta en 0 y luego
   // se mide, se ve un destello en la esquina.
   positionPill(root, ui.category);
+  scrollStripToStart(root, ui.category);
 
   root.querySelectorAll<HTMLElement>('[data-cat]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -374,6 +385,11 @@ export function renderStoreTab(
       sfx.nav();
       ui.category = btn.dataset.cat!;
       ui.detail = null;
+      // La tira se reconstruye en cada render y nace en scroll 0. Se guarda
+      // dónde estaba para que el deslizamiento al inicio se vea como una
+      // continuación y no como un salto de vuelta al origen.
+      const strip = root.querySelector('#cat-tabs') as HTMLElement | null;
+      ui.stripScroll = strip?.scrollLeft ?? 0;
       renderStoreTab(container, game, onBack, onHome, go);
     });
   });
@@ -419,11 +435,12 @@ export function renderStoreTab(
       renderStoreTab(container, game, onBack, onHome, go);
     }
   });
+
+  startAffordabilityWatch(root, game);
 }
 
 /** Mueve la píldora de la pestaña activa hasta su botón. */
-function positionPill(root: HTMLElement, activeId: string) {
-  const pill = root.querySelector('#cat-pill') as HTMLElement | null;
+function positionPill(root: HTMLElement, activeId: string) {  const pill = root.querySelector('#cat-pill') as HTMLElement | null;
   const btn = root.querySelector(`[data-cat="${activeId}"]`) as HTMLElement | null;
   if (!pill || !btn) return;
   // Se mide en el siguiente frame, cuando el navegador ya calculó el layout.
@@ -436,6 +453,35 @@ function positionPill(root: HTMLElement, activeId: string) {
     pill.style.width = `${btn.offsetWidth}px`;
     pill.style.transform = `translateX(${btn.offsetLeft}px)`;
   }, 60);
+}
+
+/**
+ * Lleva la pestaña activa al comienzo de la tira.
+ *
+ * Siete categorías no caben en un móvil: "Compañeros" y "Recolectores" quedan
+ * fuera de la vista. Antes la píldora se desplazaba hasta ellas y el jugador
+ * veía moverse un resaltado hacia un botón que no tenía delante, sin ninguna
+ * pista de qué categoría había abierto.
+ *
+ * El detalle de continuidad importa: `renderStoreTab` reconstruye la tira en
+ * cada cambio de categoría y el nodo nuevo nace con `scrollLeft` en 0. Si solo
+ * se pidiese el deslizamiento suave, la tira pegaría un tirón al principio y
+ * luego se movería, lo que se lee como un fallo. Por eso primero se restaura
+ * la posición anterior de forma instantánea y desde ahí se deja que el navegador
+ * anime hasta el origen.
+ *
+ * Si la tira no desborda (pantalla ancha) no hay nada que desplazar y se
+ * respeta la posición actual en lugar de forzar un `scrollTo` inútil.
+ */
+function scrollStripToStart(root: HTMLElement, activeId: string) {
+  const strip = root.querySelector('#cat-tabs') as HTMLElement | null;
+  const btn = root.querySelector(`[data-cat="${activeId}"]`) as HTMLElement | null;
+  if (!strip || !btn) return;
+  if (strip.scrollWidth <= strip.clientWidth) return;
+  strip.scrollLeft = ui.stripScroll;
+  // `offsetLeft` se mide contra la tira, no contra la ventana, así que sigue
+  // siendo la posición del botón dentro del contenido aunque esté desplazado.
+  strip.scrollTo({ left: btn.offsetLeft, behavior: 'smooth' });
 }
 
 /** Hoja de detalle de un producto. */
@@ -491,18 +537,98 @@ function detailSheet(
           <div class="text-right">
             <div class="label-caps mb-0.5">Tienes</div>
             <div class="font-mono text-[12px] text-[var(--text-main)] tabular">
-              ${formatNumber(state.nanites)} ◆
+              <span id="store-nanites-sheet">${formatNumber(state.nanites)}</span> ◆
             </div>
           </div>
         </div>
 
-        <button class="w-full h-12 rounded-xl font-['Orbitron'] font-bold text-[12px] cursor-pointer
-                       ${disabled ? 'btn-ghost opacity-50 text-[var(--text-muted)]'
-                                  : canAfford ? 'btn-primary' : 'btn-ghost text-[var(--text-muted)]'}"
-                data-buy="${itemKey}" ${disabled ? 'disabled' : ''}>
+        <button class="store-buy w-full h-12 rounded-xl font-['Orbitron'] font-bold text-[12px] cursor-pointer
+                       ${disabled ? 'opacity-50' : ''}"
+                data-buy="${itemKey}" data-price="${price}"
+                ${canAfford && !disabled ? 'data-afford="1"' : ''}
+                ${disabled ? 'disabled' : ''}>
           ${reason ?? 'Comprar'}
         </button>
       </div>
     </div>
   `;
+}
+
+// ==========================================================================
+//  Refresco de qué se puede comprar
+//
+//  El mercado se re-pintaba al cambiar de pestaña, al comprar y al abrir o
+//  cerrar un detalle. Nunca por tiempo. Y como el saldo decide qué botón está
+//  encendido, el efecto era un bloqueo sin explicación: un jugador que se
+//  queda esperando a que el ingreso pasivo cubra el precio no podía comprar
+//  nunca, porque la página solo se actualizaba al navegar fuera y volver.
+//
+//  Aquí solo se tocan los atributos data-afford y data-blocked de los botones
+//  que ya están en el DOM. No se re-pinta la página, y por eso no se rompen la
+//  animación de la pila de pestañas, la hoja de detalle ni el scroll.
+// ==========================================================================
+
+/** Cronómetro del refresco. Vive fuera para no dejar ninguno detrás. */
+let affordabilityTimer: number | null = null;
+
+/** Periodo del refresco. 400 ms es imperceptible y no satura el DOM. */
+const AFFORDABILITY_MS = 400;
+
+/**
+ * Pone al día el estado de todos los botones de compra de la hoja.
+ *
+ * El precio se lee de `data-price` y no se recalcula: el descuento del árbol no
+ * cambia entre re-renders, así que el precio del DOM es el bueno, y recalcularlo
+ * aquí metería una segunda copia de la regla de descuento en el archivo.
+ */
+function refreshAffordability(root: HTMLElement, game: any) {
+  const state = game.getState();
+
+  root.querySelectorAll<HTMLElement>('[data-buy]').forEach(btn => {
+    const key = btn.dataset.buy;
+    const price = Number(btn.dataset.price);
+    // Sin data-price no hay nada que comparar: se deja como está.
+    if (!key || !Number.isFinite(price)) return;
+
+    const { disabled } = statusOf(key, state, game);
+    const canAfford = state.nanites >= price;
+
+    if (disabled || !canAfford) btn.setAttribute('data-blocked', '1');
+    else btn.removeAttribute('data-blocked');
+
+    if (canAfford && !disabled) btn.setAttribute('data-afford', '1');
+    else btn.removeAttribute('data-afford');
+  });
+
+  // El saldo aparece dos veces en el mercado: en la franja de arriba y en la
+  // hoja de detalle. Las dos se actualizan aquí.
+  const value = formatNumber(state.nanites || 0);
+  for (const id of ['#store-nanites', '#store-nanites-sheet']) {
+    const el = root.querySelector(id);
+    if (el) el.textContent = value;
+  }
+}
+
+/**
+ * Arranca el refresco y lo mantiene vivo mientras la hoja esté en pantalla.
+ *
+ * El temporizador se suicida solo: `root` se recrea en cada re-render y se
+ * desconecta del documento al salir del mercado, así que basta con mirar
+ * `isConnected`. Es lo único que sobrevive al problema de que `unmount()` no
+ * llega a llamarse nunca en este proyecto.
+ */
+function startAffordabilityWatch(root: HTMLElement, game: any) {
+  if (affordabilityTimer !== null) {
+    window.clearInterval(affordabilityTimer);
+    affordabilityTimer = null;
+  }
+
+  affordabilityTimer = window.setInterval(() => {
+    if (!root.isConnected) {
+      if (affordabilityTimer !== null) window.clearInterval(affordabilityTimer);
+      affordabilityTimer = null;
+      return;
+    }
+    refreshAffordability(root, game);
+  }, AFFORDABILITY_MS);
 }

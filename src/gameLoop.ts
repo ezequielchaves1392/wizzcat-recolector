@@ -2,6 +2,7 @@ import { showToast } from './utils/toast';
 import { formatNumber } from './utils/format';
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { anotarPendiente, hayPendientes, leerCola, vaciarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
@@ -14,6 +15,7 @@ import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/pr
 import { TREE_BY_ID, nodeCost } from './data/tree';
 import { attemptForge, AFFIX_BY_ID } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
+import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
 import {
   KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER,
   crystalSuccessChance, crystalPowerFromName, keyTierFromName, keyOpens,
@@ -24,7 +26,123 @@ import {
 // Antes esto era un modal con botón "Aceptar" para avisos como "Almacén lleno":
 // bloqueaba la partida por un mensaje informativo. Ahora es un toast no bloqueante.
 
-const SAVE_VERSION = 6;
+// La 7 es la del renombre `weapon` -> `collector`. La 6 no avisó de nada: el
+// código pasó a esperar 'collector' y las partidas que ya existían se quedaron
+// con 'weapon' guardado, que no es un tipo que reconozca nadie. Por eso esta
+// versión no sube por el formato del documento sino por un cambio de NOMBRES
+// dentro de él, y por eso las migraciones de abajo se aplican solo al cruzarla.
+//
+// Una partida sin `saveVersion` (o con 0) se trata como anterior a la 7: es lo
+// que quiere decir no haber pasado nunca por este código.
+const SAVE_VERSION = 7;
+
+/**
+ * Tope de seguridad de celdas de hueco guardadas.
+ *
+ * No es el limite real -ese es el tablero, y lo calcula la vista-, sino un
+ * cortafuegos contra un documento manipulado que traiga un numero disparatado y
+ * empuje todos los items fuera de la rejilla. Muy por encima de cualquier
+ * almacen real: un tablero de 200 celdas es un almacen de 200 items.
+ */
+const TOPE_CELDAS_HUECO = 200;
+
+/**
+ * Normaliza una fecha guardada a milisegundos.
+ *
+ * El juego escribe `updatedAt` como `new Date()`, que Firestore convierte en un
+ * `Timestamp`; pero `rankingService` escribe el suyo como `Date.now()`, un
+ * número pelado, y en una partida larga hay documentos escritos por los dos
+ * caminos. La cola de nanitas compara su marca con este campo para decidir cuál
+ * de los dos es más nuevo, así que un `toDate()` a medias reventaría con el
+ * segundo.
+ */
+function aMilis(valor: any): number {
+  if (valor == null) return 0;
+  if (typeof valor === 'number') return valor;
+  if (typeof valor === 'string') {
+    const t = Date.parse(valor);
+    return Number.isNaN(t) ? 0 : t;
+  }
+  if (typeof valor.toMillis === 'function') return valor.toMillis();
+  if (typeof valor.seconds === 'number') return valor.seconds * 1000;
+  return 0;
+}
+
+/**
+ * Tipos de item que se renombraron, del nombre viejo al nuevo.
+ *
+ * `weapon` pasó a llamarse `collector` cuando las armas se convirtieron en
+ * recolectores. El nombre viaja en el guardado, no en el código, así que el
+ * cambio no alcanzó a las partidas que ya estaban escritas.
+ *
+ * No se puede arreglar en la vista, porque el objeto no está mal: es el mismo
+ * Blaster Láser con la etiqueta vieja. Y el tipo es la clave de todo lo
+ * demás —la pestaña del filtro, el botón de equipar, la forja, el precio de
+ * venta, la protección de "no vendas el último"—, así que un item con el tipo
+ * viejo desaparece de "Recolectores", no se puede equipar y el detalle acaba
+ * pintando la etiqueta cruda: "weapon".
+ *
+ * Se traduce una vez al cargar y se guarda el resultado.
+ */
+const LEGACY_ITEM_TYPES: Record<string, string> = {
+  weapon: 'collector'
+};
+
+/** Traduce los tipos renombrados de un almacén. Devuelve si ha tocado algo. */
+function migrateItemTypes(warehouse: any[]): boolean {
+  let changed = false;
+  for (const item of warehouse) {
+    const moderno = LEGACY_ITEM_TYPES[item.type];
+    if (!moderno) continue;
+    item.type = moderno;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Deja `equippedCollectorId` y la bandera `equipped` de los items diciendo lo
+ * mismo.
+ *
+ * Son la misma información en dos sitios, y una partida vieja no siempre tiene
+ * los dos: con la bandera puesta y el id vacío, la rejilla marcaba el item como
+ * equipado y el juego no leía su daño, así que el click se quedaba a cero sin
+ * decir nada. Al revés, el detalle ofrecía "Desequipar" sobre un item que nadie
+ * tenía puesto.
+ *
+ * El id manda porque es lo que lee el cálculo de daño, y la bandera se recalcula
+ * a partir de él. Un id que ya no apunta a ningún recolector se descarta en vez
+ * de dejar el estado apuntando al vacío.
+ */
+function reconcileEquippedCollector(
+  warehouse: any[],
+  equippedId: string | null,
+  adoptarBandera = true
+): { id: string | null; changed: boolean } {
+  let id = equippedId;
+  if (id && !warehouse.some((w: any) => w.id === id && w.type === 'collector')) id = null;
+  // Sin id, la bandera puesta es lo único que dice qué llevaba equipado. Solo
+  // se adopta si hay un único candidato: con dos, no hay forma de saber cuál.
+  //
+  // Esto es un RESCATE de guardado viejo y por eso es opcional: quien
+  // desequipa está diciendo que no lleva ninguno, así que no puede querer que
+  // su propio clic le vuelva a poner la bandera como equipado. Sin el
+  // interruptor, Desequipar no hacía nada y la bandera no bajaba nunca.
+  if (!id && adoptarBandera) {
+    const marcados = warehouse.filter((w: any) => w.type === 'collector' && w.equipped);
+    if (marcados.length === 1) id = marcados[0].id;
+  }
+
+  let changed = id !== equippedId;
+  for (const w of warehouse) {
+    const debeSer = w.type === 'collector' && w.id === id;
+    if (!!w.equipped === debeSer) continue;
+    w.equipped = debeSer;
+    changed = true;
+  }
+  return { id, changed };
+}
+
 export const AFK_CARD_DURATION_MS = 10 * 60 * 1000; // Cada tarjeta AFK da 10 min
 export const MAX_AFK_BUFF_DURATION_MS = 30 * 60 * 1000; // Máximo acumulable (3 tarjetas)
 
@@ -318,6 +436,11 @@ export async function createGameLoop(
     upgradeCrystals: 5,
     warehouseCapacity: 15,
     maxCompanionSlots: 1,
+    // Ids de items delante de los cuales el jugador ha dejado un hueco. Ver
+    // `setWarehouseGaps`. El array sigue Empaquetado: un hueco es una
+    // preferencia de disposición, no una posición, y por eso va anclado a un id
+    // y no a un índice de celda.
+    warehouseGaps: [] as string[],
     afkCards: 0, // Tarjetas AFK acumuladas (máx 3)
     afkExpiresAt: 0, // Tiempo de expiración del buff AFK (10 min por tarjeta)
     crates: {
@@ -353,12 +476,132 @@ export async function createGameLoop(
  * Vive fuera del objeto devuelto porque lo necesitan dos sitios: la vista, que
  * lo pinta, y `sellItem()`, que lo cobra. Con la fórmula duplicada, la tarjeta
  * podía enseñar un precio y el cobro aplicar otro.
- */
-function getSellPriceFor(item: any): number {
+ */function getSellPriceFor(item: any): number {
   if (item.type === 'collector') {
     return sellPrice(item, { sellMult: 1 + state.bonus.sellMult });
   }
   return Math.floor((item.sellPrice || 0) * (1 + state.bonus.sellMult));
+}
+
+/**
+ * Mete un item en el almacén, sumándolo a la pila que ya hubiera.
+ *
+ * Es la ÚNICA forma de añadir un item al almacén, y el motivo de que exista es
+ * que antes no lo había: cada sitio hacía `state.warehouse.push(item)`, así que
+ * una caja que soltaba una llave metía un item NUEVO en vez de sumar una unidad a
+ * la pila de llaves que el jugador ya tenía. Cada llave ocupaba su propia
+ * ranura, la rejilla las agrupaba en una celda con un "19" y el contador pedía
+ * 19 ranuras por un item que el jugador nunca había visto duplicado.
+ *
+ * Un apilable se suma a la primera pila del mismo tipo y nombre; si no cabe en
+ * ella, se abre una pila nueva. Un item que no es apilable siempre entra con su
+ * propio id, porque dos recolectores son dos cosas distintas aunque se llamen
+ * igual.
+ *
+ * Devuelve false si no había hueco. No avisa: quien llama decide, porque hay
+ * sitios que compensan en nanitas y sitios que pierden el botín a propósito.
+ */
+function addToWarehouse(item: any): boolean {
+  const pila = pilaPara(item);
+  if (pila) {
+    pila.stackCount = stackUnits(pila) + stackUnits(item);
+    return true;
+  }
+
+  if (countOccupiedSlots(state.warehouse) >= effectiveWarehouseCapacity()) return false;
+  state.warehouse.push(item);
+  return true;
+}
+
+/**
+ * La pila a la que se sumaría este item, o null si no hay ninguna.
+ *
+ * Es la pregunta "¿necesita ranura nueva?" y tiene que ser la MISMA que se hace
+ * en `addToWarehouse`. Si se respondiera solo mirando si el almacén está lleno,
+ * una compra de algo que cabe en una pila existente se rechazaría con el almacén
+ * lleno: el jugador vería "Almacén lleno" por un item que no ocupa ni una ranura
+ * y perdería las nanitas.
+ */
+function pilaPara(item: any): any {
+  if (!isStackable(item)) return null;
+  const clave = `${item.type}::${item.name}`;
+  return state.warehouse.find((w: any) => isStackable(w) && `${w.type}::${w.name}` === clave) ?? null;
+}
+
+/** ¿Cabe este item en el almacén, fundiéndolo en una pila si se puede? */
+function cabeEnAlmacen(item: any): boolean {
+  return !!pilaPara(item) || countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity();
+}
+
+/**
+ * Productos que no meten nada en el almacén: son permisos, no objetos.
+ *
+ * Ampliar el almacén o añadir huecos de compañero no guarda un item, así que
+ * no tiene por qué haber hueco. Lo que no está en esta lista SÍ es un objeto
+ * físico y necesita su sitio: llaves y cristales incluidos.
+ */
+const NO_OCUPA_RANURA = ['warehouseSlot', 'backpackExpander', 'companionSlot1', 'companionSlot2'];
+
+/**
+ * ¿Se puede comprar este producto sin que el almacén se desborde?
+ *
+ * La respuesta la necesita la TIENDA para decidir si pinta el botón como
+ * "Almacén lleno", y la necesita `buyStoreItem` para no cobrar. Son la misma
+ * pregunta, y por eso vive aquí: con dos copias, el botón se deshabilitaba para
+ * algo que la compra sí dejaba pasar.
+ *
+ * Y una ranura es una PILA, no una unidad: 19 llaves ocupa la misma ranura que
+ * una. La pregunta no es "¿quedan ranuras?" sino "¿cabe ESTE item?". Preguntar
+ * solo por el fullness rechazaba comprar una caja con el almacén lleno, aunque
+ * se fuera a sumar a la pila de cajas que ya había.
+ */
+function cabeLaCompra(itemKey: string): boolean {
+  if (NO_OCUPA_RANURA.includes(itemKey)) return true;
+  return cabeEnAlmacen(previewStoreItem(itemKey));
+}
+
+/**
+ * El nivel de llave y de cristal que entrega la TIENDA.
+ *
+ * Vive aquí y no en los dos sitios que lo necesitan porque es exactamente la
+ * clase de dato que se duplica sin que nadie se entere: `previewStoreItem`
+ * anunciaba nivel 0 mientras `buyStoreItem` creaba nivel 1. Con eso, un jugador
+ * con el almacén lleno y una pila de "Llave de Cifrado" veía el botón de
+ * comprar llave encendido —porque la preview encontraba su pila— y al pulsarlo
+ * la compra fallaba, porque lo que de verdad se crea es una "Llave Reforzada",
+ * que necesita ranura nueva. Botón y cargo discrepando (R3).
+ *
+ * OJO: el nivel 1 es una discrepancia conocida del juego
+ * (`docs/CONTEXTO-JUEGO.md` nº 1): la carta pone "Llave de Cifrado" y entrega una
+ * de nivel 1. Arreglar eso cambia la economía y no es de aquí; lo que se
+ * arregla aquí es que la pregunta "¿cabe?" mire la misma llave que se entrega.
+ */
+const STORE_MATERIAL_TIER = 1;
+
+/**
+ * Cómo se llamaría y de qué tipo sería el item de una compra, sin crearlo.
+ *
+ * La comprobación de "¿queda hueco?" va ANTES de cobrar, así que no puede
+ * llamar a los generadores: `generateCollectorByTier` y compañía gastan un id
+ * único y habría que tirar el item solo por mirarlo. Y no hace falta: para
+ * decidir si algo se funde con una pila basta su tipo y su nombre, que es
+ * justamente lo único que mira `pilaPara`.
+ *
+ * Devuelve null para las compras que no meten nada en el almacén (ampliaciones y
+ * huecos), que no ocupan ranura por ser permisos.
+ */
+function previewStoreItem(itemKey: string): any {
+  if (itemKey === 'key') return { type: 'key', name: KEY_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
+  if (itemKey === 'upgradeCrystal') return { type: 'crystal', name: CRYSTAL_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
+  if (itemKey.endsWith('Crate') && CRATE_TYPES[itemKey.replace('Crate', '').toLowerCase() as CrateType]) {
+    const t = itemKey.replace('Crate', '').toLowerCase() as CrateType;
+    return { type: 'crate', name: CRATE_TYPES[t].name, stackable: true };
+  }
+  const consumable = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
+  if (consumable) return { type: 'consumable', name: consumable.name, stackable: true };
+  if (itemKey.startsWith('companionCardT')) return { type: 'companion' };
+  if (itemKey.startsWith('collectorCardT')) return { type: 'collector' };
+  return null;
 }
 
 /**
@@ -402,16 +645,31 @@ function grantCrystals(tier: number, amount: number) {
   grantMaterial('crystal', tier, amount);
 }
 
+/**
+ * Desbloquea un cosmético. Idempotente: `false` si ya lo tenía.
+ *
+ * Vive a nivel de módulo, y no como método suelto del objeto del juego, porque
+ * lo necesitan dos sitios: el método público `unlockCosmetic` y el `applier` que
+ * `openCrateBox` pasa al sorteo de las cajas. Dentro de un objeto, un hermano no
+ * se ve a otro por su nombre: habría que escribir `this.unlockCosmetic`, y
+ * `this` no existe dentro de una función que se pasa como callback. Con la
+ * función aparte, los dos caminos llaman a la misma y no pueden divergir.
+ */
+function desbloquearCosmetico(cosmeticId: string): boolean {
+  if (state.cosmetics.unlocked.includes(cosmeticId)) return false;
+  state.cosmetics.unlocked.push(cosmeticId);
+  return true;
+}
+
 function grantMaterial(kind: 'key' | 'crystal', tier: number, amount: number) {
   if (amount <= 0) return;
-  if (state.warehouse.length >= effectiveWarehouseCapacity()) {
-    console.warn('[inventario] Sin hueco en el almacén: se pierden ' + amount + ' x ' + kind + ' T' + tier + '.');
-    return;
-  }
 
   const item = createMaterialItem(kind, tier);
   item.stackCount = amount;
-  state.warehouse.push(item);
+
+  if (!addToWarehouse(item)) {
+    console.warn('[inventario] Sin hueco en el almacén: se pierden ' + amount + ' x ' + kind + ' T' + tier + '.');
+  }
 }
 
 /**
@@ -499,10 +757,58 @@ function syncMaterialCounters() {
   const userRef = doc(db, 'users', user.uid);
   const rankingRef = doc(db, 'rankings', user.uid);
 
+  /**
+   * El último guardado falló.
+   *
+   * Se usa para avisar UNA vez, no en cada intento. Un `setDoc` sin red reintenta
+   * durante unos diez segundos antes de rendirse, y el intervalo de guardado es
+   * de quince: sin este flag, una desconexión de un minuto llenaba la pantalla de
+   * avisos idénticos superpuestos, tapando el juego.
+   */
+  let guardadoFallando = false;
+
+  /**
+   * Enciende o apaga el aviso de "sin guardar".
+   *
+   * No es decoración. Con esta cola, "el número que veo no está en el servidor"
+   * pasa a ser una situación real y constante, y el jugador no tiene forma de
+   * saberlo: el contador sigue subiendo igual de contento. Un indicador que se
+   * enciende al perder la conexión y se apaga al recuperarla convierte la
+   * incertidumbre en un dato.
+   */
+  function marcarPendiente(pendiente: boolean) {
+    // `document` puede no existir: el banco de pruebas arranca el bucle en Node
+    // con un DOM mínimo que no tiene este elemento, y sin esta guarda el fallo
+    // salía justo DENTRO del `catch` —que es el único sitio donde este aviso
+    // importa— y se comía el error de red que estaba avisando.
+    if (typeof document === 'undefined') return;
+    const el = document.querySelector('#pending-save-indicator');
+    if (!el) return;
+    el.classList.toggle('hidden', !pendiente);
+  }
+
+  /**
+   * El servidor se quedó con el saldo: se avisa y se baja el contador de fallos.
+   *
+   * Sin este aviso, el jugador que pasó un rato sin red ve como su saldo "de
+   * repente" deja de crecer en el servidor y no entiende por qué. Con él, la
+   * desconexión tiene final y se siente resuelta en vez de abandonada.
+   */
+  function pendingWasFlushed() {
+    marcarPendiente(false);
+    if (!guardadoFallando) return;
+    guardadoFallando = false;
+    showToast('Guardado. Tu progreso ya está en la nube.', 'success');
+  }
+
   try {
     const docSnap = await getDoc(userRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
+      // La versión que TRAJO el documento, no la que va a salir de aquí. Es lo
+      // único que distingue "partida vieja" de "partida ya migrada", y evita que
+      // una migración sea idempotente por casualidad y no por decisión.
+      const savedVersion = typeof data.saveVersion === 'number' ? data.saveVersion : 0;
       state.saveVersion = SAVE_VERSION;
       state.nanites = data.nanites ?? 0;
       state.totalNanitesProduced = data.totalNanitesProduced ?? data.nanites ?? 0;
@@ -524,8 +830,50 @@ function syncMaterialCounters() {
       state.companions = data.companions ?? [];
       state.activeCompanions = data.activeCompanions ?? [];
       state.warehouse = data.warehouse ?? [];
+      // Huecos de disposición. Un guardado viejo no trae el campo, y uno
+      // manipulado puede traer cualquier cosa, así que se coacciona a una lista
+      // de ids que existen de verdad en el almacén: un hueco anclado a un item
+      // que no está no tiene dónde pintarse y solo ensuciaría el recuento.
+      state.warehouseGaps = Array.isArray(data.warehouseGaps)
+        ? data.warehouseGaps.filter((id: any): id is string =>
+          typeof id === 'string' && state.warehouse.some((w: any) => w.id === id))
+        : [];
       // Migración: agregar 'damage' y actualizar descripción a recolectores viejas
       let warehouseNeedsMigration = false;
+
+      /**
+       * Renombre de 'weapon' a 'collector'. Va PRIMERO, antes de cualquier otra
+       * migración, porque todas las de abajo decide si tocan un item mirando su
+       * `type`: con el tipo viejo no se reconocían ni como recolectores y se
+       * pasaban de largo sin arreglar nada.
+       *
+       * El id del recolector equipado se renombró a la vez. Sin adoptarlo,
+       * quien lo tenía puesto se lo perdía en silencio: `equippedWeaponId` no lo
+       * leía nadie y el click se quedaba a cero.
+       *
+       * Se aplica solo al cruzar de la versión 6 a la 7. No por miedo a repetirla
+       * —es idempotente— sino porque `equippedWeaponId` se queda en el documento
+       * para siempre: `setDoc` con `merge: true` no borra las claves que ya no
+       * se envían. Si se leyera siempre, desequipar en la versión 7 no serviría
+       * de nada, porque al siguiente arranque el id viejo volvería a equipar el
+       * recolector que el jugador acababa de quitar.
+       */
+      if (savedVersion < 7) {
+        if (migrateItemTypes(state.warehouse)) warehouseNeedsMigration = true;
+        if (!state.equippedCollectorId && typeof data.equippedWeaponId === 'string') {
+          state.equippedCollectorId = data.equippedWeaponId;
+          warehouseNeedsMigration = true;
+        }
+      }
+
+      // El id equipado y la bandera `equipped` son la misma información en dos
+      // sitios. Se pone de acuerdo antes de que nada la lea: el cálculo de daño
+      // usa el id y la rejilla usa la bandera, así que discrepar se ve como un
+      // item equipado que no hace nada o como un "Desequipar" que no desequipa.
+      const equipado = reconcileEquippedCollector(state.warehouse, state.equippedCollectorId);
+      state.equippedCollectorId = equipado.id;
+      if (equipado.changed) warehouseNeedsMigration = true;
+
       state.warehouse.forEach((w: any) => {
         if (w.type === 'collector') {
           if (w.damage === undefined) {
@@ -572,37 +920,96 @@ function syncMaterialCounters() {
        * almacén era la fuente y el contador podía quedar inflado, así que se
        * ajustaba el contador. Con las llaves el saldo es real y no se puede
        * volver a contarlo, porque detrás no hay ningún item.
+       *
+       * Llaves y cristales se materializan con la MISMA función, y ya no puede
+       * ser de otra manera: las llaves se guardaban de una en una, una ranura
+       * por llave, y los cristales de golpe en una sola pila. Un jugador con 19
+       * llaves de Cifrado tenía 19 ranuras ocupadas por un item que la rejilla
+       * pintaba en una sola celda.
        */
       let materialNeedsMigration = false;
-      const meterLlaves = (tier: KeyTier, cantidad: number) => {
-        for (let i = 0; i < cantidad; i++) {
-          if (state.warehouse.length >= effectiveWarehouseCapacity()) break;
-          state.warehouse.push(createMaterialItem('key', tier));
-          materialNeedsMigration = true;
-        }
-      };
-      meterLlaves(0, data.keys ?? 3);
-      meterLlaves(1, data.keysByTier?.[1] ?? 0);
-      meterLlaves(2, data.keysByTier?.[2] ?? 0);
-      meterLlaves(3, data.keysByTier?.[3] ?? 0);
 
-      const meterCristales = (tier: number, cantidad: number) => {
-        if (cantidad <= 0) return;
-        if (state.warehouse.length >= effectiveWarehouseCapacity()) return;
-        const item = createMaterialItem('crystal', tier);
-        item.stackCount = cantidad;
-        state.warehouse.push(item);
+      /**
+       * Cuántas unidades de un material HAY ya en el almacén, por nivel.
+       *
+       * Es lo que hace que esta migración no se ejecute en cada arranque. La
+       * migración es para partidas viejas, donde el contador era un número suelto
+       * sin ningún item detrás. En una partida que YA tiene items de llave, el
+       * contador y el almacén dicen lo mismo, y materializar el contador entero
+       * cada vez que se carga metía un item más por unidad: recargar la página
+       * duplicaba las llaves, y a la tercera recarga el almacén estaba lleno de
+       * llaves que el jugador nunca pidió. Con los cristales, igual.
+       *
+       * Lo que hay que materializar es la DIFERENCIA entre lo que promete el
+       * contador y lo que ya está: los huérfanos. El bucle de arriba acaba de
+       * resolver el `tier` de los items viejos, así que aquí ya se puede contar.
+       */
+      const yaEnAlmacen = (kind: 'key' | 'crystal', tier: number): number => {
+        let total = 0;
+        for (const w of state.warehouse as any[]) {
+          if (w.type !== kind) continue;
+          const t = typeof w.tier === 'number'
+            ? w.tier
+            : kind === 'key' ? keyTierFromName(w.name || '') : (crystalPowerFromName(w.name || '') === 1 ? 1 : 2);
+          if (t !== tier) continue;
+          total += w.stackable ? (w.stackCount || 1) : 1;
+        }
+        return total;
+      };
+
+      const meterMaterial = (kind: 'key' | 'crystal', tier: number, cantidad: number) => {
+        const huerfanos = Math.max(0, cantidad - yaEnAlmacen(kind, tier));
+        if (huerfanos <= 0) return;
+        const item = createMaterialItem(kind, tier);
+        item.stackCount = huerfanos;
+        // `addToWarehouse` y no `push`: las huerfanas van a la pila de llaves que
+        // ya hubiera, y solo abren una nueva si de verdad no cabe en ninguna.
+        if (!addToWarehouse(item)) return;
         materialNeedsMigration = true;
       };
-      meterCristales(1, data.upgradeCrystals ?? 5);
-      meterCristales(2, data.crystalsByTier?.[2] ?? 0);
-      meterCristales(3, data.crystalsByTier?.[3] ?? 0);
-      meterCristales(4, data.crystalsByTier?.[4] ?? 0);
+      // `data.keys` es el TOTAL de llaves del guardado, no las de nivel 0. Pasar
+      // ese total al nivel 0 y luego restar lo que hay en el nivel 0 compara un
+      // total contra una parte, y siempre sobra: con una llave de nivel 1 en el
+      // almacén —que es justo la que crea la tienda, aunque se venda como "Llave
+      // de Cifrado"— la resta daba 0 y se materializaba una llave de nivel 0 de
+      // más en cada recarga. El nivel 0 usa su propio cubo cuando el guardado lo
+      // trae, y el total solo como reserva para las partidas viejas, que no
+      // tenían cubos.
+      meterMaterial('key', 0, data.keysByTier ? (data.keysByTier[0] ?? 0) : (data.keys ?? 3));
+      meterMaterial('key', 1, data.keysByTier?.[1] ?? 0);
+      meterMaterial('key', 2, data.keysByTier?.[2] ?? 0);
+      meterMaterial('key', 3, data.keysByTier?.[3] ?? 0);
+
+      meterMaterial('crystal', 1, data.upgradeCrystals ?? 5);
+      meterMaterial('crystal', 2, data.crystalsByTier?.[2] ?? 0);
+      meterMaterial('crystal', 3, data.crystalsByTier?.[3] ?? 0);
+      meterMaterial('crystal', 4, data.crystalsByTier?.[4] ?? 0);
       if (materialNeedsMigration) warehouseNeedsMigration = true;
 
-      if (warehouseNeedsMigration) {
-        saveToFirebase();
+      /**
+       * MIGRACIÓN: fusionar las pilas repetidas de las partidas ya jugadas.
+       *
+       * Cada botín de llave, cristal, caja o consumible se guardaba como un item
+       * NUEVO en vez de sumar sus unidades a la pila que ya había. Una partida
+       * con 19 llaves de Cifrado tenía 19 entradas: la rejilla las agrupaba en
+       * una celda con un "19" y el contador pedía 19 ranuras por ellas. El
+       * almacén se llenaba de botín que el jugador nunca había decidido guardar.
+       *
+       * Esas entradas pasan aquí a ser una sola pila con `stackCount: 19`, que
+       * es exactamente lo que el jugador ya veía en la celda. No se pierde
+       * ninguna unidad: se suman, y `syncMaterialCounters` sigue leyendo el
+       * mismo total de llaves.
+       *
+       * Va DESPUÉS de materializar los contadores, no antes. `addToWarehouse` ya
+       * suma a la pila existente, así que fusionar antes sería deshacer lo que
+       * la migración acaba de apilar.
+       */
+      const fusionado = mergeStacks(state.warehouse);
+      if (fusionado.changed) {
+        state.warehouse = fusionado.items;
+        warehouseNeedsMigration = true;
       }
+
       state.afkCards = data.afkCards ?? 0;
       state.afkExpiresAt = data.afkExpiresAt ?? 0;
       // --- Prestige y cosméticos ---
@@ -634,6 +1041,96 @@ function syncMaterialCounters() {
         clickX2ExpiresAt: data.buffs?.clickX2ExpiresAt ?? 0,
         clickX3ExpiresAt: data.buffs?.clickX3ExpiresAt ?? 0
       };
+
+      /**
+       * COLA DE LA SESIÓN ANTERIOR.
+       *
+       * Va AQUÍ, al final de la carga, y no donde se leen las nanitas. Cada
+       * bloque de arriba rellena su parte del estado desde el documento, así
+       * que aplicar la cola a mitad de carga garantiza que algo la pise después:
+       * los núcleos se leen treinta líneas más abajo y dejaban a cero los que
+       * el prestige había pagado, que es justo lo que la cola existe para
+       * evitar.
+       *
+       * La regla NO es "si hay algo pendiente, súmalo". Es "usa lo que sea más
+       * nuevo, y solo eso". La diferencia no es de estilo: el reinicio de
+       * prestigio pone el saldo a cero, y una cola que se sumara sin más
+       * devolvería ese dinero después de reiniciar — con el agravante de que el
+       * jugador conservaría los núcleos, y se podría repetir sin límite.
+       *
+       * El documento trae `updatedAt` y la cola trae su propia marca. Se
+       * comparan y gana la más reciente:
+       *
+       *   · Gana la cola → el último guardado no llegó (o hubo un reinicio que
+       *     tampoco llegó). Se adopta entero, incluido si vale cero.
+       *   · Gana el documento → otro dispositivo del jugador ha seguido jugando
+       *     más tarde, o la cola es de una sesión vieja. Se descarta entera, y
+       *     no se mezclan: quedarse con el mayor de los dos produciría saldos
+       *     que ninguna de las dos sesiones vio nunca.
+       */
+      const cola = leerCola(user.uid);
+      if (cola.existe) {
+        if (cola.ts > aMilis(data.updatedAt)) {
+          const diferencia = cola.nanites - state.nanites;
+          state.nanites = cola.nanites;
+          // El histórico y los clics se adoptan tal cual, sin máximo. Si la
+          // cola es la más nueva, sus valores son los buenos; aplicar un
+          // `Math.max` dejaría subir un reinicio de prestigio que los dejó a
+          // cero a propósito.
+          state.totalNanitesProduced = cola.producidas;
+          state.totalClicks = cola.clics;
+
+          // Y los núcleos, que son el otro lado del reinicio.
+          //
+          // El prestige PAGA con núcleos y borra las nanitas. Si un jugador lo
+          // hace sin conexión y cierra la pestaña, sin esto vuelve con el saldo
+          // a cero —correcto— y sin los núcleos: se había reiniciado para nada.
+          // Es lo más caro que puede perder la cola, porque el prestige es la
+          // partida entera.
+          state.cores = cola.nucleos;
+          state.totalCores = cola.totalNucleos;
+          state.resets = cola.reinicios;
+
+          if (diferencia > 0) {
+            console.info('[cola] Recuperadas ' + formatNumber(diferencia) + ' nanitas sin confirmar.');
+            showToast(
+              'Recuperadas ' + formatNumber(diferencia) + ' nanitas que no se habían guardado.',
+              'success'
+            );
+          } else if (diferencia < 0) {
+            // El caso del reinicio: el servidor tenía más de lo que este
+            // dispositivo vio. No es una pérdida, es una operación que sí se
+            // quiere conservar.
+            console.info('[cola] Adoptado un saldo más bajo (' + formatNumber(diferencia) + ').');
+          }
+        } else {
+          console.info('[cola] Descartada: el documento del servidor es más reciente.');
+          vaciarCola();
+        }
+      }
+
+      // EL GUARDADO DE LA MIGRACIÓN, AQUÍ Y NO ANTES.
+      //
+      // Estaba unas treinta líneas más arriba, junto al resto de migraciones, y
+      // eso lo convertía en un destructor: `setDoc` con `merge: true` escribe
+      // `cores: state.cores`, y en ese punto los núcleos todavía no se habían
+      // leído del documento, así que valían 0. Una partida con un item que
+      // necesitaba migración (un `weapon` viejo, una llave sin nivel, una pila
+      // por fusionar) perdía los núcleos y el contador de reinicios en CADA
+      // arranque, de forma silenciosa: el documento se sobrescribía a cero con
+      // datos que sí estaban bien.
+      //
+      // Solo se nota con un almacén no vacío, y por eso llevaba tanto tiempo
+      // escondido: una partida nueva no dispara migraciones.
+      //
+      // Va DESPUÉS de la cola, y no antes, por un motivo que se solapa con el
+      // suyo: si la migración guardara antes de aplicar la cola, escribiría el
+      // saldo viejo del servidor por encima del que el jugador tenía en
+      // pantalla, y la cola quedaría desfasada para siempre.
+      if (warehouseNeedsMigration) {
+        saveToFirebase();
+      }
+
       recalculatePassiveIncome();
     } else {
       // Crear documento del usuario
@@ -657,6 +1154,7 @@ function syncMaterialCounters() {
         companions: state.companions,
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
+        warehouseGaps: state.warehouseGaps,
         buffs: state.buffs,
         unlockedAchievements: state.unlockedAchievements,
         cores: state.cores,
@@ -689,7 +1187,7 @@ function syncMaterialCounters() {
     // Asegurar que todos los compañeros tengan un item correspondiente en el warehouse
     state.companions.forEach((comp: any) => {
       const exists = state.warehouse.some((w: any) => w.id === comp.id);
-      if (!exists && state.warehouse.length < effectiveWarehouseCapacity()) {
+      if (!exists && countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity()) {
         state.warehouse.push({
           id: comp.id,
           name: comp.name,
@@ -704,6 +1202,83 @@ function syncMaterialCounters() {
   }
 
   /**
+   * Forget the gaps anchored to items that are no longer in the warehouse.
+   *
+   * A gap lives in the VIEW, not in the array: `warehouseGaps` is the list of
+   * ids that have a hole painted right before them. The array itself stays
+   * packed, so a hole can never be sold, moved or counted as a slot — which is
+   * exactly why this cleanup is all it needs. If an item leaves the warehouse
+   * (sold, consumed, recycled by a prestige) its gap has nothing to be painted
+   * in front of, so it goes with it. Anything left dangling would be a hole
+   * that reappears somewhere the player never asked for as soon as an item with
+   * that id showed up again.
+   *
+   * Called from every path that removes an item. Cheap: it only walks a handful
+   * of ids, not the whole warehouse.
+   */
+  function syncWarehouseGaps() {
+    const limpio = normalizaGaps(state.warehouseGaps);
+    if (limpio.join(',') !== (state.warehouseGaps || []).join(',')) {
+      state.warehouseGaps = limpio;
+    }
+  }
+
+  /**
+   * Limpia la lista de huecos: solo ids que existen en el almacen, y sin pasar
+   * de un tope de seguridad.
+   *
+   * POR QUE NO HAY UN TOPE DE "UN HUECO POR CELDA". Se puso ese limite, y hacia
+   * justo lo contrario de lo que el jugador pide: con 3 celdas ocupadas y 18
+   * libres, solo dejaba mover un item hasta la celda 5, cuando las 18 celdas
+   * vacias son sitios tan validos como las ocupadas. El limite de verdad no es
+   * este: es el TABLERO, y lo calcula la vista (`totalCeldasPintadas`), que es la
+   * unica que sabe cuantas celdas se dibujan. Por arrastre nunca se pasa de ahi.
+   *
+   * Lo que queda aqui es un cortafuegos contra un documento manipulado: si
+   * alguien edita la partida y mete 100.000 celdas de hueco, aqui se recorta.
+   * El recorte no pierde nada —cada hueco es una celda vacia de adorno— pero
+   * evita pintar una rejilla gigante.
+   */
+  function normalizaGaps(ids: any): string[] {
+    if (!Array.isArray(ids)) return [];
+    const existentes = new Set(state.warehouse.map((w: any) => w.id));
+    const salida: string[] = [];
+    for (const id of ids) {
+      if (typeof id !== 'string' || !existentes.has(id)) continue;
+      salida.push(id);
+      if (salida.length >= TOPE_CELDAS_HUECO) break;
+    }
+    return salida;
+  }
+
+  /**
+   * Deja las celdas de hueco indicadas, una por repetición de id.
+   *
+   * `ids` es la lista COMPLETA, no una operación de "añadir": quien llama es la
+   * vista, que es la única que sabe qué hueco se está moviendo al soltar un item
+   * dentro de otro. El juego solo guarda y limpia, igual que con el orden: la
+   * disposición es del jugador, no del juego.
+   *
+   * LA MULTIPLICIDAD ES EL CONTENIDO. Un hueco puede ocupar varias celdas seguidas
+   * y eso se cuenta con repeticiones: `['b','b','c']` son dos celdas vacías antes
+   * de `b` y una antes de `c`. Por eso aquí NO se deduplica con un `Set` —que
+   * fundiría las repeticiones en una y dejaría al item a la izquierda de donde se
+   * soltó—, y por eso la lista se guarda tal cual, en orden.
+   *
+   * Un hueco NO es una ranura. No cuenta para `warehouse.length`, no bloquea una
+   * compra y no se puede vender: solo desplaza lo que se ve. Por eso el array
+   * sigue empaquetado y por eso esta función no toca `state.warehouse`.
+   */
+  function setWarehouseGaps(ids: string[]): boolean {
+    const limpio = normalizaGaps(ids);
+    const antes = (state.warehouseGaps || []).join(',');
+    state.warehouseGaps = limpio;
+    if (antes === limpio.join(',')) return false;
+    saveToFirebase();
+    return true;
+  }
+
+  /**
    * Recorta el almacén respetando una prioridad. Antes se hacía
    * `slice(0, capacity)`, que destruía el último item de la lista sin aviso y
    * podía borrar el recolector equipado o un compañero activo.
@@ -714,11 +1289,10 @@ function syncMaterialCounters() {
    */
   function enforceWarehouseCapacity() {
     const capacity = effectiveWarehouseCapacity();
-    if (state.warehouse.length <= capacity) return;
+    if (countOccupiedSlots(state.warehouse) <= capacity) return;
 
     const score = (w: any): number => {
       if (w.id === state.equippedCollectorId) return 1000;
-      if (w.equipped) return 900;
       if (state.activeCompanions.includes(w.id)) return 800;
       // Un recolector crafteado vale más que una de tienda: se conserva antes
       if (w.type === 'collector') return 500 + (w.tier || 0) + (w.potential || 0) * 50;
@@ -737,6 +1311,8 @@ function syncMaterialCounters() {
       .map(x => x.w);
 
     state.warehouse = kept;
+    // Recortar el almacén puede llevarse el item al que estaba anclado un hueco.
+    syncWarehouseGaps();
   }
 
   // Detecta el tipo de caja a partir del nombre del item
@@ -749,9 +1325,14 @@ function syncMaterialCounters() {
     return null;
   }
 
-  // `state.crates` es un contador derivado: el almacén es la fuente de verdad.
-  // Convierte contadores huérfanos de saves antiguos en items reales.
-  function syncCrateCounters() {
+  /**
+   * Cuántas cajas hay en el almacén, por tipo. Solo lee: no toca nada.
+   *
+   * Vive aparte de `syncCrateCounters` porque `materializePendingCrates` necesita
+   * el recuento ANTES de escribir nada, para no contar dos veces lo que acaba de
+   * crear.
+   */
+  function countCratesInWarehouse(): Record<CrateType, number> {
     const counts: Record<CrateType, number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
 
     state.warehouse.forEach((w: any) => {
@@ -762,14 +1343,58 @@ function syncMaterialCounters() {
       counts[crateType] += (w.stackCount || 1);
     });
 
+    return counts;
+  }
+
+  /**
+   * `state.crates` es un contador DERIVADO: el almacén es la fuente de verdad.
+   * Esta función solo lo recalcula. NO crea items.
+   *
+   * Antes esta función hacía dos trabajos incompatibles: contar y materializar.
+   * La materialización comparaba `state.crates` —el valor del guardado anterior,
+   * porque aquí todavía no se había reescrito— contra el almacén recién contada.
+   * Después de vender o abrir la ÚLTIMA caja de un tipo, el contador viejo
+   * decía 1 y el almacén decía 0, así que `missing` salía positivo y la función
+   * metía la caja otra vez en el almacén. El jugador cobraba las nanitas, veía
+   * el aviso de vendido, y la caja seguía ahí con otro id. Abrir una caja
+   * suffería exactamente lo mismo, y también `updateState()`.
+   *
+   * Crear items es trabajo de `materializePendingCrates`, que solo se llama
+   * donde tiene sentido: al cargar una partida y al reiniciar por prestigio.
+   */
+  function syncCrateCounters() {
+    state.crates = countCratesInWarehouse();
+  }
+
+  /**
+   * Convierte en cajas reales lo que el contador dice y el almacén no respalda.
+   *
+   * Solo tiene sentido en dos momentos concretos, y en ninguno más:
+   *
+   *   - Al cargar. Una partida antigua puede tener `crates: { common: 5 }` sin
+   *     un solo item de caja en el almacén. Si no se materializan, el jugador
+   *     las pierde sin haber jugado: es saldo real detrás del que no hay
+   *     ningún item.
+   *   - Al reiniciar por prestigio, donde `crates: { common: 2 }` son las cajas
+   *     de partida nueva, no un residuo de la anterior.
+   *
+   * En cualquier otro momento, este cálculo es un error: el contador va
+   *siempre retrasado una operación respecto al almacén, así que compararlo
+   * con el almacén no mide lo que falta, mide lo que se acaba de gastar.
+   */
+  function materializePendingCrates() {
+    const counts = countCratesInWarehouse();
+
     (Object.keys(CRATE_TYPES) as CrateType[]).forEach(crateType => {
       const missing = (state.crates[crateType] || 0) - counts[crateType];
       if (missing <= 0) return;
       // Materializar lo que falte, respetando la capacidad del almacén
-      const free = effectiveWarehouseCapacity() - state.warehouse.length;
+      const free = effectiveWarehouseCapacity() - countOccupiedSlots(state.warehouse);
       const toCreate = Math.min(missing, Math.max(0, free));
       for (let i = 0; i < toCreate; i++) {
-        state.warehouse.push(createCrateItem(crateType) as any);
+        // `addToWarehouse`: si ya hay una pila de este tipo de caja, las nuevas
+        // se suman a ella y no gastan una ranura cada una.
+        if (!addToWarehouse(createCrateItem(crateType) as any)) break;
       }
       counts[crateType] += toCreate;
     });
@@ -777,17 +1402,53 @@ function syncMaterialCounters() {
     state.crates = counts;
   }
 
-  // Actualiza el contador de tarjetas AFK a partir de las que hay en el almacén
+  /**
+   * Recuento de tarjetas AFK que hay en el almacén.
+   *
+   * Este contador tenía dos fallos, y los dos venían de lo mismo: no trataba el
+   * almacén como lo que es.
+   *
+   * 1. Contaba ITEMS, no unidades. Las tarjetas son apilables, así que tres
+   *    tarjetas en una sola pila se contaban como una. `syncMaterialCounters`
+   *    suma `stackCount` justo por eso; aquí faltaba.
+   * 2. Las localizaba por el NOMBRE. El almacén lleva su `buffId` desde hace
+   *    tiempo, y es el mismo campo que usa `useConsumable` para decidir el
+   *    efecto: leer el nombre en un sitio y el campo en otro es exactamente la
+   *    desincronización que los contadores derivados evitan a propósito. El día
+   *    que la tarjeta se renombre, este contador se queda a cero sin avisar. Las
+   *    partidas viejas no tienen `buffId`, así que aquí se deduce del nombre
+   *    igual que allí, una vez y solo al leer.
+   *
+   * Se filtra por `type` además de por `buffId`: es lo que hace el resto del
+   * archivo y evita que un item de otro tipo con el mismo campo se cuente.
+   */
   function refreshAfkCardCount() {
-    state.afkCards = state.warehouse.filter((w: any) => w.name.includes('AFK')).length;
+    let total = 0;
+
+    state.warehouse.forEach((w: any) => {
+      if (w.type !== 'consumable') return;
+      const buffId = w.buffId ?? inferBuffIdFromName(w.name || '');
+      if (buffId !== 'afk') return;
+      total += w.stackable ? (w.stackCount || 1) : 1;
+    });
+
+    state.afkCards = total;
   }
 
   // Sincronizar compañeros con el warehouse después de inicializar
   recomputeBonuses();
   rebuildAchievementBonuses();
   syncCompanionsToWarehouse();
-  syncCrateCounters();
+  // Al cargar SÍ se materializan las cajas que el contador promete: es la
+  // migración de partidas antiguas y el regalo de partida nueva. A partir de
+  // aquí, `state.crates` solo se recalcula.
+  materializePendingCrates();
   syncMaterialCounters();
+  // Las tarjetas AFK también se derivan del almacén al cargar. Antes se leía
+  // `afkCards` del guardado y ya está: como el contador contaba items en vez de
+  // unidades, quien tuviera tarjetas apiladas arrastraba el error indefinidamente,
+  // guardado a guardado. Derivar al cargar lo deja bien sin tocar los items.
+  refreshAfkCardCount();
   checkAchievements();
 
   // Guardar inmediatamente al iniciar sesión
@@ -939,6 +1600,25 @@ function syncMaterialCounters() {
 
   async function saveToFirebase() {
     if (!user) return;
+
+    /**
+     * PASO 1 · LA COLA.
+     *
+     * Antes de tocar la red. Es una escritura local y síncrona, así que cuando
+     * esta línea termina, el saldo está en el disco. Si todo lo que viene
+     * después falla —sin red, regla cambiada, pestaña cerrada a medias— el
+     * jugador sigue teniendo su dinero, y lo recuperará al recargar.
+     */
+    anotarPendiente(
+      user.uid,
+      state.nanites,
+      state.totalNanitesProduced,
+      state.totalClicks,
+      state.cores,
+      state.totalCores,
+      state.resets
+    );
+
     try {
       const gameData = {
         saveVersion: SAVE_VERSION,
@@ -960,6 +1640,7 @@ function syncMaterialCounters() {
         companions: state.companions,
         activeCompanions: state.activeCompanions,
         warehouse: state.warehouse,
+        warehouseGaps: state.warehouseGaps,
         buffs: state.buffs,
         unlockedAchievements: state.unlockedAchievements,
         cores: state.cores,
@@ -987,8 +1668,40 @@ function syncMaterialCounters() {
         title: state.cosmetics.title,
         updatedAt: new Date()
       }, { merge: true });
+
+      /**
+       * PASO 2 · EL SERVIDOR CONFIRMA.
+       *
+       * Solo aquí, y solo ahora que las dos escrituras han ido bien, se vacía
+       * la cola. Este es el punto más delicado de todo el mecanismo: vaciarla
+       * antes de tiempo perdería nanitas (el documento se queda con la cifra
+       * vieja y la cola con la nueva, y nadie suma las dos), y no vaciarla
+       * nunca las duplicaría en la siguiente recarga.
+       */
+      vaciarCola();
+      pendingWasFlushed();
     } catch (error) {
+      /**
+       * PASO 3 · FALLO.
+       *
+       * No se hace nada, y esa es la decisión. La cola se escribió antes de
+       * intentarlo y sigue ahí con el saldo, así que no hay nada que
+       * recuperar. El siguiente guardado lo reintenta solo.
+       *
+       * Lo que sí se avisa es el estado, porque "no se está guardando" y
+       * "no se está jugando" parecen lo mismo desde fuera y no lo son: el
+       * jugador puede estar jugando diez minutos que se perderían si cerrara.
+       */
       console.error("Error al guardar en Firebase:", error);
+      marcarPendiente(true);
+      if (!guardadoFallando) {
+        guardadoFallando = true;
+        showToast(
+          'Sin conexión con el servidor. Tu progreso se guarda en este dispositivo ' +
+          'y se subirá solo al volver.',
+          'error'
+        );
+      }
     }
   }
 
@@ -1084,6 +1797,41 @@ function syncMaterialCounters() {
   const handleUnload = () => { saveToFirebase(); };
   window.addEventListener('beforeunload', handleUnload);
 
+  /**
+   * REINTENTOS DE LA COLA.
+   *
+   * El intervalo de 15 segundos ya reintenta solo, pero hay tres momentos en
+   * los que esperar quince segundos no es aceptable:
+   *
+   *  1. Vuelve la red. El evento `online` del navegador salta en cuanto se
+   *     recupera la conexión, y es el momento exacto en que el jugador está a
+   *     punto de cerrar la pestaña. Sin esto, esos quince segundos son
+   *     exactamente los que se pierden.
+   *  2. Vuelve el jugador. Si estuvo en otra pestaña con el wifi apagado, al
+   *     enfocar esta se reintenta en el acto.
+   *  3. Hay cola de la sesión anterior. Al arrancar, este es el momento de
+   *     subarla: el jugador acaba de recuperar esas nanitas y quiere verlas
+   *     confirmadas, no dentro de medio minuto.
+   */
+  const reintentarSiHayCola = () => {
+    if (!user) return;
+    if (hayPendientes(user.uid)) void saveToFirebase();
+  };
+
+  window.addEventListener('online', reintentarSiHayCola);
+  window.addEventListener('focus', reintentarSiHayCola);
+  // BFCache: al volver atrás en el historial la página se restaura sin recargarse,
+  // y el guardado anterior pudo quedar a medias.
+  window.addEventListener('pageshow', reintentarSiHayCola);
+
+  // La subida de la cola heredada del arranque anterior. Va después de los
+  // listeners para que el resto de la inicialización esté montado cuando llegue
+  // la respuesta, y con un margen corto para no competir con el guardado de
+  // carga, que acaba de occurrir.
+  if (user && hayPendientes(user.uid)) {
+    setTimeout(() => { void saveToFirebase(); }, 1200);
+  }
+
   // Intervalo de 500ms para actualización fluida sin parpadeo
   const TICK_RATE_MS = 500;
   const TICKS_PER_SECOND = 1000 / TICK_RATE_MS;
@@ -1158,8 +1906,19 @@ function syncMaterialCounters() {
     startGameIntervals();
   }
 
-  return {
+  const estado = {
     getState: () => state,
+    /**
+     * Nombre del jugador ya resuelto (`user.displayName` → nombre de registro →
+     * "Operativo"). Vive en la API en vez de en `state` porque no es progreso
+     * guardado: es identidad de la SESIÓN.
+     *
+     * El perfil lo pintaba desde `state.__username`, un campo que no existe en
+     * ningún sitio, así que la tarjeta de identidad caía siempre en el texto de
+     * reserva "Operativo" aunque el nombre bueno estuviera resuelto. Al ser la
+     * misma variable que ya se envía al ranking, ahora no puede desincronizarse.
+     */
+    getDisplayName: () => displayName,
     isAfk: () => isAfk,
     isPresent: () => isPlayerPresent(),
     // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
@@ -1194,10 +1953,19 @@ function syncMaterialCounters() {
       saveToFirebase();
       return labels[buffKey];
     },
+    /**
+     * Adopta un estado completo de golpe.
+     *
+     * `syncCrateCounters` y no `materializePendingCrates`: esto no es importar una
+     * partida guardada, es sustituir el estado en caliente. El almacén que llega
+     * es el estado real, y de un almacén real no se fabrican cajas que el
+     * jugador ya no tiene.
+     */
     updateState: (newState: any) => {
       Object.assign(state, newState);
       enforceWarehouseCapacity();
       syncCompanionsToWarehouse();
+      syncWarehouseGaps();
       syncCrateCounters();
       syncMaterialCounters();
       refreshAfkCardCount();
@@ -1209,40 +1977,104 @@ function syncMaterialCounters() {
     },
 
     /**
-     * Reordena el almacén moviendo un item a una posición concreta.
+     * Reordena el almacén.
      *
-     * La libertad total de acomodo es del jugador, no del juego: antes el
-     * arrastre hacía un INTERCAMBIO, así que no se podía llenar el hueco del
-     * final moviendo la última caja al principio sin pasarse por todo lo demás.
-     * Ahora es una inserción en el índice que se le pide.
+     * La libertad de acomodo es del jugador, no del juego, así que aquí no se
+     * decide NADA sobre el destino: se le pasa el item al que tiene que quedar
+     * pegado el bloque que se mueve y el juego se limita a ponerlo delante. Con
+     * `anchorId = null` el bloque va al final del almacén.
      *
-     * `targetIndex` es el índice del array, no el de la vista filtrada: quien
-     * llama lo traduce, porque desde fuera solo se conocen las celdas.
+     * `lado` dice de qué lado del ancla entra el bloque. No es un detalle: sin
+     * él el bloque siempre caía DELANTE del ancla, y como el ancla es el item de
+     * la celda señalada, el bloque acababa una celda a la IZQUIERDA de donde el
+     * jugador había soltado. Peor: soltar encima del vecino inmediato era un
+     * no-op exacto —el bloque ya estaba delante del ancla— así que arrastrar una
+     * celda sobre la de al lado no movía absolutamente nada, y la conclusión del
+     * jugador era que mover no funcionaba.
+     *
+     * El que llama sabe en qué dirección se señala el destino (el número de celda
+     * de origen y el de destino), así que el juego no tiene que adivinarlo y no
+     * puede equivocarse.
+     *
+     * POR QUÉ UN ANCLA Y NO UN ÍNDICE. El número de celda de la rejilla no es un
+     * índice del array: una celda puede representar tres cajas apiladas. Al
+     * quitar el grupo arrastrado, todas las celdas que hubiera detrás cambian de
+     * sitio, así que un destino traducido a índice ANTES de quitar nada caía
+     * una celda más allá de donde se había soltado en cuanto había una pila por
+     * medio, y al soltar en uno de los huecos del final directamente no pasaba
+     * nada, porque el hueco no tiene índice y se recortaba a la última celda
+     * ocupada —que era justo la celda de origen—. Buscando el ancla por id DESPUÉS
+     * de quitar, da igual cuántas cosas hubiera detrás.
+     *
+     * `ids` puede traer varios items porque una pila es una sola celda: si se
+     * arrastra una pila de 5, los 5 van juntos y en el mismo orden. Mover solo el
+     * que representaba la celda dejaba la celda igual de llena, así que el
+     * jugador veía un arrastre que no había movido nada.
      */
-    moveItem: (itemId: string, targetIndex: number) => {
-      const from = state.warehouse.findIndex((w: any) => w.id === itemId);
-      if (from < 0) return false;
+    moveItems: (
+      ids: string[],
+      anchorId: string | null,
+      lado: 'antes' | 'despues' = 'antes'
+    ): boolean => {
+      const wh = state.warehouse;
+      if (!ids.length) return false;
 
-      // Se recorta al rango válido. Un destino "fuera de límites" desde una
-      // celda vacía del final es un append, no un error.
-      const to = Math.max(0, Math.min(targetIndex, state.warehouse.length - 1));
-      if (to === from) return false;
+      // Índices de los que se mueven, de izquierda a derecha. Los ids que no
+      // estén en el almacén se ignoran en vez de abortar: uno que ya no existe
+      // no puede volver a bloquear el movimiento de los otros.
+      const origen = ids
+        .map(id => wh.findIndex((w: any) => w.id === id))
+        .filter(i => i >= 0)
+        .sort((a, b) => a - b);
+      if (!origen.length) return false;
 
-      const [movido] = state.warehouse.splice(from, 1);
-      state.warehouse.splice(to, 0, movido);
+      const seMueven = new Set(origen);
+
+      // El ancla tiene que ser un item que se queda donde está. Si no está, o si
+      // es parte del bloque que se mueve (soltar una pila sobre sí misma), no hay
+      // reordenación que hacer.
+      const ancla = anchorId == null ? -1 : wh.findIndex((w: any) => w.id === anchorId);
+      if (anchorId != null && ancla < 0) return false;
+      if (ancla >= 0 && seMueven.has(ancla)) return false;
+
+      const bloque = origen.map(i => wh[i]);
+      for (let k = origen.length - 1; k >= 0; k--) wh.splice(origen[k], 1);
+
+      // Con el bloque ya fuera, el ancla se busca otra vez: sus índices ya no son
+      // los de antes. `ancla < 0` significa "sin ancla" = al final.
+      if (ancla < 0) {
+        wh.push(...bloque);
+      } else {
+        const i = wh.findIndex((w: any) => w.id === anchorId);
+        wh.splice(lado === 'despues' ? i + 1 : i, 0, ...bloque);
+      }
+
       onUpdate(state, isAfk);
       saveToFirebase();
       return true;
     },
 
     /**
+     * Huecos de disposición. Ver `setWarehouseGaps`.
+     *
+     * Se expone como lista completa porque el intercambio de "item entra en el
+     * hueco y el hueco va a donde estaba el item" lo decide la vista, que es la
+     * que ve la rejilla. Aquí solo se guarda, se limpia y se persiste.
+     */
+    getWarehouseGaps: (): string[] => [...(state.warehouseGaps || [])],
+    setWarehouseGaps,
+
+    /**
      * Vende un item del almacén.
      *
      * Todo el borrado ocurre aquí, no en la vista. Antes cada pantalla restaba
      * el item por su cuenta y luego llamaba a `updateState`, que recalculaba
-     * los contadores de cajas ANTES de que el item se hubiera quitado de
-     * verdad en algunos caminos: la caja volvía a aparecer en el siguiente
-     * guardado.
+     * los contadores ANTES de que el item se hubiera quitado de verdad en
+     * algunos caminos: el item volvía a aparecer en el siguiente guardado.
+     *
+     * Para las cajas el bucle era más corto: `syncCrateCounters()` recreaba el
+     * item recién vendido porque comparaba el contador del guardado anterior
+     * contra el almacén. Ver `materializePendingCrates`.
      */
     sellItem: (itemId: string): { ok: boolean; msg?: string; gained?: number } => {
       handleUserActivity();
@@ -1260,13 +2092,14 @@ function syncMaterialCounters() {
         if (quedan <= 1) return { ok: false, msg: 'No puedes vender el último de su tipo.' };
       }
 
-      const qty = item.stackable ? (item.stackCount || 1) : 1;
+      const qty = stackUnits(item);
       const unitario = getSellPriceFor(item);
       const ganado = Math.floor(unitario * qty);
 
       state.nanites += ganado;
 
       consumeWarehouseItem(item.id, qty);
+      syncWarehouseGaps();
 
       if (item.type === 'companion') {
         state.companions = state.companions.filter((c: any) => c.id !== item.id);
@@ -1345,6 +2178,7 @@ function syncMaterialCounters() {
       }
 
       consumeWarehouseItem(item.id, 1);
+      syncWarehouseGaps();
 
       refreshAfkCardCount();
       recalculatePassiveIncome();
@@ -1398,6 +2232,7 @@ function syncMaterialCounters() {
       }
 
       consumeWarehouseItem(crystal.id, crystalCost);
+      syncWarehouseGaps();
       syncMaterialCounters();
 
       // La probabilidad la fija el cristal: mejor cristal, más probabilidad.
@@ -1449,66 +2284,80 @@ function syncMaterialCounters() {
       }
       return false;
     },
-    toggleCompanionActive: (compId: string) => {
+    /**
+     * Alias de `equipCompanion`. Se conserva porque el guardado y el HTML
+     * histórico lo nombran así, pero ya no tiene lógica propia: mantener dos
+     * implementaciones de "activar/desactivar compañero" es justo lo que dejó
+     * los dos caminos haciendo cosas distintas.
+     */
+    toggleCompanionActive: (compId: string) => estado.equipCompanion(compId),
+    equipCollector: (itemId: string) => {
       handleUserActivity();
-      const index = state.activeCompanions.indexOf(compId);
-      if (index > -1) {
-        state.activeCompanions.splice(index, 1);
-      } else {
-        // Verificar si hay espacio disponible
-        if (state.activeCompanions.length < effectiveCompanionSlots()) {
-          // Insertar en el primer slot vacío (mantener orden)
-          state.activeCompanions.push(compId);
-          state.activeCompanions.sort((a, b) => {
-            const compA = state.companions.find((c: any) => c.id === a);
-            const compB = state.companions.find((c: any) => c.id === b);
-            return (compA?.tier || 0) - (compB?.tier || 0);
-          });
-        } else {
-          // No hay espacio, no se puede equipar
-          return false;
-        }
-      }
+      const item = state.warehouse.find((w: any) => w.id === itemId);
+      if (!item || item.type !== 'collector') return false;
+
+      // ¿Está YA equipado? Se pregunta por el ID, no por la bandera.
+      //
+      // La bandera es una proyección de este campo y puede haberla descolocado
+      // un guardado viejo. Preguntar por ella hacía dos cosas malas: si la
+      // bandera estaba puesta y el id vacío,Equipar en vez de Desequipar (y
+      // el jugador veía el botón al revés); y al desequipar, este `null`
+      // borraba el equipado de verdad sin mirar cuál era, dejando al jugador
+      // sin recolector.
+      const yaEquipado = state.equippedCollectorId === item.id;
+
+      // El id manda y la bandera se recalcula a partir de él, siempre. Esta
+      // llamada es la que deja los dos sitios diciendo lo mismo.
+      //
+      // `adoptarBandera` va en false al desequipar: el rescate de bandera
+      // existe para arreglar guardados viejos al cargar, y si se aplicara aquí
+      // el propio clic de "Desequipar" volvería a marcar el item y no
+      // bajaría la bandera. El jugador lo vería como un botón que no hace
+      // nada —que es el mismo síntoma que se estaba reportando.
+      const { id } = reconcileEquippedCollector(
+        state.warehouse,
+        yaEquipado ? null : item.id,
+        !yaEquipado
+      );
+      state.equippedCollectorId = id;
+
       recalculatePassiveIncome();
       onUpdate(state, isAfk);
       saveToFirebase();
       return true;
     },
-    equipCollector: (itemId: string) => {
-      handleUserActivity();
-      // Buscar el item en el warehouse
-      const item = state.warehouse.find((w: any) => w.id === itemId);
-      if (!item || item.type !== 'collector') return false;
-
-      // Si ya está equipado, desequiparlo
-      if (item.equipped) {
-        item.equipped = false;
-        state.equippedCollectorId = null;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return true;
-      }
-
-      // Desequipar cualquier recolector equipado actualmente
-      state.warehouse.forEach((w: any) => {
-        if (w.type === 'collector') w.equipped = false;
-      });
-
-      // Equipar el nuevo item
-      item.equipped = true;
-      state.equippedCollectorId = item.id;
-      onUpdate(state, isAfk);
-      saveToFirebase();
-      return true;
-    },
+    /**
+     * Activa o desactiva un compañero.
+     *
+     * Es la ÚNICA implementación. Antes convivía con `toggleCompanionActive`,
+     * que hacía lo mismo con una diferencia: ordenaba la lista por tier al
+     * insertar. Dos caminos para lo mismo, y el que usaba la vista era el que
+     * no ordenaba, así que el orden de la lista dependía de por dónde se
+     * hubiera equipado. Ahora `toggleCompanionActive` es un alias de aquí.
+     *
+     * El id se valida contra `state.companions` antes de gastarle una ranura:
+     * `activeCompanions` es una lista de ids y el ingreso se calcula cruzando
+     * con `state.companions`. Sin esta comprobación, un id que no está ahí
+     * ocupaba una de las pocas ranuras y no pagaba nada, sin avisar — con tres
+     * ranuras, un id colado era un tercio del ingreso pasivo evaporado en
+     * silencio.
+     */
     equipCompanion: (compId: string) => {
       handleUserActivity();
       const index = state.activeCompanions.indexOf(compId);
       if (index > -1) {
         state.activeCompanions.splice(index, 1);
       } else {
+        if (!state.companions.some((c: any) => c.id === compId)) return false;
         if (state.activeCompanions.length < effectiveCompanionSlots()) {
           state.activeCompanions.push(compId);
+          // Orden estable por tier: la lista se pinta en este orden y el
+          // jugador la coloca a mano esperando verla así.
+          state.activeCompanions.sort((a, b) => {
+            const compA = state.companions.find((c: any) => c.id === a);
+            const compB = state.companions.find((c: any) => c.id === b);
+            return (compA?.tier || 0) - (compB?.tier || 0);
+          });
         } else {
           return false;
         }
@@ -1541,20 +2390,23 @@ function syncMaterialCounters() {
       // Llaves y cristales AHORA SÍ ocupan ranura: son items físicos. Lo que no
       // ocupa espacio son las Ampliaciones de almacén y los Huecos de
       // compañero, porque no son objetos que se guarden: son permisos.
-      const NO_OCUPA_RANURA = ['warehouseSlot', 'backpackExpander', 'companionSlot1', 'companionSlot2'];
-      if (!NO_OCUPA_RANURA.includes(itemKey as string) && state.warehouse.length >= effectiveWarehouseCapacity()) {
+      if (!cabeLaCompra(itemKey as string)) {
         showToast('Almacén lleno. No puedes comprar más items.', 'error');
         return false;
       }
 
       state.nanites -= cost;
 
+      // A partir de aquí la compra está cobrada. Si `addToWarehouse` dice que no
+      // cabe, hay que DEVOLVER el dinero antes de salir: un "no compres" que
+      // descuenta las nanitas es peor que un bug visible, porque el jugador
+      // pierde el saldo sin ver por qué.
       if (itemKey === 'key' || itemKey === 'upgradeCrystal') {
         // Llaves y cristales son items del almacén. Antes eran solo contadores:
         // el jugador no los veía, no los podía ordenar y no ocupaban ranura.
         const esLlave = itemKey === 'key';
-        const item = createMaterialItem(esLlave ? 'key' : 'crystal', 1);
-        state.warehouse.push(item);
+        const item = createMaterialItem(esLlave ? 'key' : 'crystal', STORE_MATERIAL_TIER);
+        if (!addToWarehouse(item)) { state.nanites += cost; return false; }
         syncMaterialCounters();
         onUpdate(state, isAfk);
         saveToFirebase();
@@ -1568,34 +2420,39 @@ function syncMaterialCounters() {
         // La caja es un item real del almacén: sin esto no se puede abrir
         const crateType = itemKey.replace('Crate', '').toLowerCase() as CrateType;
         const warehouseItem = createCrateItem(crateType);
-        state.warehouse.push(warehouseItem as any);
+        if (!addToWarehouse(warehouseItem as any)) { state.nanites += cost; return false; }
         syncCrateCounters();
         onUpdate(state, isAfk);
         saveToFirebase();
         return warehouseItem;
       } else if (CONSUMABLES[itemKey as keyof typeof CONSUMABLES]) {
-        if (state.warehouse.length < effectiveWarehouseCapacity()) {
-          const def = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
-          const warehouseItem = {
-            id: `cons_${itemKey}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            name: def.name,
-            type: 'consumable' as const,
-            details: def.details,
-            rarity: def.rarity,
-            tier: 0,
-            sellPrice: Math.floor(item.cost / 4),
-            stackable: true,
-            stackCount: 1,
-            // Identificador estable: el almacén decide el efecto por este campo,
-            // no por el nombre (los nombres ya han cambiado varias veces)
-            buffId: def.buffId
-          };
-          state.warehouse.push(warehouseItem as any);
-          refreshAfkCardCount();
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
+        const def = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
+        const warehouseItem = {
+          id: `cons_${itemKey}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: def.name,
+          type: 'consumable' as const,
+          details: def.details,
+          rarity: def.rarity,
+          tier: 0,
+          sellPrice: Math.floor(item.cost / 4),
+          stackable: true,
+          stackCount: 1,
+          // Identificador estable: el almacén decide el efecto por este campo,
+          // no por el nombre (los nombres ya han cambiado varias veces)
+          buffId: def.buffId
+        };
+        // `addToWarehouse` y no un `if` de capacidad: tres tarjetas AFK son
+        // una ranura, así que la tercera se compra con el almacén lleno. Con el
+        // `if` de antes la compra caía al final de la función, devolvía true y
+        // el jugador pagaba por nada.
+        if (!addToWarehouse(warehouseItem as any)) {
+          state.nanites += cost;
+          return false;
         }
+        refreshAfkCardCount();
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return warehouseItem;
       } else if (itemKey === 'companionSlot1') {
         state.maxCompanionSlots = 2;
         onUpdate(state, isAfk);
@@ -1609,35 +2466,41 @@ function syncMaterialCounters() {
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
-        if (state.warehouse.length < effectiveWarehouseCapacity()) {
-          state.companions.push(comp);
-          const warehouseItem = {
-            id: comp.id,
-            name: comp.name,
-            type: 'companion' as const,
-            details: `Recolección por segundo: +${comp.power}/s`,
-            rarity: comp.rarity,
-            tier: comp.tier,
-            sellPrice: Math.floor(item.cost / 4)
-          };
-          state.warehouse.push(warehouseItem);
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
+        state.companions.push(comp);
+        const warehouseItem = {
+          id: comp.id,
+          name: comp.name,
+          type: 'companion' as const,
+          details: `Recolección por segundo: +${comp.power}/s`,
+          rarity: comp.rarity,
+          tier: comp.tier,
+          sellPrice: Math.floor(item.cost / 4)
+        };
+        // Un compañero SIEMPRE necesita ranura propia —dos Dron Explorador son
+        // dos celdas, para que el jugador pueda elegir cuál equipar—, así que
+        // aquí `addToWarehouse` no tiene pila a la que fundirse y decide.
+        if (!addToWarehouse(warehouseItem)) {
+          state.companions.pop();
+          state.nanites += cost;
+          return false;
         }
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return warehouseItem;
       } else if (itemKey.startsWith('collectorCardT')) {
         const tier = parseInt(itemKey.replace('collectorCardT', ''));
         const collector = generateCollectorByTier(tier);
-        if (state.warehouse.length < effectiveWarehouseCapacity()) {
-          const warehouseItem = {
-            ...collector,
-            sellPrice: Math.floor(item.cost / 4)
-          };
-          state.warehouse.push(warehouseItem);
-          onUpdate(state, isAfk);
-          saveToFirebase();
-          return warehouseItem;
+        const warehouseItem = {
+          ...collector,
+          sellPrice: Math.floor(item.cost / 4)
+        };
+        if (!addToWarehouse(warehouseItem)) {
+          state.nanites += cost;
+          return false;
         }
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return warehouseItem;
       }
 
       // Aquí solo llegan Ampliaciones de almacén y Huecos de compañero: no son
@@ -1688,6 +2551,7 @@ function syncMaterialCounters() {
       // peor que un bug visible.
       consumeWarehouseItem(caja.id, 1);
       consumeWarehouseItem(llave.id, 1);
+      syncWarehouseGaps();
       state.cratesOpened += 1;
 
       // El botín lo decide la tabla (crateLoot) y se aplica aquí. La ruleta solo
@@ -1696,10 +2560,14 @@ function syncMaterialCounters() {
         nanites: (n) => { state.nanites += n; state.totalNanitesProduced += n; },
         crystals: (n) => { grantCrystals(1, n); },
         keys: (n) => { grantKeys(1, n); },
-        hasSpace: () => state.warehouse.length < effectiveWarehouseCapacity(),
+        hasSpace: () => countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity(),
+        // El cosmético no es un item: no pasa por `addItem` ni por el almacén.
+        // Se desbloquea aquí y lo persiste el `saveToFirebase` de más abajo, que
+        // corre en la misma operación que el resto del botín.
+        unlockCosmetic: (cosmeticId) => desbloquearCosmetico(cosmeticId),
+        ownedCosmetics: () => state.cosmetics.unlocked,
         addItem: (item) => {
-          if (state.warehouse.length >= effectiveWarehouseCapacity()) return false;
-          state.warehouse.push(item as any);
+          if (!addToWarehouse(item as any)) return false;
           // El item trae `companionType` y `power` ya resueltos por crateLoot.
           // Antes se deducían parseando `details` con regex y el multiplicador
           // 0.75 se guardaba como 0.5.
@@ -1781,7 +2649,13 @@ function syncMaterialCounters() {
       const keptForged = state.forgedCount;
       const keptAchievements = [...state.unlockedAchievements];
       const keptCores = state.cores + gained;
-      const keptTotalCores = state.totalCores;
+      // `totalCores` es el HISTÓRICO de núcleos ganados, y tiene que incluir los
+      // que se acaban de ganar. `nextCores` lo resta del total que la producción
+      // actual justifica (`pendingCores`), así que si aquí no se sumaran, el
+      // histórico se quedaría congelado en el primer reinicio: cada vez daría los
+      // núcleos de la primera vez, en vez de la diferencia, y la barra de progreso
+      // del prestigio nunca avanzaría de 0.
+      const keptTotalCores = state.totalCores + gained;
       const keptResets = state.resets + 1;
       const keptNodes = { ...state.nodeLevels };
       const keptCosmetics = { ...state.cosmetics, unlocked: [...state.cosmetics.unlocked] };
@@ -1825,7 +2699,9 @@ function syncMaterialCounters() {
       recomputeBonuses();
       rebuildAchievementBonuses();
       syncCompanionsToWarehouse();
-      syncCrateCounters();
+      // Aquí `crates: { common: 2 }` son las cajas de partida nueva que acaba de
+      // escribir el reinicio: hay que convertirlas en items de verdad.
+      materializePendingCrates();
       recalculatePassiveIncome();
       checkAchievements();
       onUpdate(state, isAfk);
@@ -1984,11 +2860,36 @@ function syncMaterialCounters() {
     //  VALORACIÓN Y VENTA
     // ======================================================================
 
-    /** Precio de venta actual del item, con la bonificación del árbol. */
+    /**
+     * Precio de venta de UNA UNIDAD, con la bonificación del árbol.
+     *
+     * Ojo al nombre: es el precio unitario. Para una pila de 19 llaves son 480,
+     * no lo que se cobra por venderla. Para el total está `getSellTotal`.
+     */
     getSellPrice: (itemId: string): number => {
       const item: any = state.warehouse.find((w: any) => w.id === itemId);
       if (!item) return 0;
       return getSellPriceFor(item);
+    },
+
+    /**
+     * Lo que cobra `sellItem` por este item: unidad × unidades.
+     *
+     * Existe porque `getSellPrice` es el UNITARIO y esa distinción se ha
+     * perdido ya una vez: el botón "Vender" pintaba `getSellPrice` sin
+     * multiplicar, así que con una pila de 20 llaves decía "Vender · 480 ◆" y el
+     * modal de al lado decía "por 9.600 nanitas". El jugador ve un número, lo
+     * acepta y se le cobra otro (R3).
+     *
+     * Vive aquí y no en la vista para que el botón, el modal y el cobro no puedan
+     * discrepar por redondeo o por una pila olvidada: es la misma expresión que
+     * usa `sellItem`, y si algún día cambia la fórmula cambia en los tres sitios
+     * porque son el mismo código.
+     */
+    getSellTotal: (itemId: string): number => {
+      const item: any = state.warehouse.find((w: any) => w.id === itemId);
+      if (!item) return 0;
+      return Math.floor(getSellPriceFor(item) * stackUnits(item));
     },
 
     getCollectorValue: (itemId: string) => {
@@ -2011,17 +2912,23 @@ function syncMaterialCounters() {
     },
 
     /** Marca un cosmético como desbloqueado. Idempotente. */
-    unlockCosmetic: (cosmeticId: string) => {
-      if (state.cosmetics.unlocked.includes(cosmeticId)) return false;
-      state.cosmetics.unlocked.push(cosmeticId);
-      return true;
-    },
+    unlockCosmetic: (cosmeticId: string) => desbloquearCosmetico(cosmeticId),
 
     // ======================================================================
     //  CAPACIDADES EFECTIVAS (la UI debe usar estas, no el valor base)
     // ======================================================================
 
     getCapacity: () => effectiveWarehouseCapacity(),
+    /**
+     * ¿Cabe este producto en el almacén?
+     *
+     * Lo lee la tienda para decidir si el botón va como "Almacén lleno". Va aquí
+     * y no en la vista porque es la misma pregunta que se hace `buyStoreItem`
+     * antes de cobrar: si las dos no coinciden, el jugador ve un botón apagado
+     * para algo que sí podría comprar, o uno encendido que al pulsarlo no da
+     * nada.
+     */
+    canBuyStoreItem: (itemKey: string): boolean => cabeLaCompra(itemKey),
     getCompanionSlots: () => effectiveCompanionSlots(),
     getAfkDurationMs: () => afkCardDurationMs(),
 
@@ -2039,6 +2946,12 @@ function syncMaterialCounters() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleUserActivity);
       window.removeEventListener('click', handleUserActivity);
+      // Los de la cola. Sin estos, cerrar sesión y volver a entrar dejaba tres
+      // manejadores apuntando al bucle anterior, y un `online` disparaba un
+      // guardado de una partida que ya no existía.
+      window.removeEventListener('online', reintentarSiHayCola);
+      window.removeEventListener('focus', reintentarSiHayCola);
+      window.removeEventListener('pageshow', reintentarSiHayCola);
       await saveToFirebase();
     },
 
@@ -2054,4 +2967,6 @@ function syncMaterialCounters() {
       void saveToFirebase();
     }
   };
+
+  return estado;
 }

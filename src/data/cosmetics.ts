@@ -6,13 +6,34 @@
 // logros o por permanencia en el ranking, no vendiendo: si se vendieran, el
 // marco sería unpay-to-win social y perdería el sentido.
 //
+// LA EXCEPCIÓN SON LOS DE CAJA, y es una excepción vigilada. Una caja se
+// compra con nanitas, así que un cosmético de caja sí se paga. Como no puede
+// evitarse, se acota el daño: los de `common` y `rare` se quedan en Raro, los
+// de `epic` en Épico, y solo la legendaria da algo Divino. Los marcos y títulos
+// de rango siguen siendo la única vía de verdad al tope del catálogo.
+//
 // Estilos: los `style` son mapas de variables CSS que las tarjetas consumen.
 // Así el catálogo y la UI nunca se desincronizan.
+//
+// El `unlock.kind: 'crate'` no dice "qué hay dentro de la caja": la caja sortea
+// el cosmético y lo enseña (`components/crateLoot.ts`). Aquí solo se declara DE
+// QUÉ CAJA sale cada uno, y `crateCosmetics()` es la única fuente que leen las
+// tablas de botín. Poner un cosmético en este archivo lo hace existir; además
+// ponerlo en una tabla es lo que lo hace sorteable.
 // ==========================================================================
 
+// losing the meaning.
+// (line endings note)
 import type { Cosmetic } from '../types/domain';
 
 const glassBase = { border: '1px solid', borderRadius: '9999px' };
+
+/**
+ * Cajas que pueden dar cosméticos. Son los mismos ids que `CrateType`, pero se
+ * declaran aquí para que este archivo no dependa del game loop: el catálogo es
+ * la capa de datos y no tiene que saber nada del bucle.
+ */
+export type CrateCosmeticSource = 'common' | 'rare' | 'epic' | 'legendary';
 
 export const COSMETICS: Cosmetic[] = [
   // ---------------------------------------------------------------- TÍTULOS
@@ -91,7 +112,44 @@ export const COSMETICS: Cosmetic[] = [
     style: { background: 'conic-gradient(from 180deg at 50% 0%,#fde047,#f97316,#fbbf24,#fef08c,#f97316,#fde047)' } },
   { id: 'banner_hidden', type: 'banner', name: 'Sin Nombre', description: 'Aparece en algunos perfiles. Nadie sabe de dónde sale.',
     rarity: 'Mítico', unlock: { kind: 'secret', value: 'hidden', hint: 'Cien cajas. Ni una más.' },
-    style: { background: 'repeating-linear-gradient(45deg,#0b0b12,#0b0b12 8px,#18181f 8px,#18181f 16px)' } }
+    style: { background: 'repeating-linear-gradient(45deg,#0b0b12,#0b0b12 8px,#18181f 8px,#18181f 16px)' } },
+
+  // ------------------------------------------------------- COSMÉTICOS DE CAJA
+  //
+  // Estos sí se pagan, porque la caja se compra. Van al final y por rareza
+  // creciente con la caja: el catálogo se lee de arriba (lo que solo se
+  // consigue jugando) hacia abajo (lo que también se puede comprar).
+
+  { id: 'title_scraplord', type: 'title', name: 'Señor de Chatarra', description: 'Recicló más chatarra que nadie en la base.',
+    rarity: 'Raro', unlock: { kind: 'crate', value: 'common' },
+    style: { color: '#a3a3a3', font: 'mono' } },
+  { id: 'frame_oxy', type: 'frame', name: 'Óxido', description: 'Borde corroído, del montón y sin pulir.',
+    rarity: 'Raro', unlock: { kind: 'crate', value: 'common' },
+    style: { ...glassBase, borderColor: '#a16207', borderStyle: 'dashed' } },
+
+  { id: 'title_burnout', type: 'title', name: 'Fundido', description: 'Se quedó sin refrigerante a mitad de una fusión.',
+    rarity: 'Épico', unlock: { kind: 'crate', value: 'rare' },
+    style: { color: '#fb923c', font: 'display' } },
+  { id: 'banner_foundry', type: 'banner', name: 'Fundición', description: 'El horno encendido, de noche.',
+    rarity: 'Épico', unlock: { kind: 'crate', value: 'rare' },
+    style: { background: 'linear-gradient(160deg,#451a03,#ea580c 55%,#facc15)' } },
+
+  { id: 'title_nightshift', type: 'title', name: 'Turno de Noche', description: 'La Cyber Base nunca está vacía.',
+    rarity: 'Legendario', unlock: { kind: 'crate', value: 'epic' },
+    style: { color: '#818cf8', font: 'display', glow: 'true' } },
+  { id: 'banner_datastorm', type: 'banner', name: 'Tormenta de Datos', description: 'Caudal de telemetría sin filtrar.',
+    rarity: 'Épico', unlock: { kind: 'crate', value: 'epic' },
+    style: { backgroundImage: 'repeating-linear-gradient(115deg,rgba(56,189,248,.28) 0 2px,transparent 2px 10px),linear-gradient(180deg,#082f49,#0c4a6e)' } },
+
+  { id: 'frame_quantum', type: 'frame', name: 'Cuántico', description: 'Borde que solo está ahí cuando lo miras.',
+    rarity: 'Mítico', unlock: { kind: 'crate', value: 'legendary' },
+    style: { ...glassBase, borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, repeating-linear-gradient(90deg,#22d3ee 0 6px,transparent 6px 12px) border-box' } },
+  { id: 'banner_aurora', type: 'banner', name: 'Aurora', description: 'El cielo de la Cyber Base visto desde el tejado.',
+    rarity: 'Legendario', unlock: { kind: 'crate', value: 'legendary' },
+    style: { background: 'linear-gradient(120deg,#4c1d95,#0e7490 45%,#10b981)' } },
+  { id: 'title_signal', type: 'title', name: 'La Señal', description: 'El único cosmético Divino que no se gana en el ranking.',
+    rarity: 'Divino', unlock: { kind: 'crate', value: 'legendary' },
+    style: { color: '#34d399', font: 'display', glow: 'true', gradient: 'linear-gradient(90deg,#34d399,#22d3ee,#a78bfa)' } }
 ];
 
 export const COSMETICS_BY_ID: Record<string, Cosmetic> = Object.fromEntries(
@@ -99,6 +157,21 @@ export const COSMETICS_BY_ID: Record<string, Cosmetic> = Object.fromEntries(
 );
 
 export const COSMETICS_BY_TYPE = (type: Cosmetic['type']) => COSMETICS.filter(c => c.type === type);
+
+/**
+ * Cosméticos que puede dar una caja.
+ *
+ * Es la única forma de que las tablas de botín sepan qué sortean: filtran por
+ * el `unlock` del catálogo en vez de llevar su propia lista de ids. Si las dos
+ * cosas vivieran separadas, bastaría con borrar una entrada de aquí para que la
+ * caja siguiera anunciando un cosmético que ya no existe, y el premio saldría
+ * con un id que nadie encuentra al equiparlo.
+ *
+ * Se lee del catálogo y no de una constante: el catálogo es la fuente de verdad
+ * desde antes de que existiera el botín de cosméticos.
+ */
+export const crateCosmetics = (crate: CrateCosmeticSource): Cosmetic[] =>
+  COSMETICS.filter(c => c.unlock.kind === 'crate' && c.unlock.value === crate);
 
 /** CSS inline a partir del mapa de estilos del cosmético. */
 export function cosmeticStyle(cos: Cosmetic | undefined): string {

@@ -5,6 +5,12 @@ node_modules/
 dist/
 dist-ssr/
 
+# Banco de pruebas del game loop
+# out/, out-one/ y out-repro/ son los tres sitios donde cae el bundle:
+# verify.config, verify.vite.one.config y verify.vite.repro.config.
+# Con el comodín, añadir un cuarto config no mete artefactos en el historial.
+verify/out*/
+
 # Local env files
 .env.local
 .env.*.local
@@ -33,8 +39,20 @@ lerna-debug.log*
 .vite/
 
 # Banco de pruebas visual (solo desarrollo)
+# Entradas o NONE. O el utillaje está ignorado entero, o se versiona entero:
+# dejarlos a medias hace que git status insinúe que drag-test.html es código
+# nuevo cuando en realidad es montarlo con `npx vite`.
 preview.html
 src/preview.ts
+src/previewAudio.ts
+auth-preview.html
+src/authPreview.ts
+nav-test.html
+src/navTest.ts
+drag-test.html
+src/dragTest.ts
+ruleta-preview.html
+src/ruletaPreview.ts
 
 # Firebase
 .firebase

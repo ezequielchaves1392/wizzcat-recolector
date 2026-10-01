@@ -18,15 +18,28 @@
 //   - `overscroll-behavior: contain` en el cuerpo para que el arrastre no
 //     haga rubber-band de la página entera
 //
-// NAVEGACIÓN. La barra inferior vive AQUÍ y no solo en la vista principal.
-// Antes solo la base la tenía, así que desde el almacén, la forja o la tienda
-// la única salida era el botón `‹` de la esquina superior: en un móvil eso
-// está en la posición que el pulgar no alcanza. Tener la barra en las seis
-// páginas hace que volver sea un gesto igual de barato en todas partes.
+// NAVEGACIÓN. Aquí NO se pinta la barra inferior: la barra es del menú
+// principal y solo del menú principal.
+//
+// Antes esta cáscara también dibujaba los cinco destinos, y el resultado era un
+// mapa de dos menús: en la base estaba la barra y al entrar a cualquier sector
+// aparecía OTRA vez, idéntica pero sin el sector activo resaltado, porque los
+// enlaces internos de una página (perfil → prestigio, base → ranking) van
+//idgets en un submenú que no está en la barra. Con las dos barras a la vez la
+//posición de los iconos se corría respecto al menú al que decías haber
+//entrado, y la salida de un sector dependedía de cuál de las dos pulsabas.
+//
+// Ahora la regla es una sola: la barra inferior es el índice del juego y solo
+// existe en la base. Desde cualquier otro sector se sale con el botón `‹` de la
+// esquina superior izquierda, que es el gesto de "atrás" que ya se esperaba, y
+// que además nunca falla: si el historial no tiene nada más, cae a la base.
+//
+// En escritorio la salida es doble por diseño: el `‹` de vuelta atrás y el
+// botón de inicio, que ignora el historial y salta siempre a la base.
 // ==========================================================================
 
-import { ic, type IconName } from './icons';
-import { BOTTOM_BAR_ROUTES, type Route } from './router';
+import { ic } from './icons';
+import type { Route } from './router';
 import { formatNumber } from '../utils/format';
 
 export interface PageShellOptions {
@@ -39,8 +52,6 @@ export interface PageShellOptions {
   onHome?: () => void;
   /** Contenido extra del encabezado a la derecha, antes del contador. */
   actions?: string;
-  /** Ruta activa, para resaltar la barra inferior. */
-  activeRoute?: Route;
   /** Estado de la partida, para pintar el contador de nanitas. */
   state?: any;
   /** Oculta el contador (no hace falta en ninguna página hoy, pero queda). */
@@ -58,29 +69,47 @@ export interface PageShellOptions {
  * cuarta interacción una acción se ejecutaba cuatro veces: en la Forja, marcar
  * tres piedras se alternaba tres veces y acababa en cero.
  *
- * La solución es clonar el nodo sin hijos y sustituirlo: `cloneNode` NO copia
- * listeners, así que un solo paso borra todos los anteriores sin tener que
- * llevar la cuenta de qué se registró. El mapa recuerda cuál es ahora el nodo
- * vivo, porque quien llama guarda la referencia del principio y esa quedó
- * desconectada tras el primer montaje.
+ * La solución es meter dentro del contenedor un nodo NUEVO cada vez y tirar el
+ * anterior. `cloneNode` no era necesario para limpiar listeners: basta con
+ * crear un elemento de cero y vaciar dentro de él, porque los listeners viven
+ * en el nodo que se descarta.
+ *
+ * POR QUÉ NO SE SUSTITUYE EL CONTENEDOR.
+ *
+ * La versión anterior hacía `prev.replaceWith(fresh)`, es decir, cambiaba el
+ * propio `#app` por un clon. Eso rompía la navegación entera: `main.ts` guarda
+ * `const app = document.querySelector('#app')` una vez al arrancar, y después
+ * del primer `mountInto` esa variable apuntaba a un nodo ya desconectado del
+ * documento. Volver a la base escribía el HTML en un nodo invisible, y
+ * `app.onclick = ...` escuchaba en un nodo que ya no estaba en pantalla. El
+ * síntoma era "no me deja volver atrás": la barra seguía dibujada en la
+ * pantalla anterior, pero los botones no hacían nada porque el manejador
+ * estaba colgado de un nodo que nadie veía.
+ *
+ * El contenedor se respeta. Lo único que se reemplaza es el nodo interior que
+ * aloja la página, y ese sí se busca por atributo en cada montaje, así que
+ * `app.innerHTML = ''` entre render y render no lo deja desincronizado.
  */
-// Un Map y no un WeakMap: las claves son strings, y hay como mucho una
-// entrada por contenedor. El tamaño está acotado por el número de páginas.
-const liveRoots = new Map<string, HTMLElement>();
+
+/** Marca el nodo interior que `mountInto` va sustituyendo. */
+const MOUNT_ATTR = 'data-page-root';
 
 export function mountInto(container: HTMLElement, html: string): HTMLElement {
-  const id = container.id;
-  const prev = (id ? liveRoots.get(id) : undefined) ?? container;
-  const fresh = prev.cloneNode(false) as HTMLElement;
-  prev.replaceWith(fresh);
+  const prev = container.querySelector(`:scope > [${MOUNT_ATTR}]`);
+  const fresh = container.ownerDocument.createElement('div');
+  fresh.setAttribute(MOUNT_ATTR, '');
+  fresh.className = 'page-root';
   fresh.innerHTML = html;
-  if (id) liveRoots.set(id, fresh);
+
+  if (prev) prev.replaceWith(fresh);
+  else container.appendChild(fresh);
+
   return fresh;
 }
 
-/** Invalida el nodo vivo de una página. Se llama al salir de ella. */
+/** Vacía el nodo interior de una página. Se llama al salir de ella. */
 export function unmount(container: HTMLElement): void {
-  liveRoots.delete(container.id);
+  container.querySelector(`:scope > [${MOUNT_ATTR}]`)?.remove();
 }
 
 /**
@@ -115,6 +144,11 @@ export function wireNav(root: HTMLElement, cb: { back?: () => void; home?: () =>
 }
 
 export function pageShell(opts: PageShellOptions, body: string): string {
+  // El `‹` es LA salida del sector, y por eso se pinta siempre que haya
+  // `onBack` — sin importar el tamaño de la pantalla. Es el único control de
+  // navegación que existe aquí, así que no puede depender de un breakpoint:
+  // en móvil es la esquina inalcanzable del pulgar, y en escritorio es el
+  // botón de vuelta atrás de toda la vida.
   const backBtn = opts.onBack
     ? `<button data-nav-back
          class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0
@@ -124,8 +158,11 @@ export function pageShell(opts: PageShellOptions, body: string): string {
        </button>`
     : '';
 
-  // En escritorio la barra inferior no se pinta, así que hace falta una
-  // salida a la base que no dependa del historial.
+  // El botón de inicio es el atajo de escritorio: ignora el historial y salta
+  // a la base. Hace falta porque un sector se puede encadenar con otro
+  // (perfil → prestigio), y entonces el `‹` devuelve al perfil, no al menú
+  // principal. En móvil no se pinta porque ahí el `‹` ya es el gesto de salida
+  // y la base siempre está en el fondo de la pila.
   const homeBtn = opts.onHome
     ? `<button data-nav-home
          class="hit-expand hidden lg:inline-flex w-9 h-9 rounded-lg btn-ghost items-center justify-center
@@ -144,36 +181,14 @@ export function pageShell(opts: PageShellOptions, body: string): string {
                     border-[var(--border-color)]"
              style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
          <span class="accent-text not-italic text-[11px]" aria-hidden="true">◆</span>
-         <span class="font-mono text-[11px] text-[var(--text-main)]">${formatNumber(opts.state.nanites || 0)}</span>
+         <span class="font-mono text-[11px] text-[var(--text-main)]" id="page-nanites-val">${formatNumber(opts.state.nanites || 0)}</span>
        </span>`
     : '';
 
-  const bottomBar = opts.activeRoute
-    ? `<nav class="lg:hidden relative z-20 card-glass border-x-0 border-b-0 flex-shrink-0 px-1 pt-1.5 pb-1"
-               style="padding-bottom: max(0.25rem, env(safe-area-inset-bottom))"
-               aria-label="Navegación principal">
-         <div class="flex items-stretch gap-0.5">
-           ${BOTTOM_BAR_ROUTES.map(r => {
-             const active = r.id === opts.activeRoute;
-             return `
-               <button data-nav="${r.id}"
-                 class="nav-item group flex flex-col items-center justify-center gap-1 flex-1 cursor-pointer
-                        transition-colors duration-150 active:scale-95
-                        ${active ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}"
-                 style="min-height:44px" aria-label="${r.label}"
-                 ${active ? 'aria-current="page"' : ''}>
-                 <span class="[&>span>svg]:w-[22px] [&>span>svg]:h-[22px] transition-transform duration-150
-                              group-active:scale-90
-                              ${active ? 'drop-shadow-[0_0_8px_var(--accent)]' : ''}">
-                   ${ic(r.icon as IconName)}
-                 </span>
-                 <span class="text-[9px] font-mono tracking-wide leading-none">${r.label}</span>
-               </button>`;
-           }).join('')}
-         </div>
-       </nav>`
-    : '';
-
+  // Sin barra inferior el cuerpo se apoya en el borde inferior de la pantalla.
+  // El safe-area sigue estando: en iPhone el gesto de subir descarta el contenido
+  // que quede justo en el borde, y sin ese margen el último botón de la página
+  // queda debajo del gesto.
   return `
     <div class="fixed inset-0 app-bg flex flex-col font-sans select-none overflow-hidden">
       <header
@@ -199,21 +214,42 @@ export function pageShell(opts: PageShellOptions, body: string): string {
            style="padding-bottom: calc(1rem + env(safe-area-inset-bottom))">
         ${body}
       </main>
-
-      ${bottomBar}
     </div>
   `;
 }
 
-/** Franja de estadísticas: 2-4 números cortos con etiqueta encima. */
-export function statStrip(stats: Array<{ label: string; value: string; tone?: string }>): string {
+/**
+ * Franja de estadísticas: 2-4 números cortos con etiqueta encima.
+ *
+ * `glyph` va delante de la etiqueta y es lo que permite distinguir la moneda sin
+ * tener que leer la palabra: el rombo delante de "NANITAS" se reconoce de un
+ * vistazo, y es el mismo glifo que usan los contadores de la cabecera y del
+ * almacén.
+ *
+ * `valueId` existe porque la franja se pinta una sola vez al montar la página y
+ * el juego no para: una stat que es un contador —el saldo, que es lo que
+ * decide si puedes comprar— se queda congelada en la cifra de hace un minuto.
+ * Pasando el id, `updateUI` la refresca por el DOM en cada tick en vez de
+ * obligar a la página entera a re-pintarse.
+ */
+export function statStrip(stats: Array<{
+  label: string;
+  value: string;
+  tone?: string;
+  glyph?: string;
+  valueId?: string;
+}>): string {
   return `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
       ${stats.map(s => `
         <div class="card-glass border rounded-xl px-3 py-2.5 flex flex-col gap-0.5">
-          <span class="label-caps">${s.label}</span>
+          <span class="label-caps">
+            ${s.glyph ? `<span class="accent-text not-italic">${s.glyph}</span>` : ''}
+            ${s.label}
+          </span>
           <span class="font-['Orbitron'] font-bold text-[15px] md:text-base tabular
-                       ${s.tone || 'accent-text'}">${s.value}</span>
+                       ${s.tone || 'accent-text'}"
+                ${s.valueId ? `id="${s.valueId}"` : ''}>${s.value}</span>
         </div>
       `).join('')}
     </div>

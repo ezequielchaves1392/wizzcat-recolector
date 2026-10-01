@@ -17,10 +17,21 @@
 // apartar el pulgar del borde inferior y buscar en la esquina. Ahora los
 // cinco son páginas de verdad —Base, Almacén, Forja, Tienda, Perfil— y tanto
 // el Ranking como el tema se alcanzan desde la cabecera y desde el Perfil.
+//
+// LA BARRA ES DE AQUÍ Y SOLO DE AQUÍ. Este archivo pinta el menú principal, y
+// la barra inferior es su índice. Ninguna otra vista la dibuja: una vez entras
+// en un sector se sale con el `‹` de la cabecera, y la barra solo reaparece
+// al volver a la base. La razón es que repetir el mismo menú de cinco botones
+// dentro de cada sector no daba información nueva —el botón del sector en el
+// que estás nunca cambiaba de sitio, y los enlaces reales de cada página
+// (perfil → prestigio, base → ranking) ya están dentro del contenido— y sí
+// costaba algo: en las pantallas cortas tapaba la última fila de la lista y
+// hacía que el `‹` dejara de ser la salida evidente.
 // ==========================================================================
 
 import { ic, type IconName } from './icons';
 import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
+import { THEMES } from '../theme';
 import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
 
 export interface LayoutCallbacks {
@@ -31,14 +42,7 @@ export interface LayoutCallbacks {
   onThemeChange: (theme: string) => void;
 }
 
-const THEMES: Array<{ value: string; label: string; tone: string }> = [
-  { value: 'cyber-dark', label: 'Cyber Dark', tone: '#38bdf8' },
-  { value: 'synthwave', label: 'Synthwave', tone: '#ff5ea8' },
-  { value: 'matrix', label: 'Matrix', tone: '#34d399' },
-  { value: 'neon-purple', label: 'Neón Púrpura', tone: '#c084fc' },
-  { value: 'sunset', label: 'Sunset', tone: '#fb923c' },
-  { value: 'nature', label: 'Naturaleza', tone: '#16a34a' }
-];
+
 
 export function renderLayoutHTML(
   user: any,
@@ -227,6 +231,23 @@ export function renderLayoutHTML(
                  class="text-[11px] md:text-xs font-mono mt-1.5 text-[var(--text-muted)] tabular
                        min-h-[16px] flex items-center justify-center text-center px-2">
               +0 /s
+            </div>
+            <!--
+              Aviso de guardado pendiente.
+
+              Sin esto, con la red caída el jugador ve su saldo crecer en pantalla
+              sin ninguna pista de que el servidor no lo sabe. Cierra la pestaña y
+              no tiene forma de saber si se guardó o no. El indicador solo aparece
+              cuando hay algo de verdad sin confirmar, y desaparece en cuanto
+              llega: no es un adorno, es el estado real de la partida.
+            -->
+            <div id="pending-save-indicator"
+                 role="status" aria-live="polite"
+                 class="hidden mt-2 text-[10px] font-mono text-amber-400/90 flex items-center
+                        justify-center gap-1.5 px-2 py-1 rounded-lg border border-amber-500/30
+                        bg-amber-500/10">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              <span>Sin guardar en el servidor</span>
             </div>
           </div>
 

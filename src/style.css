@@ -285,6 +285,38 @@ body {
   transform: translateY(1px) scale(0.985);
 }
 
+/* Botón de compra del mercado.
+   El aspecto sale de los ATRIBUTOS, no de clases. El mercado se refresca sin
+   re-pintar la página —para que el botón se encienda en cuanto el ingreso
+   pasivo cubre el precio— y si el estado viviera en el className, ese refresco
+   tendría que demodular cadenas de utilidades de Tailwind para saber cuál
+   quitar. Con los atributos, cambiar el estado es alternar dos banderas.
+
+   `data-blocked` manda sobre `data-afford`: un producto que no cabe en el
+   almacén puede ser ilegible y aun así estar pagado, y el gris tiene que
+   ganar. */
+.store-buy {
+  opacity: 0.7;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+.store-buy[data-afford] {
+  opacity: 1;
+  border-color: var(--accent);
+  color: #06121f;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--accent) 92%, #fff 8%),
+    var(--accent)
+  );
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 30%, transparent) inset,
+    0 6px 18px -6px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.store-buy[data-blocked] {
+  opacity: 0.55;
+}
+
 /* Foco accesible y coherente en todo el juego */
 :where(button, select, input, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
@@ -330,9 +362,73 @@ body {
    5 · Animaciones
    -------------------------------------------------------------------------- */
 
+/*
+ * Flotante de "+X" al clickear (jugador o compañero).
+ *
+ * Antes esto era un fundido lineal de 1s: la opacidad bajaba desde el primer
+ * fotograma, así que a los 300ms el número ya iba por el 70% y a los 500ms era
+ * una mancha. Con varios compañeros golpeando cada segundo, encima, se leía
+ * menos que nada.
+ *
+ * La curva va por fases: pique, lectura y desvanecido.
+ *  - 0-10%:  "golpe". Entra pequeño y crece con rebote. Da el feedback de impacto.
+ *  - 10-70%: "lectura". Opacidad clavada en 1 mientras sube despacio. Es la fase
+ *             que hace falta para distinguir +12 de +120; antes no existía.
+ *  - 70-100%:"salida". Solo aquí se desvanece, con `ease-in` para que arranque
+ *             lento y termine de desaparecer.
+ *
+ * Todo está en porcentajes a propósito: `showFloatingText` cambia la duración
+ * según quién golpea (el jugador va rápido, un compañero se queda más), y así
+ * las tres fases se estiran con ella sin reescribir los keyframes.
+ */
 @keyframes floatUp {
-  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -150%) scale(1.2); }
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+    animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, -66%) scale(1.18);
+    animation-timing-function: ease-out;
+  }
+  22% {
+    transform: translate(-50%, -80%) scale(1);
+    animation-timing-function: linear;
+  }
+  70% {
+    opacity: 1;
+    transform: translate(-50%, -130%) scale(1);
+    animation-timing-function: ease-in;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -172%) scale(0.96);
+  }
+}
+
+/*
+ * Variante sin movimiento, para `prefers-reduced-motion`. No sube ni crece: solo
+ * aparece quieto y se desvanece. La razón de existir es que la regla global de
+ * más abajo deja `animation-duration` en 0.01ms para todo, y con `forwards` eso
+ * deja el flotante clavado en su fotograma final — opacidad 0. Con movimiento
+ * reducido activado el "+X" no se veía en absoluto, ni un instante. Quitar el
+ * movimiento sí es lo que se ha pedido; quitar el número, no.
+ */
+@keyframes floatHold {
+  0%, 72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/*
+ * Gana a la regla global de movimiento reducido porque el selector es más
+ * específico que su `*`, y los dos son `!important`.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html body [data-float-text] {
+    animation-name: floatHold !important;
+    animation-duration: 1500ms !important;
+  }
 }
 
 @keyframes achievementIn {
@@ -340,10 +436,21 @@ body {
   100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
-@keyframes companionClick {
-  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
-  50% { opacity: 0.8; transform: translate(-50%, -50%) scale(1.5); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
+/* Anillo del golpe: vive dentro del boton y se abre hacia fuera.
+   No lleva `animation` aqui a proposito: la animacion la lanza `playHitEffect`
+   con la Web Animations API, que es lo unico que gana a `coreBreathe` sin
+   tener que apagar el latido. Si se declarara aqui, el anillo se quedaria
+   clavado en su primer fotograma. */
+.hit-wave {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 18px -2px color-mix(in srgb, var(--accent) 60%, transparent),
+              inset 0 0 14px -4px color-mix(in srgb, var(--accent) 50%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, opacity;
 }
 
 /* Latido del recolector: comunica "está vivo" sin distraer */
