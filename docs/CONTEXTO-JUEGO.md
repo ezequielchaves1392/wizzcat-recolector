@@ -348,7 +348,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **12 bancos, 962 pruebas.** Queda fuera a propósito:
+la navegación. **12 bancos, 963 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
