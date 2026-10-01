@@ -319,6 +319,7 @@ tres números:
 | **F26** | ¿Un nivel de cristal por tier, o bandas? Y **qué caja suelta cada uno** — hoy solo hay 2 obtenibles de 4. |
 | **F31** | **¿La forja llega a T10 o se queda antes?** Con el stat heredado el techo ya no estorba, pero hay que elegir. |
 | **F34** | **Nada abierto.** El techo es 75% desde el tier 20; la curva por debajo (60% / 68%) es propuesta mía y espera tu visto bueno. |
+| **F35** | **Nuevo y obligatorio: los dos topes tienen que ser coherentes.** Items a tier infinito y cristales con máximo significan que **un item por encima del máximo de cristal no se puede mejorar nunca**. Hay que elegir los dos números juntos. |
 
 **Y cuatro decisiones que ya están tomadas** (respondidas, medido lo que se puede medir):
 
@@ -1437,7 +1438,56 @@ por cristales**. Y la forja debe pedir **dos** items del mismo tier, no tres.
 > y ahora además es obligatoria: la forja no tiene "acierto", tiene "sale bien o sale mal",
 > así que **perder niveles no puede ser ahí**.
 
-### F34 · Los tres números que quedaban, decididos — y lo que "tiers infinitos" cuesta de verdad
+### F35 · Los items se mezclan en la forja, los cristales van por tier, y el máximo sale de las dos vías
+
+Los items de tier se pueden mezclar en la forja para hacer un tier superior. Los cristales
+son de tier 1, 2, 3 … máx. Y obtengo los máximos de mezcla **y** de cajas.
+
+> **Esto aclara dos cosas que estaban escritas mal, y una es importante.**
+>
+> **1 · LAS CAJAS YA DAN EL MÁXIMO, y eso hace que la forja no sea el único camino.**
+> Es lo que dice `makeOverclockCollector()`: las sobrecargadas de caja son
+> **`máximo del rango × 1,25`** — "claramente mejor que su versión de tienda", está
+> escrito en el propio comentario. O sea que **una caja da un item mejor que el
+> perfecto de la forja**, y no por casualidad: por diseño.
+>
+> **Y eso corrige una afirmación que hice en F33.** Yo escribí que "un T10 forjado sale en
+> 466 y un T10 de tienda puede caer en 559, así que el mejor forjado es peor que uno de
+> tienda". Es cierto **para la tienda**, y por eso la herencia de stat era necesaria. Pero
+> **para las cajas es falso desde antes de este lote**: la sobrecargada de caja es
+> `559 × 1,25 = 699`, o sea **un 25% mejor que el techo**. La conclusión correcta es:
+>
+> | Vía | Qué da | Cuánto cuesta |
+> |---|---|---|
+> | **Caja** | El **máximo** × 1,25, o sea el mejor item del tier | Una caja y su llave |
+> | **Forja** | El máximo, y **decides tú** cuáles son tus dos mejores | 2ⁿ materiales |
+>
+> **Lo que hace la forja no es "conseguir un item mejor", es "conseguir el item que
+> quieres".** La caja es la lotería buena y barata; la forja es la que elimina la
+> lotería. Y esa es la razón por la que el jugador la va a usar aunque cueste 2ⁿ: no es
+> que la caja no pueda darle un T8 perfecto, es que **la caja no puede darle el T8
+> perfecto que tú ya tienes en la cabeza**.
+>
+> **Y esto encaja con F31**, donde elegiste que el tier suba "por forja **o** por caja".
+> Ahora está claro que las dos vías llegan y que compiten en precio, no en resultado.
+>
+> **2 · LOS CRISTALES VAN POR TIER, CON MÁXIMO.** Es F26 aplicado, y el "máx" importa
+> más de lo que parece: **los items pueden ser de tier infinito (F34) pero los cristales
+> tienen tope**, y por lo tanto **un item de tier altísimo no se puede subir de nivel**.
+>
+> Eso es una decisión de diseño y funciona —el stat alto sustituye al nivel en el tramo
+> final—, pero hay que **decirla**, porque un jugador que llegue a un T30 verá que no puede
+> mejorarlo y no sabrá por qué. **La respuesta tiene que estar en la ficha**: "necesitas
+> cristal T30" cuando el cristal T30 no existe. Y ese caso es exactamente el **muro de
+> F26**: hay que comprobar que **toda caja existe hasta el tope de cristal**, o el tramo
+> final es inalcanzable.
+>
+> **Y OJO CON LA INTERSECCIÓN, porque ahí está el bug que ya vimos:** si los items van a
+> tier infinito y los cristales tienen máximo, entonces **un item por encima del máximo de
+> cristal es un item que no se puede mejorar nunca**. Con los dos topes en 10 eso no pasa;
+> con uno infinito y otro topado, pasa desde el primer tier por encima del tope de cristal.
+> **Los dos topes tienen que ser coherentes entre sí**, y eso es un número que hay que
+> elegir (y que no estaba en la lista hasta ahora).
 
 1. Los cristales tienen la misma lógica: **se compran los tier 0 y los otros se obtienen**.
 2. La forja permite llegar a **tiers infinitos**.
