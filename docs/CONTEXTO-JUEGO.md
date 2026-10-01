@@ -79,9 +79,10 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 - Capacidad en **pilas**, no en entradas del array. 20 llaves apiladas = 1 ranura.
 - Tres tipos de objeto: `collector`, `companion`, y apilables (`crate`,
   `consumable`, `key`, `crystal`).
-- **Huecos**: el jugador puede dejar una celda vacía a propósito delante de un item
+- **Huecos**: el jugador puede dejar celdas vacías a propósito antes de un item
   (`warehouseGaps`). Es una preferencia de disposición, **no consume capacidad**.
-  Solo se puede crear desde un botón en la ficha del item, nunca arrastrando.
+  Se crean arrastrando un item a cualquier celda vacía de la rejilla, que es un
+  tablero: el item cae exactamente donde se señala y los demás no se mueven.
   Especificación completa en `docs/huecos-almacen.md`.
 
 ## 4. Los sistemas
@@ -98,7 +99,7 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 | **Ascensión** | Reinicia progreso a cambio de núcleos. Umbral: 1 M de producción. Curva `(produccion / 1e6)^0.6`. | `data/prestige.ts`, `ui/prestigePage.ts` |
 | **Árbol de pasivas** | 24 nodos, 5 columnas, requisitos cruzados. Se paga con núcleos. | `data/tree.ts`, `ui/prestigePage.ts` |
 | **Logros** | 15 (13 públicos + 2 secretos). Recompensa pasiva de click y pasivo. | `achievements.ts`, `data/achievements.ts` |
-| **Cosméticos** | 25 títulos, marcos y banners. Casi nada se vende: se obtiene con logros, núcleos, ranking o cajas. | `data/cosmetics.ts` |
+| **Cosméticos** | 34: 10 títulos, 7 marcos, 8 banners y 9 de caja. Casi nada se vende: se obtiene con logros, núcleos, ranking o cajas. | `data/cosmetics.ts` |
 | **Ranking** | 4 tablas. Puntuación = nanitas + logros×50 000 + secretos×250 000 + firmas×20 000. Se reordena en cliente. | `services/rankingService.ts`, `components/rankings.ts` |
 | **Cola offline** | Write-ahead log en `localStorage`. Antes de tocar la red, el saldo está en disco. | `services/naniteQueue.ts` |
 | **Bloqueo** | Un admin puede suspender una cuenta. Fail-open a propósito. | `services/bloqueoService.ts` |
@@ -344,11 +345,78 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 15 | Recargar duplicaba llaves y cristales | **arreglada** (`keysByTier` no se guardaba) |
 | 16 | El stub de Firestore guardaba referencias vivas | **arreglada** (hacía vacuas dos pruebas) |
 | 17 | La curva de poder por tier no está aplanada como dice el doc | **medida**: T10 da ~5× el poder por nanita del peor tier, no 1,3× |
+| 18 | **Comprar y vender en bucle daba nanitas infinitas** | **arreglada** |
+| 19 | El historico de nucleos se contaba dos veces en la primera Ascension | **arreglada** |
+| 20 | La Forja y la Ascension se anidaban a si mismas al redibujar | **arreglada** |
 
+
+
+### 18. Comprar y vender en bucle daba nanitas infinitas — ARREGLADA
+
+El precio de reventa del material salia de `KEY_DEFS[tier].cost` y
+`CRYSTAL_DEFS[tier].cost`, y en esas tablas `cost` es `null` para todo lo que no
+se vende en la tienda, que es justo el material que suelta una caja. Con un numero
+inventado en el `??`:
+
+| Compra | Coste | Se revendia a | Ganancia por operacion |
+|---|---|---|---|
+| Llave de la tienda | 250 | 1.200 | **+950** |
+| Cristal de la tienda | 60 | 4.320 | **+4.260** |
+
+No era un desajuste de balance: era una maquina de imprimir nanitas. La causa raiz
+es que llaves y cristales eran las **unicas dos cartas que no usaban la regla del
+resto** — cajas, consumibles, companeros y recolectores ya vendian por
+`Math.floor(cost / 4)`—. Ahora el material tambien, y el precio sale de
+`STORE_ITEMS`, que es de donde sale el que se cobra.
+
+**Lo que cambia de verdad, y no es trivial:** una llave suelta por una caja pasa de
+valer 1.200 al venderla a 62, y un cristal de 4.320 a 15. Es una nerfee al botin de
+caja, y es la consecuencia honesta de que el material es un consumible. Si algun dia
+hay que recuperar ese valor, el sitio es `precioReventaMaterial()`: una funcion.
+
+`buyCheck` gana la **invariante**, que es lo que faltaba: se compran las veinte
+cartas que dejan un item en el almacen, se vende lo comprado y se mira el saldo. Si
+alguna vez compra+venta deja algo positivo, salta. Ninguna prueba anterior lo
+cubria, porque comprueban que el boton y el cargo coincidan —que es otra cosa— y no
+que vender un item sea una perdida.
+
+### 19. El historico de nucleos se contaba dos veces en la primera Ascension — ARREGLADA
+
+`totalCores` es el historico de nucleos ganados y `nextCores` lo resta de lo que la
+produccion actual justifica, asi que antes del primer reinicio tiene que ser cero.
+No lo era, en dos sitios: al reciclar, si venia a cero se rellenaba con
+`pendingCores()` —que ya esta incluido en `gained`—, y al cargar, con la misma idea
+en `if (!data.totalCores)`. **La segunda es la que mas dolia, porque corre en cada
+carga** y llenaba el historico de un jugador que no habia reciclado nunca.
+
+La primera Ascension con 1 M de produccion daba los 8 nucleos correctos y dejaba el
+historico en 16. Como `nextCores` resta el historico, el segundo ascenso no daba ni
+un nucleo hasta producir **3,17 M en vez de 1 M**, y ninguna pantalla decia por que.
+
+El relleno ahora solo ocurre con `resets > 0`, que es cuando el historico se puede
+reconstruir de verdad. `stateCheck` paso de 203 a 212 con el caso que no miraba
+nadie: todas las pruebas de prestigio partian de `totalCores: 12`.
+
+### 20. La Forja y la Ascension se anidaban a si mismas al redibujar — ARREGLADA
+
+`mountInto()` sustituye el `[data-page-root]` que es hijo del **contenedor**. Las dos
+pantallas montaban bien la primera vez, pero al conectar los manejadores pasaban el
+nodo ya montado donde hacia falta el contenedor. En la segunda llamada `mountInto` no
+encontraba ninguna raiz hija y hacia `appendChild`: la pagina se metia dentro de si
+misma y cada clic anadia una copia entera debajo. En la Ascension era peor, porque el
+redraw no repassaba `go`: comprar un nodo montaba la copia sin rutas de navegacion.
+
+Se recupera el contenedor con `root.parentElement`, el mismo truco de
+`warehouse.ts`. Verificado en navegador con la condicion comprobable:
+`root.querySelector(':scope > [data-page-root]')` devuelve `null` —o sea, el codigo
+viejo hacia `appendChild`—, mientras que sobre el padre encuentra el nodo.
+
+`verify/` no cubre esto, y no puede: es exactamente el tipo de cosa que necesita un
+DOM de verdad.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **13 bancos, 1013 pruebas.** Queda fuera a propósito:
+la navegación. **14 bancos, 1058 pruebas.** El total varía en ±1 según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que depende del botín. Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
