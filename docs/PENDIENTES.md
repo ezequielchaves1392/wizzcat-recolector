@@ -310,12 +310,18 @@ decisiones grandes, no ajustes._
 fallar pueda restar 1 o 2 niveles. Encaja con F31 y explica por qué la forja de T10 es
 aburrida hoy: **fallar no cuesta nada**.
 
+**Las cuatro decisiones ya están tomadas**, y con F26 cerrada solo queda **una ambigüedad
+que no puedo decidir yo:** en F26 dijiste "no surge efecto **o** se necesitan varios", y
+son dos comportamientos distintos. El que recomiendo es **"varios del mismo"** (el cristal se
+queda corto y el jugador nunca desperdicia); el otro obliga a **decirlo en la ficha**, o
+el jugador compra Entropía que no hace nada — el mismo R3 de las llaves—.
+
 **Y cuatro decisiones que ya están tomadas** (respondidas, medido lo que se puede medir):
 
 | # | Decisión | Qué implica |
 |---|---|---|
 | **F23** | **Negarse a entrar**, no expulsar al otro | Nadie pierde la partida en curso. La otra sesión sigue viva hasta que se cierre sola. |
-| **F26** | *(sin respuesta todavía)* | Sigue abierta: ¿la cantidad la fija el tipo de cristal? |
+| **F26** | **La cantidad depende del cristal**: 1 superior sustituye a varios inferiores, y en un tramo alto el mismo superior se queda corto. | **Cambia el eje del cristal**: de "probabilidad" a "cuánto avanza". Eso elimina el azar de la sintonización y obliga a F32 a redefinirse. |
 | **F29** | **Los núcleos entran en el cálculo del definitivo Y tienen pestaña aparte** | Puntúan y además se ven. |
 | **F31** | **El tier sube por forja, o bien una caja inferior puede tirar llaves y cajas de tier superior** | Dos vías, no una. |
 
@@ -994,35 +1000,72 @@ Mover el mercado al primer segundo amor porque siempre lo confundo.
 >
 > Y es justo la clase de cosa que **no necesita un banco**: es posición en un array.
 
-### F26 · Las mejoras de nivel piden cristales mejores, no solo más de los mismos
+### F26 · La cantidad depende del cristal: uno superior sustituye a varios, pero no siempre
 
-Los tienes superiores requieren o cristales de distintos tipos o más cristales base para
-mejorarse.
+Si la cantidad depende del cristal, un cristal de tier superior requiere 1 en items de tier
+inferior porque es más fuerte; pero ese mismo cristal en un tier más alto no surge efecto o
+se necesitan varios del mismo.
 
-> **Revisado, y tu intuición es correcta pero a medias: los dos sistemas YA existen,
-> solo que no se hablan.**
+> **Decidido, y tiene una consecuencia que simplifica el sistema entero: si el cristal
+> aporta una CANIDAD, entonces la cosa que debe escalar es "cuánta mejora cuesta", no
+> "con qué probabilidad".**
 >
-> - **El multiplicador ya es por tipo de cristal.** `CRYSTAL_DEFS` tiene cuatro
->   niveles: Afino (x1, el que se compra), Fase (x1,75), Entropía (x2,75) y Singular
->   (x4). Los tres últimos **salen de las cajas altas**. O sea que **un nivel alto ya
->   necesita un cristal mejor**: es lo que hace `crystalSuccessChance`.
-> - **La cantidad es plana.** `collectorUpgradeCost` multiplica 1,26 por nivel y
->   **siempre del mismo cristal**. Ahí no hay tipo.
+> **La regla, con tus palabras:** el cristal es **una medida del progreso**, no un
+> multiplicador de suerte. Un cristal de nivel superior hace el trabajo de varios de los
+> inferiores —"1 en vez de muchos"— y por eso en un tramo bajo **con uno basta**. Y en
+> un tramo alto, ese mismo cristal **no alcanza**: o no surte efecto, o hacen falta varios.
 >
-> Traducido: hoy el cristal decide **si** mejoras y cuánto cobra, pero **no qué**
-> gastas. Un jugador con 40 Entropía tiene que gastar 40 Afino, y los Afino son los
-> que se compran.
+> **Y eso no necesita dos reglas, sale de una.** Si el coste del nivel N se mide en
+> **puntos de cristal**, y cada cristal aporta tantos puntos como su nivel, entonces sale
+> solo:
 >
-> **Y lo que hay que decidir es el punto dulce, y no sé cuál prefieres:**
-> - **(a) La cantidad también la fija el tipo** (un T8 pide 3 Singular, no 400
->   Afino). El inventario pesa mucho menos y el final de partida se acelera, lo que
->   va contra P1-P2 y contra "que el juego no se termine en un día".
-> - **(b) El tipo solo multiplica y la cantidad sigue subiendo** (lo que hay), y solo
->   se **dice mejor** en la ficha qué cristal conviene.
+> | Nivel del item | Coste en puntos | Se paga con |
+> |---|---|---|
+> | 5 | 3 puntos | 3 de Afino, o 1 de Fase |
+> | 10 | 12 puntos | 12 de Afino, o 2 de Fase, o 1 de Entropía |
+> | 18 | 60 puntos | 60 de Afino, o 6 de Entropía, o **varios** de Singular |
 >
-> Yo haría una mezcla: **el tipo fija la cantidad a partir de cierto nivel** y por
-> debajo sigue siendo el básico. Pero es justo lo que decide el ritmo del final de
-> partida, así que es tuyo.
+> El "1 en vez de muchos" y el "hacen falta varios" **son el mismo número visto desde
+> niveles distintos**. Por eso no hace falta una regla de "a partir del 10 el cristal
+> superior deja de servir": es que el coste sube y el mismo cristal se queda corto.
+>
+> **LO QUE ESTO CAMBIA, Y ES LO IMPORTANTE: hoy el cristal no mide progreso, mide
+> suerte.** `crystalSuccessChance` multiplica la **probabilidad de acierto**, y la
+> cantidad la lleva `collectorUpgradeCost` con un 1,26 plano por nivel. Cambiarlo a "el
+> cristal mide cuánto avanzas" **elimina el azar de la sintonización**: si compras el
+> cristal exacto, mejoras seguro. Y eso, con F32, cambia el carácter del
+> juego entero, para bien y para mal:
+>
+> - **A favor:** el jugador deja de perder 40 cristales a lo loco, y el coste de subir
+>   un nivel **se puede calcular de antemano**, que es lo que hace un incremental
+>   legible ("me faltan 8 puntos, tengo 5").
+> - **En contra:** si la sintonización ya no puede fallar, **F32 se queda sin sitio**.
+>   No se puede "perder 1 o 2 niveles" en algo que siempre acierta.
+>
+> **Así que F26 y F32 juntas exigen partir el trabajo en dos ejes**, y creo que es lo
+> que quieres sin haberlo escrito:
+>
+> - **El cristal decide CUÁNTO** (eje de progreso).
+> - **El nivel decide si ACIERTA y qué pasa si falla** (eje de riesgo), y F32 mete la
+>   pérdida de niveles a partir del 10.
+>
+> Así los dos se entienden y ninguno se pisa. **Pero es la confirmación más grande de
+> todo el lote**, porque quita el azar de la sintonización.
+>
+> **Y queda una ambigüedad en tu frase que no puedo decidir yo:** "no surge efecto o se
+> necesitan varios". Son dos comportamientos distintos:
+> - **Se necesitan varios** (lo que sale de la tabla de arriba): el cristal sigue
+>   sirviendo y solo se queda corto. **El jugador nunca desperdicia nada.**
+> - **No surge efecto:** por encima de cierto tramo el cristal bueno se vuelve inútil y
+>   hay que bajar al básico. Eso **fuerza al jugador a tener los cuatro**, y es más
+>   interesante a corto plazo y una mala idea a largo: el jugador deja de mirar el
+>   cristal y vuelve al botón.
+>
+> Yo haría **"varios del mismo"**, porque el otro comportamiento hace que el jugador
+> **tome decisiones con información equivocada**: si el botón dice 3 Entropía y en
+> realidad no hacen nada, el jugador va a comprarlos. **Y si el cristal no surtiera
+> efecto, tendría que decirlo en la ficha antes**, porque si no es el mismo R3 de las
+> llaves: un texto que promete algo que la regla no da.
 
 ### F27 · El almacén necesita un tope y las ampliaciones deben escalarse por tipo
 
@@ -1234,20 +1277,34 @@ nivel 1 o 2 niveles, para hacerlo más entretenido y difícil de subir.
 > pérdida de nivel, la forja tiene la misma tensión que una ruleta —y el jugador ya sabe
 > cómo se juega esa tensión.
 >
+> **LO QUE ESTA IDEA OBLIGA A DECIDIR, Y ES MÁS IMPORTANTE QUE EL NÚMERO:**
+> **hoy el cristal mide probabilidad de acierto** (`crystalSuccessChance`), y tu respuesta
+> a F26 lo cambia a **medir cuánto progreso**. Si el cristal pasa a ser "cuánto avanza", la
+> sintonización **deja de ser un azar**: compras el cristal exacto y mejoras seguro.
+> **Y entonces F32 no tiene dónde aplicarse**, porque no se puede perder un nivel en algo
+> que nunca falla.
+>
+> **Los dos juntos piden partir el trabajo en dos ejes, y creo que es lo que quieres:**
+> - **El cristal decide CUÁNTO** (eje de progreso).
+> - **El nivel decide si ACIERTA y qué pasa si falla** (eje de riesgo), y aquí entra tu
+>   pérdida de niveles.
+>
+> Con eso los dos se entienden y ninguno se pisa. Y es una mejora real: el jugador deja
+> de perder 40 cristales a lo loco, y **puede calcular de antemano cuánto le falta**.
+>
 > **Lo que hay que decidir, y son tres números:**
-> - **¿Dónde empieza?** Dices "por ejemplo del 10". Por debajo del 10 la loss sería
+> - **¿Dónde empieza?** Dices "por ejemplo del 10". Por debajo del 10 la pérdida sería
 >   demoledora, porque el jugador acaba de desbloquear eso: perder 2 niveles en el 8 es
 >   volver al 6. **Empezar en 10 es el número correcto**, y por una razón concreta:
->   `collectorMaxLevel` va a 20 y a 35 con 5 estrellas, así que el 10 es justo el punto
->   donde el segundo tramo empieza y donde el jugador ya ha invertido.
+>   `collectorMaxLevel` va a 20 y a 35 con 5 estrellas, así que el 10 es justo donde
+>   empieza el segundo tramo y donde el jugador ya ha invertido.
 > - **¿Cuánto?** "1 o 2 niveles" necesita probabilidad por nivel, no un rango. Lo más
->   simple y lo más legible: **-1 es lo normal y -2 es raro**. Y el -2 debería subir
->   con el nivel, no ser fijo.
-> - **¿Y con cristal de Afino?** El cristal multiplica la **probabilidad de éxito**, y
->   aquí hay que decidir si el cristal también compra **protección contra la pérdida**.
->   Si no lo hace, el Entropía es solo "más fácil" y el jugador tiene que decidir entre
->   subir seguro o subir arriesgado —que es una decisión buena—. Si lo hace, el cristal
->   deja de ser solo probabilidad y pasa a ser dos cosas.
+>   simple y lo más legible: **-1 es lo normal y -2 es raro**, y el -2 debería subir con
+>   el nivel en vez de ser fijo.
+> - **¿La probabilidad de fallo sube con el nivel?** Si no sube, F32 solo afecta al 10-20
+>   y los niveles bajos siguen siendo gratis. Y si sube mucho, el tramo final se vuelve
+>   una ruleta que no se puede empujar. Ese es el número que balancea el tramo alto, y va
+>   atado a P1-P2.
 >
 > **Un aviso que no es tuyo pero sale de esto:** si fallar puede restar niveles, **el
 > botón de "restaurar" se vuelve imprescindible**. Un jugador que pierde 2 niveles en un
