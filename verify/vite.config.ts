@@ -52,7 +52,8 @@ export default defineConfig({
         desgloseCheck: resolve(here, 'desgloseCheck.ts'),
         llaveCheck: resolve(here, 'llaveCheck.ts'),
         ranuraCheck: resolve(here, 'ranuraCheck.ts'),
-        tarjetaCheck: resolve(here, 'tarjetaCheck.ts')
+        tarjetaCheck: resolve(here, 'tarjetaCheck.ts'),
+        saltoCheck: resolve(here, 'saltoCheck.ts')
       },
       formats: ['es']
     }

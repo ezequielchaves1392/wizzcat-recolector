@@ -350,12 +350,146 @@ function buildKeyLoot(crateType: CrateType): LootEntry {
   };
 }
 
+/**
+ * LA PROBABILIDAD BAJA DE QUE UNA CAJA DÉ ALGO DE ARRIBA (F6).
+ *
+ * Cada caja tiene su tabla con lo que le corresponde, y en cada una hay una entrada
+ * `up` de peso bajo: un tier por encima, o un nivel de caja. No es decoration,
+ * es la razón por la que abrir una caja común tiene una sorpresa, aunque sea rara:
+ *
+ *   común     6%   dron T2 o recolector T2
+ *   rara      5%   T6 o recolector T6 sobrecargado
+ *   épica     4%   T10 o recolector T10 sobrecargado
+ *   legendaria 4%  compañía exclusiva de caja que no estaba en la tabla
+ *
+ * **POR QUÉ EL PESO ES BAJO Y NO UNA FRACCIÓN.** El peso es relativo dentro de la
+ * caja: un 5% de peso no es un 5% de probabilidad, es `5 / suma`. Con la tabla de la
+ * rara sumando 101, sale un 4,95%. Está bien que sea bajo, pero no porque el número
+ * lo sea.
+ *
+ * **POR QUÉ UN SOLO PASO Y NO "LO QUE SALGA".** Si una caja pudiera dar cualquier
+ * tier de arriba, la caja común sería una caja legendaria con más pasos. Un solo
+ * salto hace que el premio alto siga siendo reconocible ("me ha salido un T6 en una
+ * caja rara") y que se pueda razonar: la caja legendaria es donde se busca lo bueno.
+ *
+ * Y la probabilidad real de un salto **no es el peso**: es `peso / suma de la tabla`,
+ * y la suma es distinta en cada caja. Por eso los pesos no son iguales en las cuatro
+ * y por eso `llaveCheck`-style, el banco mide las cuatro por separado en vez de mirar
+ * el número de la tabla.
+ *
+ * **Y AQUÍ ESTÁ D1, QUE SE RESUELVE DE PASO.** `CRATE_ONLY_COMPANIONS` tiene seis
+ * compañeros y la tabla de la legendaria solo usa los índices 0 a 4: el **Espectro
+ * Azulado** (índice 5) estaba definido y era inalcanzable. Se ha metido en la tabla
+ * en vez de borrarlo, porque el arreglo de más valor para el jugador es que exista
+ * el compañero y que se pueda conseguir, no que el array quede bonito. La entrada
+ * baja a 6 y el resto se queda como estaba, así que el índice 5 no se ha movido y
+ * ningún guardado lo apunta.
+ */
+function buildUpLoot(crateType: CrateType): LootEntry {
+  return {
+    id: 'up',
+    weight: UP_WEIGHTS[crateType],
+    // sube UN peldaño (`subirNTier(crateType, 1)`), no "lo que salga"
+    build: () => subirNTier(crateType, 1)
+  };
+}
+
+/** Pesos del salto, por caja. Medidos, no redondeados. */
+const UP_WEIGHTS: Record<CrateType, number> = { common: 6, rare: 5, epic: 4, legendary: 4 };
+
+/**
+ * EL SALTO SE COMPRUEBA AL ABRIR, NO AL CONSTRUIR LA TABLA.
+ *
+ * Esto es lo que hace que `up` sea una entrada de verdad y no un adorno: `up` está
+ * en la tabla con su peso, así que entra en la suma y el sorteo por peso lo elige
+ * con la misma probabilidad que cualquier otra cosa. El `tocaElSalto` de abajo es
+ * solo para poder MEDIR esa probabilidad en un banco; el juego no lo llama.
+ *
+ * Y por qué está en la tabla y no en un `if` suelto al abrir: si el salto fuera un
+ * `if` aparte, la ruleta no lo enseñaría. La regla del fichero es que la ruleta
+ * tiene que enseñar lo que entra, y eso obliga a que el premio sea una entrada de la
+ * tabla que la cinta puede pintar.
+ */
+export function probabilidadDeSalto(crateType: CrateType): number {
+  const tabla = CRATE_LOOT[crateType];
+  const total = tabla.reduce((s, e) => s + e.weight, 0);
+  return UP_WEIGHTS[crateType] / total;
+}
+
+/** Tirar el salto a mano. Solo para bancos; el juego usa la entrada de la tabla. */
+export function tocaElSalto(crateType: CrateType): boolean {
+  return Math.random() < probabilidadDeSalto(crateType);
+}
+
+/**
+ * Un nombre del tier de arriba, elegido al azar entre los tres.
+ *
+ * El `as Record<number, string[]>` está porque `companionNames` está tipado con las
+ * claves literales 1..10 y aquí el índice llega como `number` (sale de
+ * `TIER_PROPIO[c] + 1`, y `TIER_PROPIO` es un `Record<CrateType, number>`). El
+ * índice es correcto: `Math.min(10, ...)` lo deja siempre en rango.
+ */
+function nombreDeArriba(origen: 'companion' | 'collector', tier: number): string {
+  const tablas = TIER_SYSTEM.companionNames as Record<number, string[]>;
+  const lista = origen === 'companion'
+    ? tablas[tier]
+    : (TIER_SYSTEM.collectorNames as Record<number, string[]>)[tier];
+  return lista[rand(0, lista.length - 1)];
+}
+
+/**
+ * El premio del salto: un tier por encima del que le tocaría a la caja.
+ *
+ * O sea: una caja común da un T2 (le tocaría T1), una rara da un T4, una épica da
+ * un T8 y una legendaria da un T10. La razón de "+1" y no "+2" es que el salto se
+ * note sin dejar de ser del mismo juego: un T4 dentro de una caja rara ya es
+ * imposible por el precio (4.500 contra 1.500 de la caja) y ya es un premio.
+ */
+function subirNTier(crateType: CrateType, pasos: number): any {
+  const propio = TIER_PROPIO[crateType];
+  const tier = Math.min(10, propio + pasos);
+
+  // Mitad y mitad, y el lado se tira con `Math.random`. Un compañero y un
+  // recolector valen cosas distintas (la companion da ingreso, el recolector daño)
+  // y alternar hace que el salto no valga siempre lo mismo.
+  if (Math.random() < 0.5) {
+    const t = TIER_SYSTEM.ranges[tier];
+    const p = rand(t[0], t[1]);
+    const nombre = nombreDeArriba('companion', tier);
+    return {
+      kind: 'companion', amount: 1, name: nombre, label: nombre,
+      details: `Recolección por segundo: +${p}/s`,
+      rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier],
+      icon: 'companion', tier,
+      item: {
+        id: `crate_up_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: nombre, type: 'companion', details: `Recolección por segundo: +${p}/s`,
+        rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
+        companionType: 'passive', power: p,
+        sellPrice: Math.floor(p * 62)
+      },
+      up: true
+    };
+  }
+
+  const w = makeOverclockCollector(tier);
+  return {
+    kind: 'collector', amount: 1, name: w.name, label: w.name,
+    details: w.details, rarity: w.rarity, icon: 'collector', tier,
+    item: w.item, up: true
+  };
+}
+
+/** El tier que le "toca" a cada caja, que es la referencia del salto de +1. */
+const TIER_PROPIO: Record<CrateType, number> = { common: 1, rare: 3, epic: 6, legendary: 8 };
+
 export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
   common: [
     { id: 'nanites', weight: 34, build: () => { const a = rand(250, 400); return { kind: 'nanites', amount: a, name: 'Nanitas', label: `+${a} Nanitas`, details: 'Materia prima básica', rarity: 'Común', icon: 'bolt' }; } },
     { id: 'crystals', weight: 26, build: () => { const a = rand(2, 4); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Raro', icon: 'crystal', materialTier: 1 }; } },
     { id: 'dron', weight: 22, build: () => ({ kind: 'companion', amount: 1, name: 'Dron Explorador', label: 'Dron Explorador', details: 'Recolección por segundo: +2/s', rarity: 'Común', icon: 'companion', tier: 1, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +2/s', rarity: 'Común', companionType: 'passive', power: 2, sellPrice: 100 } }) },
     buildKeyLoot('common'),
+    buildUpLoot('common'),
     { id: 'expander', weight: 6, build: () => ({ kind: 'consumable', amount: 1, name: 'Ranura de Almacén', label: '+1 ranura de almacén', details: 'Amplía el almacén +1 slot', rarity: 'Raro', icon: 'plus', item: { id: `crate_slot_${Date.now()}`, name: 'Ranura de Almacén', type: 'consumable', details: 'Amplía el almacén +1 slot', rarity: 'Raro', buffId: 'warehouseExpander', stackable: true, stackCount: 1, sellPrice: 125 } }) },
     { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
   ],
@@ -365,6 +499,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'collector_t4', weight: 20, build: () => { const w = makeOverclockCollector(4); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 4, item: w.item }; } },
     { id: 'epic_crate', weight: 16, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Épica', label: '+1 Caja Épica', details: 'Abre una caja de botín superior', rarity: 'Épico', icon: 'crystal', item: { id: `crate_epic_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0, sellPrice: 1125, stackable: true, stackCount: 1 } }) },
     buildKeyLoot('rare'),
+    buildUpLoot('rare'),
     { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
   ],
   epic: [
@@ -380,6 +515,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     // llave que no salía de ninguna parte. La escalera de B6 era de tres peldaños
     // y faltaban los tres.
     buildKeyLoot('epic'),
+    buildUpLoot('epic'),
     { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
   ],
   legendary: [
@@ -389,7 +525,18 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'avatar', weight: 16, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
     { id: 'oracle', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
     { id: 'sentinel', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
+    // D1 · EL ESPECTRO AZULADO (índice 5) ESTABA DEFINIDO Y NO LO SACABA NADIE.
+    //
+    // Los seis compañeros exclusivos de caja: la tabla usaba 0 a 4 y el quinto se
+    // quedaba fuera, o sea que era un compañero que existía en el código y no se
+    // podía conseguir de ninguna manera. Va con peso 5, el más bajo de la tabla:
+    // es el más raro, y por eso mismo no debe desplazar a los que ya salían.
+    //
+    // El índice 5 NO lo usa nadie más, así que ningún guardado lo apunta y no hay
+    // migración que hacer. Si algún día hay que moverlo, esto es el sitio.
+    { id: 'espectro', weight: 5, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[5]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
     buildKeyLoot('legendary'),
+    buildUpLoot('legendary'),
     { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
   ]
 };

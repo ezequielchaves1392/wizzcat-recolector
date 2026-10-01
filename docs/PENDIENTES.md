@@ -77,9 +77,39 @@ Debe existir una llave para cada tipo de caja y crece el precio de las mismas.
 > propósito que la Llave del Vacío sirva para las cajas de abajo, que es la mitad
 > de la comodidad del sistema. La regla sigue siendo "igual o superior".
 
-### F6 · Probabilidad baja de botín de tier superior en las cajas
+### F6 · Probabilidad baja de botín de tier superior en las cajas — HECHO
 
 En las cajas debe haber una probabilidad baja de obtener cosas del tier superior.
+
+> **Hecho, y la decisión importante es DÓNDE vive el salto: en la tabla de botín,
+> no en un `if` al abrir.**
+>
+> Si el salto fuera un `if` suelto, seguiría funcionando y nadie lo notaría —saldría
+> un 5% de las veces— pero la **primera regla de `crateLoot.ts` es que la ruleta tiene
+> que enseñar lo que entra**. Un premio que no está en la tabla no lo puede pintar la
+> cinta, así que el jugador vería salir un T6 de una caja común sin que la ruleta
+> hubiera mostrado nada. Va como una entrada más, con su peso.
+>
+> | Caja | Peso | Probabilidad real | Da |
+> |---|---|---|---|
+> | Común | 6 de 105 | 5,7% | T2 |
+> | Rara | 5 de 106 | 4,7% | T4 |
+> | Épica | 4 de 128 | 3,1% | T7 |
+> | Legendaria | 4 de 119 | 3,4% | T9 |
+>
+> **Por qué sube UN peldaño y no "lo que salga".** Un salto de cualquier tamaño haría
+> de la caja común una caja legendaria con más pasos, y el premio alto dejaría de ser
+> reconocible ("me salió un T4 en una caja rara" se puede contar; "me salió un T9 en una
+> caja común" no significa nada). Con un solo salto el premio sigue siendo del mismo
+> juego, y se puede razonar dónde se busca lo bueno.
+>
+> **Por qué la probabilidad no es el peso.** Es `peso / suma`, y la suma es distinta en
+> cada caja. Por eso los pesos no son iguales en las cuatro. Y por eso `saltoCheck`
+> mide las cuatro por tiradas de verdad y no mirando la tabla: un banco que mirase el
+> peso estaría midiendo un número que el jugador nunca ve.
+>
+> Cubre `saltoCheck` (42 pruebas), nuevo. Validado subiendo dos peldaños en vez de
+> uno: 4 fallos.
 
 ### F7 · Tope de 6 compañeros y precio de ranura balanceado — HECHO
 
@@ -927,6 +957,10 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
       y las tres partes suman el total exacto porque las calcula el motor, no la
       vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
+- [x] **F6 · probabilidad baja de tier superior en las cajas, y D1.** El salto es
+      una entrada de la tabla de botín (así la ruleta puede pintarlo), sube un peldaño
+      y sale entre el 3% y el 6% real según la caja. El Espectro Azulado ya sale de la
+      legendaria. `saltoCheck` (42).
 - [x] **F4 · fuera los buffs pasivos, solo tarjetas.** No era que fueran buffs: es
       que un buff pasivo activo anula el corte del AFK, así que compraban ingreso sin
       mirar. El efecto sigue en el motor para las partidas viejas. `tarjetaCheck` (17).
@@ -995,7 +1029,7 @@ la tienda—, que se recuperó de la conversación.
 > un fichero ignorado no tiene red. Los tres ficheros se recuperaron, pero
 > perdimos una herramienta de revisión visual hasta reconstruirla.
 
-### D1 · Un compañero existe pero no se puede conseguir
+### D1 · Un compañero existe pero no se puede conseguir — RESUELTO
 
 El **Espectro Azulado** (Épico, `passive`, power 18) está en `CRATE_ONLY_COMPANIONS`
 como índice 5, y **la tabla de botín no lo usa**: solo se referencian los índices
@@ -1004,3 +1038,13 @@ como índice 5, y **la tabla de botín no lo usa**: solo se referencian los índ
 > Apuntado mientras se buscaba B1, no es un bug de juego sino de contenido. Las
 > dos salidas posibles: meterlo en la tabla de botín, o borrarlo del array para
 > que no invente una recompensa que no existe.
+>
+> **Decidido: entra en la tabla**, con peso 5, el más bajo de la legendaria. El motivo
+> es que el arreglo de más valor para el jugador es que el compañero exista y se
+> pueda conseguir, no que el array quede limpio; borrarlo sería tirar contenido ya
+> escrito a cambio de nada.
+>
+> **Y el índice 5 no lo usaba nadie más**, así que no hay migración que hacer: ningún
+> guardado apunta al 5. `saltoCheck` lo comprueba, y comprueba también que los índices
+> 0 a 4 **siguen saliendo** — que es lo que rompería un guardado antiguo si alguien
+> reordenara el array.
