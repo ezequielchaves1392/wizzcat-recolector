@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "verify": "node verify/scanTexto.mjs && vite build --config verify/vite.config.ts && node verify/run.mjs",
-    "scan": "node verify/scanTexto.mjs",
-    "scan:probar": "node verify/probarScan.mjs && node verify/probarAlcance.mjs"
+    "verify": "node verify/scanTexto.mjs && node verify/scanPlantillas.mjs && vite build --config verify/vite.config.ts && node verify/run.mjs",
+    "scan": "node verify/scanTexto.mjs && node verify/scanPlantillas.mjs",
+    "scan:probar": "node verify/probarScan.mjs && node verify/probarAlcance.mjs && node verify/probarPlantillas.mjs"
   },
   "dependencies": {
     "firebase": "^10.8.0",
