@@ -177,7 +177,7 @@ se la monta él mismo.
 > **Es la misma cosa que F8 vista desde los dos lados:** B2 es el defecto y F8 la
 > decisión de qué tiene que verse en la fila. Si se arregla F8, B2 se cierra solo.
 
-### B3 · El logro del almacén a 20 no da cartel
+### B3 · El logro del almacén a 20 no da cartel — HECHO
 
 Obtuve el logro del almacen en 20 y no me salió un cartel.
 
@@ -209,8 +209,28 @@ Obtuve el logro del almacen en 20 y no me salió un cartel.
 > **Cómo se comprueba al arreglar:** meter el callback en una cola si el contenedor
 > no existe, y vaciarla en cuanto se pinte el layout. Con eso los logros de la carga
 > también salen, y hay que decidir si con retraso o solo los de en vivo.
+>
+> **Arreglado las dos mitades.**
+>
+> 1. `buyStoreItem('warehouseSlot')` ya llama a `checkAchievements()`. Era la única
+>    de las diez rutas que no lo evaluaba.
+> 2. En `main.ts` hay una **cola de logros pendientes**: `showAchievementPopup` mete
+>    el logro en la cola si `#achievement-stack` todavía no está, y la cola se vacía
+>    en cuanto `renderRoute` ha montado el layout. El aviso sale en el primer
+>    fotograma, así que no hay retraso perceptible.
+>
+> **El sonido no se reproduce al encolar, a propósito.** Un logro que suena al entrar
+> en la aplicación es un ruido en mitad de otra cosa; el cartel visual sí tiene
+> sentido, porque el jugador ya está mirando. La cola desemboca en la misma pila que
+> los avisos en vivo, así que hereda su tope de tres sin tener uno propio.
+>
+> **Lo que un banco puede comprobar y lo que no:** que el motor **emita** el logro sí
+> (el `onAchievement` es el mismo gancho que `main.ts` le pasa), y que se desbloquee
+> una sola vez. Que se pinte no: eso necesita el `#achievement-stack` de verdad, y es
+> `preview.html`. La cola está documentada en el código, no en el banco, porque es
+> una función local de un módulo que importa Firebase.
 
-### B4 · La pista del logro del almacén cuenta slots que no tienes
+### B4 · La pista del logro del almacén cuenta slots que no tienes — HECHO
 
 Relacionado con lo que dijiste de la "pista": el progreso de "Almacén Masivo"
 miente.
@@ -226,6 +246,25 @@ miente.
 > El logro tampoco se cumple por la vía del árbol, que es la que el jugador ve
 > funcionar. Se cumple comprando una ampliación de tienda (+5), y solo si ninguna de
 > las dos vías tiene ya la base a 20.
+>
+> **Arreglado, y el segundo efecto era peor que la pista.** Con la base a 20 y el
+> árbol dando ranuras, el logro se quedaba **bloqueado para siempre**: ya estaba en
+> `unlockedAchievements`, así que ni la tienda ni el árbol volaban a evaluarlo otra
+> vez. Es decir, la misma operación —comprar las dos primeras ampliaciones y el
+> árbol— dependiendo del orden daba el logro o lo quemaba para siempre. Y eso queda
+> resuelto: comprar la tienda y el árbol da el mismo resultado en las dos
+> direcciones.
+>
+> Ahora la pista mide `warehouseCapacity + bonus.storageSlots`, la misma regla que
+> `getCapacity()`, así que el logro se cumple **por la vía que el jugador está
+> viendo funcionar**.
+>
+> **Lo que el banco comprueba, y por qué no compara dos cifras.** La pista va topeada
+> a 20 y la capacidad no: con el árbol comprado la capacidad real es 26 y la pista
+> marca 20. Comparar `pista === capacidad` falla con un bug que no existe, porque el
+> tope es lo correcto —de nada sirve un 26/20—. Así que lo que se mira es que la
+> pista **llegue al tope por el árbol** (20 con capacidad 26) y que sin árbol sea
+> exactamente la base. `toastCheck` pasó de 25 a 31.
 
 ### B5 · Las tarjetas de la tienda contaban cómo está hecho el trompo
 
@@ -834,6 +873,10 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
       y las tres partes suman el total exacto porque las calcula el motor, no la
       vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
+- [x] **B3-B4 · el cartel de logro y su pista.** La compra de ampliar el almacén ya
+      evalua logros (era la única de las diez rutas que no), el cartel se encola
+      cuando todavía no hay layout y se vacía en cuanto lo hay, y la pista mide la
+      capacidad real con el árbol. `toastCheck` pasó de 25 a 31.
 - [x] **B9 · el AFK se pone solo estando en la pantalla.** La pregunta va en el
       tick, no en el manejador de presencia; el `mousemove` ha dejado de contar como
       actividad (hacía el AFK inútil); el umbral sube a 60 s. `tickCheck` pasó de 14

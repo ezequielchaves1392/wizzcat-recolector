@@ -36,8 +36,16 @@ export const DB = 'users/test';
 /** El documento tal y como está en la "base de datos", para mirar lo guardado. */
 export const guardado = (): any => (globalThis as any).__MEM_DB__[DB];
 
-/** Arranca el game loop con la partida dada puesta en la base de datos. */
-export async function boot(save?: any) {
+/**
+ * Arranca el game loop con la partida dada puesta en la base de datos.
+ *
+ * `extra` es el cuarto argumento de `createGameLoop` —el mismo que `main.ts` le
+ * pasa a `showAchievementPopup`—, y existe porque sin él no hay forma de mirar si
+ * el motor **emite** un logro. Antes solo se podía mirar si se desbloqueaba en el
+ * estado, y son dos cosas distintas: el cartel depende de la primera y del cableado
+ * hasta la vista, y esa segunda mitad no es comprobable desde un banco (B3).
+ */
+export async function boot(save?: any, extra?: { onAchievement?: (a: any) => void }) {
   // Dos turnos de espera, y el motivo es de orden.
   //
   // `createGameLoop` arranca con un `saveToFirebase()` en vuelo. Un turno deja
@@ -55,7 +63,7 @@ export async function boot(save?: any) {
   limpiarCola();
   globalThis.__MEM_DB__ = {};
   if (save) globalThis.__MEM_DB__[DB] = JSON.parse(JSON.stringify(save));
-  return await createGameLoop(USER, () => {});
+  return await createGameLoop(USER, () => {}, undefined, extra?.onAchievement);
 }
 
 /**

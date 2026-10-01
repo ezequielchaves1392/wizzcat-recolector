@@ -42,7 +42,7 @@
 // ==========================================================================
 
 import { showToast, syncToastOffset } from '../src/utils/toast';
-import { check, resumen } from './kit';
+import { check, resumen, boot, baseSave } from './kit';
 
 /** El contenedor donde se apilan los avisos. */
 const pila = () => (globalThis as any).document.querySelector('#toast-stack');
@@ -94,6 +94,65 @@ function cabecera(borde: number) {
   el.getBoundingClientRect = () => ({ top: 0, bottom: borde, height: borde, left: 0, right: 0, width: 0 });
   (globalThis as any).__DOM__.header = el;
   return el;
+}
+
+// ==========================================================================
+//  LOGROS: que el cartel llegue a algún sitio (B3)
+// ==========================================================================
+//  POR QUÉ ESTE BLOQUE ESTÁ EN EL BANCO DE LOS AVISOS.
+//
+//  El cartel de logro es un aviso más, y comparte el mismo problema que la pila:
+//  es una función que busca su contenedor y se va si no lo encuentra. La cola de
+//  nanitas que hay en `main.ts` no es comprobable desde aquí —es una función local
+//  de un módulo que importa Firebase—, así que lo que se comprueba es lo que sí
+//  se puede comprobar: **que `onAchievement` recibe el logro, y que el logro se
+//  desbloquea de verdad**.
+//
+//  Y eso no es poco, porque era justo lo que fallaba. Dos causas distintas, ambas
+//  reales, y ningunavisible mirando el cartel:
+//
+//    1. `buyStoreItem('warehouseSlot')` subía la capacidad y salía SIN llamar a
+//       `checkAchievements()`. Justo la acción que cumple "Almacén Masivo" era la
+//       única de las diez rutas que no evaluaba logros.
+//    2. El cartel se descartaba al no existir todavía `#achievement-stack`: el
+//       motor evalúa logros durante la carga, dentro del `await`, y el layout se
+//       pinta en el `requestAnimationFrame` siguiente.
+//
+//  La segunda no se puede probar aquí —no hay `main.ts` en un banco— y por eso
+//  está documentada en el código con la cola, no aquí. Lo que se ata aquí es lo
+//  que sí es comprobable: el logro llega al callback y el almacén refleja la vía
+//  que lo cumple.
+//
+//  LO QUE NO CUBRE: que se pinte. Eso es `preview.html` con viewport real, y un
+//  banco de números no lo vería aunque seCorrigiese la cola.
+// ==========================================================================
+
+/** Los logros que el motor ha anunciado, en orden. */
+function logroGrabado(t: any, a: any): string {
+  return `${t}:${a.title}`;
+}
+
+/**
+ * Arranca el motor recogiendo los logros que anuncia.
+ *
+ * `createGameLoop` acepta un cuarto argumento, `onAchievement`, que es lo que
+ * `main.ts` pasa a `showAchievementPopup`. Aquí se mira ese mismo gancho, y no la
+ * función de la vista: el banco comprueba **que el motor emite**, que es la mitad
+ * comprobable del bug. La otra mitad (que la vista tenga dónde pintarlo) es la
+ * cola de `main.ts`, y esa se documenta allí.
+ */
+async function motorConLogros(save: any) {
+  const vistos: string[] = [];
+  const g = await boot(save, { onAchievement: (a: any) => vistos.push(a.title) });
+  return { g, vistos };
+}
+
+/** Una partida con `capacidadBase` slots y dinero de sobra para ampliar. */
+function saveParaAmpliar(capacidadBase = 15) {
+  return baseSave([], {
+    nanites: 10_000_000,
+    warehouseCapacity: capacidadBase
+  });
 }
 
 async function main() {
@@ -327,6 +386,89 @@ async function main() {
     vivos().length === 1 && contadores()[0] === null,
     'contador=' + contadores()[0]
   );
+
+  // ---------------------------------------------------------------------
+  // 7 · LOGROS: QUE EL CARTEL TENGA ALGO QUE MOSTRAR (B3)
+  //
+  //  Aquí no se pinta el cartel —eso necesita el `#achievement-stack` de verdad—,
+  //  pero sí se comprueba la mitad que no estaba: **que el motor emita el logro**.
+  // ---------------------------------------------------------------------
+
+  // 7a · La compra de ampliar el almacén, que es la acción que cumple
+  // "Almacén Masivo" y la que NO evaluaba logros. Subía la capacidad y salía.
+  {
+    const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
+    g.buyStoreItem('warehouseSlot');
+
+    check(
+      'logros: ampliar el almacén hasta 20 desbloquea el logro',
+      g.getState().unlockedAchievements.includes('deep_pockets'),
+      'logros=' + JSON.stringify(g.getState().unlockedAchievements)
+    );
+    check(
+      'y lo ANUNCIA, que es lo que hace el cartel',
+      vistos.includes('Almacén Masivo'),
+      'anunciados=' + JSON.stringify(vistos)
+    );
+  }
+
+  // 7b · Y que se anuncie UNA VEZ. Con la compra repetida, el logro ya está
+  // desbloqueado y no debe volver a salir: un `×2` en el cartel sería el mismo
+  // bug que el del `×5` de los avisos, y aquí no hay forma de verlo mirando.
+  {
+    const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
+    g.buyStoreItem('warehouseSlot');
+    const trasLaPrimera = vistos.length;
+    g.buyStoreItem('warehouseSlot');
+    g.buyStoreItem('warehouseSlot');
+
+    check(
+      'logros: ampliar más no vuelve a anunciar el mismo logro',
+      vistos.length === trasLaPrimera,
+      `antes=${trasLaPrimera} despues=${vistos.length} lista=${JSON.stringify(vistos)}`
+    );
+  }
+
+  // 7c · B4 · LA PISTA MIDE LA CAPACIDAD QUE EL JUGADOR VE.
+  //
+  // El árbol de pasivas da ranuras aparte, así que la capacidad real es la base
+  // MÁS `bonus.storageSlots`. Medir solo la base hacía que con el árbol comprado el
+  // logro enseñara 15/20 para siempre con el almacén lleno de verdad. Y lo que se
+  // comprueba no es el número bonito: es que la pista y `getCapacity()` digan lo
+  // mismo, que es R3 aplicado a un logro.
+  {
+    const { g } = await motorConLogros(saveParaAmpliar(15));
+    const conArbol = await motorConLogros(baseSave([], {
+      nanites: 10_000_000,
+      warehouseCapacity: 15,
+      nodeLevels: { storage_rack: 1, void_hoard: 1 }
+    }));
+
+    // OJO CON LA COMPARACIÓN: la pista va topeada a 20 y la capacidad no. Con el
+    // árbol comprado la capacidad real es 26, así que comparar las dos cifras
+    // enteras da 20 contra 26 y el banco falla con un bug que no existe: el tope
+    // es correcto —de nada sirve un progreso de 26/20— y lo que tiene que ser
+    // cierto es que el tope se alcanza, es decir, que la pista mide lo mismo que
+    // la capacidad y llega antes. Por eso aquí se comparan ambas cosas por
+    // separado en vez de igualarlas.
+    const pista = (gg: any) => gg.getAchievements().find((a: any) => a.id === 'deep_pockets')?.current;
+
+    check(
+      'logros: la pista llega al tope de 20 por el árbol, no por la tienda',
+      pista(conArbol.g) === 20 && conArbol.g.getCapacity() === 26,
+      `pista=${pista(conArbol.g)} capacidad=${conArbol.g.getCapacity()} (base=15 +3+8 del árbol)`
+    );
+    check(
+      'y sin árbol la pista es la base, sin tocar el tope',
+      pista(g) === 15 && g.getCapacity() === 15,
+      `pista=${pista(g)} capacidad=${g.getCapacity()}`
+    );
+    check(
+      'y con el árbol lleno, el logro SÍ se cumple por la vía del árbol',
+      conArbol.g.getState().unlockedAchievements.includes('deep_pockets'),
+      'logros=' + JSON.stringify(conArbol.g.getState().unlockedAchievements)
+    );
+  }
 
   delete (globalThis as any).__DOM__.header;
   resumen('avisos flotantes');

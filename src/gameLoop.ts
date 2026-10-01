@@ -2809,6 +2809,12 @@ const AFK_THRESHOLD_MS = 60000;
         return item;
       } else if (itemKey === 'warehouseSlot') {
         state.warehouseCapacity += 5;
+        // B3 · AQUÍ FALTAVA `checkAchievements()`, y es la razón de que el
+        // logro del almacén a 20 no saliera nunca: esta compra sube la capacidad
+        // y se iba. Justo la acción que cumple "Almacén Masivo" era la única de
+        // las diez rutas que no lo evaluaba. Las otras nueve sí lo llaman, y
+        // ahora esta también.
+        checkAchievements();
         onUpdate(state, isAfk);
         saveToFirebase();
         return { id: `slot_${Date.now()}`, name: 'Espacio de Almacén', type: 'upgrade', details: '+5 espacios de almacén', rarity: 'Raro', tier: 0 };

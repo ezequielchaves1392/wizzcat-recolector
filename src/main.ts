@@ -59,13 +59,56 @@ function handleVisibility() {
   setAudioSuspended(document.hidden);
 }
 
+// ==========================================================================
+//  Logros: la cola de los que no tienen sitio donde enseñarse (B3)
+// ==========================================================================
+//
+//  POR QUÉ ESTA COLA EXISTE. `showAchievementPopup` busca `#achievement-stack`
+//  con `querySelector` y **si no está, se sale sin hacer ruido**. Ese contenedor lo
+//  pinta `renderLayoutHTML`, que corre en el `requestAnimationFrame` siguiente a
+//  que `createGameLoop` termine. A la hora del primer logro —que el motor evalúa
+//  durante la carga, dentro del `await`— el `#app` todavía no tiene layout, así
+//  que el cartel se descartaba. Por eso no hay ni un solo cartel de logro en
+//  toda la partida, ni siquiera los que se detectan en vivo.
+//
+//  O sea: el cartel no estaba roto, estaba **sin sitio a tiempo**. Es un fallo de
+//  cableado, y por eso ningún banco lo pilla: los bancos comprueban números, y
+//  lo que falta aquí es que un callback llegue a un nodo que está en el documento.
+//
+//  QUÉ HACE LA COLA, Y POR QUÉ NO ES "SOLO PARA LA CARGA". Un logro detectado
+//  durante la carga no se puede "enseñar luego": el jugador entra y a los cinco
+//  segundos le aparece un cartel de algo que pasó antes de que estuviera mirando,
+//  y eso confunde más que no avisar. Se vacía en cuanto el layout existe, que es
+//  el primer fotograma, así que el retraso es imperceptible y el aviso está donde
+//  tiene que estar.
+//
+//  Y el tope es el de siempre, tres: la cola desemboca en la misma pila que los
+//  avisos en vivo, así que hereda su tope sin tener uno propio.
+const logrosPendientes: { title: string; description: string; icon: string; rewardText: string }[] = [];
+
+/** Vacía la cola en cuanto hay dónde enseñarla. Idempotente. */
+function vaciarLogrosPendientes() {
+  const stack = document.querySelector('#achievement-stack') as HTMLElement | null;
+  if (!stack) return;
+  while (logrosPendientes.length > 0) {
+    showAchievementPopup(logrosPendientes.shift()!);
+  }
+}
+
 // Aviso de logro desbloqueado. Va abajo al centro, por encima de la barra de
 // navegación, y se apila si llegan varios seguidos en el mismo segundo.
 function showAchievementPopup(achievement: { title: string; description: string; icon: string; rewardText: string }) {
-  sfx.achievement();
-
   const stack = document.querySelector('#achievement-stack') as HTMLElement | null;
-  if (!stack) return;
+  if (!stack) {
+    // Sin layout todavía: se anota y se enseña en cuanto exista (B3).
+    // El sonido NO se reproduce aquí a propósito. Un logro que se anuncia al
+    // llegar a la aplicación es un ruido en mitad de otra cosa; el aviso visual
+    // sí tiene sentido, porque el jugador ya está mirando la pantalla.
+    logrosPendientes.push(achievement);
+    return;
+  }
+
+  sfx.achievement();
 
   const el = document.createElement('div');
   el.className = 'card-glass-elevated rounded-2xl px-4 py-2.5 flex items-center gap-3 w-full pointer-events-none';
@@ -337,6 +380,11 @@ async function initGame(user: any, username?: string) {
   requestAnimationFrame(() => {
     renderRoute(router.current);
     startCompanionClicks(activeGameInstance);
+    // B3 · El layout ya está montado, así que los logros que el motor evaluó
+    // durante la carga ya tienen dónde enseñarse. Va DESPUÉS de `renderRoute`
+    // porque es `renderRoute` la que pinta el `#achievement-stack`; si fuera
+    // antes, la cola se volvería a llenar y no se vaciaría nunca.
+    vaciarLogrosPendientes();
   });
 }
 

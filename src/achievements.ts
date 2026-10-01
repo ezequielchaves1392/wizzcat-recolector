@@ -109,7 +109,23 @@ export const ACHIEVEMENTS: Achievement[] = [
     icon: 'warehouse',
     rewardText: '+25% poder de click',
     reward: { clickBonus: 0.25, passiveBonus: 0 },
-    progress: (s) => ({ current: Math.min(s.warehouseCapacity ?? 0, 20), target: 20 })
+    // B4 · LA CAPACIDAD QUE MIDE TIENE QUE SER LA QUE EL JUGADOR VE.
+    //
+    // Antes medía `s.warehouseCapacity`, que es solo la base del save. La que ve el
+    // jugador es la base **más** `bonus.storageSlots` del árbol de pasivas (`+3` y
+    // `+8`), y con los dos nodos el almacén tiene 26 slots mientras el logro
+    // enseñaba 15/20 para siempre. Es el mismo sitio donde el árbol de pasivas
+    // hace `effectiveWarehouseCapacity()`; esta cifra sale de la misma regla (R3).
+    //
+    // Y con esto el logro se cumple **por la vía del árbol**, que es la que el
+    // jugador ve funcionar. Antes solo se cumplía comprando una ampliación de
+    // tienda, y solo si ninguna de las dos vías tenía ya la base a 20 — o sea que
+    // había una partida donde un árbol comprado al principio dejaba el logro
+    // bloqueado para siempre.
+    progress: (s) => ({
+      current: Math.min((s.warehouseCapacity ?? 0) + (s.bonus?.storageSlots ?? 0), 20),
+      target: 20
+    })
   },
   {
     id: 'tycoon',
