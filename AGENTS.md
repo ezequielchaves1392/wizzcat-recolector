@@ -12,15 +12,20 @@ habido **más de un agente editando el mismo directorio a la vez**. Leer el cód
 sin estos tres ficheros primero es la forma más rápida de romper algo y no
 enterarte.
 
-### 1. Lee los tres ficheros de `docs/`
+### 1. Lee los ficheros de `docs/`
 
 | Fichero | Qué te dice |
 |---|---|
-| [`docs/CONTEXTO-JUEGO.md`](./docs/CONTEXTO-JUEGO.md) | Qué es el juego, los 7 sistemas, cómo se guarda, **las 12 discrepancias conocidas** y lo que **no** está verificado. |
+| [`docs/CONTEXTO-JUEGO.md`](./docs/CONTEXTO-JUEGO.md) | Qué es el juego, los 7 sistemas, cómo se guarda, **las discrepancias conocidas** y lo que **no** está verificado. |
 | [`docs/REGLAS-Y-TECNOLOGIAS.md`](./docs/REGLAS-Y-TECNOLOGIAS.md) | Stack, entry points, la suite `verify/`, y las **31 reglas** del proyecto (R1-R31). Esta es la que manda. |
 | [`docs/CAMBIOS-MACRO.md`](./docs/CAMBIOS-MACRO.md) | Por qué el juego es como es, fase por fase, y el estado real del repositorio. |
+| [`docs/PENDIENTES.md`](./docs/PENDIENTES.md) | **Lo que el jugador quiere añadir.** Si dice *"sigamos con tareas pendientes"*, se lee este fichero entero. |
 
 Si vas a tocar el almacén, también [`docs/huecos-almacen.md`](./docs/huecos-almacen.md).
+
+**Y una cuarta cosa que no es un documento:** el jugador puede pedir features por
+otro lado. Cuando eso pase, la idea se escribe en `PENDIENTES.md` antes de
+tocarla, para que no viva solo en una conversación.
 
 ### 2. `git status` y `git diff` antes de investigar
 
@@ -135,3 +140,9 @@ del bug, no su síntoma. Y cerrando con lo que se comprobó y cómo
 `npm run build` + `npm run verify`. Y si el cambio toca la economía o el
 guardado: **una prueba nueva en el banco que corresponda**. Si queda algo sin
 resolver, una entrada en la lista de discrepancias de `docs/CONTEXTO-JUEGO.md`.
+
+Y **actualiza `docs/PENDIENTES.md`**: lo que se hizo se marca `[x]`, lo que se
+descartó se marca `[-]` con el motivo en una línea, y **lo que se descubriera
+haciendo otra cosa se añade al final**. Ese último punto es el que más se olvida
+y el que más caro sale: una idea que solo existe en un commit nadie la vuelve a
+encontrar.
