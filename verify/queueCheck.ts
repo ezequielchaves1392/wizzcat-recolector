@@ -22,6 +22,7 @@
 // ==========================================================================
 
 import { createGameLoop } from '../src/gameLoop';
+import { anotarPendiente, confirmarCola } from '../src/services/naniteQueue';
 import {
   boot, reload, bootNew, check, resumen, s, nanites, guardado, baseSave, collector, USER
 } from './kit';
@@ -380,82 +381,74 @@ async function main() {
   check('cola: se usó el almacenamiento del juego', almacen.datos.size >= 0);
 
   // =========================================================================
-  //  DOS GUARDADOS A LA VEZ
+  //  LA REGLA DE "SOLO VACÍA SI SIGUES SIENDO EL ÚLTIMO"
   //
   //  `saveToFirebase` no se espera en ninguno de los treinta sitios que la
-  //  llaman, así que dos guardados se solapan de forma normal: el jugador compra
-  //  mientras el guardado anterior sigue en el aire. Con `setDoc` instantáneo
-  //  eso no se ve, y por eso hacía falta un hook de retraso en el stub.
+  //  llaman, más un intervalo de quince segundos y un `beforeunload`. Dos
+  //  guardados se solapan de forma normal: el jugador compra mientras el
+  //  guardado anterior sigue en el aire. Y entonces:
   //
-  //  La carrera que se pierde dinero:
-  //
-  //    · A anota 100 y sale hacia la red (se queda en el aire).
+  //    · A anota 100 y sale hacia la red.
   //    · B anota 200 y sale detrás.
-  //    · B falla. Llega A, que para A su operación salió bien, y vacía la cola.
+  //    · Llega A, que para A su operación salió bien, y vacía la cola.
   //
-  //  Documento con 100, cola vacía, y 100 nanitas perdidas sin red de seguridad.
   //  Para A la operación fue un éxito y con razón: lo que A confirma es que A
   //  llegó. Lo que no puede afirmar es que lo suyo sea lo último que se anotó.
+  //  Y según el orden eso fabrica dinero (la compra que no se subió se olvida) o
+  //  lo destruye (el documento queda con la cifra vieja y ya no hay cola).
+  //
+  //  Se prueba la REGLA y no la carrera, a propósito. La carrera se probó
+  //  primero inyectando un retraso en el stub, y era INTERMITENTE: el retraso lo
+  //  consumía el primer `setDoc` que llegara, y en el runner completo eso es un
+  //  guardado de una prueba anterior todavía vivo. Pasaba en `one.mjs` y fallaba
+  //  en `run.mjs`, que es la peor forma que tiene una prueba de ser verde.
+  //
+  //  La regla es una función pura sobre el `localStorage` del banco: se
+  //  comprueba con dos anotaciones y las dos confirmaciones, sin reloj.
   // =========================================================================
   {
     (globalThis as any).localStorage.clear();
-    const MEM: any = (globalThis as any).__MEM_DB__;
-    const USUARIO = { uid: 'test', displayName: 'Probador' };
 
-    // Documento con saldo de partida y una caja de cada tipo para poder comprar.
-    MEM['users/test'] = {
-      saveVersion: 7, userId: 'test', username: 'Probador', nanites: 5000,
-      totalNanitesProduced: 5000, totalClicks: 0, warehouseCapacity: 15,
-      maxCompanionSlots: 1, warehouse: [], crates: {}, companions: [],
-      activeCompanions: [], unlockedAchievements: [], nodeLevels: {}, unlockedNodes: [],
-      cosmetics: { title: 'title_default', frame: 'frame_none', banner: 'banner_none', unlocked: [] },
-      updatedAt: new Date()
-    };
-    MEM.fallar = false;
+    // A anota 100. B, después, anota 200.
+    const tsA = anotarPendiente('test', 100, 0, 0, 0, 0, 0);
+    await new Promise((r) => setTimeout(r, 2));
+    const tsB = anotarPendiente('test', 200, 0, 0, 0, 0, 0);
 
-    const g = await createGameLoop(USUARIO as any, () => {});
+    check('regla: la segunda anotación es más nueva', tsB > tsA, `${tsA} -> ${tsB}`);
+    check('regla: y la cola guarda el saldo más nuevo',
+      leerCola()?.nanites === 200, 'cola=' + JSON.stringify(leerCola()));
 
-    // El retraso se pone DESPUÉS de arrancar el bucle, a propósito: `createGameLoop`
-    // guarda al entrar, y si el `setDoc` pendiente se colocó antes, lo que se
-    // queda en el aire es el guardado de inicio y no el de la compra. El banco
-    // pasaría en verde sin haber probado nada.
-    let soltar: () => void = () => {};
-    MEM.retrasar = new Promise<void>((r) => { soltar = r; });
+    // Llega A: su operación salió bien, pero lo suyo ya no es lo último anotado.
+    const vacioA = confirmarCola(tsA);
+    check('regla: confirmar un guardado viejo NO vacía la cola',
+      vacioA === false && leerCola() !== null,
+      `devolvió ${vacioA}, cola=${leerCola() === null ? 'borrada' : 'viva'}`);
+    check('regla: y el saldo que nadie confirmó sigue ahí',
+      leerCola()?.nanites === 200, 'cola=' + JSON.stringify(leerCola()));
 
-    // A: anota 4.500 y su `setDoc` se queda esperando.
-    const compraA = g.buyStoreItem('commonCrate');
-    check('carrera: A se compra y sale', Boolean(compraA), String(compraA));
+    // Llega B: ahora sí es el último, y su saldo también.
+    const vacioB = confirmarCola(tsB);
+    check('regla: confirmar el guardado más nuevo sí la vacía',
+      vacioB === true && leerCola() === null,
+      `devolvió ${vacioB}, cola=${leerCola() === null ? 'borrada' : 'viva'}`);
 
-    // B: anota 3.000 (más nuevo) y su `setDoc` falla al instante.
-    MEM.fallar = true;
-    const compraB = g.buyStoreItem('rareCrate');
-    check('carrera: B también se compra y falla al subir', Boolean(compraB), String(compraB));
+    // Confirmar con la cola ya vacía no es un error: no hay nada que perder.
+    check('regla: confirmar sin cola no rompe nada', confirmarCola(tsB) === true);
 
-    // Llega A. Para A su operación salió bien, así que el guardado vacío la cola
-    // a pelo... y con eso el saldo de B desaparece sin red de seguridad.
-    //
-    // La red vuelve ANTES de soltarlo: si no, el segundo `setDoc` de A —el del
-    // ranking— también fallaría y A acabaría en su `catch` sin llegar a tocar la
-    // cola. El banco pasaría en verde por un motivo que no es el que prueba.
-    MEM.fallar = false;
-    soltar();
-    await compraA;
-    await compraB;
-    await new Promise((r) => setTimeout(r, 0));
+    // Un registro ilegible no se toca. Vaciar un registro que no se puede leer es
+    // borrar la red de seguridad a ciegas, que es justo lo que el `leerCola` del
+    // juego evita por el otro lado. Se mira el registro CRUDO y no con el
+    // `leerCola` del banco, que es un `JSON.parse` a pelo y revienta aquí.
+    (globalThis as any).localStorage._datos.set(CLAVE, '{esto no es json');
+    check('regla: un registro ilegible no se borra',
+      confirmarCola(tsB) === false && cola() !== undefined, 'borró algo que no podía leer');
 
-    const vivo = leerCola();
-    check('carrera: la cola NO se vació con el guardado ajeno',
-      Boolean(vivo), 'un guardado confirmó y se llevó por delante la cola de otro');
+    // Y con una marca que no es un número, igual.
+    (globalThis as any).localStorage._datos.set(CLAVE,
+      JSON.stringify({ v: 1, uid: 'test', nanites: 9, producidas: 0, clics: 0, nucleos: 0, totalNucleos: 0, reinicios: 0, ts: 'ayer' }));
+    check('regla: una marca que no es fecha no se borra',
+      confirmarCola(tsB) === false && cola() !== undefined, 'borró con una marca inválida');
 
-    // Con la cola viva, la recarga trae el saldo NUEVO y no el de A.
-    const g2 = await createGameLoop(USUARIO as any, () => {});
-    check('carrera: la recarga trae el saldo que nadie confirmó',
-      g2.getState().nanites === 3000,
-      `nanitas=${g2.getState().nanites} (A confirmado=4500, B sin confirmar=3000)`);
-    void g2;
-
-    delete MEM.retrasar;
-    MEM.fallar = false;
     (globalThis as any).localStorage.clear();
   }
 

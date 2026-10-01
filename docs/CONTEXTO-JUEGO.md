@@ -263,8 +263,11 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 
     Ahora `anotarPendiente()` devuelve la marca que escribió y `confirmarCola(ts)`
     solo vacía si el registro que hay dentro es ese o uno más viejo. Cubierto por
-    cuatro pruebas nuevas en `queueCheck`, que dejaban el primer `setDoc` en el
-    aire con un hook de retraso añadido al stub (`__MEM_DB__.retrasar`).
+    ocho pruebas nuevas en `queueCheck`, que comprueban **la regla** y no la
+    carrera: la carrera se probó primero inyectando un retraso en el stub
+    (`__MEM_DB__.retrasar`) y era **intermitente**, porque el retraso lo consumía
+    el primer `setDoc` que llegara y en el runner completo eso es un guardado de
+    una prueba anterior todavía vivo. Pasaba en `one.mjs` y fallaba en `run.mjs`.
 
     **Lo que esto NO arregla, y sigue abierto:** dos guardados que los dos
     terminan bien pueden escribirse en orden inverso, y el `setDoc` que lleva el
@@ -297,7 +300,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **11 bancos, 861 pruebas.** Queda fuera a propósito:
+la navegación. **11 bancos, 865 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
