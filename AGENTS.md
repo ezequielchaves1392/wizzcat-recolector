@@ -24,10 +24,15 @@ Si vas a tocar el almacén, también [`docs/huecos-almacen.md`](./docs/huecos-al
 
 ### 2. `git status` y `git diff` antes de investigar
 
-El working tree es la referencia, **no el último commit**. Rama `main`, último
-commit `6dd1068`, y detrás hay un lote sin commitear: la ruleta del sintonizador,
-la refactorización de la ruleta de cajas en tres ficheros y la retirada del botón
-de huecos del almacén. Está descrito como fase 8 en `docs/CAMBIOS-MACRO.md`.
+El working tree es la referencia, **no el último commit**. Rama `main`. El último
+lote —la ruleta del sintonizador, la refactorización de la ruleta de cajas en tres
+ficheros y la retirada del botón de huecos del almacén— entró en `ce3a346` y está
+descrito como fase 8 de `docs/CAMBIOS-MACRO.md`.
+
+Aun así, **comprueba `git status` antes de dar por buena cualquier afirmación
+sobre el estado del repo**: el árbol puede ir por delante del último commit, y
+fue justo lo que pasó durante la fase 8. Si hay algo sin commitear, manda el
+working tree.
 
 ### 3. Comprueba si hay otro agente trabajando
 

@@ -4,14 +4,15 @@ Historial **macro**: qué cambió de verdad en el juego y por qué, no el detall
 fichero. El detalle está en los mensajes de commit (`git log`) y en las cabeceras
 `// ===...===` de cada módulo.
 
-Rama: `main`. Último commit: `6dd1068`.
+Rama: `main`. Último commit: `ce3a346` (fase 8).
 
-> **Aviso importante sobre el estado del repositorio.** El árbol de trabajo tiene
-> **un lote sin commitear**: 13 ficheros modificados y 4 sin seguimiento. Ese lote
-> es la fase 8 de más abajo —la ruleta del sintonizador, la refactorización de la
-> ruleta de cajas y la retirada del botón de huecos—, y es lo último que se
-> escribió. Antes de investigar un comportamiento raro, comprueba `git status`:
-> puede que lo que buscas esté solo en el working tree.
+> **Aviso importante sobre el estado del repositorio.** A la hora de escribir esto
+> el árbol de trabajo tenía **un lote sin commitear** —la fase 8: la ruleta del
+> sintonizador, la refactorización de la ruleta de cajas y la retirada del botón
+> de huecos—, y buena parte de lo que se describe más abajo como "estado actual"
+> **no estaba en el historial**. Ya se ha subido. Aun así, y porque durante esa
+> fase pasó justo eso: **antes de investigar un comportamiento raro, comprueba
+> `git status`.** Puede que lo que buscas esté solo en el working tree.
 
 ---
 
