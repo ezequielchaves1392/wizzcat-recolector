@@ -64,13 +64,22 @@ aliases ni formatos raros — está escrito así a propósito en la cabecera.
 | `auth-preview.html` | `src/authPreview.ts` | No | Escena de la pantalla de acceso. |
 | `nav-test.html` | `src/navTest.ts` | No | Recorrido automático de navegación. |
 | `drag-test.html` | `src/dragTest.ts` | No | Escenarios de arrastre con DOM real. |
-| `ruleta-preview.html` | `src/ruletaPreview.ts` | No | La ruleta, aislada. |
+| `ruleta-preview.html` | `src/ruletaPreview.ts` | No | Las dos ruletas, aisladas: la de las cajas y la del sintonizador. `?sintonizador=1` y `?sintonizador=0` abren la segunda con cada desenlace. |
 
-De estos cinco últimos, `.gitignore` recoge `preview.html`, `src/preview.ts`,
-`auth-preview.html`, `src/authPreview.ts`, `src/previewAudio.ts` y
-`nav-test.html`. **No** recoge `drag-test.html`, `src/dragTest.ts`,
-`ruleta-preview.html` ni `src/ruletaPreview.ts`: están sin seguimiento pero no
-ignorados. Inconsistencia conocida del `.gitignore`, no una decisión.
+De estos cinco últimos, `.gitignore` recoge **los cinco enteros**, HTML y script:
+`preview.html`, `auth-preview.html`, `nav-test.html`, `drag-test.html` y
+`ruleta-preview.html` con sus `src/`. Antes dejaban cuatro fuera
+(`drag-test.html`, `src/dragTest.ts`, `ruleta-preview.html`, `src/ruletaPreview.ts`),
+que quedaban **sin seguimiento pero no ignorados** — la peor de las dos
+situaciones: `git status` los anunciaba como código nuevo cada vez que alguien
+montaba el utillaje con `npx vite`. La regla que está escrita en el propio
+fichero es la que manda:
+
+> O el utillaje está ignorado entero, o se versiona entero.
+
+**Consecuencia práctica:** nada de lo que sirve para mirar la pantalla está en
+el historial. Si hace falta revisar el render de la ruleta hay que montarlo con
+`npx vite ruleta-preview.html`; no se puede leer del `git show`.
 
 > `admin.html` se construye porque es útil, pero **construido ≠ publicado**. La
 > seguridad la ponen las reglas de Firestore, no el HTML.
@@ -105,7 +114,7 @@ Un banco de pruebas **propio**. Sin Vitest, sin Jest, sin Playwright.
 
 ```
 npm run verify
-  = vite build --config verify/vite.config.ts   # 11 entries → verify/out/
+  = vite build --config verify/vite.config.ts   # 14 entries → verify/out/
   && node verify/run.mjs                        # entorno + importa todos
 ```
 
@@ -141,23 +150,24 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 13 bancos
+### Los 14 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
 | `sellCheck` | `sellItem` borra de verdad y no resucita al re-sincronizar ni al recargar. Cajas, llaves, cristales, consumibles, compañeros, recolectores, migraciones de contadores, renombre `weapon`→`collector`, que **el total que enseña el botón sea el que entra en la cuenta**, y la **venta por unidades**: qué queda en la pila, qué sobrevive a la recarga, que pedir más de lo que hay se recorta en vez de fabricar dinero, y que 0, negativos, `NaN` e `Infinity` se rechazan sin cobrar. | 121 |
 | `equipCheck` | Equipar/desequipar, y que **un click llega al manejador exactamente una vez** por muchos renders. Nodo falso con `addEventListener`/`click()` reales para contar acumulación. | 24 |
-| `buyCheck` | `buyStoreItem` y `buyNode`: **lo que se cobra es lo que se muestra**, lo que se paga llega, y lo que no cabe no se compra. Sobrevive a la recarga. | 145 |
+| `buyCheck` | `buyStoreItem` y `buyNode`: **lo que se cobra es lo que se muestra**, lo que se paga llega, y lo que no cabe no se compra. Sobrevive a la recarga. | 148 |
 | `filterCheck` | `matchesFilter`, `visibleStacksFor` y `moveItemTo` **juntas**, porque la rejilla que ve el jugador y la que usa el arrastre tienen que ser la misma. Los 5 órdenes. | 67 |
 | `moveCheck` | `moveItems` **reordena, nunca edita**: ni número de items, ni nanitas, ni contadores. El destino imposible se rechaza en vez de corromper. | 54 |
 | `stackCheck` | Una pila es una ranura. Comprar y abrir van a la pila existente. La migración colapsa saves viejos sin perder unidades. Que el botón de la tienda y el cobro pregunten lo mismo. | 62 |
 | `consumableCheck` | `useConsumable`, la operación más condicional. Tres fallos con nombre: gastar sin aplicar, aplicar sin gastar, romper el tope. | 88 |
-| `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** | 172 |
+| `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, **sintonización del recolector** (el acierto, el fallo que no retrocede, y los tres rechazos), prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** | 212 |
 | `gapCheck` | Los huecos del almacén. El ancla es el **id del item**, nunca un índice de celda. Reimplementa el criterio del pintor a propósito, para que el test no sea tautológico. | 65 |
 | `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
 | `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 42 |
 | `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. | 98 |
 | `toastCheck` | **La pila de avisos flotantes.** `showToast` es el overlay más llamado del juego (71 llamadas entre las siete pantallas, la terminal y el propio `gameLoop`) y no estaba cubierto por nada. Que no haya un nodo por aviso, que lo repetido se cuente (`×5`) en vez de apilar cinco iguales, el tope de cuatro vivos, que se coloque midiendo la cabecera y no con una constante, y que lo retirado no se quede apuntado en la lista. Ver abajo, porque necesita un stub con DOM de verdad. | 25 |
+| `rouletteCheck` | **La matemática del trompo.** Que la curva frene de verdad —es el ajuste de `2t - t²`, deceleración constante— y no un `ease-out` cualquiera, que `instante()` la deshaga, que **la casilla ganadora para en el marcador**, que las vueltas se cuenten en ventanas visibles para que el trompo dure igual en móvil y en escritorio, y que **cada chasquido caiga en una frontera de casilla** con los intervalos espaciándose al frenar. Es la otra mitad de "que la ruleta no mienta": `lootCheck` comprueba que el número de la casilla sea el que entra en la cuenta, este que el desplazamiento deje esa casilla bajo la aguja. Y una segunda mitad, la **ruleta del sintonizador**: que el motor distinga *el dado salió mal* de *no se llegó a tirar* (`rolled`), que un rechazo no gaste cristal ni mueva el nivel, y que la flecha del acierto sea `4 → 5` y no el `5 → 5` que sale de releer el item después del sorteo. | 59 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).
@@ -231,7 +241,7 @@ $env:ONE_BANK="gapCheck"; npx vite build --config verify/vite.one.config.ts
 node verify/one.mjs gapCheck
 ```
 
-**Los trece bancos funcionan así.** Antes no: `one.mjs` arrastraba un entorno más
+**Los catorce bancos funcionan así.** Antes no: `one.mjs` arrastraba un entorno más
 pobre que `run.mjs` y cuatro bancos morían antes de imprimir, con un error que no
 señalaba su causa. Los dos runners toman el entorno de `verify/entorno.mjs`, así
 que ya no pueden separarse. Si añades un banco y no se puede depurar en solitario,
@@ -633,7 +643,11 @@ src/
 
   components/                   Pantallas y sus helpers puros.
     warehouse.ts                   El más grande. Rejilla, arrastre, huecos, venta, cajas.
-    store.ts / crateLoot.ts / crateRoulette.ts / crystalPicker.ts
+    store.ts / crateLoot.ts / crateRoulette.ts / tuningRoulette.ts
+     rouletteStrip.ts            La mecánica del trompo, compartida por las dos
+     rouletteSpin.ts             ruletas: ventana, casillas, chasquidos y frenado.
+                                SIN imports a propósito: es lo que lo hace
+                                comprobable sin navegador (`rouletteCheck`).
     rankings.ts / auth.ts / blocked.ts
     crates.ts / upgrades.ts        HUÉRFANAS. No las importa nadie.
 
@@ -650,7 +664,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              13 bancos.
+  <subject>Check.ts              14 bancos.
 docs/                           Este directorio.
 ```
 
@@ -673,13 +687,21 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los **13 bancos** dan **1013 pruebas**, todas en verde.
+   cambiar nada. Los **14 bancos** dan **1083 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que
    esa prueba solo existe cuando el premio son nanitas. Por eso dos commits
    seguidos discutieron si eran 962 o 963. Un total exacto no es un dato que se
    pueda comprobar: lo que se comprueba es que todos los bancos impriman.
+
+> **Las cifras de la tabla de arriba se comprueban, pero no se acumulan.** Cuando
+> se añadió un banco o se amplió una sección, la tabla se quedó con los números
+> de entonces en tres filas (`buyCheck`, `stateCheck`, `playthroughCheck`) mientras
+> el total de abajo sí se actualizaba: 1041 contra 1083, que no cuadran. Un
+> documento con cifras que no cuadran entre sí enseña a no fiarte de las que
+> sí importan. Si añades pruebas, actualiza la fila **y** comprueba que la suma
+> da el total.
 6. Para lo que `verify/` no cubre: `preview.html`, `nav-test.html`,
    `drag-test.html`, `ruleta-preview.html`.
 

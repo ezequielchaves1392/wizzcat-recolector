@@ -321,8 +321,12 @@ async function main() {
     check('mockup: el almacen con 19 llaves da 3 celdas',
       visibleStacksFor(g, s(g), 'all', 'default').length === 3, ids(g).join(','));
 
-    // El hueco lo pone el boton de la ficha, no un arrastre: es el unico gesto
-    // que puede crear uno, porque toda celda vacia esta detras de la ultima.
+    // El hueco se monta aqui con la API y no arrastrando, para poder colocar el
+    // ancla donde interesa sin tener que acertar una celda de la rejilla: aqui lo
+    // que se comprueba es COMO se ve y COMO se comporta un hueco, no el gesto que
+    // lo crea. Ese gesto es el arrastre —soltar en una celda vacia le cuelga al
+    // item los huecos que necesita para caer ahi—, y lo cubren las secciones 9 y
+    // 10 con `moveToFreeCell`.
     g.setWarehouseGaps(['dron']);
     check('mockup: el hueco delante del dron se ve en la rejilla',
       rejilla(g).join(',') === '·,dron,blaster,k0', rejilla(g).join(','));

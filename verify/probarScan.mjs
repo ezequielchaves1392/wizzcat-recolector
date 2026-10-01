@@ -1,4 +1,4 @@
-﻿// Prueba del guard: hay que comprobar que FALLA cuando debe.
+// Prueba del guard: hay que comprobar que FALLA cuando debe.
 //
 // Un barrido que nunca falla no protege nada, y lo peligroso que tiene uno es
 // justo eso: da verde, y lo verde es lo que hace que nadie vuelva a mirar.

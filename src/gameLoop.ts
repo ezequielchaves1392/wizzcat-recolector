@@ -2323,11 +2323,34 @@ function syncMaterialCounters() {
       checkAchievements();
       onUpdate(state, isAfk);
     },
+    /**
+     * Sintoniza el recolector equipado con un cristal del nivel pedido.
+     *
+     * EL RESULTADO TIENE TRES ESTADOS, NO DOS, y por eso `rolled` existe.
+     *
+     * `success` dice si el dado salió bueno, y eso no distingue entre "el dado
+     * salió mal" y "no se llegó a tirar el dado". Los dos casos devuelven
+     * `success: false`, porque los rechazos (no hay cristal de ese nivel, faltan
+     * unidades, ya está en el techo) también son `false`. Para quien llama, sin
+     * embargo, son cosas distintas: un fallo del dado GASTA el cristal y la
+     * ruleta tiene que girar y decir "has fallado"; un rechazo NO gasta nada y
+     * lo que corresponde es un aviso, no un trompo por una operación que no
+     * ocurrió.
+     *
+     * La señal de cuál es cuál es el propio `success`, pero implícita y frágil:
+     * dependería de que cada rechazo se olvidara de mandar `success`, y en
+     * cuanto uno lo mandara la ruleta giraría por una operación inexistente. Se
+     * dice explícitamente con `rolled`, y se dice aquí, en el motor, que es el
+     * único que sabe si el dado llegó a tirarse. Que la vista lo deduje
+     * mirando si el cristal se gastó sería meter una regla del motor en la
+     * vista (R1 y R2), y se rompería en cuanto el consumo dejara de ser una
+     * línea recta.
+     */
     upgradeEquippedCollector: (crystalTier = 1) => {
       handleUserActivity();
-      if (!state.equippedCollectorId) return { success: false, msg: 'No hay ningún recolector equipado.' };
+      if (!state.equippedCollectorId) return { success: false, rolled: false, msg: 'No hay ningún recolector equipado.' };
       const item = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
-      if (!item) return { success: false, msg: 'Recolector no encontrado.' };
+      if (!item) return { success: false, rolled: false, msg: 'Recolector no encontrado.' };
       const level = item.level || 0;
       // EL TOPE LO PONE EL RECOLECTOR, Y LO PONE LA MISMA REGLA QUE LO CREA.
       //
@@ -2344,7 +2367,7 @@ function syncMaterialCounters() {
       // Los dos modelos de tipos conviven y no se van a fusionar aquí; lo que no
       // vale es que el motor no pueda leer un campo que el juego escribe.
       const tope = collectorMaxLevel((item as any).maxLevel);
-      if (level >= tope) return { success: false, msg: `Recolector al nivel máximo (+${tope * 10}%).` };
+      if (level >= tope) return { success: false, rolled: false, msg: `Recolector al nivel máximo (+${tope * 10}%).` };
 
       // El cristal se busca por nivel en el almacén, no en un contador suelto.
       // Un cristal de nivel 3 no se gasta por uno de nivel 1: por eso hay que
@@ -2353,7 +2376,7 @@ function syncMaterialCounters() {
         w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : 1) === crystalTier);
       if (!crystal) {
         const nombre = CRYSTAL_DEFS[crystalTier]?.name ?? 'Cristal';
-        return { success: false, msg: `No tienes ${nombre}.` };
+        return { success: false, rolled: false, msg: `No tienes ${nombre}.` };
       }
 
       // Coste en cristales creciente: antes era 1 por nivel, así que 20 niveles
@@ -2363,6 +2386,7 @@ function syncMaterialCounters() {
       if (units < crystalCost) {
         return {
           success: false,
+          rolled: false,
           msg: `Necesitas ${crystalCost} x ${CRYSTAL_DEFS[crystalTier].name} (tienes ${units}).`
         };
       }
@@ -2379,7 +2403,7 @@ function syncMaterialCounters() {
         item.level = level + 1;
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { success: true, msg: `¡Mejora exitosa! ${item.name} ascendió al nivel ${item.level}.` };
+        return { success: true, rolled: true, level: item.level, msg: `¡Mejora exitosa! ${item.name} ascendió al nivel ${item.level}.` };
       } else {
         // Fallo: conserva el nivel y el cristal gastado. Antes retrocedía un
         // nivel, y con el coste creciente eso era una escalera sin retorno:
@@ -2387,7 +2411,7 @@ function syncMaterialCounters() {
         // La pérdida real es el cristal, que es el coste que se eligió arriesgar.
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { success: false, msg: `Fallo en el sintonizador. ${item.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)` };
+        return { success: false, rolled: true, level, msg: `Fallo en el sintonizador. ${item.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)` };
       }
     },
     expandWarehouse: () => {

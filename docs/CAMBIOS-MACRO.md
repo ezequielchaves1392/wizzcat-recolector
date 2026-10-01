@@ -4,16 +4,14 @@ Historial **macro**: qué cambió de verdad en el juego y por qué, no el detall
 fichero. El detalle está en los mensajes de commit (`git log`) y en las cabeceras
 `// ===...===` de cada módulo.
 
-Rama: `main`. Último commit: `d3c71ef`.
+Rama: `main`. Último commit: `6dd1068`.
 
 > **Aviso importante sobre el estado del repositorio.** El árbol de trabajo tiene
-> **un lote grande sin commitear**: 23 ficheros modificados (+3631/−703) y 17
-> sin seguimiento. Ese lote contiene la terminal de administración, la cola offline
-> de nanitas, el módulo de apilado, los huecos del almacén, las reglas de
-> Firestore y **toda** la suite `verify/`. Es decir, buena parte de lo que se
-> describe abajo como "estado actual" **no está en el historial todavía**.
-> Antes de investigar un comportamiento raro, comprueba `git status`: puede que lo
-> que buscas esté solo en el working tree.
+> **un lote sin commitear**: 13 ficheros modificados y 4 sin seguimiento. Ese lote
+> es la fase 8 de más abajo —la ruleta del sintonizador, la refactorización de la
+> ruleta de cajas y la retirada del botón de huecos—, y es lo último que se
+> escribió. Antes de investigar un comportamiento raro, comprueba `git status`:
+> puede que lo que buscas esté solo en el working tree.
 
 ---
 
@@ -194,7 +192,7 @@ Y por fin se arregla la causa raíz de la fase 1:
 Las llaves y cristales dejan de ser contadores y pasan a ser **items físicos por
 nivel**, con migración del saldo viejo.
 
-## Fase 7 — Cierre (2026-09-30, `d3c71ef`) + lote sin commitear
+## Fase 7 — Cierre (2026-09-30, `d3c71ef`) + el lote que lo cerraba
 
 `d3c71ef` arregla tres cosas:
 
@@ -210,13 +208,15 @@ nivel**, con migración del saldo viejo.
   ×2.75 / ×4) y el selector enseña coste y probabilidad **antes** de confirmar,
   con números que salen del game loop, no de una copia en la vista.
 
-### El lote sin commitear
+### El lote que cerraba la fase 7
 
-Después de `d3c71ef`, sin commitear. Tres cosas de aquí merecen un párrafo propio,
-porque son decisiones y no solo código:
+Después de `d3c71ef` y antes de la fase 8, sin commitear durante un rato.
+**Hoy está todo versionado**; lo que sigue es el índice de qué entró y por qué.
+Tres cosas de aquí merecen un párrafo propio, porque son decisiones y no solo
+código:
 
 **La suite de pruebas.** Nace entera en este lote y es lo que sostiene todo lo
-demás: **13 bancos** (el número de pruebas sube con cada tanda), sobre el game loop real con Firebase sustituido
+demás: **14 bancos** (el número de pruebas sube con cada tanda), sobre el game loop real con Firebase sustituido
 por un store en memoria. La regla que la gobierna es que **cada comprobación
 termina en `reload()`**, porque lo que solo vive en memoria es el bug que más
 veces ha llegado a producción. `queueCheck` es el ejemplo de por qué: la mitad de
@@ -244,23 +244,144 @@ enseña la tira.
 | Módulo de apilado | `src/data/stacking.ts` |
 | Huecos del almacén | `warehouseGaps` en types/gameLoop/warehouse, `src/dragTest.ts` |
 | Cosméticos de caja | `src/data/cosmetics.ts` (`crateCosmetics`), `crateLoot.ts`, `gameLoop.ts` |
-| **Suite de pruebas** | `verify/` completa (**13 bancos**, kit, stubs) |
+| **Suite de pruebas** | `verify/` completa (**14 bancos**, kit, stubs) |
 | Mejoras varias | `auth.ts`, `store.ts`, `warehouse.ts`, `rankings.ts`, `main.ts`, `layout.ts`, `pageShell.ts`, `router.ts`, `audio.ts`, `theme.ts`, `style.css`, `style.modules.css` |
 | Configuración | `vite.config.ts` (multipágina), `tailwind.config.js` |
 | Bancos de pruebas visuales | `ruleta-preview.html`, `src/ruletaPreview.ts`, `drag-test.html`, `src/dragTest.ts` |
 | Documentación | `AGENTS.md` + `docs/` |
 
-Volumen actual: **24 ficheros modificados (+3925/−732) y 17 sin seguimiento.**
+> **Este lote ya está en el historial.** Cuando se escribió esto eran 24
+> ficheros modificados y 17 sin seguimiento; hoy la tabla de arriba describe
+> código **versionado**, y lo único que queda sin commitear es la fase 8. La
+> tabla se conserva porque es el índice de qué acabó en qué sitio, no porque
+> describa el árbol de trabajo.
 
-El working tree es la referencia, **no el último commit**. Antes de investigar un
-comportamiento raro o de escribir un informe, `git status` y `git diff` van primero.
+**Y los bancos de pruebas visuales no están en git, ni siquiera ahora.**
+`.gitignore` los recoge **enteros** —HTML y script, los cinco pares—, con la
+regla escrita en su propio comentario: *o el utillaje está ignorado entero, o se
+versiona entero*. Antes dejaban fuera `drag-test.html`, `ruleta-preview.html` y
+sus dos `src/`, que quedaban sin seguimiento **y** sin ignorar: la peor de las
+dos situaciones, porque `git status` los anunciaba como código nuevo cada vez que
+alguien montaba el utillaje con `npx vite`. Consecuencia: mirar el render de la
+ruleta hay que hacerlo en local, no se puede leer de un `git show`.
 
-De los bancos de pruebas visuales, `.gitignore` recoge `preview.html`,
-`src/preview.ts`, `auth-preview.html`, `src/authPreview.ts`, `src/previewAudio.ts`
-y `nav-test.html` (líneas 39-44). **No** recoge `drag-test.html`, `src/dragTest.ts`,
-`ruleta-preview.html` ni `src/ruletaPreview.ts`: esos cuatro están sin seguimiento
-en git pero no ignorados, lo que es una inconsistencia del `.gitignore`. O el utillaje
-de desarrollo debería estar ignorado entero, o ninguno.
+---
+
+## Fase 8 — La ruleta se parte en dos (2026-10-01, lote sin commitear)
+
+Tres trabajos que chocaron en paralelo sobre la misma ruleta. Lo que tienen en
+común es que los tres son **la misma promesa, aplicada a tres sitios**: lo que el
+jugador ve bajo la aguja tiene que ser lo que el motor aplicó. El primero la
+incumplía sin que nadie se diera cuenta, el segundo se la jugaba sin tenerla, y
+el tercero sobraba.
+
+### 8.1 La ruleta del sintonizador
+
+Sintonizar un recolector era el **único punto del juego donde el jugador arriesga
+un recurso a una tirada**, y el resultado llegaba en un toast: "¡Mejora exitosa!".
+Una tirada que solo se comunica con una línea de texto no se siente como una
+tirada. Ahora hay trompo, con la misma ventana y el mismo marcador que la de las
+cajas —a propósito: el jugador ya sabe leer esa ruleta, y reutilizar el lenguaje
+hace que la segunda no sea un objeto nuevo que hay que aprender.
+
+**El cambio de contrato en el motor es lo que no se ve.** `upgradeEquippedCollector`
+devolvía `success: false` para dos cosas opuestas: *el dado salió mal* (se gastó
+el cristal) y *la operación se rechazó antes de tirar* (no se gastó nada). Para el
+jugador son lo contrario, pero el motor devolvía lo mismo, y con una sola bandera
+un rechazo hacía girar la ruleta entera con un cartel de "FALLO" y un mensaje que
+hablaba de otra cosa ("Necesitas 4 x Cristal de Afino").
+
+La solución es **un tercer estado explícito**, `rolled`, más `level` con el que se
+queda. No se deduce en la vista, porque deducirlo mirando si el cristal se gastó
+sería repetir en la vista la regla de consumo del motor (R1 y R2). Un `rolled`
+que llegue `undefined` —un mock viejo, un motor anterior— se trata como "no hay
+ruleta", que es la salida que no le enseña nada falso al jugador.
+
+**El segundo error, del que solo se dio cuenta el banco.** El game loop sube
+`item.level` en el mismo objeto del almacén, así que leer el nivel *después* de
+llamarlo devuelve el nivel nuevo en los dos casos: el acierto pintaba "5 → 5", un
+número que no existe. Por eso `levelBefore` se lee **antes** de la llamada y
+`levelAfter` sale de una relación, no de una segunda lectura. El fallo parecía
+correcto por casualidad, porque ahí los dos números coinciden de verdad.
+
+### 8.2 La ruleta de cajas deja de ser una ruleta
+
+`crateRoulette.ts` mezclaba tres cosas en un solo fichero: la matemática del
+giro, el DOM del carril y el cartel del premio. Se parte en tres, y el reparto no
+es caprichoso:
+
+| Fichero | Qué tiene | Imports |
+|---|---|---|
+| `rouletteSpin.ts` | La curva, su inversa, la geometría y los chasquidos | **ninguno** |
+| `rouletteStrip.ts` | La ventana, el marcador y la transición CSS | `rouletteSpin`, DOM |
+| `crateRoulette.ts` | Solo el cartel del botín de las cajas | `rouletteStrip` |
+
+**`rouletteSpin.ts` no importa nada, y esa es la razón de que exista.** Son
+números puros, que es justo lo que los hace comprobables: importarlos en Node no
+arranca Web Audio ni lee `window.innerWidth`. Si la aritmética del giro se
+hubiera quedado dentro de `crateRoulette.ts`, **`rouletteCheck` no podría
+existir**: importar ese fichero en Node significaba levantar el audio y el DOM
+solo para dividir por dos números.
+
+Y hay una asimetría que conviene no pasar por alto. `tuningRoll()` sí es una
+función pura, pero vive en `tuningRoulette.ts`, que **sí** importa audio, iconos
+y el carril. `rouletteCheck` la importa igual y funciona, porque
+`verify/entorno.mjs` pone los stubs de debajo. Es decir: la mitad derecha del
+banco (la geometría) no depende de que el stub esté bien, y la mitad izquierda
+(sintetizador) sí. Un stub que estorba en un banco y salva en otro no es un
+stub neutro: es deuda que se paga el día que alguien lo recorte.
+
+Tres cosas cambian de verdad, no solo de sitio:
+
+- **La curva.** Era un `cubic-bezier(0.16, 1, 0.3, 1)` elegido a ojo, con el 90%
+  del camino en el primer 25% del tiempo: cuatro segundos de trompo eran uno de
+  verdad y tres de arrastre, y el ojo abandonaba la tirada mucho antes de que
+  acabara. Ahora es el ajuste de `d = 2t - t²` —una rueda a la que se le quita la
+  energía poco a poco— y el último medio segundo va casilla a casilla.
+- **Los chasquidos.** Iban a un intervalo constante calculado **aparte** de la
+  curva (`duracion / casillas`), con lo que el sonido describía el tiempo y no el
+  movimiento: callado en el primer segundo, que es donde la cinta vuela, y
+  metrónomo en el final. Ahora salen de `instante()` sobre la misma curva, y caen
+  **en la frontera de casilla** que cruza el marcador.
+- **Las vueltas.** Se contaban en casillas fijas, así que el trompo era corto en
+  móvil (4 casillas de ventana) y largo en escritorio (6). Ahora se cuentan en
+  **ventanas visibles**, y dura lo mismo en los dos.
+
+Y un detalle que es la mitad de un bug: el carril tenía `px-1`. Cuatro píxeles que
+nadie escribió en la fórmula desplazaban la casilla ganadora, así que **el
+marcador señalaba una casilla y el cartel anunciaba otra** — el peor fallo posible
+en una ruleta. Lo que no está en la aritmética no se pone en la aritmética.
+
+### 8.3 El botón de huecos desaparece
+
+El almacén tenía un botón "Dejar un hueco aquí" en la ficha del item, y con él
+`alternaHueco()` y dos casos del manejador. **Se retiran a petición del jugador**,
+y el motivo es de diseño, no de limpieza:
+
+> En un tablero, "dejar un hueco aquí" es lo mismo que "el item no está aquí", y
+> eso ya lo dice el arrastre. Soltar en una celda vacía le cuelga al item los
+> huecos que necesite para caer exactamente en la celda señalada, **sin mover a
+> nadie más**. El botón era un segundo camino hacia lo mismo.
+
+De paso se arregla el resaltado del arrastre: la condición de `pointermove`
+excluía `data-gap` justo cuando el destino era un hueco. El `drop` sí funcionaba
+(lo resolvía el `pointerup`); lo que faltaba era la señal visual, y sin ella
+arrastrar a un hueco se leía como un arrastre que no iba a hacer nada.
+
+### 8.4 Qué se comprobó
+
+- `npm run build`: `tsc` limpio.
+- `npm run verify`: **14 bancos, 1083 pruebas**, todas en verde. `rouletteCheck`
+  aporta 59 y es nuevo.
+- **Medido, no supuesto**, en `ruleta-preview.html`: el desfase entre el centro de
+  la casilla ganadora y la aguja es de **0 px** en las tres ruletas (caja épica,
+  sintonizador con acierto y sintonizador con fallo), y los tres sitios que
+  enseñan el resultado dicen lo mismo —casilla "NIVEL 5", cartel "Nivel 4 → 5" y
+  el mensaje del motor.
+
+Lo que `verify/` **no** cubre y no se puede cubrir: el render. La medición de
+píxeles y el ancho de la ventana real quedan fuera del banco, y por eso existe el
+banco visual.
 
 ---
 

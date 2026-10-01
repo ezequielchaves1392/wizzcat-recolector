@@ -23,6 +23,7 @@ import { CRYSTAL_DEFS } from '../data/items';
 import { collectorMaxLevel } from '../data/crafting';
 import { previewUpgradeChance, previewUpgradeCost } from '../gameLoop';
 import { rarityClass } from './crateLoot';
+import { showTuningRoulette, tuningRoll } from './tuningRoulette';
 
 /**
  * Abre el selector de cristal para sintonizar el recolector equipado.
@@ -125,7 +126,36 @@ export function showCrystalPicker(game: any, redraw: () => void) {
       const idx = Number((b as HTMLElement).dataset.idx);
       cerrar();
       sfx.use();
+      // POR QUÉ EL NIVEL SE LEE ANTES DE TIRAR EL DADO. El game loop sube
+      // `item.level` en el mismo objeto del almacén, así que leerlo después
+      // devolvería el nivel nuevo en los dos casos y la ruleta no podría
+      // pintar "4 → 5": enseñaría "5 → 5" en el acierto, que es un número que
+      // no existe. `equipo` es la referencia viva al item, no una copia.
+      const nivelAntes = equipo.level || 0;
       const res = game.upgradeEquippedCollector(disponibles[idx].tier || 1);
+      // `tuningRoll()` decide qué niveles enseña la ruleta, y el porqué de que
+      // el de antes se lea ANTES de la llamada está en su JSDoc. Aquí solo se le
+      // pasa lo que hay.
+      const roll = tuningRoll(res, nivelAntes, equipo.level || 0);
+      // Y SI EL MOTOR NO TIRÓ EL DADO, NO HAY RULETA. Un rechazo —no hay
+      // cristales de ese nivel, ya está en el techo, no hay colector— no es un
+      // fallo de la tirada: no se ha gastado nada y no ha pasado nada. Girar
+      // igualmente sería una ruleta mintiendo: el trompo anunciaría una
+      // apuesta que el jugador no hizo y el cartel daría un desenlace que no
+      // existe, con un mensaje que además habla de otra cosa ("Necesitas 4 x
+      // Cristal de Afino"). El aviso de toast es lo que corresponde aquí, y es
+      // lo que ya se veía antes de esta ruleta.
+      //
+      // Es un camino raro —el selector desactiva el botón cuando no llega, y el
+      // techo se comprueba al abrir—, pero "raro" no es "imposible": el estado
+      // puede cambiar entre abrir el selector y pulsar, y el juego no puede
+      // depender de que la vista lo compruebe una vez.
+      if (!roll.rolled) {
+        sfx.error();
+        showToast(roll.msg || 'No se pudo sintonizar.', 'error');
+        redraw();
+        return;
+      }
       // POR QUÉ `success` Y NO `ok`. El game loop tiene DOS convenciones de
       // resultado y no están unificadas: `sellItem`, `useConsumable` y
       // `openCrateBox` devuelven `{ ok, msg }`, mientras que
@@ -136,13 +166,12 @@ export function showCrystalPicker(game: any, redraw: () => void) {
       // con el texto "¡Mejora exitosa!" dentro y sonaba el sonido de fallo. Solo
       // el fallo se veía bien, y por casualidad, porque en ese caso el mensaje
       // de error era el que tocaba. Un resultado mal leído no da ningún aviso.
-      if (!res.success) {
-        sfx.error();
-        showToast(res.msg || 'No se pudo sintonizar.', 'error');
-      } else {
-        showToast(res.msg, 'success');
-      }
-      redraw();
+      //
+      // Y POR QUÉ `res.msg` EN VEZ DE UN MENSAJE NUEVO. El texto del acierto y
+      // del fallo lo redacta el motor, que es quien sabe cuánto costó y a qué
+      // nivel quedó. Reescribirlo aquí sería una segunda versión de la misma
+      // frase, y las dos se separarían en cuanto se tocara una.
+      showTuningRoulette(roll, redraw);
     });
   });
   document.body.appendChild(overlay);

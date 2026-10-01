@@ -44,7 +44,8 @@ export default defineConfig({
         lootCheck: resolve(here, 'lootCheck.ts'),
         queueCheck: resolve(here, 'queueCheck.ts'),
         playthroughCheck: resolve(here, 'playthroughCheck.ts'),
-        toastCheck: resolve(here, 'toastCheck.ts')
+        toastCheck: resolve(here, 'toastCheck.ts'),
+        rouletteCheck: resolve(here, 'rouletteCheck.ts')
       },
       formats: ['es']
     }

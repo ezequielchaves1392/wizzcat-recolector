@@ -92,7 +92,8 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 | **Recolectores** | Clickers equipables. Daño × nivel. Se afinan con cristales (sube el nivel, puede fallar). T1-T10. | `gameLoop.ts`, `data/tiers.ts` |
 | **Compañeros** | Aportan ingreso. Tipos `click` / `passive` / `multiplier`. 1 ranura de base, 5 de tope. | `gameLoop.ts`, `data/tiers.ts` |
 | **Cajas** | 4 tipos (común/rara/épica/legendaria). Necesita llave de nivel igual o superior. Tabla de botín con pesos en `crateLoot.ts`. | `components/crateLoot.ts` |
-| **Ruleta** | 26 casillas, 4.2 s. **Solo muestra**: el premio ya está decidido antes de girar. | `components/crateRoulette.ts` |
+| **Ruleta de cajas** | 21-31 casillas según la ventana, 5.2 s. **Solo muestra**: el premio ya está decidido antes de girar. | `components/rouletteSpin.ts` (los números), `rouletteStrip.ts` (el carril), `crateRoulette.ts` (el cartel) |
+| **Sintonizador** | 17-25 casillas, 2.4 s, 2 vueltas. **También solo muestra**: el motor tira el dado y la ruleta enseña el `success` que ya vino. | `components/tuningRoulette.ts`, `crystalPicker.ts` |
 | **Forja** | 3 recolectores del mismo tier → 1 del siguiente. Potencial 1-5, afijos heredados, autor, fecha. | `data/crafting.ts`, `ui/forgePage.ts` |
 | **Afijos** | 14 afijos en 6 rarezas. Modifican daño, pasivo y suerte de forja. | `data/crafting.ts:42-71` |
 | **Valoración** | El precio es dinámico: tier × nivel × rareza × potencial × afijos × fama × antigüedad. El jugador se queda el 42 %. | `data/valuation.ts` |
@@ -348,6 +349,52 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 18 | **Comprar y vender en bucle daba nanitas infinitas** | **arreglada** |
 | 19 | El historico de nucleos se contaba dos veces en la primera Ascension | **arreglada** |
 | 20 | La Forja y la Ascension se anidaban a si mismas al redibujar | **arreglada** |
+| 21 | La sintonizacion no tenia ruleta: solo un toast | **arreglada** (y de paso, `rolled` en el contrato del motor) |
+
+### 21. La sintonización no tenía ruleta — ARREGLADA
+
+Gastar un cristal de mejora devolvía un toast: "¡Mejora exitosa!" o "Fallo en el
+sintonizador". Era el único punto del juego donde el jugador arriesga un recurso
+a una tirada, y se enteraba del resultado por una línea de texto. Una tirada que
+solo se comunica así no se siente como una tirada.
+
+Ahora hay ruleta (`src/components/tuningRoulette.ts`), con la misma ventana, el
+mismo marcador y el mismo trompo que la de las cajas, y el resultado se enseña en
+tres sitios a la vez: la casilla que gana, el cartel y el mensaje del motor. Los
+tres tienen que decir lo mismo, que es lo único que sostiene la promesa de la
+ruleta.
+
+**EL CAMBIO DE CONTRATO EN EL MOTOR, que es lo que no se ve.** Para poder
+enseñar el resultado hubo que separar dos cosas que `upgradeEquippedCollector`
+devolvía juntas. `success: false` significaba las dos: *el dado salió mal* y *la
+operación se rechazó antes de tirar*. Para el jugador son opuestas —una gastó el
+cristal, la otra no gastó nada— pero el motor las devolvía idénticas. Con una
+sola bandera, un rechazo hacía girar la ruleta entera por una operación que no
+ocurrió, con un cartel de "FALLO" y un mensaje que hablaba de otra cosa.
+
+La solución fue **un tercer estado explícito**: `rolled`, que dice si el dado
+llegó a tirarse, más `level`, con el que se quedó. No se deduce en la vista,
+porque deducirlo mirando si el cristal se gastó sería repetir en la vista la
+regla de consumo del motor (R1 y R2). Lo dice el motor, que es el único que lo
+sabe. Un `rolled` que llegue `undefined` —un mock viejo, un motor anterior— se
+trata como "no hay ruleta", que es la salida que no le enseña nada falso al
+jugador.
+
+**LO QUE ESTO NO ESTÁ ARREGLADO, y sigue abierto:** la unificación de las dos
+convenciones de resultado que menciona la discrepancia 3. `upgradeEquippedCollector`
+devuelve ahora `{ success, rolled, level, msg }`, que es *más* campos que antes
+sobre una convención que sigue siendo distinta de `{ ok, msg }`. La entrada nueva
+no unifica nada: la hace más difícil de unificar de lo que estaba.
+
+Cubierto por `rouletteCheck`, que además comprueba la geometría del giro. Esa
+parte salió de otra sesión: `rouletteSpin.ts` (los números del trompo, sin un
+solo import para poder comprobarlos en Node) y `rouletteStrip.ts` (el DOM que
+comparten las dos ruletas).
+
+Lo que `verify/` **no** cubre, y se miró a mano en `ruleta-preview.html`: que la
+casilla que gana se pare **exactamente** bajo la aguja. Esa comprobación no se
+puede escribir en el banco porque necesita medir píxeles. Se midió, y el
+desfase es de 0 px.
 
 
 

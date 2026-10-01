@@ -357,15 +357,6 @@ function detailContent(item: any, state: any, game: any): string {
   const sellTotal = game.getSellTotal?.(item.id)
     ?? Math.floor((game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0) * stackUnits(item));
   const maxStack = MAX_STACK[item.type] ?? 1;
-  // ¿Tiene el jugador un hueco justo delante de este item? Es lo que decide si
-  // el botón de la ficha pone o quita un hueco, y lo que le pone el texto.
-  //
-  // Se lee del estado guardado y no de la rejilla porque el hueco se puede haber
-  // creado con un filtro o un orden activo, donde no se pinta: si el botón
-  // dependiera de lo que se ve, un hueco creado en "Todo" desaparecería de las
-  // opciones en cuanto se filtrara, sin que nadie lo hubiera quitado.
-  const aquitienehueco = ((game.getWarehouseGaps?.() ?? state.warehouseGaps ?? []) as string[])
-    .includes(item.id);
   const maxLevel = collectorMaxLevel(item.maxLevel);
 
   const affixList = (item.affixes || []).map((id: string) => {
@@ -499,29 +490,6 @@ function detailContent(item: any, state: any, game: any): string {
               ? `Vender ×${stackUnits(item)} · ${formatNumber(sellTotal)} ◆`
               : `Vender · ${formatNumber(sellTotal)} ◆`}
           </button>
-
-          <!--
-            El UNICO gesto que crea un hueco.
-
-            Por que existe y por que es un boton: un hueco solo puede aparecer ENTRE
-            dos items, y una lista empaquetada no tiene ninguna posicion libre entre
-            dos items: toda celda vacia esta detras de la ultima. Asi que arrastrar
-            nunca puede dejar un hueco en medio, solo rellenar uno que ya exista. Sin
-            este boton el primer hueco es imposible de crear y la funcion entera
-            no se podria alcanzar.
-
-            Y esta en la ficha del item y no en la rejilla porque "dejar un hueco
-            AQUI" es una frase sobre un item, y un boton en la rejilla seria una
-            segunda cosa que acertar en una celda pequena.
-          -->
-          <button class="w-full h-9 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer
-                         border border-dashed ${aquitienehueco ? 'accent-border' : ''}"
-                  data-act="${aquitienehueco ? 'quitarhueco' : 'dejarhueco'}"
-                  style="${aquitienehueco
-                    ? 'background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent);'
-                    : ''}">
-            ${aquitienehueco ? 'Quitar el hueco de aquí' : 'Dejar un hueco aquí'}
-          </button>
         </div>
 
         ${isEquipped ? `<p class="text-[9px] text-amber-400 text-center mt-2">Desequípalo para venderlo o mejorarlo.</p>` : ''}
@@ -644,42 +612,12 @@ function wire(root: HTMLElement, game: any, onBack: () => void, onStateChange?: 
       case 'nada':
         // Botón informativo: no hace nada a propósito.
         return;
-      case 'dejarhueco':
-        if (!item) return;
-        alternaHueco(game, item.id, true);
-        sfx.pick();
-        ui.sort = 'default';
-        redraw();
-        break;
-      case 'quitarhueco':
-        if (!item) return;
-        alternaHueco(game, item.id, false);
-        sfx.pick();
-        redraw();
-        break;
       case 'sell':
         if (!item) return;
         sellItem(game, item, redraw);
         break;
     }
   });
-}
-
-/**
- * Pone o quita el hueco que va justo delante de `itemId`.
- *
- * La lista de huecos se lee, se toca un elemento y se devuelve ENTERA. Es
- * deliberado: quien sabe qué hueco se está moviendo es la vista, que es la que
- * ve la rejilla, y el juego no tiene por qué saber reinterpretar un "quita este y
- * pon aquel" como si fuera suyo decidir cuál se borra.
- */
-function alternaHueco(game: any, itemId: string, dejar: boolean) {
-  const actuales: string[] = game.getWarehouseGaps?.() ?? [];
-  // Quitar se lleva TODAS las celdas de hueco de ese item, no una: el botón es
-  // "no quiero un hueco aquí", y dejar media pila de huecos detrás sería un
-  // estado que el jugador no ha pedido en ningún momento.
-  const siguiente = dejar ? [...actuales, itemId] : actuales.filter((id: string) => id !== itemId);
-  game.setWarehouseGaps?.(siguiente);
 }
 
 // ==========================================================================
@@ -754,7 +692,14 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
     const under = document.elementFromPoint(e.clientX, e.clientY) as Element | null;
     const over = (under?.closest('[data-cell],[data-gap]') ?? null) as HTMLElement | null;
     grid.querySelectorAll('.is-over').forEach(el => el.classList.remove('is-over'));
-    if (over && over.dataset.cell !== String(fromIndex) && over.dataset.gap === undefined) {
+    // Lo único que no se resalta es el item que se esta arrastrando: soltarlo
+    // encima de si mismo no mueve nada. Los huecos SI se resaltan, y antes no:
+    // esta condicion tenia `&& over.dataset.gap === undefined`, que excluia
+    // exactamente el destino que el comentario de arriba dice que hay que
+    // resaltar. El drop funcionaba (el `pointerup` si resuelve `data-gap`); lo que
+    // faltaba era la senal visual, y sin ella arrastrar a un hueco se lee como
+    // un arrastre que no va a hacer nada.
+    if (over && over.dataset.cell !== String(fromIndex)) {
       over.classList.add('is-over');
     }
   });

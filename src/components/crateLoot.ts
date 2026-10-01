@@ -249,6 +249,16 @@ export interface RouletteTile {
   sub: string;
   rarity: string;
   icon: string;
+  /**
+   * Tinte de la casilla para las ruletas que NO son de botín.
+   *
+   * La ruleta del sintonizador tiene dos casillas —mejora o fallo— y ninguna de
+   * las dos es un premio con rareza. Prestarle una ("Legendario" sobre un fallo)
+   * haría que el jugador leyera que fallar es un premio. Cuando está, el tinte
+   * sustituye a la rareza y el campo `rarity` se rellena igual para que
+   * `makeRouletteTile` siga siendo la única constructora de casillas.
+   */
+  tone?: 'good' | 'bad';
 }
 
 interface LootEntry {

@@ -25,8 +25,9 @@ Si vas a tocar el almacén, también [`docs/huecos-almacen.md`](./docs/huecos-al
 ### 2. `git status` y `git diff` antes de investigar
 
 El working tree es la referencia, **no el último commit**. Rama `main`, último
-commit `d3c71ef`, y detrás hay ~3600 líneas sin commitear que incluyen la
-terminal admin, la cola offline, el módulo de apilado y toda la suite `verify/`.
+commit `6dd1068`, y detrás hay un lote sin commitear: la ruleta del sintonizador,
+la refactorización de la ruleta de cajas en tres ficheros y la retirada del botón
+de huecos del almacén. Está descrito como fase 8 en `docs/CAMBIOS-MACRO.md`.
 
 ### 3. Comprueba si hay otro agente trabajando
 
@@ -43,7 +44,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 13 bancos = 1013 pruebas (el total varía ±1: una prueba es condicional)
+npm run verify    # 14 bancos = 1083 pruebas (el total varía ±1: una prueba es condicional)
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
@@ -73,7 +74,7 @@ El resto está en `docs/REGLAS-Y-TECNOLOGIAS.md`.
 ```bash
 npm run dev       # servidor de desarrollo
 npm run build     # tsc && vite build — el type-check es puerta de entrada
-npm run verify    # banco de pruebas propio: 13 bancos sobre el game loop real
+npm run verify    # banco de pruebas propio: 14 bancos sobre el game loop real
 ```
 
 Para un banco suelto:

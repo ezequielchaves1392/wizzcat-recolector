@@ -85,21 +85,22 @@ ocupa el hueco y el hueco queda donde estaba el item*:
 Es el mismo comportamiento que en Stardew, y es un intercambio: el número de huecos
 no cambia al arrastrar.
 
-## 3-bis. Cómo se CREA el primer hueco (añadido al implementar)
+## 3-bis. Cómo se CREA un hueco (eliminado el botón)
 
-Un hueco solo puede aparecer **entre** dos items, y una lista empaquetada no tiene
-ninguna posición libre entre dos items: toda celda vacía está detrás de la última.
-Arrastrar, por tanto, **nunca puede crear un hueco** — el arrastre solo puede
-rellenar uno que ya exista. Sin un gesto adicional, el primer hueco sería imposible
-de crear y la función entera inalcanzable.
+> **Eliminado a petición del jugador:** el botón "Dejar un hueco aquí" /
+> "Quitar el hueco de aquí" de la ficha del item. Ya no existe, y con él se fueron
+> `alternaHueco()` y los dos casos `dejarhueco` / `quitarhueco` del manejador.
+> Motivo: **no cumplía lo que el almacén debe hacer.** En un tablero "dejar un
+> hueco aquí" es lo mismo que "el item no está aquí", y eso ya lo dice el
+> arrastre: soltar en una celda vacía le cuelga al item los huecos que necesite
+> para caer exactamente en la celda señalada, sin mover a nadie más. El botón era
+> un segundo camino hacia lo mismo, y además se leía mal —"quitar el hueco de
+> aquí", sobre un item que el jugador no ha movido de sitio, no tiene a qué
+> referirse—.
 
-El gesto es un botón en la ficha del item: **"Dejar un hueco aquí"** /
-**"Quitar el hueco de aquí"**. Explícito, y funciona igual en móvil. Va en la ficha
-y no en la rejilla porque "dejar un hueco *aquí*" es una frase sobre un item, y un
-botón en la rejilla sería una segunda cosa que acertar en una celda pequeña.
-
-El botón lee los huecos del estado guardado y no de la rejilla: un hueco creado
-en "Todo" no puede desaparecer de las opciones en cuanto se activa un filtro.
+Lo que queda: un hueco nace de arrastrar. El resto del sistema —modelo de datos,
+pintado, intercambio al soltar dentro de un hueco, sincronización y migración—
+sigue igual, y `gapCheck.ts` sigue cubriéndolo entero.
 
 ## 4. Reglas
 
@@ -149,9 +150,9 @@ El modelo que sale de ahí:
   único límite es un cortafuegos de 200 contra un documento manipulado, muy por
   encima de cualquier almacén real.
 
-El botón de la ficha sigue siendo la única forma de dejar un hueco *en medio* de la
-lista, porque una lista empaquetada no tiene posición libre entre dos items. Pero
-para llevar un item a cualquier celda vacía ya no hace falta: se arrastra y se suelta.
+El botón de la ficha que quedaba como única forma de dejar un hueco *en medio* de
+la lista ya no está (ver 3-bis): en un tablero, arrastrar el item a la celda vacía
+de en medio hace lo mismo, y sin un segundo camino que mantener.
 
 ## 5. API nueva en el game loop
 
