@@ -1250,6 +1250,51 @@ sin comprar casi cajas; para darle más valor a las cajas, nivelemos todo.
 >   decisión: ¿el T10 es el final absoluto o la forja sigue subiendo?
 > - **La tasa de fallo** de la forja, que es justo donde entra tu idea nueva (**F32**).
 >
+> **Y hay una variante que lo simplifica TODO, y la propongo aquí porque sale de tus
+> propias respuestas: una caja por tier.**
+>
+> Hoy hay cuatro cajas (común, rara, épica, legendaria) y **cada una está atada a un nivel
+> de llave**. Si en vez de eso hay **una caja por tier** —diez cajas, T1 a T10—, cada caja
+> lleva su llave, y entonces **una sola pieza resuelve cuatro peticiones**:
+>
+> | Petición | Cómo la resuelve una caja por tier |
+> |---|---|
+> | **F26** (cristal del mismo tier) | La caja T8 suelta **cristal T8**. Es el problema que hoy es un muro, y aquí sale de la caja correcta por construcción. |
+> | **F27** (expansores por tipo) | La caja T8 suelta **Expansor T8**. Ya pediste que algunos fuesen solo de cajas. |
+> | **F31** (subir de tier) | La caja T8 suelta la **llave y la caja T9**. Es la cadena que ya definiste. |
+> | **D4** (el patrón) | Dejas de tener el problema: si cada caja tiene su fila y cada fila suelta lo que debe, no hay dos tablas que puedan discrepar. |
+>
+> **Y el efecto de columna vertebral es lo que lo justifica:** la tienda vende la caja T1 y
+> la llave T1, y de ahí en adelante **se sube encadenando**. Es un camino único y legible,
+> y cada caja es a la vez un premio y una llave.
+>
+> ---
+>
+> **LO QUE HAY QUE DECIDIR, Y ES UNA COSA, PERO ES LA IMPORTANTE:**
+>
+> **¿La tienda vende las cajas y llaves altas, o solo la T1?**
+>
+> - **Solo T1** → la cadena **es** el juego. No hay atajo, y el progreso depende de abrir
+>   cajas, que es justo lo que pediste.
+> - **Todas** → el jugador **se compra el T10 directamente**: llave T10 y caja T10, y se
+>   acabó la partida. Las cajas altas serían un adorno con animación, o sea **el mismo
+>   problema que querías arreglar, en forma nueva**.
+>
+> Hoy el atajo ya existe en pequeño —llave 250 y caja común 500— así que la pregunta no
+> es nueva; lo que cambia con cajas por tier es que el atajo serían **diez compras** en vez
+> de una. **Mi opinión: solo T1 en la tienda**, y el resto se sube jugando.
+>
+> **Y dos cosas técnicas, que son el trabajo de verdad:**
+> - **El tipo de caja se deduce del NOMBRE**, no de un campo: `openCrateBox` hace
+>   `getCrateTypeFromName(caja.name)`. Con diez cajas hay que escribir diez nombres y
+>   **mantener los cuatro viejos como alias**, o las cajas que ya tienes en el almacén
+>   dejan de reconocerse. Es R8: coaccionar al cargar, no confiar en el save.
+> - **`createCrateItem` pone `tier: 0` siempre**, y el precio de reventa sale de
+>   `STORE_ITEMS[${crateType}Crate].cost`. Diez cajas son diez entradas de tienda, o el
+>   reventa de una caja alta revienta con un `undefined`.
+>
+> ---
+>
 > Y hay un **cuello de botella que aparece al hacerlo** y que conviene tener en la
 > cabeza: si todo el poder pasa por la forja, y la forja consume items, entonces el
 > **almacén se llena de material de forja** —y F27 quiere ponerle un tope. Los dos
