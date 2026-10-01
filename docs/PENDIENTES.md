@@ -316,10 +316,9 @@ tres números:
 
 | # | Número abierto |
 |---|---|
-| **F26** | ¿Un nivel de cristal por tier, o bandas? Y **qué caja suelta cada uno** — hoy solo hay 2 obtenibles de 4. |
-| **F31** | **¿La forja llega a T10 o se queda antes?** Con el stat heredado el techo ya no estorba, pero hay que elegir. |
-| **F34** | **Nada abierto.** El techo es 75% desde el tier 20; la curva por debajo (60% / 68%) es propuesta mía y espera tu visto bueno. |
-| **F35** | **Nuevo y obligatorio: los dos topes tienen que ser coherentes.** Items a tier infinito y cristales con máximo significan que **un item por encima del máximo de cristal no se puede mejorar nunca**. Hay que elegir los dos números juntos. |
+| **F36** | **Nada abierto.** Los tres están determinados con la cuenta a la vista: items y cristales hasta el **30**, cristales de **uno por tier sin bandas**, forja hasta **T10**. La curva de probabilidad (60/68/75%) es lo único que espera tu visto bueno. |
+
+**Lo que queda por decidir es una sola cosa, y es tuya:** la curva de probabilidad por debajo del 20 (60% / 68% / 75%), que está propuesta en **F34** y razonada en **F36**. Todo lo demás tiene número.
 
 **Y cuatro decisiones que ya están tomadas** (respondidas, medido lo que se puede medir):
 
@@ -1486,8 +1485,76 @@ son de tier 1, 2, 3 … máx. Y obtengo los máximos de mezcla **y** de cajas.
 > tier infinito y los cristales tienen máximo, entonces **un item por encima del máximo de
 > cristal es un item que no se puede mejorar nunca**. Con los dos topes en 10 eso no pasa;
 > con uno infinito y otro topado, pasa desde el primer tier por encima del tope de cristal.
-> **Los dos topes tienen que ser coherentes entre sí**, y eso es un número que hay que
-> elegir (y que no estaba en la lista hasta ahora).
+> **Los dos topes tienen que ser coherentes entre sí** — resuelto en **F36**, con los tres
+> números que quedaban, delegated.
+
+### F36 · Los tres números que quedaban, determinados con la cuenta a la vista
+
+Delegados ("sí"). Van aquí con la cuenta, para que se puedan cambiar sin volver a razonarlos.
+
+> **1 · LOS TOPES: items hasta el 30 y cristales hasta el 30. Cohesentes.**
+>
+> La pregunta era hasta dónde llega cada uno, y la respuesta sale de un solo número: **el
+> precio**. Con 2 materiales por forja, un item de tier T cuesta **2^(T-1) materiales de
+> T1**, y la T1 cuesta 900:
+>
+> | Item | T1 necesarias | En nanitas |
+> |---|---|---|
+> | T10 | 512 | 460.800 |
+> | T15 | 16.384 | 14.745.600 |
+> | T20 | 524.288 | 471.859.200 |
+> | **T25** | 16.777.216 | **15 billones** |
+> | **T30** | 536.870.912 | **483 billones** |
+>
+> **Ahí está el final, y no lo pone un tope: lo pone la aritmética.** Un T25 cuesta 15
+> billones y un T30 **483 billones**. El juego puede *decir* "tiers infinitos" porque la
+> forja **no rechaza ningún tier** —y eso es lo que hay que implementar—, pero nadie llega
+> al 25 por la forja. Se llega antes por cajas, y eso es lo correcto.
+>
+> **Y los cristales llegan al 30.** Dos razones, y la segunda es la que manda:
+> - **Coherencia:** si el tope de cristal fuera 10 y los items llegaran a 30, habría veinte
+>   tiers **imposibles de mejorar**. Con los dos en 30 **no hay ningún tier muerto** — que
+>   es justo lo que sale mal en el patrón de D4.
+> - **El trade-off es real:** un T30 sin nivel es **más débil que un T10 con nivel**, porque
+>   el nivel multiplica ×3 y el stat ×1,62 por tier. O sea que **el nivel gana hasta el
+>   tier 6-7 y después el stat toma el relevo**. Con los dos topes en 30, un jugador en el
+>   final tiene que elegir: **bajar a los items que puede nivelar**, o **quedarse arriba con
+>   el stat y sin niveles**. **Esa es una decisión buena**, no un descuido.
+>
+> **Y AQUÍ ESTÁ EL NÚMERO QUE HACE QUE 30 SEA 30, Y NO 25 NI 50:** el techo de la forja
+> es 75% desde el tier 20 (F34). Si el tope de item fuera 25, **el tramo donde falla la
+> forja sería el tramo final**, y el jugador acabaría la partida. **Con el item en 30 hay un
+> tramo entero (25-30) donde la forja es segura pero carísima**, que es donde el juego
+> quiere que estés.
+>
+> **2 · CRISTALES: UNO POR TIER, 30 niveles, sin bandas.**
+>
+> Sin bandas porque **la regla estricta de F26 ya no deja sitio para ellas**: la regla es
+> "el cristal del mismo tier", y una banda obligaría a que un T7 pudiera usar cristal T8,
+> que es justo lo que pediste evitar. **Un nivel por tier es la consecuencia directa de la
+> regla estricta.**
+>
+> En los multiplicadores, una decisión que hay que tomar porque no es automática: **los 10
+> nombres que ya existen conservan su nombre y su multiplicador** (Afino, Fase, Entropía,
+> Singular…) y **el multiplicador se queda en cuatro escalones**; los 20 nuevos reutilizan
+> el del grupo al que pertenecen. Motivo: `crystalSuccessChance` solo multiplica **la
+> probabilidad**, y si el multiplicador creciera sin límite **el 75% de la forja se rompería
+> en los tiers altos** — que es precisamente lo que se pidió. **El multiplicador mueve la
+> segunda ruleta (la del stat) y no toca la primera (la del forjado).** Esa separación es
+> lo que mantiene con sentido las piedras de forja en el tramo 20+.
+>
+> **3 · LA FORJA LLEGA A T10, Y NO MÁS.**
+>
+> Por una razón que sale de F33: **la forja da el máximo y el jugador elige sus dos
+> materiales**. Un T11 forjado sería un T11 perfecto, y a partir de ahí **la caja —que da
+> el máximo ×1,25— ganaría a la forja siempre**. Si la forja llegara más lejos que la caja,
+> **dejaría de usarse**, que es lo contrario de lo que se pidió.
+>
+> El techo actual (`maxTier = 11`, que rechaza `tier >= 11`) **ya es T10**: solo hay que
+> **quitar el `Math.min(tier, 10)`** de la rareza, para que un T10 forjado no salga con la
+> rareza recortada a Divino de T9.
+
+---
 
 1. Los cristales tienen la misma lógica: **se compran los tier 0 y los otros se obtienen**.
 2. La forja permite llegar a **tiers infinitos**.
