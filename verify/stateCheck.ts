@@ -22,7 +22,7 @@
 // ==========================================================================
 
 import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
-import { nextCores, pendingCores } from '../src/data/prestige';
+import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel } from '../src/data/crafting';
 import { CRATE_LOOT } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity } from '../src/data/valuation';
@@ -1328,6 +1328,54 @@ async function main() {
       segundo >= 1, `pending=${segundo}`);
     check('prestigio: y da MENOS que el primero, porque el histórico se descuenta',
       segundo < justo, `segundo=${segundo} primero=${justo}`);
+  }
+  {
+    // B12 · EL SEGUNDO PRESTIGIO DECÍA "PRODUCE 0 MÁS".
+    //
+    // La vista restaba `PRESTIGE_MIN_NANITES - producido`, que es el umbral del
+    // PRIMER núcleo. En la segunda vuelta, con 1 M producido y 8 de histórico,
+    // la resta da 0 y el botón sigue apagado: la pantalla dice 0 y la cuenta
+    // pide más. La cifra que se enseña tiene que salir de `nanitesToNextCore`
+    // (el mismo `nextCores` que decide si el botón se enciende), y la barra de
+    // `coreProgress` tiene que subir al producir: antes devolvía
+    // `totalCores / total`, que BAJA de 1 a 0,67 entre 1 M y 2 M.
+    const g = await boot(baseSave([collector('r1')], {
+      totalNanitesProduced: 1_000_000,
+      cores: 0, totalCores: 0, resets: 0
+    }));
+    g.prestige();
+    const hist = s(g).totalCores;
+    g.getState().totalNanitesProduced = 1_000_000;
+    const st = (p: number) => ({
+      totalNanitesProduced: p, totalCores: hist, coreGain: s(g).bonus.coreGain
+    });
+    const falta = nanitesToNextCore(st(1_000_000));
+    check('B12: en la segunda vuelta con 1 M falta MAS de 0 (la vista decia 0)',
+      falta > 0, `falta=${falta}`);
+    check('B12: y produciendo justo lo que falta aparece el siguiente nucleo',
+      nextCores(st(1_000_000 + falta)) >= 1,
+      `pending=${nextCores(st(1_000_000 + falta))} falta=${falta}`);
+    check('B12: y con uno menos todavia no hay nada (la cifra es exacta, no un redondeo)',
+      nextCores(st(1_000_000 + falta - 1)) === 0,
+      `pending=${nextCores(st(1_000_000 + falta - 1))}`);
+    // Lo que solo vive en memoria es un bug: tras recargar, el historico sigue
+    // intacto y el pendiente sigue en 0 (la segunda vuelta empieza de 0).
+    const g2 = await reload();
+    check('B12: el historico y el pendiente sobreviven a la recarga',
+      g2.getPrestigeInfo().pending === 0 && g2.getPrestigeInfo().totalCores === hist,
+      `pending=${g2.getPrestigeInfo().pending} totalCores=${g2.getPrestigeInfo().totalCores}`);
+    const prog1 = coreProgress(st(1_000_000));
+    const prog2 = coreProgress(st(2_000_000));
+    check('B12: la barra sube al producir (antes bajaba de 1 a 0,67)',
+      prog2 > prog1, `1M=${prog1} 2M=${prog2}`);
+    check('B12: y llega a 1 cuando ya se puede reciclar',
+      coreProgress(st(1_000_000 + falta)) === 1,
+      String(coreProgress(st(1_000_000 + falta))));
+    // La primera vuelta no cambia: sin histórico el umbral sigue siendo 1 M.
+    check('B12: en la primera vuelta el umbral sigue siendo el minimo de 1 M',
+      nanitesForCores(1, 0) === 1_000_000 && nanitesToNextCore({
+        totalNanitesProduced: 400_000, totalCores: 0, coreGain: 0
+      }) === 600_000, `forCores(1)=${nanitesForCores(1, 0)}`);
   }
 
   resumen('estado, migracion y economia');

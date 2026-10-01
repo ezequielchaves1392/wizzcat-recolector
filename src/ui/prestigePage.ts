@@ -20,7 +20,7 @@
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip } from './pageShell';
 import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META } from '../data/tree';
-import { canBuyNode, nextCores, treeCompletion, PRESTIGE_MIN_NANITES } from '../data/prestige';
+import { canBuyNode, nextCores, coreProgress, nanitesToNextCore, treeCompletion } from '../data/prestige';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -169,10 +169,18 @@ export function renderPrestigePage(
         <div class="mb-2.5">
           <div class="flex items-center justify-between gap-2 mb-1">
             <span class="text-[10px] font-mono text-[var(--text-muted)]">
-              Produce ${formatNumber(Math.max(0, PRESTIGE_MIN_NANITES - state.totalNanitesProduced))} más para el primer núcleo
+              Produce ${formatNumber(nanitesToNextCore({
+                totalNanitesProduced: state.totalNanitesProduced,
+                totalCores: state.totalCores,
+                coreGain: bonus.coreGain
+              }))} más para el ${state.totalCores > 0 ? 'siguiente' : 'primer'} núcleo
             </span>
           </div>
-          <div class="meter is-tall"><span style="width:${Math.min(100, (state.totalNanitesProduced / PRESTIGE_MIN_NANITES) * 100)}%"></span></div>
+          <div class="meter is-tall"><span style="width:${Math.round(coreProgress({
+            totalNanitesProduced: state.totalNanitesProduced,
+            totalCores: state.totalCores,
+            coreGain: bonus.coreGain
+          }) * 100)}%"></span></div>
         </div>
       `}
 

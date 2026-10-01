@@ -61,15 +61,60 @@ export function nextCores(state: {
   return Math.max(0, total - state.totalCores);
 }
 
-/** Progreso 0..1 hacia el siguiente núcleo, para la barra de la UI. */
+/**
+ * Producción total necesaria para justificar `nucleos` núcleos.
+ *
+ * Es la inversa de `pendingCores`: el mínimo `p` con `pendingCores(p) >= nucleos`.
+ * Vive aquí y no en la vista (R2/R3): la página de Ascensión y el banco leen el
+ * mismo número, así que lo que se enseña es lo que se cobra.
+ */
+export function nanitesForCores(nucleos: number, coreGainBonus = 0): number {
+  if (nucleos <= 0) return 0;
+  const mult = 1 + coreGainBonus;
+  // Inversión directa de `8·(p/1e6)^0.6·mult >= nucleos`.
+  // Se arranca en el umbral mínimo: por debajo de él `pendingCores` devuelve 0
+  // siempre (los núcleos 1..7 no existen sueltos: el primero que se justifica
+  // es el 8º, con 1 M), así que sin el tope el ajuste de abajo caminaría ~1 M
+  // de uno en uno.
+  let p = Math.max(
+    PRESTIGE_MIN_NANITES,
+    Math.ceil(1_000_000 * Math.pow(nucleos / (8 * mult), 1 / 0.6))
+  );
+  // Ajuste por el `floor` y el redondeo: como mucho unos pocos pasos.
+  while (p > 0 && pendingCores(p - 1, coreGainBonus) >= nucleos) p--;
+  while (pendingCores(p, coreGainBonus) < nucleos) p++;
+  return p;
+}
+
+/** Cuánto falta producir para el siguiente núcleo (0 si ya se puede reciclar). */
+export function nanitesToNextCore(state: {
+  totalNanitesProduced: number;
+  totalCores: number;
+  coreGain: number;
+}): number {
+  if (nextCores(state) > 0) return 0;
+  const umbral = nanitesForCores(state.totalCores + 1, state.coreGain);
+  return Math.max(0, umbral - state.totalNanitesProduced);
+}
+
+/**
+ * Progreso 0..1 hacia el siguiente núcleo, para la barra de la UI.
+ *
+ * Se mide en esfuerzo (producido / umbral del siguiente), no en
+ * `totalCores / total`: esa fracción BAJA al producir —con 8 de histórico da 1
+ * con 1 M y 0,67 con 2 M—, así que la barra retrocedía cuanto más jugabas.
+ * La producción se reinicia a 0 en cada Ascenso, así que medir desde 0 es lo
+ * que el jugador siente: lo producido entre lo necesario.
+ */
 export function coreProgress(state: {
   totalNanitesProduced: number;
   totalCores: number;
   coreGain: number;
 }): number {
-  const total = pendingCores(state.totalNanitesProduced, state.coreGain);
-  if (total <= 0) return 0;
-  return Math.min(1, state.totalCores / total);
+  if (nextCores(state) > 0) return 1;
+  const umbral = nanitesForCores(state.totalCores + 1, state.coreGain);
+  if (umbral <= 0) return 0;
+  return Math.min(1, Math.max(0, state.totalNanitesProduced / umbral));
 }
 
 /**
