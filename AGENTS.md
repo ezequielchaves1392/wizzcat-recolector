@@ -19,7 +19,22 @@ enterarte.
 | [`docs/CONTEXTO-JUEGO.md`](./docs/CONTEXTO-JUEGO.md) | Qué es el juego, los 7 sistemas, cómo se guarda, **las discrepancias conocidas** y lo que **no** está verificado. |
 | [`docs/REGLAS-Y-TECNOLOGIAS.md`](./docs/REGLAS-Y-TECNOLOGIAS.md) | Stack, entry points, la suite `verify/`, y las **31 reglas** del proyecto (R1-R31). Esta es la que manda. |
 | [`docs/CAMBIOS-MACRO.md`](./docs/CAMBIOS-MACRO.md) | Por qué el juego es como es, fase por fase, y el estado real del repositorio. |
-| [`docs/PENDIENTES.md`](./docs/PENDIENTES.md) | **Lo que el jugador quiere añadir.** Si dice *"sigamos con tareas pendientes"*, se lee este fichero entero. |
+| [`docs/PENDIENTES.md`](./docs/PENDIENTES.md) | **Lo que el jugador quiere añadir**, con el plan de trabajo y el orden. Si dice *"sigamos con tareas pendientes"*, se lee este fichero entero. |
+
+### Comandos que aceleran lo de siempre
+
+Hay cuatro comandos de proyecto en `.opencode/commands/`. Cada uno trae dentro el
+procedimiento completo, así que no hace falta acordarlo otra vez:
+
+| Comando | Qué hace |
+|---|---|
+| `/idea <lo que sea>` | Apunta una idea nueva en la lista, ya clasificada. Guarda tus palabras textuales. |
+| `/plan` | Sigue el **Plan de trabajo**: un paso, en el orden que dice el plan. |
+| `/feature` | Una feature del apartado **Features**, con las reglas de R2 y R3 dentro. |
+| `/bug` | Un bug del apartado **Bugs**: reproducir antes de arreglar, causa raíz en el mensaje. |
+
+Si aun así pide trabajar a pelo, el fichero manda igual: `PENDIENTES.md` es la
+fuente y estos comandos solo la leen mejor.
 
 Si vas a tocar el almacén, también [`docs/huecos-almacen.md`](./docs/huecos-almacen.md).
 
