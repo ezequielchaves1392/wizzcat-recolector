@@ -29,6 +29,23 @@ export const setDoc = async (ref: any, data: any, options?: { merge?: boolean })
   if (globalThis.__MEM_DB__?.fallar) {
     throw new Error('FirestoreError: unavailable: Sin conexión (simulado)');
   }
+  // RETRASO PROGRAMADO.
+  //
+  // `fallar` simula la caída, pero no el tiempo que tarda un guardado en
+  // viajar. Sin este hook no hay forma de provocar DOS guardados solapados, que
+  // es lo que pasa en el juego real: `saveToFirebase` no se espera en treinta
+  // sitios distintos y el intervalo de quince segundos la llama sin más. Aquí
+  // `__MEM_DB__.retrasar` es una promesa que la prueba controla, así que puede
+  // dejar un `setDoc` en el aire mientras el jugador sigue comprando.
+  //
+  // El hook se consulta por cada escritura y se limpia solo: `__MEM_DB__.retrasar`
+  // es `undefined` en cuanto se resuelve, de modo que el segundo `setDoc` del
+  // mismo guardado (el de `rankings`) no hereda el retraso.
+  const espera = globalThis.__MEM_DB__?.retrasar;
+  if (espera) {
+    delete globalThis.__MEM_DB__.retrasar;
+    await espera;
+  }
   const db = globalThis.__MEM_DB__;
   const previo = options?.merge ? db[ref.id] : undefined;
   db[ref.id] = previo ? { ...previo, ...data } : data;

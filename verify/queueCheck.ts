@@ -379,6 +379,86 @@ async function main() {
   // Que la cola se escribe en el almacenamiento real del stub, no en una copia.
   check('cola: se usó el almacenamiento del juego', almacen.datos.size >= 0);
 
+  // =========================================================================
+  //  DOS GUARDADOS A LA VEZ
+  //
+  //  `saveToFirebase` no se espera en ninguno de los treinta sitios que la
+  //  llaman, así que dos guardados se solapan de forma normal: el jugador compra
+  //  mientras el guardado anterior sigue en el aire. Con `setDoc` instantáneo
+  //  eso no se ve, y por eso hacía falta un hook de retraso en el stub.
+  //
+  //  La carrera que se pierde dinero:
+  //
+  //    · A anota 100 y sale hacia la red (se queda en el aire).
+  //    · B anota 200 y sale detrás.
+  //    · B falla. Llega A, que para A su operación salió bien, y vacía la cola.
+  //
+  //  Documento con 100, cola vacía, y 100 nanitas perdidas sin red de seguridad.
+  //  Para A la operación fue un éxito y con razón: lo que A confirma es que A
+  //  llegó. Lo que no puede afirmar es que lo suyo sea lo último que se anotó.
+  // =========================================================================
+  {
+    (globalThis as any).localStorage.clear();
+    const MEM: any = (globalThis as any).__MEM_DB__;
+    const USUARIO = { uid: 'test', displayName: 'Probador' };
+
+    // Documento con saldo de partida y una caja de cada tipo para poder comprar.
+    MEM['users/test'] = {
+      saveVersion: 7, userId: 'test', username: 'Probador', nanites: 5000,
+      totalNanitesProduced: 5000, totalClicks: 0, warehouseCapacity: 15,
+      maxCompanionSlots: 1, warehouse: [], crates: {}, companions: [],
+      activeCompanions: [], unlockedAchievements: [], nodeLevels: {}, unlockedNodes: [],
+      cosmetics: { title: 'title_default', frame: 'frame_none', banner: 'banner_none', unlocked: [] },
+      updatedAt: new Date()
+    };
+    MEM.fallar = false;
+
+    const g = await createGameLoop(USUARIO as any, () => {});
+
+    // El retraso se pone DESPUÉS de arrancar el bucle, a propósito: `createGameLoop`
+    // guarda al entrar, y si el `setDoc` pendiente se colocó antes, lo que se
+    // queda en el aire es el guardado de inicio y no el de la compra. El banco
+    // pasaría en verde sin haber probado nada.
+    let soltar: () => void = () => {};
+    MEM.retrasar = new Promise<void>((r) => { soltar = r; });
+
+    // A: anota 4.500 y su `setDoc` se queda esperando.
+    const compraA = g.buyStoreItem('commonCrate');
+    check('carrera: A se compra y sale', Boolean(compraA), String(compraA));
+
+    // B: anota 3.000 (más nuevo) y su `setDoc` falla al instante.
+    MEM.fallar = true;
+    const compraB = g.buyStoreItem('rareCrate');
+    check('carrera: B también se compra y falla al subir', Boolean(compraB), String(compraB));
+
+    // Llega A. Para A su operación salió bien, así que el guardado vacío la cola
+    // a pelo... y con eso el saldo de B desaparece sin red de seguridad.
+    //
+    // La red vuelve ANTES de soltarlo: si no, el segundo `setDoc` de A —el del
+    // ranking— también fallaría y A acabaría en su `catch` sin llegar a tocar la
+    // cola. El banco pasaría en verde por un motivo que no es el que prueba.
+    MEM.fallar = false;
+    soltar();
+    await compraA;
+    await compraB;
+    await new Promise((r) => setTimeout(r, 0));
+
+    const vivo = leerCola();
+    check('carrera: la cola NO se vació con el guardado ajeno',
+      Boolean(vivo), 'un guardado confirmó y se llevó por delante la cola de otro');
+
+    // Con la cola viva, la recarga trae el saldo NUEVO y no el de A.
+    const g2 = await createGameLoop(USUARIO as any, () => {});
+    check('carrera: la recarga trae el saldo que nadie confirmó',
+      g2.getState().nanites === 3000,
+      `nanitas=${g2.getState().nanites} (A confirmado=4500, B sin confirmar=3000)`);
+    void g2;
+
+    delete MEM.retrasar;
+    MEM.fallar = false;
+    (globalThis as any).localStorage.clear();
+  }
+
   resumen('cola de nanitas pendientes');
 
   /**

@@ -197,7 +197,7 @@ export function anotarPendiente(
   nucleos: number,
   totalNucleos: number,
   reinicios: number
-): void {
+): number {
   try {
     const registro: Registro = {
       v: VERSION,
@@ -211,10 +211,58 @@ export function anotarPendiente(
       ts: Date.now()
     };
     localStorage.setItem(CLAVE, JSON.stringify(registro));
+    return registro.ts;
   } catch {
     // Modo privado, cuota llena o `localStorage` bloqueado. El juego sigue
     // funcionando como antes de esta cola: sin red de seguridad, pero sin
     // romperse.
+    return 0;
+  }
+}
+
+/**
+ * Vacía la cola SOLO si lo que hay dentro sigue siendo lo que se acaba de
+ * confirmar, y devuelve si la vació.
+ *
+ * POR QUÉ NO BASTA CON `vaciarCola()` AL CONFIRMAR. `saveToFirebase` no se espera
+ * en ninguno de los treinta sitios que la llaman, así que dos guardados se
+ * solapan de forma normal: el jugador compra mientras el guardado anterior sigue
+ * en el aire. Y entonces:
+ *
+ *   · El guardado A anota 100 y sale hacia la red.
+ *   · El guardado B anota 200 y sale detrás.
+ *   · B falla. A llega después, su operación salió bien, y vacía la cola.
+ *
+ * El documento se queda con 100, la cola ya no está, y el jugador ha perdido 200
+ * nanitas sin ninguna forma de recuperarlas. Para A la operación fue un éxito,
+ * y con razón: lo que A confirman es que A llegó. Lo que no puede afirmar es que
+ * lo suyo sea lo último que se anotó.
+ *
+ * La marca de tiempo lo resuelve sin cambiar nada de la temporización: se vacía
+ * solo si el registro que hay dentro es el mismo —o uno más viejo— que el que
+ * este guardado confirmó. Si otro guardado escribió después, su saldo sigue ahí,
+ * que es justo lo que hay que dejar vivo.
+ *
+ * Lo que NO arregla esto: dos guardados que los dos terminan bien pueden
+ * escribirse en orden inverso, y el `setDoc` del que lleva el snapshot viejo se
+ * escribiría después, dejando el documento unos segundos por detrás. Esa carrera
+ * se cura sola en el siguiente guardado (cada compra y el intervalo de quince
+ * segundos), mientras que la que arregla esta función no se curaba nunca, porque
+ * la red de seguridad ya no estaba.
+ */
+export function confirmarCola(tsConfirmado: number): boolean {
+  try {
+    const crudo = localStorage.getItem(CLAVE);
+    if (!crudo) return true;
+    const r = JSON.parse(crudo) as Registro;
+    // Si no se puede leer la marca, no se vacía. Ante un registro ilegible lo que
+    // se protege es la red de seguridad, igual que en `leerCola`.
+    if (!r || typeof r.ts !== 'number' || !isFinite(r.ts)) return false;
+    if (r.ts > tsConfirmado) return false;
+    localStorage.removeItem(CLAVE);
+    return true;
+  } catch {
+    return false;
   }
 }
 

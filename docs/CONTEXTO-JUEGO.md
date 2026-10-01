@@ -247,6 +247,34 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
     valor total del todo haría de fusionar la única acción óptima y el juego
     perdería la tensión de ranuras.
 
+14. **Dos guardados a la vez se llevaban por delante la red de seguridad.**
+    **ARREGLADO.** `saveToFirebase` no se espera en ninguno de los treinta sitios
+    que la llaman, más un intervalo de 15 s y un `beforeunload`. Dos guardados
+    solapados eran la norma, no el caso raro: el jugador compra mientras el
+    guardado anterior sigue en el aire.
+
+    El guardado A confirmaba su operación y vaciaba la cola **a pelo**, así que
+    se llevaba la anotación de un guardado más nuevo que había fallado. El
+    resultado depende del orden:
+    - Si el más nuevo falla, se **fabrica** dinero: la compra que no se subió se
+      olvida y el jugador se queda con el item.
+    - Si el más viejo falla, se **pierde** dinero: el documento queda con la cifra
+      vieja y no queda cola de la que recuperar.
+
+    Ahora `anotarPendiente()` devuelve la marca que escribió y `confirmarCola(ts)`
+    solo vacía si el registro que hay dentro es ese o uno más viejo. Cubierto por
+    cuatro pruebas nuevas en `queueCheck`, que dejaban el primer `setDoc` en el
+    aire con un hook de retraso añadido al stub (`__MEM_DB__.retrasar`).
+
+    **Lo que esto NO arregla, y sigue abierto:** dos guardados que los dos
+    terminan bien pueden escribirse en orden inverso, y el `setDoc` que lleva el
+    snapshot viejo se escribiría después, dejando el documento unos segundos por
+    detrás. Esa carrera se cura sola en el siguiente guardado —cada compra y el
+    intervalo de 15 s—, mientras que la que se arregla aquí no se curaba nunca,
+    porque la red de seguridad ya no estaba. La solución completa sería
+    serializar los guardados, pero se probó y **empeora el juego**: aplazar la
+    escritura hace que "comprar y recargar al instante" pierda datos.
+
 ### Resumen
 
 | # | Discrepancia | Estado |
@@ -264,11 +292,12 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 11 | Un docblock en inglés | sigue |
 | 12 | `huecos-almacen.md` desactualizado | **arreglada** |
 | 13 | La forja pierde valor total en T1-T4 | **documentada, no es bug** (la invariante real es por ranura y se cumple) |
+| 14 | Un guardado confirmando vaciaba la cola de otro más nuevo | **arreglada** (queda la carrera inversa, que se cura sola) |
 
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **11 bancos, 857 pruebas.** Queda fuera a propósito:
+la navegación. **11 bancos, 861 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.

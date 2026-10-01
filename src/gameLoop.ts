@@ -2,7 +2,7 @@ import { showToast } from './utils/toast';
 import { formatNumber } from './utils/format';
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { anotarPendiente, hayPendientes, leerCola, vaciarCola } from './services/naniteQueue';
+import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
@@ -1115,7 +1115,11 @@ function syncMaterialCounters() {
           }
         } else {
           console.info('[cola] Descartada: el documento del servidor es más reciente.');
-          vaciarCola();
+          // También con `confirmarCola`: el documento manda sobre ESTE registro,
+          // pero si mientras se comparaba se anotó otro más nuevo, ese no se
+          // descarta por la razón anterior. El documento no es más reciente que
+          // lo que se acaba de escribir.
+          confirmarCola(cola.ts);
         }
       }
 
@@ -1619,7 +1623,7 @@ function syncMaterialCounters() {
      * después falla —sin red, regla cambiada, pestaña cerrada a medias— el
      * jugador sigue teniendo su dinero, y lo recuperará al recargar.
      */
-    anotarPendiente(
+    const tsAnotado = anotarPendiente(
       user.uid,
       state.nanites,
       state.totalNanitesProduced,
@@ -1687,9 +1691,14 @@ function syncMaterialCounters() {
        * antes de tiempo perdería nanitas (el documento se queda con la cifra
        * vieja y la cola con la nueva, y nadie suma las dos), y no vaciarla
        * nunca las duplicaría en la siguiente recarga.
+       *
+       * Se vacía con `confirmarCola(tsAnotado)` y no a pelo, porque los guardados
+       * se solapan: al llegar aquí, este guardado ha confirmado SU saldo, pero
+       * puede que otro más nuevo ya haya escrito en la cola. Vaciarla sin mirar
+       * borraba la red de seguridad de ese otro, y el jugador perdía saldo sin
+       * forma de recuperarlo. Ver `confirmarCola`.
        */
-      vaciarCola();
-      pendingWasFlushed();
+      if (confirmarCola(tsAnotado)) pendingWasFlushed();
     } catch (error) {
       /**
        * PASO 3 · FALLO.
