@@ -14,7 +14,7 @@
 // ==========================================================================
 
 import type { Rarity, CollectorItem } from '../types/domain';
-import { AFFIX_BY_ID } from './crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, BASE_COLLECTOR_MAX_LEVEL } from './crafting';
 import { TIER_SYSTEM } from './tiers';
 
 /** Valor de referencia de un recolector base de cada tier (sin nivel ni afijos). */
@@ -42,7 +42,7 @@ const RARITY_VALUE_MULT: Record<Rarity, number> = {
 };
 
 /** Cada nivel del recolector suma un porcentaje creciente del valor base. */
-export function levelValueMult(level: number, maxLevel = 20): number {
+export function levelValueMult(level: number, maxLevel = BASE_COLLECTOR_MAX_LEVEL): number {
   if (level <= 0) return 1;
   // 0.06 por nivel hasta la mitad, 0.10 después: premia llevar el recolector lejos
   const half = maxLevel / 2;
@@ -115,7 +115,7 @@ export interface ValuationOptions {
 
 export function collectorValue(collector: CollectorItem, opts: ValuationOptions = {}): number {
   const base = TIER_BASE_VALUE[Math.max(1, Math.min(collector.tier, 11))] ?? 200;
-  const levelMult = levelValueMult(collector.level || 0, collector.maxLevel ?? 20);
+  const levelMult = levelValueMult(collector.level || 0, collectorMaxLevel(collector.maxLevel));
   const rarityMult = RARITY_VALUE_MULT[collector.rarity] ?? 1;
   const potMult = potentialValueMult(collector.potential ?? 0);
   const affMult = affixValueMult(collector);
@@ -192,7 +192,7 @@ export function valuationBreakdown(collector: CollectorItem, opts: ValuationOpti
   const out: string[] = [];
   const base = TIER_BASE_VALUE[Math.max(1, Math.min(collector.tier, 11))] ?? 200;
   out.push(`Base T${collector.tier}: ${fmt(base)}`);
-  if (collector.level) out.push(`Nivel ${collector.level}: ×${levelValueMult(collector.level, collector.maxLevel ?? 20).toFixed(2)}`);
+  if (collector.level) out.push(`Nivel ${collector.level}: ×${levelValueMult(collector.level, collectorMaxLevel(collector.maxLevel)).toFixed(2)}`);
   out.push(`Rareza ${collector.rarity}: ×${(RARITY_VALUE_MULT[collector.rarity] ?? 1).toFixed(2)}`);
   if (collector.potential) out.push(`Potencial ${collector.potential}★: ×${potentialValueMult(collector.potential).toFixed(2)}`);
   if (collector.affixes?.length) out.push(`${collector.affixes.length} afijo(s): ×${affixValueMult(collector).toFixed(2)}`);

@@ -20,6 +20,7 @@ import { ic } from '../ui/icons';
 import { showToast } from '../utils/toast';
 import { sfx } from '../utils/audio';
 import { CRYSTAL_DEFS } from '../data/items';
+import { collectorMaxLevel } from '../data/crafting';
 import { previewUpgradeChance, previewUpgradeCost } from '../gameLoop';
 import { rarityClass } from './crateLoot';
 
@@ -37,7 +38,14 @@ export function showCrystalPicker(game: any, redraw: () => void) {
     showToast('Equipa un recolector primero.', 'info');
     return;
   }
-  if (equipo.level >= 35) {
+  // El techo lo decide el recolector, con la MISMA regla que usa el game loop.
+  // Aquí había un 35 a pelo: el máximo absoluto, que solo corresponde a un
+  // recolector forjado de potencial 5. Con un recolector de la tienda (techo 20)
+  // el selector se abría en el nivel 20, el jugador elegía un cristal, lo gastaba
+  // y la sintonización se le rechazaba. Dos números distintos para la misma regla
+  // en la misma partida: uno en la vista y otro en el motor.
+  const tope = collectorMaxLevel(equipo.maxLevel);
+  if ((equipo.level || 0) >= tope) {
     showToast('El recolector ya está al nivel máximo.', 'info');
     return;
   }

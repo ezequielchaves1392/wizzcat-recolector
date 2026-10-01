@@ -72,6 +72,45 @@ export const AFFIXES: Affix[] = [
 
 export const AFFIX_BY_ID: Record<string, Affix> = Object.fromEntries(AFFIXES.map(a => [a.id, a]));
 
+/** Techo de nivel de un recolector que no lo trae: los de la tienda. */
+export const BASE_COLLECTOR_MAX_LEVEL = 20;
+
+/** Cuántos niveles extra da cada estrella de potencial. */
+const MAX_LEVEL_PER_POTENTIAL = 3;
+
+/**
+ * El techo de niveles de un recolector.
+ *
+ * Recibe el `maxLevel` del item y no el item entero. Una razón es que la regla es
+ * sobre un número y no necesita conocer la forma del item. La otra es la que
+ * cuesta: `{ maxLevel?: number }` es un *weak type* —todos sus campos opcionales—
+ * y TypeScript rechaza con TS2559 cualquier objeto que no comparta ninguna
+ * propiedad con él, así que un `WarehouseItem` no se le puede pasar ni con el
+ * tipo bien puesto.
+ *
+ * POR QUÉ ESTA FUNCIÓN Y NO UN `?? 20` EN CADA SITIO. El techo se escribía a mano
+ * en cinco sitios y los cinco no coincidían: la ficha del almacén, el panel del
+ * jugador, la valoración y el desglose usaban `item.maxLevel ?? 20`, el game loop
+ * comparaba contra una constante de 20 y el selector de cristales contra un 35 a
+ * pelo. De ahí dos bugs que no se parecían: un recolector forjado con techo 28
+ * llegaba al 20 y el juego respondía "ya no puedes" mientras la barra de la ficha
+ * seguía llegando a 28; y un recolector de la tienda en su nivel 20 abría el
+ * selector, gastaba el cristal y le rechazaban la sintonización.
+ *
+ * El techo pertenece a la MISMA regla que lo crea —`maxLevel: 20 + potencial * 3`
+ * más abajo en este mismo fichero—, así que vive aquí y lo leen el motor y las
+ * vistas por igual. Una regla compartida escrita cinco veces no está compartida:
+ * está copiada, y las copias divergen.
+ *
+ * Si el item no trae `maxLevel` es que viene de la tienda, y esos topan en 20. Un
+ * `maxLevel` de 0 o negativo también cae al de base: es dato corrupto, y tratarlo
+ * como "techo cero" dejaría al recolector sin poder subir nunca.
+ */
+export function collectorMaxLevel(maxLevel?: number | null): number {
+  if (typeof maxLevel === 'number' && maxLevel > 0) return maxLevel;
+  return BASE_COLLECTOR_MAX_LEVEL;
+}
+
 // --------------------------------------------------------------------------
 // Probabilidad de éxito
 // --------------------------------------------------------------------------
@@ -235,8 +274,10 @@ export function attemptForge(
     rarity,
     tier: newTier,
     level: 0,
-    // El techo sube con potencial: 20 + 3 por estrella (máx 35)
-    maxLevel: 20 + potential * 3,
+    // El techo sube con potencial: 20 + 3 por estrella (máx 35). Se calcula con la
+    // misma regla que lee todo el mundo, para que el techo que se crea y el que
+    // se comprueba no puedan separarse.
+    maxLevel: BASE_COLLECTOR_MAX_LEVEL + potential * MAX_LEVEL_PER_POTENTIAL,
     potential,
     damage,
     affixes,

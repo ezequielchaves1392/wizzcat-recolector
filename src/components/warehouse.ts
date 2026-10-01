@@ -34,7 +34,7 @@ import { showCrateRoulette } from './crateRoulette';
 import { showCrystalPicker } from './crystalPicker';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
-import { AFFIX_BY_ID } from '../data/crafting';
+import { AFFIX_BY_ID, collectorMaxLevel } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import {
   KEY_DEFS, CRATE_KEY_TIER, keyNameOpensCrate, keyTierFromName, type KeyTier
@@ -358,7 +358,7 @@ function detailContent(item: any, state: any, game: any): string {
   // opciones en cuanto se filtrara, sin que nadie lo hubiera quitado.
   const aquitienehueco = ((game.getWarehouseGaps?.() ?? state.warehouseGaps ?? []) as string[])
     .includes(item.id);
-  const maxLevel = item.maxLevel ?? 20;
+  const maxLevel = collectorMaxLevel(item.maxLevel);
 
   const affixList = (item.affixes || []).map((id: string) => {
     const a = AFFIX_BY_ID[id];

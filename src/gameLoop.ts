@@ -13,7 +13,7 @@ export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 import { TREE_BY_ID, nodeCost } from './data/tree';
-import { attemptForge, AFFIX_BY_ID } from './data/crafting';
+import { attemptForge, AFFIX_BY_ID, collectorMaxLevel } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
 import {
@@ -227,8 +227,14 @@ export const STORE_ITEMS = {
 // Se llega hasta 9 slots: 5 de tienda + hasta 4 del nodo "Cuadrilla".
 export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_000, 1_400_000, 3_600_000, 9_000_000];
 
-// Mejora de recolector: 20 niveles, coste creciente en cristales y éxito decreciente.
-export const MAX_COLLECTOR_LEVEL = 20;
+// Mejora de recolector: coste creciente en cristales y éxito decreciente.
+//
+// El TECHO de niveles no vive aquí. Vive en `data/crafting.ts` como
+// `collectorMaxLevel()`, junto a la fórmula que crea el `maxLevel` de un
+// recolector forjado, y se llama desde el game loop y desde las vistas. Aquí
+// hubo un `MAX_COLLECTOR_LEVEL = 20` que solo usaba este fichero, y mientras
+// estuvo el techo mirando solo a 20 la mitad de los recolectores del juego
+// tenían un límite que su propia ficha no enseñaba.
 export function collectorUpgradeCost(level: number): number {
   // 1,1,2,2,3,3,4,5,6,7,8,9,11,13,15,18,21,25,30,35 -> ~190 cristales en total
   return Math.max(1, Math.floor(1.2 * Math.pow(1.14, level)));
@@ -2208,7 +2214,22 @@ function syncMaterialCounters() {
       const item = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
       if (!item) return { success: false, msg: 'Recolector no encontrado.' };
       const level = item.level || 0;
-      if (level >= MAX_COLLECTOR_LEVEL) return { success: false, msg: `Recolector al nivel máximo (+${MAX_COLLECTOR_LEVEL * 10}%).` };
+      // EL TOPE LO PONE EL RECOLECTOR, Y LO PONE LA MISMA REGLA QUE LO CREA.
+      //
+      // Antes se comparaba contra un `MAX_COLLECTOR_LEVEL = 20` fijo de este
+      // fichero, mientras un recolector forjado nace con `maxLevel: 20 + potencial
+      // * 3`, o sea entre 23 y 35. El jugador veía una barra que llegaba a 28, el
+      // botón de sintonizar aceptaba el gasto del cristal, y a partir del 20 el
+      // juego respondía "ya no puedes". Un techo que la pantalla no enseña es peor
+      // que uno pequeño, porque el jugador gasta para llegar a algo que no existe.
+      // El `as any` es R24 aplicado a un caso concreto: `state.warehouse` está
+      // anotado con el `WarehouseItem` de `types.ts`, que es VESTIGIAL y no
+      // declara `maxLevel`, mientras que el modelo que de verdad describe el
+      // dominio (`types/domain.ts`) sí lo tiene y `data/crafting.ts` lo rellena.
+      // Los dos modelos de tipos conviven y no se van a fusionar aquí; lo que no
+      // vale es que el motor no pueda leer un campo que el juego escribe.
+      const tope = collectorMaxLevel((item as any).maxLevel);
+      if (level >= tope) return { success: false, msg: `Recolector al nivel máximo (+${tope * 10}%).` };
 
       // El cristal se busca por nivel en el almacén, no en un contador suelto.
       // Un cristal de nivel 3 no se gasta por uno de nivel 1: por eso hay que

@@ -200,9 +200,27 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
    `TIER_POWER`, `types.ts` (`GameState`, `defaultState`), `ProfileState`,
    `UserProfile`, y las pantallas `components/crates.ts` y
    `components/upgrades.ts` (huérfanas desde `f90abea`).
-10. **`MAX_COLLECTOR_LEVEL = 20` ignora `item.maxLevel`.** La comprobación está en
-    `gameLoop.ts:2194`, así que un recolector forjado con `maxLevel` 23-35 queda
-    bloqueado en 20 por el game loop, aunque la UI siga enseñando el techo real.
+10. ~~**`MAX_COLLECTOR_LEVEL = 20` ignora `item.maxLevel`.**~~ **ARREGLADO**, y
+    era **peor de lo que parecía**. La regla del techo de niveles estaba escrita a
+    mano en **cinco** sitios y los cinco no coincidían:
+    | Sitio | Qué usaba |
+    |---|---|
+    | Ficha del almacén, panel del jugador, valoración, desglose | `item.maxLevel ?? 20` |
+    | `upgradeEquippedCollector` (game loop) | constante `MAX_COLLECTOR_LEVEL = 20` |
+    | Selector de cristales | un **35** a pelo |
+
+    De ahí dos bugs que no se parecían en nada. Un recolector forjado nace con
+    `maxLevel: 20 + potencial * 3` (`data/crafting.ts`), o sea 23-35, y su ficha
+    enseñaba una barra hasta 28: el jugador subía al 20, gastaba un cristal más y
+    el juego le respondía "ya no puedes". Y al revés: un recolector de la tienda
+    (techo 20) abría el selector de cristales, el jugador elegía, pagaba, y la
+    sintonización se le rechazaba. Dos números distintos para la misma regla en la
+    misma partida.
+
+    Ahora el techo es `collectorMaxLevel()` en `data/crafting.ts`, junto a la
+    fórmula que lo crea, y lo leen el motor y las tres vistas. Se borra
+    `MAX_COLLECTOR_LEVEL` del game loop: dejar dos nombres para el mismo 20 es
+    dejar la divergencia preparada.
 11. **`syncWarehouseGaps()` está documentado en inglés** (`gameLoop.ts:1188-1200`),
     el único bloque del juego en ese idioma. Cosmético, pero rompe el patrón.
 12. ~~**`docs/huecos-almacen.md` dice "sin implementar"**~~ **ARREGLADO.** La
@@ -242,7 +260,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 7 | Las esquirlas nunca se gastan | sigue |
 | 8 | `crateLuck` y `offlineClicks` no se consumen | sigue |
 | 9 | Código muerto | sigue |
-| 10 | `MAX_COLLECTOR_LEVEL` ignora `item.maxLevel` | sigue |
+| 10 | El techo de niveles estaba escrito en 5 sitios y no coincidían | **arreglada** |
 | 11 | Un docblock en inglés | sigue |
 | 12 | `huecos-almacen.md` desactualizado | **arreglada** |
 | 13 | La forja pierde valor total en T1-T4 | **documentada, no es bug** (la invariante real es por ranura y se cumple) |
@@ -250,7 +268,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **11 bancos, 849 pruebas.** Queda fuera a propósito:
+la navegación. **11 bancos, 857 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.

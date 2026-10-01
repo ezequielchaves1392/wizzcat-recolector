@@ -1,6 +1,6 @@
 import { ic } from './icons';
 import { formatNumber } from '../utils/format';
-import { AFFIX_BY_ID } from '../data/crafting';
+import { AFFIX_BY_ID, collectorMaxLevel } from '../data/crafting';
 
 /**
  * Panel del jugador: recolector equipado y slots de companeros.
@@ -18,8 +18,10 @@ export function renderPanel(state: any, realDamage: number, effectiveSlots?: num
     if (equippedItem) {
       const tier = equippedItem.tier || 1;
       const level = equippedItem.level || 0;
-      // Las recolectores crafteadas suben el techo: 20 normal, hasta 35 con 5 estrellas
-      const maxLevel = equippedItem.maxLevel || 20;
+      // Las recolectores crafteadas suben el techo: 20 normal, hasta 35 con 5 estrellas.
+      // La regla es la misma que usa el game loop para decidir la sintonización, para
+      // que la barra no pueda prometer un nivel que el motor luego rechace.
+      const maxLevel = collectorMaxLevel(equippedItem.maxLevel);
       const rarity = equippedItem.rarity || 'Común';
       const overclocked = Boolean(equippedItem.overclock);
       // Los afijos son la diferencia entre dos recolectores del mismo tier

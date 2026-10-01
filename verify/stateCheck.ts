@@ -21,8 +21,9 @@
 //  guardado, y ese es exactamente el bug que mas veces ha llegado a produccion.
 // ==========================================================================
 
-import { STORE_ITEMS, MAX_COLLECTOR_LEVEL, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
+import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
 import { nextCores } from '../src/data/prestige';
+import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel } from '../src/data/crafting';
 import { CRATE_LOOT } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity } from '../src/data/valuation';
 import {
@@ -565,10 +566,10 @@ async function main() {
       String(find(g, 'x1')?.stackCount));
   }
   {
-    // El nivel maximo es un tope real: en el 20 no se mejora ni se cobran
-    // cristales.
+    // El techo de un recolector SIN `maxLevel` (o sea, de la tienda) son 20, y
+    // es un tope real: en el 20 no se mejora ni se cobran cristales.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: MAX_COLLECTOR_LEVEL }),
+      collector('r1', 3, { damage: 60, level: BASE_COLLECTOR_MAX_LEVEL }),
       crystal('x1', 1, 99)
     ], { nanites: 0 }));
     g.equipCollector('r1');
@@ -576,6 +577,57 @@ async function main() {
     check('mejora: en el nivel maximo se rechaza', !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
     check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 99,
       String(find(g, 'x1')?.stackCount));
+  }
+  {
+    // EL TECHO LO PONE EL RECOLECTOR, NO UNA CONSTANTE DEL MOTOR.
+    //
+    // Un recolector forjado nace con `maxLevel: 20 + potencial * 3`, o sea entre
+    // 23 y 35, y la ficha del almacen y el panel del jugador enseñan ese techo.
+    // El game loop comparaba contra un 20 fijo, asi que un recolector forjado
+    // llegaba al nivel 20, el jugador gastaba un cristal mas y le respondian
+    // "ya no puedes": la barra de la ficha prometia 28 niveles y el motor daba
+    // 20. Un techo que la pantalla no enseña hace que el jugador pague por algo
+    // que no existe.
+    const g = await boot(baseSave([
+      collector('r1', 3, { damage: 60, level: 20, maxLevel: 28, potential: 3 }),
+      crystal('x1', 1, 99)
+    ], { nanites: 0 }));
+    g.equipCollector('r1');
+    const r = conRoll(0, () => g.upgradeEquippedCollector(1));
+    check('mejora: un recolector forjado pasa del 20 si su techo da',
+      r.success === true && find(g, 'r1').level === 21,
+      `nivel=${find(g, 'r1').level} msg=${r.msg ?? ''}`);
+    check('mejora: y el gasto es real', find(g, 'x1').stackCount === 99 - collectorUpgradeCost(20),
+      `x1=${find(g, 'x1').stackCount}`);
+    const g2 = await reload();
+    check('mejora: y el nivel 21 sobrevive a la recarga', find(g2, 'r1')?.level === 21,
+      'nivel=' + find(g2, 'r1')?.level);
+  }
+  {
+    // Y el techo del item es el tope de verdad: en su propio maxLevel, ni uno mas.
+    const g = await boot(baseSave([
+      collector('r1', 3, { damage: 60, level: 28, maxLevel: 28 }),
+      crystal('x1', 1, 99)
+    ], { nanites: 0 }));
+    g.equipCollector('r1');
+    const r = g.upgradeEquippedCollector(1);
+    check('mejora: en el techo del item se rechaza',
+      !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
+    check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 99,
+      String(find(g, 'x1')?.stackCount));
+    // El mensaje nombra el techo REAL, no el 20 de antes: si dice "+200%" cuando
+    // el techo son 28, el jugador ve un número que no corresponde con su item.
+    check('mejora: el mensaje nombra el techo del item', /\+280%/.test(r.msg ?? ''), r.msg ?? '');
+  }
+  {
+    // Y sin `maxLevel` la regla sigue siendo 20, sin exceptions: los recolectores
+    // de la tienda no traen el campo y no pueden tocar mas alto.
+    check('mejora: sin `maxLevel` el techo es 20',
+      collectorMaxLevel(undefined) === 20 && collectorMaxLevel(null) === 20
+      && collectorMaxLevel(28) === 28,
+      [collectorMaxLevel(undefined), collectorMaxLevel(28)].join(','));
+    check('mejora: un `maxLevel` de 0 no rompe el techo',
+      collectorMaxLevel(0) === 20, String(collectorMaxLevel(0)));
   }
   {
     // Si no hay cristales suficientes, no se intenta: el item no se gasta a medias.
