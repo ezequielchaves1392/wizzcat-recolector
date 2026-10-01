@@ -1,0 +1,84 @@
+# ==========================================================================
+#  Publicar el juego en GitHub Pages
+# ==========================================================================
+#  LO QUE HACE ESTE FICHERO, Y LO QUE NO HACE POR CASUALIDAD:
+#
+#  Publica SOLO la página del juego. `admin.html` —que tiene un botón de borrar
+#  la base de datos entera y se protege solo con las reglas de Firestore— **no se
+#  construye en este despliegue**, porque `vite.config.ts` lee `GH_PAGES` y quita
+#  esa entrada. Ver el comentario de ese fichero antes de tocar nada aquí.
+#
+#  CADA `push` a `main` reconstruye y publica. No hay pasos manuales, y eso es
+#  intencionado: si el despliegue dependiera de acordarse de lanzarlo, acabaría
+#  publicando una versión vieja sin que nadie lo notara.
+#
+#  `npm run build` es `tsc && vite build`, o sea que **el type-check es puerta de
+#  entrada**: si el código no compila, no se publica nada. Es lo mismo que exige
+#  `AGENTS.md` en local, y por eso el paso de tests no está: los 22 bancos tardan
+#  más que el despliegue entero y ya se ejecutan en local antes de commitear.
+# ==========================================================================
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Para republicar sin un commit vacío: lo usa la pestaña "Actions" del repo.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un despliegue a la vez, y el nuevo cancela al que esté en curso. Sin esto dos
+# pushes seguidos pueden dejar la página a medio publicar.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `GH_PAGES=1` es lo que hace las dos cosas: rutas relativas para el
+      # subcamino, y fuera `admin.html`.
+      - name: Construir (solo la página del juego)
+        run: npm run build
+        env:
+          GH_PAGES: '1'
+
+      # Si el build publico llegara a incluir admin.html, el despliegue falla
+      # aquí en vez de subirlo. Es una red, no un adorno: la protección real es
+      # que vite.config.ts lo saque, y esto avisa si algún día deja de hacerlo.
+      - name: Comprobar que admin.html NO se ha publicado
+        run: |
+          if [ -f dist/admin.html ]; then
+            echo "::error::admin.html está en dist y se iba a publicar. La terminal de administración tiene un botón de borrar la base de datos: NO puede subirse a un sitio accesible."
+            exit 1
+          fi
+          echo "OK: dist/ solo contiene la página del juego."
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  publicar:
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - id: despliegue
+        uses: actions/deploy-pages@v4

@@ -16,6 +16,26 @@
 //  salida se sube a un servidor accesible, hay que excluirla del despliegue
 //  (no publicarla) y poner reglas en Firestore que limiten las escrituras.
 // ==========================================================================
+//  LA VARIABLE `GH_PAGES`, Y POR QUÉ CAMBIA DOS COSAS A LA VEZ.
+// ==========================================================================
+//  GitHub Pages sirve el repo desde un SUBCAMINO
+//  (`https://<cuenta>.github.io/<repo>/`), y Vite por defecto escribe las rutas
+//  de los assets con barra inicial (`/assets/main-xxx.js`). En la raíz eso es
+//  correcto; en un subcamino apunta a la raíz del dominio y da 404. Por eso
+//  `base` pasa a `'./'` —relativas— cuando la variable está puesta.
+//
+//  Y lo segundo, y es lo importante: **en Pages NO se construye `admin.html`**.
+//
+//  `admin.html` tiene un botón que borra la base de datos entera, y lo único que
+//  decide quién puede pulsarlo son las reglas de Firestore. Publicarlo en un
+//  repo accesible pone esa URL en manos de cualquiera que la encuentre, así que
+//  el despliegue público se queda **solo con la página del juego**. La terminal
+//  se sigue construyendo en local, donde no la ve nadie.
+//
+//  O sea que una variable de entorno decide dos cosas a la vez, y conviene que
+//  sea explícita: si alguien la pone y cree que solo cambia el `base`, publica
+//  el botón de borrar. Las dos cosas están en este mismo bloque a propósito.
+// ==========================================================================
 
 import { defineConfig } from 'vite';
 import { resolve, dirname } from 'path';
@@ -26,15 +46,22 @@ import { fileURLToPath } from 'url';
 // lleva `verify/vite.config.ts`.
 const aqui = dirname(fileURLToPath(import.meta.url));
 
+const paraPages = process.env.GH_PAGES === '1';
+
 export default defineConfig({
+  // `'./'` solo en Pages. En local y en cualquier otro despliegue queda `/`,
+  // que es lo que espera el resto del proyecto.
+  base: paraPages ? './' : '/',
   build: {
     rollupOptions: {
-      input: {
-        // La página del juego.
-        main: resolve(aqui, 'index.html'),
-        // La terminal de administración.
-        admin: resolve(aqui, 'admin.html')
-      }
+      input: paraPages
+        ? { main: resolve(aqui, 'index.html') }
+        : {
+            // La página del juego.
+            main: resolve(aqui, 'index.html'),
+            // La terminal de administración. SOLO en local.
+            admin: resolve(aqui, 'admin.html')
+          }
     }
   }
 });
