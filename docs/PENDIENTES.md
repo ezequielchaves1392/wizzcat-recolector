@@ -327,7 +327,7 @@ programar**; lo que queda es trabajo y tres números:
 | **F23** | **Negarse a entrar**, no expulsar al otro | Nadie pierde la partida en curso. La otra sesión sigue viva hasta que se cierre sola. |
 | **F26** | **El cristal tiene que ser del mismo tier del item, estrictamente.** La progresión se mantiene como está, así que el fallo sigue existiendo. | No cambia la economía, pero **obliga a que existan 10 niveles de cristal**: hoy solo hay 4 definidos y **solo 2 obtenibles**. Si el T8 pide cristal T8 y ese cristal no sale de ninguna caja, el T8 es un muro. |
 | **F29** | **Los núcleos entran en el cálculo del definitivo Y tienen pestaña aparte** | Puntúan y además se ven. |
-| **F31** | **El tier sube por forja, o bien una caja inferior puede tirar llaves y cajas de tier superior** | Dos vías, no una. |
+| **F31** | **El tier sube por forja o por caja, y la tienda solo vende cajas básicas** ("aún no empiezan los tiers ahí") | Dos vías. **Las llaves pueden venderse todas**: la puerta es la caja, no la llave. |
 
 **Datos que faltaban y ya han llegado:**
 
@@ -1270,19 +1270,56 @@ sin comprar casi cajas; para darle más valor a las cajas, nivelemos todo.
 >
 > ---
 >
-> **LO QUE HAY QUE DECIDIR, Y ES UNA COSA, PERO ES LA IMPORTANTE:**
+> **LO QUE HAY QUE DECIDIR, Y ESTÁ DECIDIDO: la tienda solo vende cajas tier 0, las
+> básicas, "aún no empiezan los tiers ahí".**
 >
-> **¿La tienda vende las cajas y llaves altas, o solo la T1?**
+> **Y FUNCIONA POR UNA RAZÓN QUE NO ERA LA QUE YO TEMÍA.** Yo temía que hubiera que
+> quitar también las llaves altas, y **no hace falta**: **la puerta es la caja, no la
+> llave**. Si la tienda vende la llave T9 pero no la caja T9, esa llave **no sirve para
+> nada** hasta que una caja T9 salga de una T8. El jugador puede tener las diez llaves y
+> seguir necesitando la caja, que es justo lo que tiene que pasar.
 >
-> - **Solo T1** → la cadena **es** el juego. No hay atajo, y el progreso depende de abrir
->   cajas, que es justo lo que pediste.
-> - **Todas** → el jugador **se compra el T10 directamente**: llave T10 y caja T10, y se
->   acabó la partida. Las cajas altas serían un adorno con animación, o sea **el mismo
->   problema que querías arreglar, en forma nueva**.
+> Traducido: **las llaves pueden venderse todas, y las cajas solo las básicas.** Es un
+> matiz pequeño y evita un problema grande, porque las llaves caras son la compra que el
+> jugador quiere hacer (no quiere la caja, quiere abrirla).
 >
-> Hoy el atajo ya existe en pequeño —llave 250 y caja común 500— así que la pregunta no
-> es nueva; lo que cambia con cajas por tier es que el atajo serían **diez compras** en vez
-> de una. **Mi opinión: solo T1 en la tienda**, y el resto se sube jugando.
+> **LO QUE SÍ HAY QUE QUITAR, Y ES LO MÁS GRANDE DE ESTA DECISIÓN:** las **veinte cartas
+> de tier**. Hoy la tienda vende `companionCardT1..T10` y `collectorCardT1..T10`, de 900 a
+> 193.850. Si los tiers altos dejan de estar a la venta, **la tienda pasa de 20 cartas a
+> 2**, y esas dos son la T1 de compañero y la T1 de recolector. Es el mayor recorte
+> de contenido del lote, y es correcto: mientras la carta T8 esté a la venta, las cajas
+> no son necesarias.
+>
+> ---
+>
+> **Y UN NÚMERO QUE HAY QUE MIRAR ANTES, porque la forja puede no llegar al final.**
+>
+> La forja hace **3 de un tier → 1 del siguiente**, y con suerte **devuelve 1 de los 3**
+> (consumes 2 netos). Con la T1 a 900, y subiendo por niveles:
+>
+> | De | A | Coste neto en T1 |
+> |---|---|---|
+> | T1 | T2 | 1.800 |
+> | T2 | T3 | 3.600 |
+> | T4 | T5 | 28.800 |
+> | T7 | T8 | 460.800 |
+> | T9 | T10 | **14.745.600** |
+>
+> Eso es **2ⁿ**, o sea exponencial. Una carta de T10 cuesta 193.850: forjar hasta T10
+> cuesta unas **75 veces** más que comprarla. **Con la tienda limitada al tier 0, la forja
+> no puede ser el camino hasta el final o el juego no tiene final.**
+>
+> **Y no creo que sea un problema —creo que es lo que quieres—, pero conviene decirlo:**
+> la forja es **el camino de los tramos bajos** (T1 a T4 sale bien de precio) y a partir
+> de ahí **toman el relevo las cajas**. Eso encaja con F31, donde elegiste que el tier se
+> suba "por forja **o** por caja". Lo que hay que decidir es **dónde está el punto de
+> cambio**, y si la forja tiene un techo explícito más bajo que T10 para que el jugador no
+> la use para algo que no puede pagar.
+>
+> **Lo que la forja necesita además, y que ya no es opcional:** con la tienda cerrada al
+> tier alto, **la forja es la única vía de progreso de los primeros tiers**, así que el
+> botón de **quitar material** (F24) pasa de "queda bien" a "imprescindible": un jugador
+> que mete mal un material y no puede sacarlo se queda **atascado sin ninguna salida**.
 >
 > **Y dos cosas técnicas, que son el trabajo de verdad:**
 > - **El tipo de caja se deduce del NOMBRE**, no de un campo: `openCrateBox` hace
