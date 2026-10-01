@@ -34,7 +34,7 @@ const ID_CONTADOR = '#nanites-counter';
  * un parpadeo: el jugador vería el mismo 307 durante medio segundo y luego un
  * salto. El máximo es lo que separa "crece" de "va con retraso": por encima de
  * 900 ms el número está más tiempo lejos de la verdad que cerca, y entonces lo
- * honesto es pintarlo entero. Las dos son甘 medidas en el mismo sitio, por eso
+ * honesto es pintarlo entero. Las dos son medidas en el mismo sitio, por eso
  * una sola función decide, sin números mágicos sueltos.
  */
 const MS_POR_NANITA = 1;
