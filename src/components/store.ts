@@ -500,11 +500,9 @@ function detailSheet(
   const d = descFor(itemKey);
 
   return `
-    <div class="fixed inset-0 z-[60] flex items-end justify-center pointer-events-none">
+    <div class="sheet-overlay z-[60]">
       <div class="absolute inset-0 bg-black/55 pointer-events-auto" data-detail-close></div>
-      <div class="relative card-glass-elevated w-full max-w-md rounded-t-2xl pointer-events-auto p-4
-                  max-h-[80dvh] overflow-y-auto overscroll-contain animate-rise-in"
-           style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+      <div class="sheet-panel card-glass-elevated animate-rise-in">
         <div class="flex items-start gap-3 mb-3">
           <span class="w-12 h-12 rounded-xl grid place-items-center flex-shrink-0
                        ${rarity ? 'ring-' + raritySlug(rarity) : ''}

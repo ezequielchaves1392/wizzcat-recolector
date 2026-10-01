@@ -231,6 +231,75 @@ body {
   box-shadow: var(--shadow-lift);
 }
 
+/* --------------------------------------------------------------------------
+   Hoja emergente: abajo en el móvil, centrada en escritorio
+   --------------------------------------------------------------------------
+   POR QUÉ UNA CLASE Y NO VARIAS UTILIDADES TIPO `md:items-center` POR CADA
+   SITIO. Este panel estaba copiado en tres ficheros —selector de cristal,
+   selector de llave, detalle de tienda— con las MISMAS clases de Tailwind
+   escritas a mano. Con la regla escrita tres veces, el siguiente sitio que se
+   añadía salía pegado al borde inferior otra vez: no se nota al escribirlo, se
+   nota cuando ya está en producción.
+
+   POR QUÉ EL MÓVIL NO CAMBIA. Abajo es lo correcto en un teléfono: el pulgar
+   llega sin subir y la hoja apoya en el borde, con `safe-area-inset-bottom`
+   para que no quede debajo del gesto de inicio. Centrarla en móvil sería
+   empeorarla. Lo que estaba mal era SOLO escritorio: una hoja de 90 px pegada
+   al borde inferior de una pantalla de 900 px no se lee como un diálogo, se
+   lee como un aviso que se ha quedado a medias.
+
+   EL CORTE ES `md` (768 px) Y NO UNA MEDIA DE TIPO DE PUNTERO. Lo que decide
+   el diseño no es "¿esto tiene ratón?" sino "¿hay algo que leer con el pulgar
+   cerca del borde?". Un portátil con la ventana estrecha se queda con la hoja
+   abajo, y es coherente: se acaba de redimensionar. Una tablet tumbada da una
+   hoja abajo a 1024 px de ancho, y a nadie le molesta.
+
+   En escritorio la hoja pasa a ser un diálogo: centrado, con las cuatro
+   esquinas, la misma sangría arriba que abajo y una sombra más profunda para
+   despegarlo del fondo oscurecido. El alto se limita con `min(85dvh, 44rem)`
+   para que una lista larga de cristales no se convierta en una columna sin
+   fin, y siga teniendo scroll DENTRO de la tarjeta y no contra el borde.
+   -------------------------------------------------------------------------- */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sheet-panel {
+  position: relative;
+  width: 100%;
+  max-width: 28rem;
+  padding: 1rem;
+  /* El inset inferior solo tiene sentido mientras la hoja apoya en el borde */
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  border-radius: 1rem 1rem 0 0;
+  max-height: 80dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+}
+
+@media (min-width: 768px) {
+  .sheet-overlay {
+    align-items: center;
+    padding: 1rem;
+  }
+
+  .sheet-panel {
+    /* Cuadras ya no apoyan en nada: el diálogo flota sobre la pantalla */
+    border-radius: 1rem;
+    padding-bottom: 1rem;
+    max-height: min(85dvh, 44rem);
+    box-shadow:
+      var(--shadow-lift),
+      0 24px 64px -24px rgb(0 0 0 / 0.75);
+  }
+}
+
 .accent-glow {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),

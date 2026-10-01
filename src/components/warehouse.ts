@@ -1301,12 +1301,10 @@ function showKeyPicker(
   llaves: any[], total: number, onPick: (llave: any) => void
 ) {
   const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[70] flex items-end justify-center pointer-events-none';
+  overlay.className = 'sheet-overlay z-[70]';
   overlay.innerHTML = `
     <div class="absolute inset-0 bg-black/60 pointer-events-auto" data-cerrar></div>
-    <div class="relative card-glass-elevated w-full max-w-md rounded-t-2xl pointer-events-auto p-4
-                max-h-[80dvh] overflow-y-auto overscroll-contain animate-rise-in"
-         style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+    <div class="sheet-panel card-glass-elevated animate-rise-in">
       <div class="flex items-start gap-3 mb-3">
         <span class="w-11 h-11 rounded-xl grid place-items-center flex-shrink-0 ring-raro rarity-raro
                      [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('key')}</span>
