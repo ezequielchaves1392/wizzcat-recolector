@@ -1341,71 +1341,101 @@ sin comprar casi cajas; para darle más valor a las cajas, nivelemos todo.
 > **Es la petición más grande del lote**: no cambia un número, cambia de dónde sale el
 > poder. (b) y (c) ya están decididas y encajan bien.
 
-### F33 · La forja es el camino a los items perfectos: hereda el nivel de los materiales
+### F33 · La forja es el camino a los items perfectos: hereda cómo salieron los stats
 
-Lo que tiene la forma de beneficio es que se puede forzar un item perfecto. Si los items
+Lo que tiene la forma de beneficio es que se puede forjar un item perfecto. Si los items
 de tier 1 que mezclo están al máximo, su mezcla va a ser un tier 2 al máximo; y a su vez
 va a tener un plus de forja. La idea es obtener tiers, buscar los perfectos y tratar de
 forjarlos.
 
-> **ESTO RESUELVE EL NÚMERO QUE DI ANTES, y no lo hace cambiando el precio: cambia qué
-> estás comprando.** Yo había dicho que forjar hasta el T10 cuesta unas 75 veces más que
-> comprarlo. Con la herencia de nivel, **esas 75 veces compran algo que no se compra de
-> ninguna otra manera**: un T10 **con sus niveles**. La carta del T10 sale en nivel 0, y
-> la caja te da un T10 en nivel 0. **El único camino a un T10 perfecto es la forja**, y
-> eso es lo que hace que el precio exponencial sea justo en vez de absurdo.
+Una cosa es el nivel del objeto y otro "qué tan bien salieron los stats": cuando se
+generan van de un rango mínimo al máximo. Eso es lo que se mezcla al forjar. Si los dos
+están al máximo, el tier nuevo está al máximo, pero **el nivel es 0 y se pierde la subida
+por cristales**. Y la forja debe pedir **dos** items del mismo tier, no tres.
+
+> **CORRECCIÓN IMPORTANTE: yo lo había leído mal.** Hay **dos cosas distintas** y las
+> había mezclado:
 >
-> **Y la mitad de la idea YA ESTÁ HECHA. Medido, en `rollPotential()`:**
+> | | Qué es | Cómo se obtiene |
+> |---|---|---|
+> | **El nivel** | 0 a 20 (o 35 con 5 estrellas) | **Cristales**, nivel a nivel |
+> | **El stat** | Dónde cayó dentro del rango de su tier (`TIER_SYSTEM.ranges`) | **Al generarse**, al azar dentro del rango |
 >
-> ```ts
-> const levelScore = (m.level || 0) * 0.06;
-> score += rarityScore * 0.4 + levelScore;
-> ```
->
-> O sea que **los materiales al máximo ya suben el potencial**, y el potencial 1-5 mueve
-> la rareza (`collectorRarity`), el techo de niveles (`maxLevel = 20 + potencial × 3`,
-> hasta 35), los afijos y el daño. Tres T1 al máximo aportan `3 × 20 × 0,06 = 3,6` puntos
-> de potencial, que es **casi el máximo de la escala**. O sea que el "si están al
-> máximo, sale mejor" **ya funciona**.
->
-> **LO QUE NO EXISTE, Y ES LA MITAD IMPORTANTE:** el item forjado sale **siempre en nivel
-> 0**. En `attemptForge()` está literal: `level: 0`. Así que hoy, encima de subir de tier,
-> **se pierde todo el trabajo de subir niveles de los materiales**. La forja actual es
-> "tira tres collectors y recibe uno nuevo sin resiniciar".
->
-> **Y ESO ES LO QUE HAY QUE AÑADIR: la herencia.** Y con ella sale el "plus de forja" que
-> dices, que puede ser una cosa o dos:
-> - **La herencia de nivel**: el forjado conserva una parte del nivel de los materiales.
-> - **El plus de forja**: una marca o bonus propio de lo forjado, que lo hace mejor que un
->   T2 de la tienda aunque tenga menos nivel.
+> **Lo que se hereda es el STAT, no el nivel**, y el nivel a 0 **es lo que se quiere**: la
+> subida por cristales se pierde al forjar y hay que rehacerla. Eso no es un defecto, es la
+> decisión, y hace que **F26 y F33 sean el mismo bucle**: la forja da el mejor stat y la
+> sintonización da el nivel, y son cosas distintas.
 >
 > ---
 >
-> **LA PREGUNTA QUE HAY QUE DECIDIR, Y ES DE BALANCE PURO: ¿cómo se hereda el nivel?**
+> **LO QUE HAY HOY, Y SON DOS COSAS QUE PARECEN LA MISMA.**
 >
-> Si el forjado sale **exactamente** al nivel del material, hay un problema: un T2 en
-> nivel 20 se consigue en una sola forja, y **el afinar de ese T2 se vuelve inútil** — ya
-> está al techo. Y al revés, el forjado hereda un nivel que puede estar **por encima del
-> techo del nuevo tier** (un T1 de nivel 35 forjado da un T2 cuyo techo es 20 o 35).
+> **1 · Los items de tienda y de caja sí tiran dentro del rango.** `poderDe(tier, rng)`
+> genera la potencia con el `rng`, así que un T10 de la tienda cae entre 373 y 559, y dos
+> T10 de la tienda son distintos entre sí.
 >
-> Las dos salidas que tienen sentido:
+> **2 · Los items forjados NO. Nunca.** En `attemptForge()`:
 >
-> - **Proporcional: `nivelNuevo = nivelViejo × (techoNuevo / techoViejo)`.** Tres T1 al
->   máximo (20/20) dan un T2 al **100% de su techo**, que es 20 — o 35 si el potencial es
->   alto. Y tres T1 al 50% dan un T2 al 50%. **La inversión se conserva como fracción**, el
->   techo nuevo manda, y el afinar el T2 sigue teniendo trabajo por delante.
-> - **Por mínimo: se queda el más bajo de los tres.** Trivial de entender ("si uno está
->   bajo, el resultado está bajo"), pero el jugador tiene que llevar **tres** al máximo
->   para no perder, y se le castiga por el material que le sobró.
+> ```ts
+> const baseRange = TIER_SYSTEM.ranges[Math.min(newTier, 10)];
+> const baseDamage = Math.round((baseRange[0] + baseRange[1]) / 2);   // el PUNTO MEDIO
+> ```
 >
-> Yo haría la **proporcional**, y el motivo es que hace que "buscar los perfectos" siga
-> valiendo la pena: con la proporcional, un T2 al 60% es mejor que uno al 40%, y el jugador
-> sigue teniendo motivo para no conformarse con el primero que le salga.
+> O sea que **un item forjado sale siempre en el medio de su rango**, no en un punto
+> tirado. Nunca da el máximo, ni por casualidad ni con materiales perfectos.
 >
-> **Y una consecuencia que encaja con F32, y es buena:** si el nivel se hereda en la
-> forja, **la pérdida de niveles no puede ser en la forja** (ahí no hay "{acierto}", hay
-> "sale mal"). La pérdida de 1 o 2 niveles es de la **sintonización**, que es donde ya
-> falla hoy. Los dos mecanismos no se pisan.
+> **CONSECUENCIA, Y ES EL NÚMERO:** un T10 forjado sale en **466** (el medio de 373-559),
+> mientras que un T10 de la tienda puede caer en **559**. O sea que **hoy el mejor item
+> forjado es PEOR que un item de tienda tirado con suerte**, que es justo lo contrario de
+> lo que pides. Y lo único que hoy mueve al item forjado es
+> `potentialMult = 1 + (potencial - 1) × 0,12`, que sale de la **rareza** de los
+> materiales —no de dónde cayó su stat—, así que subir a potencial 5 con materiales raros
+> es como se llega a un forjado bueno.
+>
+> **LO QUE HAY QUE AÑADIR, y es una tirada con entrada:**
+>
+> ```
+> posicionDeLosMateriales = (danoDeA - minDeA) / (maxDeA - minDeA)     // 0..1
+> posicionNueva = posicionMedia(materiales) + plusDeForja              // 0..1
+> statNuevo = minNuevo + posicionNueva × (maxNuevo - minNuevo)
+> ```
+>
+> Con los dos materiales al máximo la posición es ~1 y el forjado cae en el máximo del
+> nuevo rango. Con uno al 30% y otro al 80% sale en el ~55%: **mezclar es promediar, y por
+> eso vale la pena buscar los perfectos** en vez de conformarse con los primeros.
+>
+> **Y EL "PLUS DE FORJA" ES LO QUE HACE QUE PROMEDIAR NO SEA UNA TRAMPA:** si dos
+> materiales perfectos dieran exactamente el máximo, el jugador **nunca rechazaría** un
+> material bueno y buscar los perfectos dejaría de ser una decisión. El plus tiene que
+> poder **compensar** un material flojo, para que la pregunta sea "¿me vale esto o busco
+> otro?" y no "siempre sí".
+>
+> ---
+>
+> **Y EL OTRO CAMBIO, QUE ES EL QUE ARREGLA EL PRECIO: DOS MATERIALES EN VEZ DE TRES.**
+>
+> Pedir 2 en vez de 3 **no es un detalle de ergonomía: es la mitad del exponente.** Con la
+> T1 a 900, llegar a un T10 por forja cuesta:
+>
+> | Materiales | T1 para un T10 | En nanitas | Contra la carta T10 (193.850) |
+> |---|---|---|---|
+> | **3** (hoy) | 3⁹ = 19.683 | 17.714.700 | **91×** — absurdo |
+> | **2** (lo que pides) | 2⁹ = 512 | **460.800** | **2,4×** — justificable |
+>
+> **Con dos materiales, forjar sale 2,4 veces la carta y a cambio das el mejor stat
+> posible del tier.** Eso es un precio justo por una ventaja que ni la tienda ni la caja
+> dan con seguridad. **Con tres sigue siendo 91 veces y nadie lo usa.** Tu instinto era
+> correcto, y la razón es aritmética.
+>
+> **Con esto el techo de forja deja de ser un problema:** si la forja es el camino a la
+> calidad y no al nivel, no necesita subir de T10. Hay que decidir si llega a T10 o se
+> queda antes.
+>
+> ---
+>
+> **Y F32 SIGUE SIENDO LA SINTONIZACIÓN, no la forja**, que ya era la conclusión anterior
+> y ahora además es obligatoria: la forja no tiene "acierto", tiene "sale bien o sale mal",
+> así que **perder niveles no puede ser ahí**.
 
 ### F32 · A partir del nivel 10, fallar puede restar 1 o 2 niveles
 
