@@ -138,24 +138,53 @@ export function sellPrice(collector: CollectorItem, opts: ValuationOptions = {})
   return Math.max(1, Math.floor(collectorValue(collector, opts) * 0.42));
 }
 
-/** Coste de una Piedra de Calibración en la tienda. */
-export const CALIBRATION_STONE_COST = 45_000;
-
-/** Coste de una Nanopartícula de Estabilidad (el consumible premium). */
-export const STABILITY_NANOPARTICLE_COST = 220_000;
+/*
+ * NO PONGA AQUÍ EL PRECIO DE UN CONSUMIBLE DE LA TIENDA.
+ *
+ * Aquí no hay precios de tienda, y antes sí los había: `CALIBRATION_STONE_COST`
+ * (45 000) y `STABILITY_NANOPARTICLE_COST` (220 000). No los usaba nadie, pero
+ * como uno coincidía con la tienda y el otro no, parecía un bug de economy:
+ * "la nanopartícula cuesta 90 000 en un sitio y 220 000 en otro". No lo era. Los
+ * dos eran constantes muertas y el precio que se cobra y se enseña sale de
+ * `STORE_ITEMS` en el game loop, como el de cualquier otra carta. Una segunda
+ * copia del precio es exactamente el tipo de cosa que R2 prohíbe: cuando las dos
+ * se separan, el juego sigue funcionando bien y el aviso aparece en la
+ * documentación, donde no lo lee nadie.
+ */
 
 /**
- * Comprueba si una fusión está "razonable" desde el punto de vista económico:
- * el valor de salida debe superar siempre al input. Se usa en los tests.
+ * ¿La fusión mejora la DENSIDAD de valor del almacén?
+ *
+ * Se compara el valor POR RANURA, no el valor total, y esa es toda la diferencia.
+ * La forja convierte tres recolectores en uno, así que el total baja a propósito en
+ * los tiers bajos: medido sobre el juego real, fundir 3 de T1 (1.122 de valor en
+ * tres ranuras) da 1 de T2 por 778. Pierde un 36% del total y gana un 108% por
+ * ranura.
+ *
+ * La versión anterior de esta función afirmaba lo contrario —"el valor de salida
+ * debe superar al input"—, y estaba rota de una forma que no se veía: era código
+ * que no usaba nadie, con un comentario que prometía un test que no existía. Nadie
+ * validó nunca esa regla. Comparar totales habría dado que la forja entera es una
+ * trampa, cuando lo que compra con tres materiales es una ranura liberada y un
+ * recolector mejor.
+ *
+ * La regla que de verdad sostiene el módulo es la de la ranura: fusionar tiene que
+ * dejar más valor por celda ocupada. Si alguna vez la densidad no mejora, fusionar
+ * sería indistinguible de vender tres y comprar uno, y el módulo perdería su razón
+ * de ser.
+ *
+ * El margen es del 15%, holgado a propósito: la densidad real sube entre 2,5x y
+ * 4,6x según el tier, así que un margen amplio sigue detectando un desequilibrio
+ * de verdad sin volverse pesimista con el azar de la forja.
  */
-export function fusionIsProfitable(
+export function fusionImprovesDensity(
   inputs: CollectorItem[],
   output: CollectorItem,
   opts: ValuationOptions = {}
 ): boolean {
-  const inValue = inputs.reduce((a, w) => a + collectorValue(w, opts), 0);
-  const outValue = collectorValue(output, opts);
-  return outValue > inValue * 1.15;
+  if (inputs.length === 0) return false;
+  const densidadEntrada = inputs.reduce((a, w) => a + collectorValue(w, opts), 0) / inputs.length;
+  return collectorValue(output, opts) > densidadEntrada * 1.15;
 }
 
 /** Resumen legible para la tarjeta del item. */

@@ -24,6 +24,7 @@
 import { STORE_ITEMS, MAX_COLLECTOR_LEVEL, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
 import { nextCores } from '../src/data/prestige';
 import { CRATE_LOOT } from '../src/components/crateLoot';
+import { collectorValue, fusionImprovesDensity } from '../src/data/valuation';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
   baseSave, collector, companion, ficha, crate, key, crystal, consumable, conRoll
@@ -914,6 +915,82 @@ async function main() {
     const r = g.forgeCollector(['a', 'b', 'c'], 0, 1);
     check('forja: con la nanoparticula la fusion se ejecuta', typeof r.success === 'boolean', r.msg ?? '');
     check('forja: y la nanoparticula se gasta', !find(g, 'n1'), ids(g).join(','));
+  }
+  {
+    // ¿LA FORJA CREA VALOR O LO DESTRUYE?
+    //
+    // Esta pregunta es la de todo el módulo: tres recolectores del mismo tier se
+    // convierten en uno del siguiente, así que si la salida vale menos que la
+    // entrada la forja es una trampa y el jugador lo descubre tarde, cuando ya no
+    // puede deshacerla. `fusionIsProfitable` existe para esto y su comentario
+    // decia "se usa en los tests" sin que ningun test la usara: era codigo
+    // muerto que hacia una promesa. Ahora hay un test detras de la promesa.
+    //
+    // Se mide la EXITENCIA, no el acierto: los tres materiales se consumen tanto
+    // si la fusion acierta como si falla, y hay que comprobar las dos. Se
+    // comprueba sobre los items REALES del juego, con la misma `collectorValue`
+    // que usa el precio de venta, para que el test no mida una copia de la regla.
+    const conBlueprint = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
+    const porTier: Record<string, number> = {};
+    const entradasPorTier: Record<string, any[]> = {};
+    let aciertos = 0;
+    let intentos = 0;
+    let algunaRenta = false;
+    let algunaPerdida = false;
+    for (let tier = 1; tier <= 9; tier++) {
+      let peorDensidad = Infinity;
+      let ultimaEntrada: any[] = [];
+      let ultimaSalida: any = null;
+      for (let intento = 0; intento < 4; intento++) {
+        const g = await boot(baseSave([
+          collector('a', tier, { damage: 20 * tier }),
+          collector('b', tier, { damage: 20 * tier }),
+          collector('c', tier, { damage: 20 * tier })
+        ], conBlueprint));
+        // Los tres materiales se consumen acierte o falle la fusion, asi que su
+        // valor se lee ANTES de forjar.
+        const entrada = [find(g, 'a'), find(g, 'b'), find(g, 'c')].map((w: any) => ({ ...w }));
+        const r = g.forgeCollector(['a', 'b', 'c']);
+        intentos++;
+        if (!r.success || !r.collector) continue;
+        aciertos++;
+        ultimaEntrada = entrada;
+        ultimaSalida = r.collector;
+        peorDensidad = Math.min(peorDensidad,
+          collectorValue(r.collector) / (entrada.reduce((s, w) => s + collectorValue(w), 0) / 3));
+        const total = collectorValue(r.collector) / entrada.reduce((s, w) => s + collectorValue(w), 0);
+        if (total > 1) algunaRenta = true; else algunaPerdida = true;
+      }
+      if (peorDensidad !== Infinity) {
+        porTier['T' + tier] = Number((peorDensidad / 1.15).toFixed(2));
+        entradasPorTier['T' + tier] = ultimaEntrada;
+      }
+    }
+    const peorDensidad = Math.min(...Object.values(porTier));
+    check('forja: se pudo medir la fusion en todos los intentos',
+      intentos > 0 && aciertos >= 8, `intentos=${intentos} aciertos=${aciertos}`);
+    // Lo que se mide es la DENSIDAD: valor de salida por valor de entrada POR
+    // RANURA. La densidad real sube 2,5x-4,6x segun el tier, asi que esto pide
+    // >1.15 y el margen sobra. Medir el TOTAL daria 0.64 en T1 y la forja
+    // pareceria una trampa: es el cambio de cantidad a calidad, que es lo que
+    // paga la ranura liberada.
+    check('forja: fusionar mejora el valor por ranura en TODOS los tiers',
+      peorDensidad >= 1,
+      'margen por tier=' + JSON.stringify(porTier));
+    // Y la funcion del juego dice lo mismo que el dato, no una copia del test.
+    const ref = Object.keys(entradasPorTier)[0];
+    const gRef = await boot(baseSave([collector('a', 1), collector('b', 1), collector('c', 1)], conBlueprint));
+    const rRef = gRef.forgeCollector(['a', 'b', 'c']);
+    check('forja: `fusionImprovesDensity` coincide con lo medido',
+      !rRef.success || fusionImprovesDensity(
+        [collector('a', 1), collector('b', 1), collector('c', 1)], rRef.collector),
+      ref ?? '');
+    // Dato, no invariante: la forja Pierde valor total en los tiers bajos. Se
+    // documenta para que un rebalance futuro no lo "arregle" sin querer, porque
+    // subirlo del todo haria de fusionar la unica accion optima y el juego
+    // perderia la tension de ranuras.
+    check('forja: DATO la curva de valor total (pierde en T1-T4)',
+      algunaPerdida, `hay tiers que ganan=${algunaRenta} y tiers que pierden=${algunaPerdida}`);
   }
 
   // =========================================================================

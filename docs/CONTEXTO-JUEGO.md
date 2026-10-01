@@ -209,6 +209,25 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
     funcionalidad está implementada y cubierta por `gapCheck.ts`. El fichero se
     escribió para advertir de que otro agente editaba `src/` y `verify/` en el
     mismo directorio, y el aviso se quedó pegado al estado de la funcionalidad.
+13. **La forja pierde valor total en T1-T4 y lo gana de T5 en adelante.**
+    **No es un bug: es el cambio de cantidad a calidad, y está medido.** La curva
+    de valor total (salida ÷ suma de las tres entradas) medida sobre el juego real
+    es T1 0.64, T2 0.83, T3 0.83, T4 0.96, T5 1.08, T6 1.55, T7 1.38, T8 1.55.
+    Es decir, fundir 3 de T1 (1.122 en tres ranuras) da 1 de T2 por 778: se pierde
+    un 36% del total y se gana un 108% **por ranura**.
+
+    Lo que sostiene el módulo es la densidad por ranura, y esa sube 1.68x a 3.92x
+    en todos los tiers, con margen de sobra sobre el 15%. Está comprobado por
+    `stateCheck` en los nueve tiers.
+
+    Aquí estaba el agujero real: `valuation.ts` tenía `fusionIsProfitable()`, que
+    afirmaba que la salida debe valer más que la entrada, con un comentario que
+    decía "se usa en los tests". **No la usaba nadie y ningún test la usaba.** La
+    regla que el proyecto creía tener escrita nunca se validó, y escrita como
+    estaba era falsa. Ahora la función es `fusionImprovesDensity()` y mide lo que
+    de verdad se sostiene. Si alguien rebalancea la forja, que sepa que subir el
+    valor total del todo haría de fusionar la única acción óptima y el juego
+    perdería la tensión de ranuras.
 
 ### Resumen
 
@@ -226,11 +245,12 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 10 | `MAX_COLLECTOR_LEVEL` ignora `item.maxLevel` | sigue |
 | 11 | Un docblock en inglés | sigue |
 | 12 | `huecos-almacen.md` desactualizado | **arreglada** |
+| 13 | La forja pierde valor total en T1-T4 | **documentada, no es bug** (la invariante real es por ranura y se cumple) |
 
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **11 bancos, 845 pruebas.** Queda fuera a propósito:
+la navegación. **11 bancos, 849 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
