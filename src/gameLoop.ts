@@ -783,11 +783,15 @@ function syncMaterialCounters() {
    * incertidumbre en un dato.
    */
   function marcarPendiente(pendiente: boolean) {
-    // `document` puede no existir: el banco de pruebas arranca el bucle en Node
-    // con un DOM mínimo que no tiene este elemento, y sin esta guarda el fallo
-    // salía justo DENTRO del `catch` —que es el único sitio donde este aviso
-    // importa— y se comía el error de red que estaba avisando.
-    if (typeof document === 'undefined') return;
+    // Lo que se comprueba es `querySelector`, NO `document`. Preguntar por
+    // `document` era mirar en el sitio equivocado: un banco de pruebas puede
+    // definir `document` a medias, sin `querySelector`, y entonces la guarda
+    // pasaba y la llamada reventaba. Y reventaba en el sitio peor: `pendingWasFlushed`
+    // la llama DESPUÉS de un guardado correcto, así que el `TypeError` caía en el
+    // `catch` que estaba avisando de un fallo de red, y el aviso sale mezclado:
+    // "Error al guardar en Firebase: document.querySelector is not a function".
+    // Un guardado que funcionaba, anunciado como perdido.
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
     const el = document.querySelector('#pending-save-indicator');
     if (!el) return;
     el.classList.toggle('hidden', !pendiente);

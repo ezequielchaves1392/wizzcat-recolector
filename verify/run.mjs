@@ -1,101 +1,18 @@
 // Arranca el bundle de pruebas con el mínimo de DOM que el game loop necesita.
-// El game loop solo usa `document`/`window` para enganchar listeners de
-// presencia y para preguntar si la pestaña está visible.
-const listeners = () => ({ addEventListener() {}, removeEventListener() {} });
+//
+// El entorno (DOM, `localStorage` que guarda, `performance`, `setInterval` anulado
+// y los manejadores de fallo del proceso) vive en `entorno.mjs`, COMPARTIDO con
+// `one.mjs`. Estaba duplicado aquí y allí, y las dos copias se separaron: a `one.mjs`
+// le faltaba `querySelector` y le faltaba `classList`, con lo que cuatro bancos no
+// se podían depurar en solitario y uno no imprimía nada, siempre con un error que
+// no señalaba a su causa real. Un banco que funciona con este runner tiene que
+// funcionar también con el otro, y eso solo se garantiza si hay una definición.
+import { instalarEntorno, instalarProceso } from './entorno.mjs';
 
 globalThis.__MEM_DB__ = {};
+instalarEntorno();
+instalarProceso();
 
-// El game loop pinta avisos con `showToast`, que hace `toast.classList.remove()`
-// dentro de un `setTimeout`. Con el stub de antes, ese `classList` no existía y
-// el temporizador reventaba con "Cannot read properties of undefined (reading
-// 'remove')" DESPUÉS de que la tanda de pruebas ya hubiera terminado: el banco
-// que se ejecutaba a continuación (moveCheck) moría sin imprimir una sola
-// línea, y el proceso se acababa con "0 pruebas" sin decir por qué. Un stub que
-// no cubre lo que el código toca no es un stub más pequeño: es un banco de
-// pruebas que se apaga solo en cuanto hay un aviso que mostrar.
-const elementoFalso = () => {
-  const clases = new Set();
-  return {
-    className: '',
-    textContent: '',
-    innerHTML: '',
-    dataset: {},
-    style: {},
-    classList: {
-      add: (...c) => c.forEach(x => clases.add(x)),
-      remove: (...c) => c.forEach(x => clases.delete(x)),
-      toggle: (c, on) => (on ? clases.add(c) : clases.delete(c)),
-      contains: (c) => clases.has(c)
-    },
-    setAttribute() {},
-    removeAttribute() {},
-    appendChild() {},
-    remove() {},
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    addEventListener() {},
-    removeEventListener() {}
-  };
-};
-
-globalThis.document = {
-  visibilityState: 'visible',
-  hasFocus: () => true,
-  addEventListener() {},
-  removeEventListener() {},
-  createElement: () => elementoFalso(),
-  querySelector: () => null,
-  querySelectorAll: () => [],
-  body: { appendChild() {} }
-};
-globalThis.window = { ...listeners() };
-
-// `localStorage` QUE GUARDA, y no el `{getItem: () => null}` que había.
-//
-// La cola de nanitas pendientes vive aquí, y con un almacén que devuelve
-// siempre `null` no se puede ni escribir ni comprobar nada: todas sus pruebas
-// pasarían sin mirar la cola. Además lacked `removeItem`, que es justo lo que
-// se llama cuando el servidor confirma, así que habría reventado con un
-// "is not a function" en mitad del guardado bueno.
-//
-// `localStorage` QUE GUARDA, y no el `{getItem: () => null}` que había.
-//
-// La cola de nanitas pendientes vive aquí, y con un almacén que devuelve
-// siempre `null` no se puede ni escribir ni comprobar nada: todas sus pruebas
-// pasarían sin mirar la cola. Además le faltaba `removeItem`, que es justo lo
-// que se llama cuando el servidor confirma, así que habría reventado con un
-// "is not a function" en mitad del guardado bueno.
-//
-// Cada banco parte de este mapa vacío, y `queueCheck` lo sustituye por el suyo
-// para poder inspeccionarlo.
-globalThis.localStorage = {
-  _datos: new Map(),
-  getItem(k) { return this._datos.has(k) ? this._datos.get(k) : null; },
-  setItem(k, v) { this._datos.set(k, v); },
-  removeItem(k) { this._datos.delete(k); },
-  clear() { this._datos.clear(); }
-};
-globalThis.performance ??= { now: () => Date.now() };
-
-// El game loop arranca un `setInterval` de juego; en Node Keeps alive el proceso
-// y el runner no termina nunca. Las pruebas no dependen del tick.
-globalThis.setInterval = () => 0;
-
-/**
- * POR QUÉ `process.exit()` ESTÁ AL FINAL Y NO EN `process.on('exit')`.
- *
- * `process.exit()` corta lo que hubiera pendiente de escribirse en stdout. Con
- * bancos que imprimen hundreds de líneas y un `console.error` de una excepción
- * justo antes del final, esas líneas se perdían: el banco se quedaba mudo y
- * parecía que no habia corrido. `process.on('exit', ...)` calling a su vez
- * `process.exit` hace lo mismo un instante antes de que Node vacíe los buffers.
- *
- * Dejar que Node termine solo, y devolver el código con `process.exitCode`, es
- * lo que garantiza que todo lo impreso llegue a pantalla.
- */
-process.exitCode = 0;
-process.on('unhandledRejection', (e) => { console.error('RECHAZO SIN CAPTURAR', e?.stack || e); process.exit(2); });
-process.on('uncaughtException', (e) => { console.error('EXCEPCION', e?.stack || e); process.exit(3); });
 // Cada módulo exporta la promesa de `main()`: hay que esperarla, o el proceso
 // se cierra antes de que termine la tanda. Se recorren en orden y se acumulan
 // los códigos de salida, para que un fallo en el segundo no enmascare al primero.

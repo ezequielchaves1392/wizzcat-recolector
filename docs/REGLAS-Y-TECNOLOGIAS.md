@@ -106,7 +106,7 @@ Un banco de pruebas **propio**. Sin Vitest, sin Jest, sin Playwright.
 ```
 npm run verify
   = vite build --config verify/vite.config.ts   # 11 entries → verify/out/
-  && node verify/run.mjs                        # stubs + importa todos
+  && node verify/run.mjs                        # entorno + importa todos
 ```
 
 **Cómo funciona.** `verify/vite.config.ts` tiene **un único plugin**,
@@ -114,13 +114,24 @@ npm run verify
 `firebase/auth` a los stubs de `verify/stubs/`. El stub de Firestore usa
 `globalThis.__MEM_DB__` y **respeta `{merge: true}`** — a propósito, porque si no
 una regresión del tipo "dejamos de guardar `equippedCollectorId`" pasaría
-inadvertida. `verify/run.mjs` instala el mínimo de DOM (`document`, `window`,
-`localStorage` que **guarda de verdad**, `performance`) y anula `setInterval`
-para que Node no se quede vivo.
+inadvertida.
 
-`run.mjs` tiene comentarios larguísimos sobre por qué el stub tiene que ser así.
-Léelos antes de tocarlo: **un stub que no cubre lo que el código toca no es un
-stub más pequeño, es un banco que se apaga solo.**
+El entorno mínimo (DOM, `localStorage` que **guarda de verdad**, `performance`,
+`setInterval` anulado y los manejadores de fallo del proceso) vive en
+**`verify/entorno.mjs`** y lo comparten `run.mjs` y `one.mjs`. Antes estaba
+duplicado en los dos, y las copias se separaron: a `one.mjs` le faltaban
+`querySelector` y `classList`, con lo que **cuatro de los once bancos no se podían
+ejecutar en solitario** y uno no imprimía nada. El síntoma era siempre un error que
+señalaba a otro sitio: `document.querySelector is not a function` dentro del
+`catch` que informa de fallos de red (un guardado correcto anunciado como
+perdido), y `reading 'remove'` en un `setTimeout` de los avisos. Más el
+`localStorage` que devolvía `null` siempre, con el que la cola de nanitas no se
+podía ni escribir.
+
+**Un banco que funciona con el runner tiene que funcionar con el depurador.** Por
+eso el entorno es un módulo y no dos. Léelo antes de tocarlo: **un stub que no
+cubre lo que el código toca no es un stub más pequeño, es un banco que se apaga
+solo.**
 
 ### Los 11 bancos
 
@@ -174,8 +185,16 @@ $env:ONE_BANK="gapCheck"; npx vite build --config verify/vite.one.config.ts
 node verify/one.mjs gapCheck
 ```
 
-Ojo: `one.mjs` tiene un `localStorage` **más pobre** que `run.mjs` (`getItem` que
-siempre devuelve `null`, sin `removeItem`). Para la cola hay que usar `run.mjs`.
+**Los once bancos funcionan así.** Antes no: `one.mjs` arrastraba un entorno más
+pobre que `run.mjs` y cuatro bancos morían antes de imprimir, con un error que no
+señalaba su causa. Los dos runners toman el entorno de `verify/entorno.mjs`, así
+que ya no pueden separarse. Si añades un banco y no se puede depurar en solitario,
+no es que el banco sea especial: es que ha salido algo que el entorno no cubre, y
+eso se arregla en `entorno.mjs`.
+
+Un banco que no imprime **no** es un banco que pasa. Y un banco que solo funciona
+con el runner completo **tampoco**: si falla en solitario, el runner te está
+contando que pasa algo que en realidad no has comprobado.
 
 ## 1.7 CSS y temas
 
@@ -584,7 +603,7 @@ src/
   utils/                        audio.ts, format.ts, modal.ts, toast.ts.
 
 verify/                         El banco de pruebas. No está en tsconfig.
-  vite.config.ts / run.mjs / kit.ts / domStub.ts / stubs/
+  vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
   <subject>Check.ts              11 bancos.
 docs/                           Este directorio.
 ```
