@@ -408,7 +408,7 @@ En celu no puedo cerrar sesión ni cambiar de theme.
 >    problema de confianza, no de layout**: si el jugador no puede cerrar sesión, no
 >    puede dejar de jugar en el móvil. Eso no se arregla solo moviendo un botón.
 
-### B12 · El segundo prestigio dice "produce 0 más" y no dice cuánto falta
+### B12 · El segundo prestigio dice "produce 0 más" y no dice cuánto falta — HECHO
 
 El segundo prestigio dice produce 0 más, pero no indica bien cuánto falta para poder
 prestigiar.
@@ -441,11 +441,25 @@ prestigiar.
 > **Lo que hay que hacer es enseñar, no calcular:** el `pending` como cifra y la barra
 > de `coreProgress()`. Los dos están listos.
 >
-> **Y hay una ambigüedad que hay que resolver antes**, porque el arreglo la hace visible:
-> `pendingCores()` **devuelve 0 por debajo del umbral**, y ese 0 es correcto para el
-> botón pero **no para una barra** — hay que distinguir "todavía no puedes" de "ya
-> puedes y esto es lo que te falta". Con el texto actual el jugador no puede saber en
-> cuál de los dos está.
+> **Arreglado. Causa raíz: la vista restaba el umbral del PRIMER núcleo
+> (`PRESTIGE_MIN_NANITES - producido`) en vez del umbral del siguiente, que
+> descuenta el histórico (`nextCores`).** Es bug de valor, no de flujo: el motor
+> cobraba bien y la pantalla enseñaba otro número. Con 1 M producido en la
+> segunda vuelta (histórico 8) la resta da 0 con el botón apagado.
+>
+> **Y `coreProgress()` no solo estaba sin usar: estaba al revés.** Devolvía
+> `totalCores / total`, que BAJA al producir (1 con 1 M, 0,67 con 2 M). Ahora
+> mide esfuerzo (`producido / umbral del siguiente`) y sube siempre.
+>
+> **El número nuevo vive en el motor, no en la vista** (R2/R3):
+> `nanitesForCores()` (inversa exacta de `pendingCores`, con ajuste por el
+> `floor`), `nanitesToNextCore()` y `coreProgress()` en `data/prestige.ts`. La
+> página pinta "Produce 217 K más para el **siguiente** núcleo" con barra al
+> 82% en ese caso, y "primer" solo sin histórico. La primera vuelta no cambia:
+> el umbral sigue siendo 1 M.
+>
+> Cubre `stateCheck` (+7: el faltante es >0, producirlo da exactamente 1 núcleo
+> y uno menos da 0, la barra sube, y todo sobrevive a la recarga).
 
 ### B4 · La pista del logro del almacén cuenta slots que no tienes — HECHO
 
@@ -1996,6 +2010,11 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       abrir caja— cuentan ahora lo que vive el jugador. La mecánica no se ha tocado:
       `ruleta-preview.html` gira, frena y la casilla y el cartel dicen lo mismo.
       Sin commit todavía.
+- [x] **B12 · el segundo prestigio ya dice cuánto falta (`b3ea2de`).** La vista restaba el
+      umbral del primer núcleo en vez del siguiente (bug de valor: el motor
+      cobraba bien); `coreProgress()` además estaba invertida. El faltante y el
+      progreso salen de `data/prestige.ts`, así que lo enseñado es lo cobrado.
+      `stateCheck` pasó de 212 a 219.
 
 ---
 
@@ -2092,3 +2111,13 @@ aquí para que el cuarto no pase.)*
 > **La regla que sale de esto, para lo que se añada:** cuando se declara una cosa con
 > nombre, multiplicador y probabilidad, **tiene que haber un banco que pregunte de dónde
 > sale**. No que funcione: que exista. Es barato, y los tres bugs eran gratis de evitar.
+
+### Descubierto haciendo B12 (no es bug, es para no perderlo)
+
+- El `pending` que el diagnóstico de B12 dice que "nunca se pinta" **sí se pinta**:
+  va en el `statStrip` ("Al reiniciar +N") y en el botón de reciclar. Lo que de
+  verdad faltaba era el **faltante**, no el pendiente.
+- El MOCK de `preview.html` (`totalCores: 61`, 412 M producidos) siempre cae en la
+  rama "ya puedes reciclar": la rama del faltante no se puede mirar en el preview
+  sin tocar el MOCK. Si se vuelve a tocar ese panel, mirar la rama con un estado
+  de segunda vuelta (histórico 8, 1 M producido).
