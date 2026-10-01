@@ -268,6 +268,43 @@ export function baseSave(items: any[], extra: any = {}) {
 }
 
 // --------------------------------------------------------------------------
+//  Dado
+// --------------------------------------------------------------------------
+
+/**
+ * Ejecuta `fn` con `Math.random` clavado en `valor`.
+ *
+ * POR QUÉ EXISTE. La sintonización del recolector tira un dado por cada intento
+ * y hasta ahora las pruebas solo miraban los RECHAZOS, que son deterministas
+ * porque no llegan al dado. La rama del ACIERTO —la que devuelve
+ * `{ success: true }`— no la comprobaba ningún banco. Ese hueco es
+ * precisamente lo que dejó pasar el bug más gordo que se arregla aquí:
+ * `crystalPicker.ts` leía `res.ok` sobre un `{ success }`, que da `undefined`,
+ * así que `!undefined` era `true` y TODA sintonización caía en la rama de
+ * error. Un acierto pintaba un toast rojo de "error" con el texto "¡Mejora
+ * exitosa!" dentro y sonaba el sonido de fallo. Un resultado mal leído no
+ * lanza ningún aviso: por eso hacía falta una prueba que lo leyera bien.
+ *
+ * No es una reimplementación de ninguna regla del juego, que es lo que este kit
+ * prohíbe: el umbral lo sigue poniendo `crystalSuccessChance` y el dado lo
+ * sigue tirando el game loop. Aquí solo se quita la varianza, que es justo lo
+ * que hace que una prueba sea intermitente.
+ *
+ * Los dos extremos son seguros sin conocer la fórmula: el techo de
+ * `crystalSuccessChance` es 95, así que `0` acierta siempre y `0.999` falla
+ * siempre, para cualquier nivel y cualquier cristal.
+ */
+export function conRoll(valor: number, fn: () => any): any {
+  const original = Math.random;
+  Math.random = () => valor;
+  try {
+    return fn();
+  } finally {
+    Math.random = original;
+  }
+}
+
+// --------------------------------------------------------------------------
 //  Resumen
 // --------------------------------------------------------------------------
 

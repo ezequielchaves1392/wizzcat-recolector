@@ -9,6 +9,7 @@
 
 import { TIER_SYSTEM, type CrateType } from '../gameLoop';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
+import type { KeyTier } from '../data/items';
 import { formatNumber } from '../utils/format';
 import type { WarehouseItem } from '../types';
 
@@ -43,8 +44,16 @@ export interface CrateReward {
    * una caja común da cristal básico y una legendaria, uno de Fase.
    */
   materialTier?: number;
-  /** Nivel de llave que otorga el botín. Cada cofre deja la suya. */
-  keyTier?: number;
+  /**
+   * Nivel de llave que otorga el botín. Cada cofre deja la suya.
+   *
+   * Es `KeyTier` y no `number` a propósito: el botín declara qué llave deja y
+   * el aplicador tiene que respetar ese número. Con `number` el compilador
+   * aceptaba cualquier valor, y como el aplicador además ignoraba el
+   * argumento, una legendaria enseñaba "+N Llaves Rúnicas" y entregaba una
+   * Llave Reforzada sin que nada lo impidiera.
+   */
+  keyTier?: KeyTier;
 }
 
 // Colores de rareza. Devolvemos la clase de texto y la de borde por separado:
@@ -326,7 +335,9 @@ export function pickLoot(crateType: CrateType, weights?: number[]): LootEntry {
 export type LootApplier = {
   nanites: (n: number) => void;
   crystals: (n: number, tier: number) => void;
-  keys: (n: number, tier: number) => void;
+  /** `tier` es el nivel de llave que ANUNCIA el botín. No es opcional: ignorarlo
+   *  es lo que hacía que la ruleta prometiese una llave y entregara otra. */
+  keys: (n: number, tier: KeyTier) => void;
   addItem: (item: any) => boolean;
   hasSpace: () => boolean;
   /** Desbloquea un cosmético. `false` si ya lo tenía. */

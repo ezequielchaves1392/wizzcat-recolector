@@ -1,8 +1,16 @@
 # Huecos reales en el almacén
 
-Estado: **diseño cerrado, sin implementar.** Motivo: hay otro agente editando
-`src/` en este mismo directorio. Implementar esto ahora es garantizar un conflicto
-sobre `gameLoop.ts` y `warehouse.ts`.
+Estado: **implementado y cubierto por `gapCheck.ts` (65 pruebas).** Este fichero
+nació con otro estado: decía "sin implementar", y el motivo era que había otro
+agente editando `src/` en este mismo directorio e implementarlo entonces
+garantizaba un conflicto sobre `gameLoop.ts` y `warehouse.ts`. Ese aviso sobre
+la concurrencia era verdad y sigue siéndolo, pero se quedó pegado al estado de
+la funcionalidad y ya no describe nada real.
+
+Dónde vive ahora: `warehouseGaps` en `types/`, `gameLoop.ts` (`syncWarehouseGaps`)
+y `components/warehouse.ts`. El ancla es el **id del item**, no un índice de
+celda, y `gapCheck` reimplementa el criterio del pintor a propósito para que la
+prueba no sea tautológica.
 
 El problema que resuelve: el almacén es un array empaquetado, así que "un hueco" no
 existe como posición. Soltar un item en una celda vacía solo puede significar "ponlo

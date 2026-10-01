@@ -153,21 +153,36 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
    no era la del item entregado. Con el almacén lleno y una pila de nivel 0, el
    botón se encendía y al pulsarlo la compra fallaba (R3). Ahora las dos rutas
    leen `STORE_MATERIAL_TIER`. Lo cubre `stackCheck`.
-2. **El nivel de llave/cristal se pierde al aplicarlo desde una caja.**
-   `rollCrateReward` pasa `keyTier`/`materialTier`, pero los aplicadores del game
-   loop ignoran el segundo argumento: `gameLoop.ts:2544-2545` son
-   `crystals: (n) => grantCrystals(1, n)` y `keys: (n) => grantKeys(1, n)`, con el
-   1 fijo. Una caja legendaria entrega su llave rúnica y sus cristales de fase
-   como si fueran de nivel 1.
+2. ~~**El nivel de llave/cristal se pierde al aplicarlo desde una caja.**~~
+   **ARREGLADO.** `rollCrateReward` pasa `keyTier`/`materialTier` y ahora el
+   aplicador los respeta: `crystals: (n, materialTier) => grantCrystals(materialTier, n)`
+   y `keys: (n, keyTier) => grantKeys(keyTier, n)`. El tipo `LootApplier` pasó a
+   declarar `keys: (n, tier: KeyTier)` y `CrateReward.keyTier` a `KeyTier`, para
+   que el compilador vigile el nivel en vez de aceptar cualquier `number`.
 
-   Con el módulo de apilado esto se nota más: como todas las llaves de caja caen
-   en el nivel 1, se funden en **una sola pila**. La rúnica de la legendaria
-   entra en la misma celda que la de Cifrado de la común y el jugador no tiene
-   forma de recuperarla. Arreglar el segundo argumento que se ignora separa las
-   pilas por nivel y son dos líneas, pero altera lo que da cada caja.
-3. **`crystalPicker` lee el flag equivocado.** `upgradeEquippedCollector`
-   devuelve `{success, msg}` pero `crystalPicker.ts:119` ramifica sobre `res.ok`,
-   siempre `undefined` → toda sintonización muestra el toast de error.
+   El síntoma era la ruleta mintiendo: la legendaria anuncia "+N Llaves Rúnicas"
+   (nivel 2) y "Cristales de Fase" (nivel 2), y llegaban Reforzadas y de Afino
+   (nivel 1). Con el módulo de apilado era peor: todas las llaves de caja caían
+   en nivel 1 y se fundían en una sola pila, así que la rúnica acababa en la
+   misma celda que la de Cifrado sin forma de separarlas. Lo cubren seis pruebas
+   nuevas en `stateCheck`, que clavan el dado con `rollPara()` para mirar la fila
+   exacta de la tabla en vez de confiar en el sorteo.
+3. ~~**`crystalPicker` lee el flag equivocado.**~~ **ARREGLADO.**
+   `upgradeEquippedCollector` devuelve `{success, msg}` y la vista ramificaba
+   sobre `res.ok`, que en ese objeto es `undefined`: `!undefined` es `true`, así
+   que **toda** sintonización caía en la rama de error. Un acierto pintaba un
+   toast rojo de "error" con el texto "¡Mejora exitosa!" dentro y sonaba el
+   sonido de fallo; el fallo sí se veía bien, pero por casualidad.
+
+   La causa raíz es que el game loop tiene **dos** convenciones de resultado y
+   no están unificadas: `sellItem`, `useConsumable` y `openCrateBox` devuelven
+   `{ ok, msg }`, mientras que `upgradeEquippedCollector`, la Forja y la Ascensión
+   devuelven `{ success, msg }`. Unificarlo es lo pendiente.
+
+   No lo detectó ningún banco porque `verify/` no tenía forma de mirar el
+   ACIERTO: la sintonización tira un dado y las pruebas solo comprobaban los
+   rechazos, que son deterministas porque no llegan al dado. Se añadió
+   `conRoll()` al kit y se cubren las dos ramas, con `reload()` al final.
 4. **Dos tablas de precio de caja.** `STORE_ITEMS` (500/1500/5500/21000) frente a
    `CRATE_META` (`crateLoot.ts:113-116` = 400/1200/4500/18000). La segunda es la
    que manda en los drops de nanitas y en la compensación cuando el almacén está
@@ -190,17 +205,18 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
     bloqueado en 20 por el game loop, aunque la UI siga enseñando el techo real.
 11. **`syncWarehouseGaps()` está documentado en inglés** (`gameLoop.ts:1188-1200`),
     el único bloque del juego en ese idioma. Cosmético, pero rompe el patrón.
-12. **`docs/huecos-almacen.md` dice "sin implementar"** en su línea 3. La
-    funcionalidad **sí** está implementada (`gapCheck.ts`, 65 pruebas). El estado
-    nunca se actualizó.
+12. ~~**`docs/huecos-almacen.md` dice "sin implementar"**~~ **ARREGLADO.** La
+    funcionalidad está implementada y cubierta por `gapCheck.ts`. El fichero se
+    escribió para advertir de que otro agente editaba `src/` y `verify/` en el
+    mismo directorio, y el aviso se quedó pegado al estado de la funcionalidad.
 
 ### Resumen
 
 | # | Discrepancia | Estado |
 |---|---|---|
 | 1 | La llave de la tienda es de nivel 1, se anuncia de nivel 0 | **parcial**: la incoherencia de "¿cabe?" está arreglada, la etiqueta sigue mintiendo |
-| 2 | El nivel de llave/cristal se pierde al aplicar el botín de caja | rota |
-| 3 | `crystalPicker` lee `res.ok` en vez de `res.success` | rota |
+| 2 | El nivel de llave/cristal se pierde al aplicar el botín de caja | **arreglada** |
+| 3 | `crystalPicker` lee `res.ok` en vez de `res.success` | **arreglada** (queda unificar las dos convenciones de resultado) |
 | 4 | Dos tablas de precio de caja | sigue |
 | 5 | La nanopartícula cuesta 90 000 en un sitio y 220 000 en otro | sigue |
 | 6 | Los cosméticos nunca se desbloquean | **arreglada** |
@@ -209,12 +225,12 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 9 | Código muerto | sigue |
 | 10 | `MAX_COLLECTOR_LEVEL` ignora `item.maxLevel` | sigue |
 | 11 | Un docblock en inglés | sigue |
-| 12 | `huecos-almacen.md` desactualizado | sigue |
+| 12 | `huecos-almacen.md` desactualizado | **arreglada** |
 
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **11 bancos, 806 pruebas.** Queda fuera a propósito:
+la navegación. **11 bancos, 845 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.

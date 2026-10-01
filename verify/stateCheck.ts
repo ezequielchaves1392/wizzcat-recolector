@@ -21,12 +21,46 @@
 //  guardado, y ese es exactamente el bug que mas veces ha llegado a produccion.
 // ==========================================================================
 
-import { STORE_ITEMS, MAX_COLLECTOR_LEVEL, collectorUpgradeCost } from '../src/gameLoop';
+import { STORE_ITEMS, MAX_COLLECTOR_LEVEL, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
 import { nextCores } from '../src/data/prestige';
+import { CRATE_LOOT } from '../src/components/crateLoot';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
-  baseSave, collector, companion, ficha, crate, key, crystal, consumable
+  baseSave, collector, companion, ficha, crate, key, crystal, consumable, conRoll
 } from './kit';
+
+/**
+ * La PILA de un material en un nivel dado, o `undefined` si no hay ninguna.
+ *
+ * Se busca por `tier` y no por el nombre, porque el nombre es lo que se deduce
+ * cuando el save es viejo (`keyTierFromName`) y lo que cambia con la
+ * traducción. El nivel es el dato del que habla el botín.
+ */
+function pilaDe(g: any, tipo: string, tier: number | undefined): any {
+  if (typeof tier !== 'number') return undefined;
+  return wh(g).find((w: any) => w.type === tipo && w.tier === tier);
+}
+
+/**
+ * Valor de `Math.random` que hace salir la fila pedida de la tabla de una caja.
+ *
+ * Lee los PESOS de `CRATE_LOOT` en vez de fijarlos a mano, así que si mañana se
+ * añade, se quita o se reordena una entrada, esto sigue acertando sin tocar el
+ * test. No reimplementa ninguna regla del juego —solo construye el dado que hace
+ * que salga la fila que el test quiere mirar— y devuelve `null` si esa fila no
+ * existe, para que el test falle con un mensaje claro en vez de abrir 300 cajas
+ * confiando en la suerte.
+ */
+function rollPara(caja: CrateType, idFila: string): number {
+  const tabla = CRATE_LOOT[caja];
+  const total = tabla.reduce((a, e) => a + e.weight, 0);
+  let antes = 0;
+  for (const e of tabla) {
+    if (e.id === idFila) return (antes + e.weight / 2) / total;
+    antes += e.weight;
+  }
+  throw new Error(`la caja ${caja} no tiene la fila ${idFila}`);
+}
 
 async function main() {
   // =========================================================================
@@ -435,6 +469,17 @@ async function main() {
   //  7. La Mejora del recolector: cristal del nivel exacto y coste creciente
   // =========================================================================
   {
+    // EL ACIERTO, con el dado clavado. Esta rama no la miraba NINGÚN banco:
+    // todos los tests de mejora comprobaban rechazos, que son deterministas
+    // porque no llegan al dado. Ese hueco es justo lo que dejó vivir el bug más
+    // gordo que arregla este commit: `crystalPicker.ts` leía `res.ok` sobre un
+    // resultado `{ success, msg }`, así que `res.ok` era `undefined`, `!undefined`
+    // era `true` y TODA sintonización caía en la rama de error. Un acierto
+    // pintaba un toast rojo de "error" con el texto "¡Mejora exitosa!" dentro y
+    // sonaba el sonido de fallo. El fallo sí se veía bien, pero por casualidad.
+    //
+    // El acierto tiene que leerse por `success`. Si algún día alguien unifica la
+    // convención y cambia este campo sin tocar la vista, esta línea se enciende.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 0 }),
       crystal('x1', 1, 5)
@@ -442,12 +487,59 @@ async function main() {
     g.equipCollector('r1');
     const coste = collectorUpgradeCost(0);
     const antes = find(g, 'x1').stackCount;
-    const r = g.upgradeEquippedCollector(1);
-    check('mejora: intenta mejorar', !!r.success || !!r.msg, r.msg ?? '');
-    check('mejora: consume los cristales del coste', find(g, 'x1').stackCount === antes - coste,
+    const danio0 = g.getClickDamage();
+    // 0 * 100 = 0 y el techo de la probabilidad es 95: acierta siempre, para
+    // cualquier nivel y cualquier cristal.
+    const r = conRoll(0, () => g.upgradeEquippedCollector(1));
+    check('mejora: el acierto se lee por `success` y no por `ok`',
+      r.success === true,
+      `success=${r.success} ok=${JSON.stringify((r as any).ok)} msg=${r.msg ?? ''}`);
+    check('mejora: y el mensaje es el del acierto, no el del fallo',
+      /exitosa/i.test(r.msg ?? ''), r.msg ?? '');
+    check('mejora: el acierto sube el nivel',
+      find(g, 'r1').level === 1, 'nivel=' + find(g, 'r1').level);
+    check('mejora: consume los cristales del coste',
+      find(g, 'x1').stackCount === antes - coste,
       `antes=${antes} ahora=${find(g, 'x1').stackCount} coste=${coste}`);
-    check('mejora: el fallo no retrocede el nivel',
-      find(g, 'r1').level === 0 || find(g, 'r1').level === 1, 'nivel=' + find(g, 'r1').level);
+    check('mejora: y el nivel nuevo paga más daño', g.getClickDamage() > danio0,
+      `${danio0} -> ${g.getClickDamage()}`);
+    const g2 = await reload();
+    check('mejora: el acierto sobrevive a la recarga', find(g2, 'r1')?.level === 1,
+      'nivel=' + find(g2, 'r1')?.level);
+    check('mejora: y el reload no regasta la mejora', find(g2, 'x1')?.stackCount === antes - coste,
+      'stackCount=' + find(g2, 'x1')?.stackCount);
+  }
+  {
+    // EL FALLO, también con el dado clavado. 0.999 * 100 = 99.9, por encima
+    // del techo del 95, así que falla siempre.
+    //
+    // Lo que se fija aquí es la decisión de diseño: el fallo NO retrocede el
+    // nivel. Retrocederlo convertía la mejora en una escalera sin retorno para
+    // el jugador que fallaba dos veces. La pérdida real es el cristal, que es
+    // justo el coste que se eligió arriesgar — y aun así se paga.
+    const g = await boot(baseSave([
+      collector('r1', 3, { damage: 60, level: 4 }),
+      crystal('x1', 1, 5)
+    ], { nanites: 0 }));
+    g.equipCollector('r1');
+    const coste = collectorUpgradeCost(4);
+    const antes = find(g, 'x1').stackCount;
+    const danio0 = g.getClickDamage();
+    const r = conRoll(0.999, () => g.upgradeEquippedCollector(1));
+    check('mejora: el fallo se lee por `success`', r.success === false,
+      `success=${r.success} ok=${JSON.stringify((r as any).ok)}`);
+    check('mejora: y el mensaje lo dice', /fallo/i.test(r.msg ?? ''), r.msg ?? '');
+    check('mejora: el fallo no retrocede el nivel', find(g, 'r1').level === 4,
+      'nivel=' + find(g, 'r1').level);
+    check('mejora: el fallo no cambia el daño', g.getClickDamage() === danio0,
+      `${danio0} -> ${g.getClickDamage()}`);
+    check('mejora: pero el cristal se paga igual', find(g, 'x1').stackCount === antes - coste,
+      `antes=${antes} ahora=${find(g, 'x1').stackCount} coste=${coste}`);
+    const g2 = await reload();
+    check('mejora: el fallo sobrevive a la recarga', find(g2, 'r1')?.level === 4,
+      'nivel=' + find(g2, 'r1')?.level);
+    check('mejora: y el cristal gastado no vuelve', find(g2, 'x1')?.stackCount === antes - coste,
+      'stackCount=' + find(g2, 'x1')?.stackCount);
   }
   {
     // Sin recolector equipado no se mejora, y no se gasta nada.
@@ -533,8 +625,17 @@ async function main() {
     const r = g.openCrateBox('c1', 'k1');
     check('cajas: con la llave correcta se abre', r.ok, r.msg ?? '');
     check('cajas: la caja se consume', !find(g, 'c1'), ids(g).join(','));
-    check('cajas: y una unidad de la llave', find(g, 'k1')?.stackCount === 1,
-      String(find(g, 'k1')?.stackCount));
+    // Lo que se comprueba aquí NO es que la pila quede en 1, sino que el botín
+    // caiga en la pila de SU nivel. Antes daba 1 siempre, y no porque estuviera
+    // bien: la caja común anuncia llaves de nivel 0 y el aplicador las forzaba a
+    // nivel 1, así que caían en OTRA pila y esta cuenta pasaba por casualidad. Al
+    // arreglarlo, el resultado depende del sorteo, así que se compara con el
+    // premio que devuelve el propio juego y no con una cuenta fija.
+    const delBotin = r.reward?.kind === 'keys' && (r.reward.keyTier ?? 0) === 0;
+    const esperado = delBotin ? 1 + r.reward.amount : 1;
+    check('cajas: el botín de llaves se apila con las de su nivel',
+      find(g, 'k1')?.stackCount === esperado,
+      `pila=${find(g, 'k1')?.stackCount} esperado=${esperado} premio=${r.reward?.kind}`);
     check('cajas: el contador de cajas abiertas sube', s(g).cratesOpened === 1, String(s(g).cratesOpened));
     const g2 = await reload();
     check('cajas: el botin aplicado sobrevive a la recarga',
@@ -562,10 +663,71 @@ async function main() {
     check('cajas: con el almacen lleno el botin no desborda', wh(g).length <= g.getCapacity(),
       `antes=${antes} ahora=${wh(g).length} cap=${g.getCapacity()}`);
   }
-
-  // =========================================================================
-  //  9. Prestigio
-  // =========================================================================
+  {
+    // LA CAJA ENTREGA EL MATERIAL QUE ANUNCIA, Y NO OTRO.
+    //
+    // Este es el bug que más se parezca a "la ruleta mintiendo", y lo es de
+    // verdad. La tabla declara qué llave deja cada cofre (`keyTier`): la legendaria
+    // anuncia "Llave Rúnica" (nivel 2) y "Cristales de Fase" (nivel 2). Pero el
+    // aplicador del game loop se comía ese segundo argumento y entregaba siempre
+    // nivel 1. El jugador veía "+6 Llaves Rúnicas" y recibía seis Llaves
+    // Reforzadas, sin ninguna forma de saber que eran distintas.
+    //
+    // Con el módulo de apilado era peor que cosmético: como todas las llaves de
+    // caja caían en nivel 1, se fundían en UNA sola pila. La rúnica de la
+    // legendaria entraba en la misma celda que la de Cifrado de la común y no
+    // había forma de separarlas.
+    //
+    // `rollPara` clava el dado en la fila que interesa, así que esto no depende
+    // del sorteo ni de cuántas cajas haga falta abrir.
+    const g = await boot(baseSave([crate('c1', 'legendary'), key('k3', 3, 1)]));
+    const r = conRoll(rollPara('legendary', 'keys'), () => g.openCrateBox('c1', 'k3'));
+    check('cajas: la caja legendary se abre', r.ok, r.msg ?? '');
+    check('cajas: la llave del botín es del nivel que anuncia',
+      r.reward?.kind === 'keys' && pilaDe(g, 'key', r.reward.keyTier)?.stackCount === r.reward.amount,
+      `anuncia ${r.reward?.keyTier}x${r.reward?.amount} y llegó ` +
+      JSON.stringify(wh(g).filter((w: any) => w.type === 'key')
+        .map((w: any) => `${w.name}:${w.tier}x${w.stackCount ?? 1}`)));
+    check('cajas: y no aparece una llave del nivel equivocado',
+      !wh(g).some((w: any) => w.type === 'key' && w.tier !== r.reward?.keyTier),
+      'sobran llaves de otro nivel');
+    const g2 = await reload();
+    check('cajas: y el nivel de la llave sobrevive a la recarga',
+      pilaDe(g2, 'key', r.reward.keyTier)?.stackCount === r.reward.amount,
+      `pila=${pilaDe(g2, 'key', r.reward.keyTier)?.stackCount}`);
+  }
+  {
+    // Lo mismo con los cristales. La legendaria anuncia cristales de nivel 2 y
+    // antes llegaban de nivel 1, que es justo el cristal que el jugador ya tenía.
+    const g = await boot(baseSave([crate('c1', 'legendary'), key('k3', 3, 1)]));
+    const r = conRoll(rollPara('legendary', 'crystals'), () => g.openCrateBox('c1', 'k3'));
+    check('cajas: el cristal del botín es del nivel que anuncia',
+      r.reward?.kind === 'crystals' && pilaDe(g, 'crystal', r.reward.materialTier)?.stackCount === r.reward.amount,
+      `anuncia ${r.reward?.materialTier}x${r.reward?.amount} y llegó ` +
+      JSON.stringify(wh(g).filter((w: any) => w.type === 'crystal')
+        .map((w: any) => `${w.name}:${w.tier}x${w.stackCount ?? 1}`)));
+    check('cajas: y no aparece un cristal del nivel equivocado',
+      !wh(g).some((w: any) => w.type === 'crystal' && w.tier !== r.reward?.materialTier),
+      'sobran cristales de otro nivel');
+  }
+  {
+    // Y que el nivel se puede pedir explícitamente: gastar una llave de nivel 2
+    // afina con un cristal de nivel 2, no con el de nivel 1 aunque también haya.
+    // Antes, como todo el botín caía en nivel 1, estos dos casos indistinguibles.
+    const g = await boot(baseSave([
+      crate('c1', 'legendary'), key('k3', 3, 1),
+      crystal('x1', 1, 5), crystal('x2', 2, 5),
+      collector('r1', 3, { damage: 60, level: 0 })
+    ]));
+    g.equipCollector('r1');
+    const coste = collectorUpgradeCost(0);
+    const r = conRoll(0, () => g.upgradeEquippedCollector(2));
+    check('cajas: sintonizar con nivel 2 gasta el cristal de nivel 2',
+      find(g, 'x2').stackCount === 5 - coste,
+      `x2=${find(g, 'x2').stackCount} coste=${coste} msg=${r.msg ?? ''}`);
+    check('cajas: y el de nivel 1 no se toca',
+      find(g, 'x1').stackCount === 5, 'x1=' + find(g, 'x1').stackCount);
+  }
   {
     // Por debajo del umbral no se puede reciclar.
     const g = await boot(baseSave([crate('c1'), collector('r1'), collector('r2')],

@@ -2558,8 +2558,21 @@ function syncMaterialCounters() {
       // lo muestra: si la animación decidiera, mentiría sobre las probabilidades.
       const premio = rollCrateReward(crateType, {
         nanites: (n) => { state.nanites += n; state.totalNanitesProduced += n; },
-        crystals: (n) => { grantCrystals(1, n); },
-        keys: (n) => { grantKeys(1, n); },
+        // El segundo argumento es el NIVEL que anuncia el botín, y se respetaba antes.
+        // Aquí se tiraba: eran `grantCrystals(1, n)` y `grantKeys(1, n)` con el 1
+        // fijo. Consecuencia: una caja legendaria, que anuncia "Llave Rúnica"
+        // (nivel 2) y "Cristales de Fase" (nivel 2), entregaba una Llave
+        // Reforzada y un Cristal de Afino, ambos de nivel 1. El jugador veía un
+        // nombre y recibía otro, que es exactamente lo que la ruleta no debe
+        // hacer: Decide el premio y solo lo MUESTRA, así que el nombre que
+        // enseña y el item que entra tienen que ser el mismo.
+        //
+        // Con el módulo de apilado el efecto era peor que cosmético: como todas
+        // las llaves de caja caían en nivel 1, se fundían en UNA sola pila. La
+        // rúnica de la legendaria entraba en la misma celda que la de Cifrado de
+        // la común y no había forma de separarlas ni de recuperarlas.
+        crystals: (n, materialTier) => { grantCrystals(materialTier, n); },
+        keys: (n, keyTier) => { grantKeys(keyTier, n); },
         hasSpace: () => countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity(),
         // El cosmético no es un item: no pasa por `addItem` ni por el almacén.
         // Se desbloquea aquí y lo persiste el `saveToFirebase` de más abajo, que

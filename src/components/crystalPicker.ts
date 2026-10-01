@@ -116,7 +116,17 @@ export function showCrystalPicker(game: any, redraw: () => void) {
       cerrar();
       sfx.use();
       const res = game.upgradeEquippedCollector(disponibles[idx].tier || 1);
-      if (!res.ok) {
+      // POR QUÉ `success` Y NO `ok`. El game loop tiene DOS convenciones de
+      // resultado y no están unificadas: `sellItem`, `useConsumable` y
+      // `openCrateBox` devuelven `{ ok, msg }`, mientras que
+      // `upgradeEquippedCollector`, la Forja y la Ascensión devuelven
+      // `{ success, msg }`. Aquí se leía `res.ok`, que en un `{ success }` es
+      // `undefined`: `!undefined` es `true`, así que TODA sintonización caía en
+      // la rama de error. Es decir, un acierto pintaba un toast rojo de "error"
+      // con el texto "¡Mejora exitosa!" dentro y sonaba el sonido de fallo. Solo
+      // el fallo se veía bien, y por casualidad, porque en ese caso el mensaje
+      // de error era el que tocaba. Un resultado mal leído no da ningún aviso.
+      if (!res.success) {
         sfx.error();
         showToast(res.msg || 'No se pudo sintonizar.', 'error');
       } else {
