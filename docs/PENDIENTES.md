@@ -1780,6 +1780,65 @@ no se pierda.)*
 > progresión y curvas. Lo que falta es una vista de la partida de un jugador —su mejor
 > recolector, sus compañeros, su árbol— con la tuya al lado.
 
+### F37 · La forja sintetiza items, y el item sale con un bonus con nombre
+
+Agreguemos que la forja pueda sintetizar items , lo cual me va a otorgar el bonus como por ejemplo "baluarte " del item
+
+> **Clasificada como Feature, y no como bug, por una razón medida: la mitad de la
+> segunda frase ya existe.** Lo nuevo es "sintetizar"; el "bonus con nombre" ya tiene
+> nombre técnico y hay uno que se llama exactamente lo que dices.
+>
+> **1 · "Baluarte" ya es un bonus del item, y hay catorce como él.** En
+> `AFFIXES` (`data/crafting.ts:42-71`) hay 14 **afijos**, y el tercero es
+> `aff_bulwark`: *"Baluarte — +60 de daño plano"*, Épico. Los demás son Afilado,
+> Cadencia, Rendimiento, Flujo, Núcleo, Crítico, Foco, Suerte de Forja, Efenéreo,
+> Eterno, Absorción, Primo y Vacío Devorador.
+>
+> Y el sistema entero está montado y vivo: un recolector forjado **hereda** 1 a 3
+> afijos según su potencial, 4 con la Nanopartícula (`crafting.ts:287-289`), el motor
+> los suma al daño en `equippedAffixEffect()` (`gameLoop.ts:1613`) y la ficha del
+> almacén los enseña por su nombre (`warehouse.ts:362`). O sea que "forjar y que el
+> item salga con un bonus llamado Baluarte" **ya se puede ver hoy**.
+>
+> **Lo que NO existe es que tú lo elijas.** `pickAffixes()` (`crafting.ts:332`) los
+> sortea del pool con pesos inversos a la rareza, y encima cada material aporta 0,02
+> a la probabilidad de éxito pero ninguno influye en *qué* afijo sale. Así que hay dos
+> lecturas distintas dentro de la misma frase: **"que el item salga con un afijo"**
+> (ya está) y **"que yo elija el afijo, o que la síntesis dé uno concreto"**
+> (no está, y es una decisión de diseño de verdad).
+>
+> **2 · "Que la forja pueda sintetizar items" tiene tres lecturas, y solo una es
+> nueva.** Lo digo porque "fusionar", "forjar" y "sintetizar" son cosas distintas en
+> este juego y el código las separa:
+>
+> | Lectura | Estado real |
+> |---|---|
+> | (a) Unir items para subir de tier | **Ya existe**: la fusión 3 → 1 de `attemptForge()`. Y F33 ya decidió que sean **dos** materiales, no tres |
+> | (b) Forjar también **compañeros** | **No existe**, y es un hueco real: `forgePage.ts:55` filtra `w.type === 'collector'` y `attemptForge()` recibe `CollectorItem[]`. **La mitad de los items del juego —los compañeros, que son los que generan el ingreso— no se pueden forjar** |
+> | (c) Fabricar un item desde material base (cristales, esquirlas, nanitas), sin item previo | **No existe**: la forja solo acepta recolectores enteros como material |
+>
+> **Yo leo que es (b) o (c)**, porque si fuera (a) estarías pidiendo algo que ya se
+> puede hacer. Si es (b), es la más limpia de las tres y encaja con F31: si el tier se
+> sube por forja y solo hay un camino, los compañeros se quedan fuera del sistema.
+>
+> **3 · Dónde se cruza con lo ya decidido, porque no se puede hacer antes.** F33 deja
+> la forja con **2 materiales** y hace que herede el stat, y F36 explica el techo de
+> **T10** con un motivo que esta idea toca de lleno: *"si la forja llegara más lejos que
+> la caja, dejaría de usarse"*. Una síntesis que da **un bonus propio** compite
+> exactamente con eso: F33 vende la forja como *"el item que tú quieres"* —materiales
+> elegidos a mano— y una síntesis con afijo sorteado es *"el item que te salió"*, que
+> es la promesa de la caja. **Las dos cosas no pueden ser el mismo botón.** Por eso
+> F37 va después de F33 y F36, y encima conviene decidir si la síntesis es **una vía
+> más** (una pestaña al lado de la fusión) o **una alternativa** (el mismo yunque, con
+> otro botón), porque cambia el número de afijos que puede llevar un item y eso lo
+> decide `pickAffixes`.
+>
+> **Y un aviso de D4, que sale del punto 1:** los afijos son 14 en `crafting.ts` y el
+> que los reparte es `pickAffixes`, dentro del mismo fichero, así que ese par sí está
+> sano. Lo que hay que vigilar al añadir una síntesis es que **los afijos que le
+> pueda dar a un item existan todos en la tabla** —y que si son afijos nuevos, la regla
+> del banco de D4 aplique: preguntar de dónde sale cada uno.
+
 ---
 
 ## Balance y dificultad
