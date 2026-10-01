@@ -310,15 +310,15 @@ decisiones grandes, no ajustes._
 fallar pueda restar 1 o 2 niveles. Encaja con F31 y explica por qué la forja de T10 es
 aburrida hoy: **fallar no cuesta nada**.
 
-**Las cuatro decisiones ya están tomadas** y ya no queda ninguna ambigüedad abierta. Con
-F26 cerrada, **ninguna de las trece peticiones necesita una respuesta para empezar a
-programar**; lo que queda es trabajo y tres números:
+**Las cuatro decisiones ya están tomadas.** Con F34 cerrada, **ninguna de las trece
+peticiones necesita una respuesta para empezar a programar**; lo que queda es trabajo y
+tres números:
 
 | # | Número abierto |
 |---|---|
-| **F26** | ¿10 niveles de cristal, o bandas? Y **qué caja suelta cada uno** — hoy solo hay 2 obtenibles de 4. |
-| **F31** | **¿El techo de la forja sigue siendo T11?** Hoy `tier >= 11` se rechaza, así que la forja no pasa de T10. |
-| **F32** | **¿La probabilidad de fallo sube con el nivel?** Si no sube, la pérdida de niveles solo afecta al tramo 10-20. |
+| **F26** | ¿Un nivel de cristal por tier, o bandas? Y **qué caja suelta cada uno** — hoy solo hay 2 obtenibles de 4. |
+| **F31** | **¿La forja llega a T10 o se queda antes?** Con el stat heredado el techo ya no estorba, pero hay que elegir. |
+| **F34** | **Nada abierto.** El techo es 75% desde el tier 20; la curva por debajo (60% / 68%) es propuesta mía y espera tu visto bueno. |
 
 **Y cuatro decisiones que ya están tomadas** (respondidas, medido lo que se puede medir):
 
@@ -1478,14 +1478,57 @@ por cristales**. Y la forja debe pedir **dos** items del mismo tier, no tres.
 > fallo a 75% en el tramo final cuesta **dos materiales de T19**. Eso es coste real con
 > riesgo real, que son las dos cosas que se piden en la misma frase.
 >
-> **Lo que hay que decidir es la curva, y son dos números:**
-> - **Dónde está el techo de 75% y a partir de qué tier.** "Un tier alto y casi final"
->     sin número es un techo que se moverá cuando alguien lo toque. Y hay una pregunta que
->     sale del coste: ¿en qué tier el 25% de fallo cuesta más nanos de los que puedes
->   recuperar? **Ese es el tier donde el techo tiene que empezar a doler.**
-> - **¿El techo se queda en 75% para siempre, o en los muy altos es más peligroso?** Hoy la
->   curva baja y se topa; lo que se quiere es que suba y se tope. Y con "tiers infinitos"
->   hay que decidir qué pasa en el 30: ¿también 75%, o el techo vuelve a bajar?
+> **DECIDIDO: a partir del tier 20, 75% fijo. Solo sube el coste. delegated a mi.**
+>
+> **Y es la decisión correcta por una razón que sale de los números del propio juego, no
+> de una preferencia:** el techo de niveles de un recolector es `20 + potencial × 3`, o
+> sea **20 sin estrellas y 35 con 5**. El **20 del tope de probabilidad es exactamente el
+> nivel base de un item de la tienda**. O sea que la línea cae donde el juego ya tiene una
+> frontera que el jugador conoce sin que se la digamos: **el tier 20 es donde un item
+> "normal" deja de caber en un item "de la tienda" sin trabajo.** No es un número
+> inventado, es la misma frontera de dos sistemas distintos.
+>
+> **Y QUEDA FIJO PARA SIEMPRE, sin curva que vuelva a bajar.** La razón es la que ya
+> estaba escrita en el punto 3: con tiers infinitos, si el techo volviera a bajar en los
+> muy altos, el tramo de 2ⁿ se volvería **imposible** —porque no hay final—, y el juego
+> tendría un muro sin cartel. Con 75% fijo, la dificultad del tramo alto la pone **el
+> precio**, que ya es 2ⁿ y ya es suficiente.
+>
+> **Y LAS PIEDRAS SIGUEN TENIENDO SENTIDO, que es una pregunta que la decisión deja
+> abierta.** Si el tope es fijo, las piedras dejan de servir para "subir el techo" y
+> quedan para dos cosas: **bajar la probabilidad de fallo** (misma cosa, al revés) o
+> **proteger el resultado**. La segunda es la interesante, y va en la línea de F33: una
+> piedra que **garantiza que el item sale perfecto** es una piedra contra la tirada del
+> stat, que es el otro azar de la forja. **Si no, en el tramo 20+ con 2 materiales, el
+> jugador tiene dos ruletas en la misma pantalla** —¿sale el item? y ¿sale bueno?— y eso
+> es demasiado azar para un tramo final. Con la piedra contra el stat, la segunda ruleta
+> tiene solución y la primera no, que es exactamente como se reparten las tensiones.
+>
+> **LO QUE QUEDA, Y ES LA PARTE QUE SÍ NECESITA TU OJO: la curva por debajo del 20.**
+> Porque si el 75% es el techo desde el 20, hay que decidir qué pasa del 1 al 20, y aquí
+> está el problema que quiero señalar en vez de resolver por mi cuenta:
+>
+> **Hoy la curva es 78% en T1 bajando a 33% en T10.** Si sube, ¿hasta dónde? Si el techo
+> del 75% empieza en el T20, entonces los tiers 10 a 19 están en una zona que **hoy es la
+> más dura del juego** (33% a 50%) y que con la curva al revés sería la más fácil. **Eso
+> crea una HARD WALL en el tramo medio**: los tiers 1-9 fáciles, un salto, y del 10 al 19
+> un bajón en la dificultad.
+>
+> **Mi propuesta, y es la que pondría en el código si me dijeras que sí:**
+>
+> | Tier | Probabilidad | Por qué |
+> |---|---|---|
+> | 1-9 | **60%** | Zona de aprendizaje. Con 2 materiales, un fallo cuesta poco y se vuelve a probar |
+> | 10-19 | **68%** | La dificultad la pone el cristal, no la suerte: aquí siguen siendo obtenibles |
+> | 20+ | **75%** | Techo. Y el 2ⁿ hace el resto |
+>
+> **Y el motivo de que la zona 1-9 sea del 60% y no más fácil** es lo que viene de F33:
+> como el resultado se promedia, **un fallo no destruye el trabajo**, solo pierde los
+> materiales. Si la probabilidad fuera muy alta, el forjado sería un botón y buscar los
+> perfectos —que es de lo que va el juego en esta parte— no sería una decisión. **Con 60%,
+> tres T1 imperfectos dan un T2 imperfecto con ~82% de seguridad** (0,6² es el fallo doble,
+> que es lo que pasa cuando los dos materiales son flojos), y eso obliga a **ir a buscar
+> buenos antes que a probar mucho**: la estrategia sale sola de los números.
 >
 > **Y EL PUNTO 4 ES LA MEJOR COSA DE ESTA RONDA.** El resultado se promedia con los dos
 > materiales: dos T1 perfectos dan un T1 perfecto, y si no, el promedio. Eso significa que
