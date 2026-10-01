@@ -14,8 +14,8 @@ Empieza por estos pasos, en orden, y **no los saltes**:
 1. Lee el plan y las ideas de `PENDIENTES.md`.
 2. `git status` y `LastWriteTime` de `src/**/*.ts` y `verify/*.ts`: si hay otro
    agente trabajando en el mismo fichero, **no lo edites**, dilo y para.
-3. `npm run build` y `npm run verify` para tener la línea base. Ahora son **20
-   bancos, 1340 pruebas** (el total varía ±1: `playthroughCheck` tiene un `check()`
+3. `npm run build` y `npm run verify` para tener la línea base. Ahora son **21
+   bancos, 1350 pruebas** (el total varía ±1: `playthroughCheck` tiene un `check()`
    condicional).
 4. Haz **un** paso. No dos, no "de paso" nada más.
 

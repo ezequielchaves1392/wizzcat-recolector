@@ -23,9 +23,40 @@
 
 _Cosas que quieres que existan._
 
-### F4 · Solo tarjetas de buff, fuera los buffs pasivos
+### F4 · Solo tarjetas de buff, fuera los buffs pasivos — HECHO
 
 Sacar los buffs pasivos y dejar las tarjetas únicamente.
+
+> **Hecho, y el motivo por el que estaban mal no era "ser buffs pasivos".**
+>
+> Los dos que se han retirado (`clickBuff`, 30 min, y `passiveBuff`, 60 min) no
+> estaban mal por lo que hacían, sino por **cuánto duraban**. Y el efecto es
+> medido, no supuesto:
+>
+> ```
+> isEffectivelyAfk = isAfk && !hasPassiveBuffActive && !hasAfkBuff
+> ```
+>
+> **Un buff pasivo activo anula el corte del AFK.** O sea que `clickBuff` no era un
+> multiplicador: era un pago por no mirar la pantalla. 800 nanitas por media hora de
+> ingreso sin estar delante, y compraba la mitad del AFK de B9 por la puerta de
+> atrás. Eso rompe R10, que es una regla, no una opinión.
+>
+> Las tres tarjetas que quedan duran 10 minutos o 30 segundos, así que no da tiempo a
+> instalar esa costura. Y son las que se acumulan y las que se pueden cancelar desde
+> el HUD, que es lo que hace que un buff sea una decisión y no una espera.
+>
+> **Lo que NO se toca: el efecto sigue en el motor.** Hay partidas guardadas con
+> `passiveBoostExpiresAt` en el futuro, y ese jugador sigue cobrando su x2 hasta que
+> expire. Quitar el efecto le recortaría el ingreso a media partida por un cambio de
+> tienda. Se retira la compra, no el buff.
+>
+> Cubre `tarjetaCheck` (17 pruebas), nuevo. Y dos listas de `buyCheck` que nombraban
+> las cartas retiradas.
+>
+> **La regla que queda escrita**, y que es la que importa para lo que se añada: nada
+> comprable puede durar más de 15 minutos. El banco lo comprueba sobre `STORE_ITEMS`,
+> así que una carta nueva con una duración larga falla sola.
 
 ### F5 · Una llave por tipo de caja, con precio creciente — HECHO
 
@@ -896,6 +927,9 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
       y las tres partes suman el total exacto porque las calcula el motor, no la
       vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
+- [x] **F4 · fuera los buffs pasivos, solo tarjetas.** No era que fueran buffs: es
+      que un buff pasivo activo anula el corte del AFK, así que compraban ingreso sin
+      mirar. El efecto sigue en el motor para las partidas viejas. `tarjetaCheck` (17).
 - [x] **F7-F11 · escuadrón de 6 con las ranuras en una tabla.** Tres cartas, tope
       6, ningún salto de +3, y el número de ranuras en un solo sitio. `ranuraCheck`
       (34) es el banco nuevo.

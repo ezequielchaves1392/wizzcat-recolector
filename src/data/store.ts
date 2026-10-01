@@ -26,9 +26,28 @@
 //  `buffId` es el identificador estable que usa el almacén para aplicar el
 //  efecto: cambiar un nombre no puede romper el buff. Por eso el buff se busca
 //  por `buffId` y nunca por el texto.
+// F4 · `clickBuff` y `passiveBuff` ESTÁN FUERA, Y NO ES UNA BORRADURA.
+//
+// Los dos eran consumibles que se compraban, se gastaban y dejaban un buff de 30
+// o 60 minutos. Las tres tarjetas (`afkCard`, `clickX2Card`, `clickX3Card`) siguen
+// ahí, y son las que se acumulan y las que se pueden cancelar desde el HUD.
+//
+// **LO QUE HAY QUE TENER CUIDADO NO ES BORRARLOS DEL TEXTO.** Un buff pasivo de 30
+// minutos que se compra con nanitas rompe la regla de R10 por la puerta de atrás: el
+// juego promise ingreso sin que el jugador esté mirando y luego lo cobra.
+// `recalculatePassiveIncome` multiplicaba por 2 mientras el buff estuviera vivo,
+// o sea que el AFK automático de B9 podía deixar de cortar el ingreso con una
+// tarjeta comprada hace diez minutos. Las tarjetas de 30 segundos casi no lo
+// notarían, y esa es exactamente la diferencia entre las dos cosas.
+//
+// Y el resto del buff se queda: los `state.buffs.clickBoostExpiresAt` y
+// `passiveBoostExpiresAt` **no se tocan**, porque vienen en el guardado de partidas
+// viejas. Un jugador que los tenga activos sigue cobrando hasta que expiren, y es
+// la opción que no le quita nada a nadie.
+//
+// O sea: se retiran de la tienda y no se pueden comprar, pero no se toca el estado.
+// Es lo mismo que se hizo con las ampliaciones de huecos del almacén.
 export const CONSUMABLES = {
-  clickBuff: { name: 'Buff Clicks x2', details: 'Otorga x2 al click por 30 minutos', rarity: 'Raro', buffId: 'clickBoost' },
-  passiveBuff: { name: 'Buff Pasivo x2', details: 'Otorga x2 al ingreso pasivo por 60 minutos', rarity: 'Épico', buffId: 'passiveBoost' },
   backpackExpander: { name: 'Expansor de Almacén', details: 'Aumenta el almacén +1 slot (máx 20)', rarity: 'Raro', buffId: 'warehouseExpander' },
   afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
@@ -216,8 +235,9 @@ export const STORE_ITEMS = {
   rareCrate: { cost: 1500, label: 'Caja Rara' },
   epicCrate: { cost: 5500, label: 'Caja Épica' },
   legendaryCrate: { cost: 21000, label: 'Caja Legendaria' },
-  clickBuff: { cost: 800, durationMs: 30 * 60 * 1000, label: 'Buff Clics x2' },
-  passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2' },
+  // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).
+  // Se han retirado de la tienda; ver el comentario en `CONSUMABLES` para el porqué
+  // de que el efecto siga en el motor y solo desaparezca la compra.
   // Nuevos items
   backpackExpander: { cost: 1400, label: 'Expansor de Almacén (+1 slot)' },
   // Las tres cartas de ranura salen de `defDeRanura()`, que es donde está el
@@ -226,6 +246,8 @@ export const STORE_ITEMS = {
   companionSlot1: defDeRanura(1),
   companionSlot2: defDeRanura(2),
   companionSlot3: defDeRanura(3),
+  // F4 · Solo tarjetas. `clickBuff` y `passiveBuff` estaban aquí y se han ido; el
+  // motivo de por qué están mal y las tarjetas están bien está en `CONSUMABLES`.
   afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
   clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
   clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },

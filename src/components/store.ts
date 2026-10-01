@@ -54,7 +54,11 @@ const CATEGORIES: Category[] = [
   { id: 'llaves', label: 'Llaves', icon: 'key', items: ['keyT0', 'keyT1', 'keyT2', 'keyT3'] },
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
   { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'warehouseSlot', 'backpackExpander'] },
-  { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickBuff', 'passiveBuff', 'clickX2Card', 'clickX3Card'] },
+  // F4 · Solo las tres tarjetas. `clickBuff` y `passiveBuff` se han retirado de la
+  // lista: la categoría ya no puede nombrarlos porque no existen, y
+  // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
+  // `undefined` al pintar.
+{ id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card', 'clickX3Card'] },
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
   { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: Object.keys(RANURA_POR_CARTA) },
   { id: 'companeros', label: 'Compañeros', icon: 'companion', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
@@ -188,7 +192,9 @@ function iconFor(itemKey: string): IconName {
   const map: Record<string, IconName> = {
     keyT0: 'key', keyT1: 'key', keyT2: 'key', keyT3: 'key',
     upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
-    afkCard: 'clock', clickBuff: 'bolt', passiveBuff: 'graph', clickX2Card: 'bolt', clickX3Card: 'bolt',
+    // F4 · `clickBuff` y `passiveBuff` ya no tienen carta, así que ya no hay icono que
+// inventarles. Si volvieran, volverían aquí.
+afkCard: 'clock', clickX2Card: 'bolt', clickX3Card: 'bolt',
     calibrationStone: 'flask', stabilityNano: 'flask',
     // Las cartas de ranura salen de la tabla, no de una entrada por carta. Con una
   // entrada por carta, una ranura nueva nace sin icono y con el de la última.
@@ -209,7 +215,8 @@ function rarityOf(itemKey: string): string | null {
   if (itemKey.startsWith('collectorCardT')) return tierRarity(parseInt(itemKey.slice(11)));
   const map: Record<string, string> = {
     upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
-    afkCard: 'Raro', clickBuff: 'Raro', passiveBuff: 'Épico', clickX2Card: 'Raro', clickX3Card: 'Épico',
+    // F4 · Sin `clickBuff` ni `passiveBuff`: no hay carta, no hay rareza.
+afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
     // La rareza de una ranura sale de su posición en la tabla: cuanto más cara, más
   // alta. Es una regla y por eso se calcula; escribirla a mano por carta era otra

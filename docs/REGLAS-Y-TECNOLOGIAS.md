@@ -153,7 +153,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 20 bancos
+### Los 21 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -179,6 +179,7 @@ en producción.
 
 | `desgloseCheck` | **Que las partes del daño sumen el total.** El panel enseña el click partido en base, nivel y bonos, y el reparto sale del motor. Que `base + nivel + bonos` sea **exactamente** `getClickDamage()` en cinco casos raros, con buff x2 puesto y al expirar, y que ninguna parte salga negativa. Y la que no es cosmética: **con buff la parte de nivel no se mueve**. El buff multiplica el total entero, así que adjudicárselo a "nivel" hacía que el panel dijera "+200 nivel" para un item cuyo nivel vale 50, y se leía que subir de nivel rendía el doble. El efecto entero del buff tiene que caer en "bonos", que es donde uno lo espera. | 31 |
 | `ranuraCheck` | **Las ranuras de escuadrón (F7, F11).** Que el número de ranuras viva en **una** tabla y todo lo demás se lea de ahí: el `if` que desactiva el botón, el `if` del motor y el `= ` que concede. Eran cuatro números a mano para la misma regla y no coincidían —la tarjeta decía "+3" y el motor daba 5—. Que los saltos no sean de 3 de golpe (era ×5,3 en el precio por ranura entre la primera y la segunda compra), que la tabla cierre con el tope de la tienda, que el botón se apague en su propio tope, que el árbol pueda subir el total por encima de ese tope, y que lo comprado sobreviva a la recarga sin dejar item en el almacén —las ranuras son permisos, no objetos—. Y que el precio por ranura suba sin multiplicarse por más de 4. | 34 |
+| `tarjetaCheck` | **Que lo que queda de buffs sean tarjetas, y que ninguna sea una puerta trasera al AFK (F4).** `clickBuff` y `passiveBuff` se han retirado de la tienda, y el banco comprueba las dos mitades (ni carta ni consumible) para que ningún sitio se quede con la mitad. Y lo que de verdad ata: **que nada comprable dure lo bastante para tapar un rato sin mirar** (topo de 15 min) y que **no quede ningún buff de ingreso pasivo comprable**. El motivo está medido, no supuesto: `isEffectivelyAfk` es `isAfk && !hasPassiveBuffActive`, o sea que un buff pasivo activo **anula el corte del AFK** — los dos retirados compraban 30 y 60 minutos de ingreso sin mirar por 800 y 1.500. Y que una partida vieja con el buff activo **siga cobrando el doble**, que es lo que hace la retirada segura: hay saves con `passiveBoostExpiresAt` en el futuro y quitarli el efecto les recortaría el ingreso a media partida. | 17 |
 | `llaveCheck` | **Que el sistema de llaves cerrara.** Tres mitades que fallaban a la vez: la **cadena** (la del Vacío no salía de ninguna parte y la caja legendaria era imposible de abrir; la Rúnica solo salía de la legendaria; la épica no soltaba llave ninguna — tres peldaños y faltaban los tres), el **texto** (los cuatro `details` mentían) y la **tienda** (una carta que entregaba otra llave, con el precio en un tercer sitio). Comprueba que cada caja suelte la llave que la abre, por **las dos vías**: botín y tienda, porque una llave que solo existe en la tienda y una que solo sale de cajas dejan de ser el mismo sistema. Que el texto no prometa ninguna caja que la llave no abra, en las dos direcciones. Que cada carta entregue la llave que dice. Y que el botín no anuncie una llave que no entrega, con el **plural entero**: una versión anterior miraba `includes('Llaves')` y daba por buena una etiqueta que decía "+2 Llaves Rúnica". | 92 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
@@ -683,7 +684,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              20 bancos.
+  <subject>Check.ts              21 bancos.
 docs/                           Este directorio.
 ```
 
@@ -706,7 +707,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **20 bancos** dan **1340 pruebas**, todas en verde.
+   tocar nada. Los **21 bancos** dan **1350 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

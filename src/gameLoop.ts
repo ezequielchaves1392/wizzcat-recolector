@@ -1530,6 +1530,18 @@ const AFK_THRESHOLD_MS = 60000;
       }
     });
 
+    // F4 · ESTA LÍNEA SE QUEDA, Y ES LO QUE HACE QUE LA RETIRADA SEA SEGURA.
+    //
+    // `passiveBuff` ya no se compra (ver `CONSUMABLES` en `data/store.ts`), pero el
+    // multiplicador sigue aquí a propósito: hay partidas guardadas con
+    // `passiveBoostExpiresAt` en el futuro, y un jugador que lo tenía comprado va a
+    // seguir cobrando su x2 hasta que expire. Quitar la línea le recortaría el
+    // ingreso a media partida por un cambio de tienda.
+    //
+    // Y por eso el motivo de retirarlo no es "era mucho": es que un x2 de 30-60
+    // minutos comprado con nanitas rompe R10 por la puerta de atrás, porque
+    // `isEffectivelyAfk` da por bueno el ingreso mientras el buff siga vivo. Las
+    // tres tarjetas que quedan duran 10 minutos o 30 segundos.
     if (Date.now() < state.buffs.passiveBoostExpiresAt) {
       base *= 2;
     }

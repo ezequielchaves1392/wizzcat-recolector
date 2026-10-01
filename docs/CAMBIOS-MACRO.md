@@ -540,7 +540,7 @@ nadie verifica lo que dice un número**.
 
 ### Qué se comprobó
 
-`npm run build` (tsc limpio) y `npm run verify`: **20 bancos, 1340 pruebas**. Los
+`npm run build` (tsc limpio) y `npm run verify`: **21 bancos, 1350 pruebas**. Los
 30 nuevos son de `balanceCheck`, que ata cuatro cosas: la banda de coste por
 punto, que **un tier superior nunca sea mejor por punto que el anterior** (esa es
 la que habría servido para cazar este bug), que las dos curvas coincidan y que la

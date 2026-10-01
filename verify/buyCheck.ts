@@ -65,8 +65,11 @@ async function main() {
     { k: 'rareCrate', tipo: 'crate', coste: 1500, nombre: 'Rara' },
     { k: 'epicCrate', tipo: 'crate', coste: 5500, nombre: 'Épica' },
     { k: 'legendaryCrate', tipo: 'crate', coste: 21000, nombre: 'Legendaria' },
-    { k: 'clickBuff', tipo: 'consumable', coste: 800, nombre: 'Buff Clicks' },
-    { k: 'passiveBuff', tipo: 'consumable', coste: 1500, nombre: 'Buff Pasivo' },
+    // F4 · `clickBuff` y `passiveBuff` estaban aquí. Ya no se compran: eran buffs de
+    // 30 y 60 minutos, que compraban media hora de ingreso sin mirar la pantalla
+    // (ver `tarjetaCheck`). El efecto sigue en el motor para las partidas viejas,
+    // pero la tienda ya no los tiene, y una carta que no existe daría un error de
+    // `undefined` al mirarla.
     { k: 'backpackExpander', tipo: 'consumable', coste: 1400, nombre: 'Expansor' },
     { k: 'afkCard', tipo: 'consumable', coste: 10000, nombre: 'Tarjeta AFK' },
     { k: 'clickX2Card', tipo: 'consumable', coste: 5000, nombre: 'Click x2' },
@@ -510,7 +513,8 @@ async function main() {
       // caras y comprobar una no lo habría visto.
       'keyT0', 'keyT1', 'keyT2', 'keyT3',
       'upgradeCrystal', 'commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate',
-      'clickBuff', 'passiveBuff', 'backpackExpander', 'afkCard', 'clickX2Card', 'clickX3Card',
+      // F4 · Fuera `clickBuff` y `passiveBuff`, que ya no son cartas de tienda.
+      'backpackExpander', 'afkCard', 'clickX2Card', 'clickX3Card',
       'calibrationStone', 'stabilityNano',
       'companionCardT1', 'companionCardT5', 'companionCardT10',
       'collectorCardT1', 'collectorCardT5', 'collectorCardT10'
