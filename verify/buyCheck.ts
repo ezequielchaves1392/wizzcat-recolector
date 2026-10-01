@@ -19,6 +19,10 @@
 
 import { STORE_ITEMS } from '../src/gameLoop';
 import { TREE_BY_ID, nodeCost } from '../src/data/tree';
+// Para las ranuras: el número que da cada carta sale de esta tabla, no de un 4
+// escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
+// texto de la tarjeta y en estas dos aserciones.
+import { COMPANION_SLOT_BUY } from '../src/data/store';
 import {
   boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, distintos
 } from './kit';
@@ -344,19 +348,24 @@ async function main() {
     check('permisos: y no se cobra la segunda', s(g).maxCompanionSlots === 2, 'slots=' + s(g).maxCompanionSlots);
   }
   {
-    // Comprar el ranura de escuadron sin el primer hueco no tiene sentido: el
-    // `companionSlot2` de tienda pone los slots a 5, y comprarlo con 1 slot base
-    // regalaria los intermedios.
+    // Comprar la segunda ranura sin la primera da los intermedios: la carta lleva
+    // a 4, así que saltas del 1 al 4.
+    //
+    // Los números salen de `COMPANION_SLOT_BUY`, que es la tabla que el motor
+    // escribe. Escribir el 4 aquí sería volver a tener el número en dos sitios, que
+    // es exactamente lo que hacía el modelo viejo de dos cartas con el 5.
     const g = await boot(baseSave([], { nanites: 200_000, maxCompanionSlots: 1 }));
     const r = g.buyStoreItem('companionSlot2');
-    check('permisos: la ranura de escuadron se compra', r !== false, String(r));
-    check('permisos: y lleva los slots a 5', s(g).maxCompanionSlots === 5, 'slots=' + s(g).maxCompanionSlots);
+    check('permisos: la segunda ranura se compra', r !== false, String(r));
+    check('permisos: y lleva los slots donde dice la tabla',
+      s(g).maxCompanionSlots === COMPANION_SLOT_BUY[1].da,
+      'slots=' + s(g).maxCompanionSlots + ' tabla=' + COMPANION_SLOT_BUY[1].da);
   }
   {
     // El guard de los permisos compara sobre el total EFECTIVO, no sobre la base
     // guardada. Con la base en 2 y +1 del arbol, el total efectivo es 3: comprar
-    // el ranura de escuadron (que lleva a 5) tiene que seguir siendo posible, o
-    // el slot del arbol habria "bloqueado" la compra siguiente.
+    // la siguiente carta tiene que seguir siendo posible, o el slot del arbol
+    // habria "bloqueado" la compra que le toca.
     const g = await boot(baseSave([], {
       nanites: 200_000, maxCompanionSlots: 2,
       nodeLevels: { squad_slots: 1, passive_loop: 1, core_sink: 1 },
@@ -365,10 +374,11 @@ async function main() {
     check('permisos: el slot del arbol suma al total efectivo', g.getCompanionSlots() === 3,
       'slots=' + g.getCompanionSlots());
     const r = g.buyStoreItem('companionSlot2');
-    check('permisos: con 3 slots efectivos se puede comprar la ranura de escuadron',
+    check('permisos: con 3 slots efectivos se puede comprar la siguiente ranura',
       r !== false, String(r));
-    check('permisos: y lleva los slots a 5', s(g).maxCompanionSlots === 5,
-      'slots=' + s(g).maxCompanionSlots);
+    check('permisos: y lleva los slots donde dice la tabla',
+      s(g).maxCompanionSlots === COMPANION_SLOT_BUY[1].da,
+      'slots=' + s(g).maxCompanionSlots + ' tabla=' + COMPANION_SLOT_BUY[1].da);
   }
   {
     // Y con la base en 1 mas el +1 del arbol, el total efectivo ya es 2: el hueco

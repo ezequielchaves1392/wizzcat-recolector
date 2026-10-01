@@ -37,7 +37,7 @@ import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data
 // ==========================================================================
 import {
   STORE_ITEMS, CRATE_TYPES, CONSUMABLES, COLLECTOR_BASE_COSTS,
-  COMPANION_SLOT_COSTS, type CrateType
+  COMPANION_SLOT_COSTS, RANURA_POR_CARTA, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
 import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
@@ -2770,9 +2770,21 @@ const AFK_THRESHOLD_MS = 60000;
       // Validar antes de cobrar: los slots son únicos y no se pueden repetir.
       // Se comparan sobre el total efectivo para que un slot del árbol no
       // "bloquee" la compra del siguiente de tienda.
+      //
+      // F7/F11 · LAS RANURAS SALEN DE LA TABLA, NO DE TRES `if`.
+      //
+      // Antes había un `if` por carta con su número escrito dentro (`>= 2` y
+      // `>= 5`), y el `=` de más abajo también. Cuatro números a mano para lo mismo,
+      // y por eso la tarjeta decía "+3" cuando el motor daba 5.
+      //
+      // Ahora se busca la compra en `COMPANION_SLOT_BUY` y se compara con el número
+      // que da ESA fila. Añadir una cuarta ranura es añadir una fila a la tabla y
+      // una carta a `STORE_ITEMS`; no es acordarse de un `if`, de un `=` y de un
+      // texto. Y si la fila no existe, la carta no existe, así que no hay un
+      // camino que conceda ranuras que la tabla no dice.
       const effSlots = effectiveCompanionSlots();
-      if (itemKey === 'companionSlot1' && effSlots >= 2) return false;
-      if (itemKey === 'companionSlot2' && effSlots >= 5) return false;
+      const compraRanura = RANURA_POR_CARTA[itemKey];
+      if (compraRanura && effSlots >= compraRanura.da) return false;
 
       // Validar mochila llena.
       //
@@ -2855,16 +2867,21 @@ const AFK_THRESHOLD_MS = 60000;
         onUpdate(state, isAfk);
         saveToFirebase();
         return warehouseItem;
-      } else if (itemKey === 'companionSlot1') {
-        state.maxCompanionSlots = 2;
+      } else if (RANURA_POR_CARTA[itemKey]) {
+        // F7/F11 · El número que da esta ranura, de la misma tabla que la usa el
+        // `if` de arriba. Un solo sitio decide cuántas ranuras hay (R2).
+        const compra = RANURA_POR_CARTA[itemKey];
+        state.maxCompanionSlots = compra.da;
         onUpdate(state, isAfk);
         saveToFirebase();
-        return { id: `slot2_${Date.now()}`, name: 'Slot de Compañero 2', type: 'upgrade', details: '2 slots de compañero activos', rarity: 'Épico', tier: 0 };
-      } else if (itemKey === 'companionSlot2') {
-        state.maxCompanionSlots = 5;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { id: `slot5_${Date.now()}`, name: 'Ranura de Escuadrón', type: 'upgrade', details: '5 slots de compañero activos', rarity: 'Legendario', tier: 0 };
+        return {
+          id: `slots${compra.da}_${Date.now()}`,
+          name: compra.etiqueta,
+          type: 'upgrade',
+          details: `${compra.da} slots de compañero activos`,
+          rarity: 'Épico',
+          tier: 0
+        };
       } else if (itemKey.startsWith('companionCardT')) {
         const tier = parseInt(itemKey.replace('companionCardT', ''));
         const comp = generateCompanionByTier(tier);
@@ -3362,7 +3379,22 @@ const AFK_THRESHOLD_MS = 60000;
      * para algo que sí podría comprar, o uno encendido que al pulsarlo no da
      * nada.
      */
-    canBuyStoreItem: (itemKey: string): boolean => cabeLaCompra(itemKey),
+    // "¿Se puede comprar esto ahora?" Lo que la vista usa para apagar el botón.
+//
+//  `canBuyStoreItem` antes solo preguntaba "¿cabe en el almacén?", así que una
+//  carta ya comprada seguía con el botón encendido: el jugador podía pulsar un
+//  producto que ya tenía. Para las ranuras era peor, porque `buyStoreItem` sí
+//  rechazaba la segunda compra (hay un `if` para eso) y el resultado era un botón
+//  que hacía clic sin efecto, o sea R3 al revés: la vista y el motor discrepaban.
+//
+//  Ahora la pregunta tiene las dos partes, y en este orden: primero "ya lo tengo",
+//  que es un rechazo por partida y no de espacio; después "¿cabe?". Un almacén
+//  lleno y una ranura ya comprada es "no cabe", no "ya lo tienes".
+canBuyStoreItem: (itemKey: string): boolean => {
+  const ranura = RANURA_POR_CARTA[itemKey];
+  if (ranura && effectiveCompanionSlots() >= ranura.da) return false;
+  return cabeLaCompra(itemKey);
+},
     getCompanionSlots: () => effectiveCompanionSlots(),
     getAfkDurationMs: () => afkCardDurationMs(),
 

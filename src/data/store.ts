@@ -124,6 +124,87 @@ export const COLLECTOR_BASE_COSTS = {
 //  jugador al que le faltan llaves.
 export const KEY_COSTS = [250, 900, 3_000, 11_000] as const;
 
+// ==========================================================================
+//  Ranuras de compañero (F7 y F11)
+// ==========================================================================
+//
+//  EL MODELO ENTERO CAMBIA, Y POR QUÉ NO ERA EL DE DOS CARTAS.
+//
+//  Había dos cartas fijas (`companionSlot1` y `companionSlot2`) y el motor
+//  escribía un número en cada una: `= 2` y `= 5`. Es decir, **dos valores
+//  escritos a mano en el motor y el precio en un tercero**, y de ahí salía todo lo
+//  que F7 señalaba:
+//
+//    · el +3 de golpe de la segunda compra, que es un salto de 2 a 5 sin nada en
+//      medio, y hace que el precio por ranura se multiplique por 5,3 entre una
+//      compra y la siguiente;
+//    · la tarjeta decía "Abre hasta 3 ranuras" y el motor daba 5 (R3);
+//    · `COMPANION_SLOT_COSTS` tenía diez huecos y solo se usaban dos: una tabla
+//      escrita para un modelo que no llegó a existir.
+//
+//  Ahora las tres cartas salen de UNA tabla: cada compra da un número de ranuras y
+//  ese número es el que dice la tarjeta. El tope es 6 (F7 lo sube de 3 a 6), y las
+//  tres compras lo llegan: 1 → 2 → 4 → 6. Ni +3 de golpe ni un +2 al final que no
+//  compensa.
+//
+//  LA TABLA DE PRECIOS. El coste se lee de `COMPANION_SLOT_COSTS` por el índice que
+//  corresponda a la carta, así que añadir una compra es añadir una fila y ya. Los
+//  precios crecen ×3,8 y luego ×3,4: el ritmo de la curva de cartas de tier, que es
+//  lo que hace que a partir del cuarto compañero una ranura se siente más cara que
+//  un compañero entero. Ese es el objetivo de la tabla: que el escuadrón grande sea
+//  una decisión de final de partida, no una compra de mitad.
+//
+//  Y con el árbol de pasivas el total puede pasar de 6 (`bonus.companionSlots`), así
+//  que el tope de la tienda no es el tope del juego. Igual que con el almacén.
+//
+//  ESTAS DEFINICIONES VAN ANTES DE `STORE_ITEMS` A PROPÓSITO. `STORE_ITEMS` llama a
+//  `defDeRanura()` al construirse, y `defDeRanura` lee `COMPANION_SLOT_BUY` y
+//  `COMPANION_SLOT_COSTS`. Si estas tablas estuvieran debajo, el módulo leería dos
+//  `const` antes de inicializarse y tiraría un `ReferenceError` al importar — el
+//  fallo más estúpido posible y el más difícil de ver, porque el error no señala
+//  nada de ranuras de compañero: señala el final del fichero.
+export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_000, 1_400_000, 3_600_000, 9_000_000];
+
+/** Tope de ranuras que da la tienda, sin contar el árbol de pasivas. */
+export const COMPANION_SLOTS_TIENDA = 6;
+
+/**
+ * Las tres compras de ranura, y CADA UNA CON EL NÚMERO QUE DA.
+ *
+ * `da` es lo que el motor escribe en `maxCompanionSlots`. Es lo único que decide
+ * cuántas ranuras hay, y la tarjeta lo lee de aquí, así que no puede ser un "+3" en
+ * un texto y un `= 5` en el motor: es un número en un sitio.
+ *
+ * Los saltos son +1, +2 y +2. El +2 del medio sube el total a 4 en vez de a 5, que
+ * es lo que hace que la tercera compra quede cerca de la segunda en vez de dejar un
+ * +3 y un +1 detrás.
+ */
+export const COMPANION_SLOT_BUY: { da: number; etiqueta: string }[] = [
+  { da: 2, etiqueta: 'Slot de Compañero 2' },
+  { da: 4, etiqueta: 'Ranura de Escuadrón (ranuras 3 y 4)' },
+  { da: 6, etiqueta: 'Ranura de Escuadrón (ranuras 5 y 6)' }
+];
+
+/** La carta de tienda `companionSlotN` (N = 1, 2, 3), con su precio y su etiqueta. */
+export function defDeRanura(n: number): { cost: number; label: string } {
+  const compra = COMPANION_SLOT_BUY[n - 1];
+  return {
+    cost: COMPANION_SLOT_COSTS[n] ?? 0,
+    label: compra?.etiqueta ?? 'Ranura de escuadrón'
+  };
+}
+
+/**
+ * Qué carta de la tienda es cuál compra de ranura.
+ *
+ * Se construye de `COMPANION_SLOT_BUY` para que las dos mitades no puedan
+ * separarse: si alguien añade una cuarta compra a la tabla, la carta aparece sola
+ * y con su número. Es lo mismo que hace `STORE_KEY_TIER` con las llaves (B7), y el
+ * motivo por el que aquí se repite: los dos sitios eran el bug.
+ */
+export const RANURA_POR_CARTA: Record<string, { da: number; etiqueta: string }> =
+  Object.fromEntries(COMPANION_SLOT_BUY.map((c, i) => [`companionSlot${i + 1}`, c]));
+
 export const STORE_ITEMS = {
   keyT0: { cost: KEY_COSTS[0], label: 'Llave de Cifrado' },
   keyT1: { cost: KEY_COSTS[1], label: 'Llave Reforzada' },
@@ -139,8 +220,12 @@ export const STORE_ITEMS = {
   passiveBuff: { cost: 1500, durationMs: 60 * 60 * 1000, label: 'Buff Pasivo x2' },
   // Nuevos items
   backpackExpander: { cost: 1400, label: 'Expansor de Almacén (+1 slot)' },
-  companionSlot1: { cost: 1200, label: 'Slot de Compañero 2' },
-  companionSlot2: { cost: 16000, label: 'Ranura de Escuadrón (+3 slots)' },
+  // Las tres cartas de ranura salen de `defDeRanura()`, que es donde está el
+  // número de ranuras que da cada una. La tarjeta no pone "+N" escrito: lo dice
+  // la tabla, que es la misma que lee el motor (R3).
+  companionSlot1: defDeRanura(1),
+  companionSlot2: defDeRanura(2),
+  companionSlot3: defDeRanura(3),
   afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
   clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
   clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },
@@ -181,11 +266,3 @@ export const STORE_ITEMS = {
   collectorCardT9: { cost: 106950, label: 'Recolector Tier 9' },
   collectorCardT10: { cost: 193850, label: 'Recolector Tier 10' }
 };
-
-// ==========================================================================
-//  Ranuras de compañero
-// ==========================================================================
-//  Coste de cada slot adicional (índice = slots ya poseídos). 5 slots es el
-//  techo de la tienda: es lo que hace que los slots valgan más que los tiers.
-//  Se llega hasta 9: 5 de tienda + hasta 4 del nodo "Cuadrilla".
-export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_000, 1_400_000, 3_600_000, 9_000_000];

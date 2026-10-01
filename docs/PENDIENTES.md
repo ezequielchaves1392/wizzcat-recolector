@@ -50,17 +50,15 @@ Debe existir una llave para cada tipo de caja y crece el precio de las mismas.
 
 En las cajas debe haber una probabilidad baja de obtener cosas del tier superior.
 
-### F7 · Tope de 6 compañeros y precio de ranura balanceado — ACTUALIZADO
+### F7 · Tope de 6 compañeros y precio de ranura balanceado — HECHO
 
 El máximo de compañeros quiero que sea ~~3~~ **6**. La segunda compra de slot no debe
 dar +3. Balancear el precio.
 
-> **Actualizado el 20 de octubre: el tope pasa de 3 a 6**, y con él se cuela la
-> revisión de las mejoras de ranura, que es la misma pregunta. Todo el detalle
-> medido está en **F11**, que es la versión desarrollada de esta entrada. Aquí queda
-> el resumen para no tener dos fuentes: base 1 ranura, compra 1 → 2 (1.200), compra 2
-> → 5 (16.000), y el árbol de pasivas añade más aparte. Con tope 6 falta una tercera
-> compra, o el segundo slot sube a 6.
+> **Hecho con F11**, que es la versión desarrollada de esta entrada y donde está
+> todo el detalle. Resumen: el tope es 6 y se llega en tres compras
+> (1 → 2 → 4 → 6), ninguna de +3, y el precio por ranura ya no da un salto.
+> `ranuraCheck` (34 pruebas).
 
 ### F8 · En el ranking sale el título, pero no el marco ni el banner
 
@@ -447,26 +445,51 @@ movimientos durante 1 min al menos.
 _Lote de trece peticiones. Van con su texto intacto y la clasificación ya decidida:
 cada una es cosa de hacer, de contenido, o de una decisión tuya._
 
-### F11 · Escuadrón de 6 y revisar las mejoras de ranura
+### F11 · Escuadrón de 6 y revisar las mejoras de ranura — HECHO
 
 Aumentar el máximo del escuadrón a 6 y verificar las mejoras de aumento de slots.
 
 > **Ojo: esto actualiza F7**, que pedía el tope en 3. F7 queda con el tope en 6 y
 > apuntando aquí, porque es la misma pregunta: cuántas ranuras y a qué precio.
 >
-> **Lo que hay hoy, medido:** base 1 ranura, `companionSlot1` (1.200) → 2, y
-> `companionSlot2` (16.000) → **5 de golpe** (`gameLoop.ts:2694-2703`). El árbol de
-> pasivas añade `companionSlots` aparte, así que el total puede pasar de 5 sin tocar
-> la tienda. Con el tope en 6 falta una tercera compra, o el segundo slot sube a 6.
+> **Lo que había, medido:** base 1 ranura, `companionSlot1` (1.200) → 2, y
+> `companionSlot2` (16.000) → **5 de golpe**. El árbol de pasivas añadía
+> `companionSlots` aparte, así que el total podía pasar de 5 sin tocar la tienda.
 >
-> **Los tres números que hay que revisar, y son los que F7 ya señalaba:**
-> - El salto de 2 a 5 son **+3 ranuras por 16.000**, y el precio por ranura se
->   multiplica por 5,3 entre la primera y la segunda compra. Si sube a 6, ese salto
->   son +4.
-> - `COMPANION_SLOT_COSTS` tiene **10 huecos** (`data/store.ts:166`) y solo se usan
->   dos: es una tabla que se llenó para un modelo que no llegó a existir.
-> - La tarjeta de `companionSlot2` dice "Abre hasta **3** ranuras" (`store.ts:141`) y
->   el motor da 5. Otro texto que no es el número que se cobra (R3).
+> **Los tres números que había que revisar, y los tres eran ciertos:**
+> - El salto de 2 a 5 eran **+3 ranuras por 16.000**, y el precio por ranura se
+>   multiplicaba por 5,3 entre la primera compra y la segunda.
+> - `COMPANION_SLOT_COSTS` tenía diez huecos y solo se usaban dos.
+> - La tarjeta decía "Abre hasta **3** ranuras" y el motor daba 5.
+>
+> **Arreglado por la vía que evita el problema entero: que el número viva en una
+> tabla.** Los cuatro números a mano (el `if` de la vista, el `if` del motor, el `=`
+> que concede y el texto de la tarjeta) se quedan en uno. `COMPANION_SLOT_BUY` dice
+> qué da cada carta, y el motor, el botón y la tarjeta lo leen de ahí.
+>
+> | Carta | Precio | Da | Salto |
+> |---|---|---|---|
+> | `companionSlot1` | 1.200 | 2 | +1 |
+> | `companionSlot2` | 4.500 | 4 | +2 |
+> | `companionSlot3` | 16.000 | 6 | +2 |
+>
+> El precio por ranura queda en 1.200 → 2.250 → 8.000: sube siempre, y ningún
+> salto multiplica por más de 4. Antes el segundo multiplicaba por 5,3, que era la
+> pared que F7 señalaba. Y la última ranura sale a 8.000, más cara que un compañero
+> T1 entero (900): el escuadrón grande es una decisión de final de partida, que es
+> de lo que se trata.
+>
+> **La tarjeta ya no dice "+N" escrito.** Dice cuántas quedan por abrir, restando las
+> que ya tienes, y sale del total **efectivo**: si el árbol ya te dio la ranura 3 y
+> te falta la 4, la tarjeta dice 1 y no 2.
+>
+> Cubre `ranuraCheck` (34 pruebas), nuevo. Y las dos aserciones de `buyCheck` que
+> decían "lleva los slots a 5" ahora leen la tabla, que es donde está el número.
+>
+> **Un detalle que salió de paso y no estaba en la petición:** `canBuyStoreItem` solo
+> preguntaba "¿cabe en el almacén?", así que una carta ya comprada seguía con el
+> botón encendido y el `buyStoreItem` la rechazaba en silencio. Botón que no hace
+> nada. Ahora las cartas de ranura preguntan también "¿ya lo tienes?".
 
 ### F12 · Ver qué compañero o recolector te ha tocado al comprarlo
 
@@ -873,6 +896,9 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
       y las tres partes suman el total exacto porque las calcula el motor, no la
       vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
+- [x] **F7-F11 · escuadrón de 6 con las ranuras en una tabla.** Tres cartas, tope
+      6, ningún salto de +3, y el número de ranuras en un solo sitio. `ranuraCheck`
+      (34) es el banco nuevo.
 - [x] **B3-B4 · el cartel de logro y su pista.** La compra de ampliar el almacén ya
       evalua logros (era la única de las diez rutas que no), el cartel se encola
       cuando todavía no hay layout y se vacía en cuanto lo hay, y la pista mide la

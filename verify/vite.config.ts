@@ -50,7 +50,8 @@ export default defineConfig({
         senalCheck: resolve(here, 'senalCheck.ts'),
         balanceCheck: resolve(here, 'balanceCheck.ts'),
         desgloseCheck: resolve(here, 'desgloseCheck.ts'),
-        llaveCheck: resolve(here, 'llaveCheck.ts')
+        llaveCheck: resolve(here, 'llaveCheck.ts'),
+        ranuraCheck: resolve(here, 'ranuraCheck.ts')
       },
       formats: ['es']
     }

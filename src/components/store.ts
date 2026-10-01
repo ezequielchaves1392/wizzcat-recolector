@@ -34,7 +34,7 @@ import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM } from '../data/tiers';
-import { STORE_ITEMS, CRATE_TYPES } from '../data/store';
+import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY } from '../data/store';
 // Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
 // nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
 import { STORE_KEY_TIER, KEY_DEFS, cratesOpenedBy } from '../data/items';
@@ -56,7 +56,7 @@ const CATEGORIES: Category[] = [
   { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'warehouseSlot', 'backpackExpander'] },
   { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickBuff', 'passiveBuff', 'clickX2Card', 'clickX3Card'] },
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
-  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: ['companionSlot1', 'companionSlot2'] },
+  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: Object.keys(RANURA_POR_CARTA) },
   { id: 'companeros', label: 'Compañeros', icon: 'companion', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
   { id: 'recolectores', label: 'Recolectores', icon: 'collector', items: Array.from({ length: 10 }, (_, i) => `collectorCardT${i + 1}`) }
 ];
@@ -190,7 +190,9 @@ function iconFor(itemKey: string): IconName {
     upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
     afkCard: 'clock', clickBuff: 'bolt', passiveBuff: 'graph', clickX2Card: 'bolt', clickX3Card: 'bolt',
     calibrationStone: 'flask', stabilityNano: 'flask',
-    companionSlot1: 'layers', companionSlot2: 'layers'
+    // Las cartas de ranura salen de la tabla, no de una entrada por carta. Con una
+  // entrada por carta, una ranura nueva nace sin icono y con el de la última.
+  ...Object.fromEntries(Object.keys(RANURA_POR_CARTA).map(k => [k, 'layers']))
   };
   return map[itemKey] ?? 'store';
 }
@@ -209,7 +211,13 @@ function rarityOf(itemKey: string): string | null {
     upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
     afkCard: 'Raro', clickBuff: 'Raro', passiveBuff: 'Épico', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
-    companionSlot1: 'Épico', companionSlot2: 'Legendario'
+    // La rareza de una ranura sale de su posición en la tabla: cuanto más cara, más
+  // alta. Es una regla y por eso se calcula; escribirla a mano por carta era otra
+  // cosa que hay que acordarse de tocar al añadir una.
+  ...Object.fromEntries(COMPANION_SLOT_BUY.map((_, i) => [
+    `companionSlot${i + 1}`,
+    i >= 1 ? 'Legendario' : 'Épico'
+  ]))
   };
   return map[itemKey] ?? null;
 }
@@ -231,8 +239,11 @@ function descFor(itemKey: string): { what: string; detail: string } {
 /** Estado del producto dentro de la partida. */
 function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; reason: string | null } {
   const effSlots = game.getCompanionSlots?.() ?? state.maxCompanionSlots;
-  if (itemKey === 'companionSlot1' && effSlots >= 2) return { disabled: true, reason: 'Comprado' };
-  if (itemKey === 'companionSlot2' && effSlots >= 5) return { disabled: true, reason: 'Comprado' };
+  // F7/F11 · El tope de esta carta sale de la fila de la tabla, no de un `if` por
+  // carta. Con tres cartas y tres `if` escritos a mano, añadir la cuarta era
+  // acordarse de los tres sitios; con la tabla es una fila.
+  const ranura = RANURA_POR_CARTA[itemKey];
+  if (ranura && effSlots >= ranura.da) return { disabled: true, reason: 'Comprado' };
   if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 50) return { disabled: true, reason: 'Al máximo' };
   // "¿Cabe esta compra?" lo contesta el game loop, que es quien cobra. Preguntar
   // aquí solo por el fullness del almacén apagaba el botón de una caja que sí
@@ -279,8 +290,25 @@ export function renderStoreTab(
       note = `Tienes ${state.keys}`;
     } else if (itemKey === 'upgradeCrystal') {
       note = `Tienes ${state.upgradeCrystals}`;
-    } else if (itemKey === 'companionSlot1' || itemKey === 'companionSlot2') {
-      note = `Ranuras activas: ${game.getCompanionSlots?.() ?? state.maxCompanionSlots}`;
+    } else if (RANURA_POR_CARTA[itemKey]) {
+      // F7/F11 · CUÁNTAS RANURAS ABRE ESTA CARTA, EN EL NÚMERO.
+      //
+      // El texto no dice "+N": dice cuántas quedan por abrir, restando las que ya
+      // tienes. Esa es la cifra que el jugador está decidiendo, y es la que no
+      // puede mentir: sale de la misma tabla que el `if` que desactiva el botón y
+      // del mismo número que el motor escribe. Antes ponía "+3" escrito a mano
+      // cuando el motor daba 5.
+      //
+      // Y sale del total EFECTIVO, que incluye el árbol: si el árbol ya te dio la
+      // ranura 3 y te queda la 4, la tarjeta tiene que decir 1 y no 2, o el
+      // jugador paga por algo que ya tiene.
+      const compra = RANURA_POR_CARTA[itemKey];
+      const actual = game.getCompanionSlots?.() ?? state.maxCompanionSlots;
+      const anade = Math.max(0, compra.da - actual);
+      const detalle = anade === 1
+        ? 'Abre 1 ranura más de escuadrón'
+        : `Abre ${anade} ranuras más de escuadrón`;
+      note = `${detalle} · Tienes ${actual}`;
     } else if (itemKey === 'calibrationStone' || itemKey === 'stabilityNano') {
       const inStore = (state.warehouse as any[]).find(w => w.buffId === (itemKey === 'calibrationStone' ? 'calibrationStone' : 'stabilityNano'));
       note = `En almacén: ${inStore?.stackCount || 0}`;
