@@ -48,7 +48,8 @@ export default defineConfig({
         rouletteCheck: resolve(here, 'rouletteCheck.ts'),
         tickCheck: resolve(here, 'tickCheck.ts'),
         senalCheck: resolve(here, 'senalCheck.ts'),
-        balanceCheck: resolve(here, 'balanceCheck.ts')
+        balanceCheck: resolve(here, 'balanceCheck.ts'),
+        desgloseCheck: resolve(here, 'desgloseCheck.ts')
       },
       formats: ['es']
     }

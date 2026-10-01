@@ -1,6 +1,7 @@
 import { ic } from './icons';
 import { formatNumber } from '../utils/format';
 import { AFFIX_BY_ID, collectorMaxLevel } from '../data/crafting';
+import { valuationBreakdown } from '../data/valuation';
 
 /**
  * Panel del jugador: recolector equipado y slots de companeros.
@@ -11,7 +12,8 @@ export function renderPanel(
   state: any,
   realDamage: number,
   effectiveSlots?: number,
-  ingresoDe?: (companionId: string) => number
+  ingresoDe?: (companionId: string) => number,
+  desgloseDe?: () => { total: number; base: number; porNivel: number; porBonos: number }
 ) {
   // --- Recolector equipado ---
   const equippedItem = state.equippedCollectorId
@@ -31,6 +33,40 @@ export function renderPanel(
       const overclocked = Boolean(equippedItem.overclock);
       // Los afijos son la diferencia entre dos recolectores del mismo tier
       const affixes: string[] = equippedItem.affixes || [];
+
+      // F3 · EL DESGLOSE DEL DAÑO. El jugador pide "5 base +15 por mejora", y
+      // el motor lo da partido en tres (`getClickDamageBreakdown`). Las cifras
+      // las pone el motor porque son suyas: si se calcularan aquí, un buff que
+      // activara o expirara entre el pintado y la lectura haría que la suma no
+      // cuadrara, y eso es exactamente el descuadre que se vino a arreglar.
+      //
+      // Y son TRES partes y no dos a propósito. Con "base" y "por nivel" nada
+      // más, un T1 de daño 5 en nivel 4 daría 5 + 2 = 7 al lado de un total de 20,
+      // y el jugador volvería a informar del mismo bug. Los bonos de compañeros,
+      // logros, árbol y afijos tienen que aparecer o las cifras no suman.
+      const desglose = typeof desgloseDe === 'function' ? desgloseDe() : null;
+      const desgloseHTML = desglose && desglose.total > 0 ? `
+        <div class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 flex flex-wrap gap-x-2 tabular">
+          <span title="El daño que trae el item">${formatNumber(desglose.base)} base</span>
+          ${desglose.porNivel > 0 ? `<span title="Lo que suma el nivel del recolector">+${formatNumber(desglose.porNivel)} nivel</span>` : ''}
+          ${desglose.porBonos > 0 ? `<span title="Compañeros, logros, árbol, afijos y buffs de click">+${formatNumber(desglose.porBonos)} bonos</span>` : ''}
+        </div>
+      ` : '';
+
+      // F2 · LA VALORACIÓN, que estaba solo en la ficha del almacén y se perdía
+      // en el panel principal, que es donde se mira el recolector antes de
+      // decidir. `valuationBreakdown()` es pura y vive en `data/valuation.ts`, así
+      // que se puede llamar igual que desde la ficha, sin pasar por el motor: no
+      // depende del estado de la partida, sale del item.
+      const valoracion = valuationBreakdown(equippedItem);
+      const valoracionHTML = valoracion.length ? `
+        <details class="mt-2.5" open>
+          <summary class="label-caps cursor-pointer select-none">Valoración</summary>
+          <ul class="mt-1 space-y-0.5">
+            ${valoracion.map(v => `<li class="text-[9px] font-mono text-[var(--text-muted)]">${v}</li>`).join('')}
+          </ul>
+        </details>
+      ` : '';
 
       collectorContainer.innerHTML = `
         <div class="flex items-center gap-3">
@@ -91,6 +127,9 @@ export function renderPanel(
                  style="color: var(--accent)">+${formatNumber(realDamage)}</div>
           </div>
         </div>
+
+        ${desgloseHTML}
+        ${valoracionHTML}
       `;
     } else {
       collectorContainer.innerHTML = `

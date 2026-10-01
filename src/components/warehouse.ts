@@ -435,7 +435,23 @@ function detailContent(item: any, state: any, game: any): string {
         ` : ''}
 
         ${valuation.length ? `
-          <details class="mb-2.5">
+          <!--
+            POR QUÉ VA ABIERTO. Estaba en un <details> cerrado, y el jugador
+            tenía que abrir la flechita para ver cuánto valía su item. Es
+            información que se pide antes de vender: nadie mira la valoración
+            después de haber vendido. Y esconderla detrás de un clic hace que la
+            mayoría de las fichas enseñen un precio sin explicar de dónde sale.
+
+            El <details> NO se quita, y esa es la parte importante: cerrar el
+            desglose sigue siendo posible cuando la ficha es larga y occupies el
+            alto. Abrir por defecto y poder cerrar no es lo mismo que no dejar
+            cerrar.
+
+            Y no es un <summary> que haya que enganchar: el elemento nativo ya se
+            abre y se cierra solo, sin un solo listener. Un acordeón propio sería
+            un estado más que mantener y una tecla más que pulsar.
+          -->
+          <details class="mb-2.5" open>
             <summary class="label-caps cursor-pointer select-none">Valoración</summary>
             <ul class="mt-1.5 space-y-0.5">
               ${valuation.map(v => `<li class="text-[10px] font-mono text-[var(--text-muted)]">${v}</li>`).join('')}

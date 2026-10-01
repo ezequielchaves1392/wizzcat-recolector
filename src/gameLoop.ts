@@ -1590,21 +1590,89 @@ function syncMaterialCounters() {
     return out;
   }
 
-  function calculateClickDamage() {
-    if (!state.equippedCollectorId) return 0;
+  /**
+   * LA CUENTA DEL CLICK, SIN EL BUFF. La fórmula vive aquí y en ningún otro
+   * sitio: la consumen el click mismo, el guardado y el desglose del panel.
+   *
+   * POR QUÉ ESTA FUNCIÓN EXISTE, Y POR QUÉ NO ES "EL DAÑO". El buff de click se
+   * aplica FUERA de la cuenta y en tres sitios distintos: al hacer click, al
+   * mostrar el panel y al desglosarlo. Si esta función metiera el buff dentro,
+   * el buff se aplicaría dos veces y un buff x2 daría x4 — que es exactamente
+   * el bug que rompió `playthroughCheck` al meter el buff aquí dentro. Por eso
+   * lo que sale de aquí se llama "sin buff", y quien quiera el buff lo multiplica
+   * una vez, a su manera.
+   *
+   * `conNivel` es el daño después del nivel y antes de los demás multiplicadores,
+   * y es lo que permite repartir el total sin inventarse números (ver abajo).
+   */
+  function cuentaDeClickSinBuff(): { total: number; base: number; conNivel: number } {
+    const cero = { total: 0, base: 0, conNivel: 0 };
+    if (!state.equippedCollectorId) return cero;
     const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
-    if (!item) return 0;
+    if (!item) return cero;
 
     const affixes = equippedAffixEffect();
-    const baseDmg = (item.damage || 0) + affixes.flat;
+    const base = item.damage || 0;
     const levelMultiplier = 1 + ((item.level || 0) * 0.10);
-    const total = baseDmg
+    const conNivel = base * levelMultiplier;
+    const total = (base + affixes.flat)
       * levelMultiplier
       * calculateCompanionMultiplier()
       * (1 + achievementState.clickBonus)
       * (1 + state.bonus.clickMult)
       * (1 + affixes.clickMult);
-    return Math.floor(total);
+    return { total, base, conNivel };
+  }
+
+  /** El daño de un click SIN buffs. Quien quiera buffs los aplica encima. */
+  function calculateClickDamage(): number {
+    return Math.floor(cuentaDeClickSinBuff().total);
+  }
+
+  /**
+   * De dónde sale el daño de un click, en tres partes que suman el total.
+   *
+   * POR QUÉ ESTA FUNCIÓN Y NO QUE LA VISTA RESTE. El jugador pidió ver "5 base +
+   * 15 por mejora". Restar en la vista daría un número que no existe en ningún
+   * sitio, y además se desincronizaría en cuanto un buff activara o expirara
+   * entre el pintado y la lectura. Aquí el desglose sale de la MISMA cuenta que
+   * cobra el click, que es lo único que garantiza que las tres partes sumen el
+   * total (R1, R3).
+   *
+   * Y POR QUÉ TRES PARTES Y NO DOS. El detalle que obliga: con solo "base" y
+   * "por nivel" las cifras NO cuadran. Un T1 de daño 5 en nivel 4 da 5 × 1,4 = 7
+   * por nivel, y el total que ve el jugador es 20, porque por en medio están los
+   * compañeros, los logros, el árbol y los afijos. Mostrar 5 + 2 = 7 al lado de
+   * un 20 es un descuadre del que el jugador vuelve a informar, y con razón.
+   *
+   * Las partes son:
+   *   · base   — el daño que trae el item, tal cual.
+   *   · porNivel — lo que suma el nivel. El techo de niveles NO se cuenta aquí:
+   *     es un tope, no una bonificación.
+   *   · porBonos — compañeros tipo multiplicador, logros, árbol, afijos y el
+   *     buff de click activo.
+   *
+   * Y las tres suman `total` exactamente, porque `total` se calcula después y
+   * las partes se derivan de los mismos pasos intermedios, no al revés.
+   */
+  function desgloseDeClick(): { total: number; base: number; porNivel: number; porBonos: number } {
+    const cuenta = cuentaDeClickSinBuff();
+    const total = Math.floor(cuenta.total * calculateMultiplier());
+
+    // El reparto se hace desde el total hacia atrás, no desde las partes hacia
+    // el total: así el redondeo cae una sola vez y las tres cifras suman lo que
+    // se ve. Al revés, tres redondeos sueltos dan un número que no cuadra.
+    //
+    // Y LA PARTE DE NIVEL SE MIDE SIN EL BUFF, a propósito. El buff de click
+    // multiplica el total entero, pero si se adjudicara a "nivel", con el buff
+    // puesto el panel diría "+200 nivel" cuando el nivel solo aporta 100, y el
+    // jugador leería que subir de nivel vale el doble de lo que vale. Fijando
+    // la parte de nivel sin buff, "nivel" dice siempre lo mismo y es el buff
+    // entero lo que aparece en "bonos", que es donde un jugador espera verlo.
+    const nivelSinBuff = Math.floor(cuenta.conNivel);
+    const porNivel = nivelSinBuff - cuenta.base;
+    const porBonos = total - nivelSinBuff;
+    return { total, base: cuenta.base, porNivel, porBonos };
   }
 
   function calculateMultiplier() {
@@ -2036,6 +2104,11 @@ function syncMaterialCounters() {
     // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
     // La UI debe usar esta función para no mostrar un valor distinto al real.
     getClickDamage: () => Math.floor(calculateClickDamage() * calculateMultiplier()),
+    /**
+     * El daño de un click partida en base, nivel y bonos, para que la vista lo
+     * enseñe sin tener que deducirlo restando. Ver `desgloseDeClick()`.
+     */
+    getClickDamageBreakdown: () => desgloseDeClick(),
     /**
      * Cuánto aporta ESTE compañero al ingreso pasivo, ya con los
      * multiplicadores, y con el reparto justo de la fracción.

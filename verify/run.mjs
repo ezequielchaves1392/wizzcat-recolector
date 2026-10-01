@@ -33,7 +33,8 @@ for (const banco of [
   'rouletteCheck',
   'tickCheck',
   'senalCheck',
-  'balanceCheck'
+  'balanceCheck',
+  'desgloseCheck'
 ]) {
   console.log(`\n=== ${banco} ===`);
   try {

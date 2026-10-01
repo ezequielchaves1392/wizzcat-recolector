@@ -23,19 +23,6 @@
 
 _Cosas que quieres que existan._
 
-### F1 · Ver la valoración sin abrir la flechita
-
-La valoración por defautl se muestra, no hace falta abrir la flechita.
-
-### F2 · La valoración también en el panel principal
-
-La valoración se debe mostrar en el panel principal, en el sector de recolector.
-
-### F3 · Desglosar la recolección por click
-
-La recolección x click debe mostrar el base + el aumento por la mejora x nivel.
-Ej: `Recolección por click: +20 (5 base +15 por mejora)`
-
 ### F4 · Solo tarjetas de buff, fuera los buffs pasivos
 
 Sacar los buffs pasivos y dejar las tarjetas únicamente.
@@ -48,10 +35,17 @@ Debe existir una llave para cada tipo de caja y crece el precio de las mismas.
 
 En las cajas debe haber una probabilidad baja de obtener cosas del tier superior.
 
-### F7 · Tope de 3 compañeros y precio de ranura balanceado
+### F7 · Tope de 6 compañeros y precio de ranura balanceado — ACTUALIZADO
 
-El máximo de compañeros quiero que sea 3. La segunda compra de slot no debe dar
-+3. Balancear el precio.
+El máximo de compañeros quiero que sea ~~3~~ **6**. La segunda compra de slot no debe
+dar +3. Balancear el precio.
+
+> **Actualizado el 20 de octubre: el tope pasa de 3 a 6**, y con él se cuela la
+> revisión de las mejoras de ranura, que es la misma pregunta. Todo el detalle
+> medido está en **F11**, que es la versión desarrollada de esta entrada. Aquí queda
+> el resumen para no tener dos fuentes: base 1 ranura, compra 1 → 2 (1.200), compra 2
+> → 5 (16.000), y el árbol de pasivas añade más aparte. Con tope 6 falta una tercera
+> compra, o el segundo slot sube a 6.
 
 ### F8 · En el ranking sale el título, pero no el marco ni el banner
 
@@ -244,6 +238,347 @@ decidido antes de girar".
 > la casilla y el cartel dicen lo mismo. La mecánica no se ha tocado (F10 explica
 > por qué no).
 
+### B6 · Las llaves no abren lo que dicen, y las de arriba no se pueden conseguir
+
+Me gustaría que hayan distintas llaves que abran distintos tiers. Hoy como está la
+cosa esta llave dice que abre épicos y legendarios y no es verdad. Reveamos el
+sistema de llaves, ¿está funcionando bien?
+
+> **Revisado: sí funciona el código, y el bug es de LÓGICA, no de texto: la cadena es
+> una escalera imposible.** Las cuatro llaves son reales y las cuatro cajas existen,
+> pero las llaves de arriba solo se sacan de cajas que ellas mismas abren. Medido:
+>
+> | Caja | Necesita | De dónde sale esa llave |
+> |---|---|---|
+> | Común | Cifrada (T0) | **Tienda**, y cajas comunes |
+> | Rara | Reforzada (T1) | **Cajas raras** (peso 14) y comunes dan la T0 |
+> | Épica | Rúnica (T2) | **Solo cajas legendarias** |
+> | Legendaria | Del Vacío (T3) | **No sale de NINGÚN sitio** |
+>
+> Traducido: la legendaria es **imposible de abrir** — su llave no existe en el
+> juego — y la épica solo se abre si primero abres una legendaria. Las cajas
+> legendarias se pueden comprar (`data/store.ts` las vende) y no se pueden abrir.
+> Eso no es un texto mentiroso: es contenido inalcanzable.
+>
+> **Por qué la llave dice una cosa y hace otra:** `KEY_DEFS` describe a mano qué
+> abre cada llave (`items.ts:70,80,89`) y `CRATE_KEY_TIER` decide de verdad qué
+> abre (`items.ts:106`). Son **dos tablas** para la misma regla, y ya no coinciden:
+> la Rúnica dice "Abre Épicos y Legendarios" pero `CRATE_KEY_TIER.legendary = 3` y
+> la Rúnica es nivel 2, así que **no abre la legendaria**. El texto promete más de
+> lo que la regla da.
+>
+> **La reparación de raíz no es tocar textos: es una sola tabla.** Que
+> `details` se genere desde `CRATE_KEY_TIER` con el mismo criterio que usa
+> `keyOpens()`, y entonces no puede volver a mentir. Es R2 aplicado a un sitio
+> donde la regla estaba partida en dos.
+>
+> **Lo que tú propones —épicas en las raras, legendarias en las raras, con baja
+> probabilidad— es exactamente el desatasco, y encaja con la tabla que hay: la
+> rara ya suelta la Reforzada al 14% y la legendaria suelta la Rúnica al 8%. Si la
+> legendaria suelta la Del Vacío, la cadena cierra. Probabilidades exactas a
+> decidir, y ahí hay que medir cuántas cajas hay que abrir para llegar.
+
+### B7 · La tienda dice una llave y entrega otra
+
+Aparte de B6, hay un descuadre corto en la misma familia: la carta de la tienda se
+llama "Llave de Cifrado" y el motor entrega otra.
+
+> `STORE_ITEMS.key` se llama "Llave de Cifrado" (`data/store.ts:106`), pero la
+> compra llama a `createMaterialItem('key', STORE_MATERIAL_TIER)` y
+> `STORE_MATERIAL_TIER = 1` (`gameLoop.ts:491`). O sea: **pagas 250 por lo que la
+> tarjeta llama Cifrado y entra una Reforzada**, que es la que abre las raras.
+>
+> El coste del que sí es el nombre correcto está en `KEY_DEFS[0].cost = 480` y no
+> lo usa nadie: es el mismo patrón de precio duplicado que ya se corrigió en los
+> cristales (P3). Dos precios y dos nombres para la misma compra.
+>
+> F5 ("una llave por tipo de caja, con precio creciente") toca este mismo sitio, y
+> B6-B7 son las dos mitades: **B6 es la regla, F5 es la tienda.** Conviene hacerlas
+> juntas o la tienda se arregla dos veces.
+
+### B8 · No hay forma de ver el perfil de otro jugador
+
+Al tocar en el nombre de un jugador quiero entrar a su perfil y ver su panel
+principal y sus estadísticas actuales.
+
+> **No es un bug: es una regla de Firestore, y por eso es una decisión y no un
+> arreglo.** `users/{uid}` **solo lo puede leer su dueño o un admin**
+> (`firestore.rules:101`). El ranking es legible por cualquiera, así que la fila te
+> da nombre, título, logros y puntuación —todo lo que está en `rankings/{uid}`— pero
+> **el panel principal y las estadísticas no están en ninguna colección pública**:
+> viven en el documento privado de cada jugador.
+>
+> **Lo que hay que decidir:** o se publica una tarjeta pública nueva —que sería
+> exactamente el subconjunto que `rankings.ts` ya sabe pintar más lo que el jugador
+> quiera mostrar— o se abre `users/{uid}` a lectura y se acepta que el saldo, los
+> inventarios y las compras sean públicos. La segunda es un cambio de privacidad de
+> una línea y **no la recomiendo**: un incremental te enseña el gasto de tu
+> competencia.
+>
+> Con la primera no hay problema de seguridad: es un documento que el jugador escribe
+> con lo que decide enseñar. Y de paso le daría en qué apoyarse a **F20**: la imagen
+> de perfil es justo el dato que hay que poder leer de otro.
+
+### B9 · El AFK no se pone solo estando en la pantalla
+
+El juego también se pone en AFK si el jugador está en la pantalla pero no hace
+movimientos durante 1 min al menos.
+
+> **Medido: el umbral existe y son 45 segundos, no 1 minuto**
+> (`AFK_THRESHOLD_MS = 45000`, `gameLoop.ts:700`). Así que la mitad de lo que pides ya
+> está, y lo que falta es la otra mitad, que es la importante.
+>
+> **Lo que NO ocurre es que se ponga en AFK estando en la pantalla.** `isAfk` se
+> recalcula **solo** dentro de `handlePresenceChange` (`gameLoop.ts:1785-1786`), que es
+> el manejador de `visibilitychange`/`focus`/`blur`/`pageshow`/`freeze`. Con la
+> pestaña visible y el cursor quieto **ninguno de esos eventos se dispara**:
+> `handleUserActivity` va anotando `lastActiveTimestamp` con cada click, pero nadie
+> mira ese reloj hasta que la ventana recupera el foco. Y el watchdog del intervalo
+> solo comprueba si el jugador *sigue presente* (`gameLoop.ts:1952`), no si lleva rato
+> sin hacer nada.
+>
+> Traducido: **el tick nunca se para solo, y el `isAfk` que ya se pinta en pantalla
+> miente** — dice "AFK" cuando el ingreso sigue entrando. Y hay una regla del
+> proyecto detrás (R10): nada de ingreso pasivo si el jugador no está mirando.
+>
+> **Dónde se comprueba:** en el propio tick, que es donde ya se decide si entra
+> ingreso: `Date.now() - lastActiveTimestamp > umbral`. Los dos números a decidir:
+> 45 s es poco para quien está leyendo un texto largo, y 1 min es lo que pides. Y un
+> aviso importante: **los clics automáticos del árbol no pueden contar como
+> actividad**, porque si cuentan el juego nunca se pone en AFK solo — que es
+> exactamente el caso que describes.
+
+---
+
+## Más cosas que pediste — 20 de octubre
+
+_Lote de trece peticiones. Van con su texto intacto y la clasificación ya decidida:
+cada una es cosa de hacer, de contenido, o de una decisión tuya._
+
+### F11 · Escuadrón de 6 y revisar las mejoras de ranura
+
+Aumentar el máximo del escuadrón a 6 y verificar las mejoras de aumento de slots.
+
+> **Ojo: esto actualiza F7**, que pedía el tope en 3. F7 queda con el tope en 6 y
+> apuntando aquí, porque es la misma pregunta: cuántas ranuras y a qué precio.
+>
+> **Lo que hay hoy, medido:** base 1 ranura, `companionSlot1` (1.200) → 2, y
+> `companionSlot2` (16.000) → **5 de golpe** (`gameLoop.ts:2694-2703`). El árbol de
+> pasivas añade `companionSlots` aparte, así que el total puede pasar de 5 sin tocar
+> la tienda. Con el tope en 6 falta una tercera compra, o el segundo slot sube a 6.
+>
+> **Los tres números que hay que revisar, y son los que F7 ya señalaba:**
+> - El salto de 2 a 5 son **+3 ranuras por 16.000**, y el precio por ranura se
+>   multiplica por 5,3 entre la primera y la segunda compra. Si sube a 6, ese salto
+>   son +4.
+> - `COMPANION_SLOT_COSTS` tiene **10 huecos** (`data/store.ts:166`) y solo se usan
+>   dos: es una tabla que se llenó para un modelo que no llegó a existir.
+> - La tarjeta de `companionSlot2` dice "Abre hasta **3** ranuras" (`store.ts:141`) y
+>   el motor da 5. Otro texto que no es el número que se cobra (R3).
+
+### F12 · Ver qué compañero o recolector te ha tocado al comprarlo
+
+Al comprar un compañero se debe mostrar un modal con el compañero que se generó. Al
+comprar un recolector, una tarjeta con el recolector que se generó. Esto es porque
+se generan al azar, para que el jugador lo sepa: actualmente solo se agregan al
+almacén.
+
+> **Esto es R3 aplicado a las cartas de tier, y por eso no es un capricho.** La
+> tienda **sí** dice "El nombre, el poder exacto y la rareza se sortean al comprarlo"
+> (`store.ts:153`), pero en el momento de cobrar no pasa nada visible: el item entra
+> al almacén y el jugador tiene que ir a buscarlo. Paga por una sorpresa y la
+> sorpresa se la tiene que buscar él.
+>
+> **Hay un sitio donde esto ya está resuelto y se puede copiar:** la ruleta de cajas
+> monta su cartel de premio con la cifra en grande (`crateRoulette.ts:108-124`). Es
+> el mismo problema, resuelto al revés: en la caja el premio se anuncia antes de que
+> se vaya la pantalla.
+>
+> **Lo que hay que decidir:** el caso difícil es la compra, no la caja. En la tienda no
+> se ha tirado nada todavía —el sorteo ocurre al comprar—, así que hay que decidir si
+> la pantalla se queda en la ficha hasta el clic, o si hay una confirmación de "se va
+> a sortear". Con quince cartas de tier, el modal tiene que decir **el nombre, el
+> poder y la rareza que salieron**, no solo "ya lo tienes".
+>
+> **Medido también:** las quince cartas (10 de compañero y 10 de recolector, una por
+> tier) no se describen a mano, se generan con `tierDescription()`
+> (`store.ts:147-160`). El lore de F13 y este modal tocarán el mismo sitio, así que
+> van juntos.
+
+### F13 · Que los compañeros y recolectores tengan lore
+
+Poner descripciones en los recolectores y compañeros para darle lore. Ejemplo tuyo:
+*Forjador de Mundos, un compañero Legendario, su poder de extracción es uno nunca
+antes visto… la tierra se quiebra a su paso…* (mejóralo, y ponle uno a cada tipo).
+
+> **Es contenido, y son 63 fichas**: 10 tiers × 3 nombres de compañero y 10 × 3 de
+> recolector (`data/tiers.ts:42-66`), más los 6 exclusivos de caja. Y el nombre del
+> ejemplo es real: "Forjador de Mundos" es el primero del tier 7 (`tiers.ts:49`).
+>
+> **Lo que ya está resuelto:** `CRATE_ONLY_COMPANIONS` tiene justo la forma que pides
+> —nombre, tipo, poder, rareza, icono (`crateLoot.ts:133-140`)—. Lo que les falta a los
+> de tier es el texto, porque ahora su único texto es `Recolección por segundo: +N/s`,
+> que es un número (F12 lo necesita igual).
+>
+> **Para que el lore no se contradiga con la mecánica, cada descripción debería decir
+> el tipo de compañero** (`passive`, `click` o `multiplier`), que es lo que el jugador
+> tiene que entender para decidir si lo equipa. Un texto sobre "la tierra se quiebra" no
+> dice si produce mientras no estás o solo al clickear.
+
+### F14 · Comprar por cantidad en el almacén
+
+Comprar por cantidad en el almacén, siempre y cuando haya lugar y nanitas.
+
+> **Vender ya tiene selector de cantidad** (`warehouse.ts:1423-1434`); lo que falta es
+> **comprar varias unidades de una vez**.
+>
+> **La condición "si hay lugar" es donde está el trabajo.** Las llaves y cristales son
+> apilables, así que 20 llaves son 1 ranura, no 20: la capacidad se mide por **slots
+> ocupados**, no por unidades (`countOccupiedSlots`). Y las cartas de tier y los slots
+> de escuadrón **no** se apilan: 5 compañeros son 5 ranuras, y ahí sí tiene que
+> bloquearse en cuanto no quepan. El número que se puede comprar sale de las dos
+> cosas, y por eso tiene que salir del motor (R1/R3) y no de la vista.
+
+### F15 · En el perfil, cuántos Títulos, Marcos y Banners tienes
+
+En el perfil me tiene que decir la cantidad de Títulos, Marcos y Banners poseídos.
+
+> **Ya hay un contador, pero es único y mezcla las tres cosas**:
+> `${unlockedCosmetics.length}/${COSMETICS.length}` (`profilePage.ts:270`) va en el
+> encabezado de la sección, y como los secretos van dentro de la misma lista no se
+> distingue qué es título y qué es marco. Lo que falta es el desglose: títulos 7/14,
+> marcos 4/9, banners 2/11 —que es lo que hay, medido sobre `data/cosmetics.ts`.
+>
+> Sale casi gratis de `COSMETICS_BY_TYPE()`, que ya está importado. Y de paso resuelve
+> media F16: si el número está desglosado, se puede enseñar en la tarjeta de
+> identidad sin obligar al jugador a entrar al perfil.
+
+### F16 · El desbloqueo se ve en el perfil, en el ranking y arriba a la izquierda
+
+El desbloqueado se tiene que mostrar tanto en el perfil, como en el ranking, como
+arriba a la izquierda en el menú principal.
+
+> **Aquí hay que separar dos cosas que el texto mezcla:**
+>
+> **Lo desbloqueado** (el título, el marco, el banner equipado) sale en el perfil, y en
+> el ranking sale **solo el título** (`rankings.ts:147`). El marco y el banner no salen
+> en el ranking, y eso ya es B2. Arriba a la izquierda del menú principal no sale nada.
+>
+> **Lo que se desbloquea en ese momento** es otra cosa, y esa es la que no existe: es el
+> **cartel de logro**, que no se ha visto nunca en toda la partida. Es B3, con sus dos
+> causas ya diagnosticadas.
+>
+> Los sitios posibles para lo recién desbloqueado, de menos a más trabajo: el
+> `#achievement-stack` que ya existe (`layout.ts:353`, abajo al centro), la esquina
+> superior izquierda como pides, o el panel principal. Arriba a la izquierda es el sitio
+> que más se ve, pero también el que más se solapa con el contenido en móvil.
+
+### F17 · Saltarse la animación de la ruleta
+
+Poder skipear la animación de la ruleta con un check.
+
+> **Ojo: el trompo dura 5.200 ms y no es decorativo para el jugador**: es la
+> anticipación. El comentario de `crateRoulette.ts:23-43` explica por qué el frenado es
+> lo que da emoción y por qué 7.000 ms serían solo más espera.
+>
+> **Pero el skip no es "quitar la animación": es "saltar al final".** El premio ya está
+> decidido y aplicado antes de que empiece el trompo (F10), así que saltar es seguro:
+> solo hay que terminar la transición en la casilla ganadora y enseñar el cartel. El
+> riesgo real es el doble clic: si se puede saltar, salta **una** ruleta y se come las
+> que hay debajo.
+>
+> El interruptor tiene que ser persistente (un `check`, como pides) y su sitio natural
+> es el perfil o un panel de ajustes, no el modal de la ruleta: un control dentro de
+> algo que se puede saltar no se alcanza nunca.
+
+### F18 · Abrir varias cajas de golpe
+
+Poder abrir cajas simultáneamente si el espacio del almacén me da.
+
+> **La condición que pones es la correcta y ya está resuelta en el motor:**
+> `hasSpace()` (`crateLoot.ts:355`) y `addToWarehouse` son los que deciden, así que "si
+> el espacio me da" se puede preguntar antes y no hay que bloquear nada.
+>
+> **Lo que hay que decidir es qué pasa con las que no caben**, y hay tres lecturas:
+> abrir tantas como quepan y decir cuántas sobraron, **parar** en cuanto no quede sitio,
+> o **meter en cola** las que no caben para cuando liberes espacio. La tercera es la
+> mejor jugable y la más cara, porque necesita un sitio donde vivan las pendientes —y
+> ya hay uno: la `materializePendingCrates()` que materializa las cajas al cargar
+> (`gameLoop.ts:1587`) arrastra un "pendientes" desde antes de este lote.
+>
+> **Y ojo con el trompo**: abrir cinco cajas son cinco trompos de 5,2 segundos, que son
+> 26 segundos de espera. F17 es la condición para que esto sea usable: sin poder saltar
+> el trompo, abrir cajas en lote es un castigo.
+
+### F19 · Los logros de las cajas son un item que hay que usar
+
+Los logros que salen en las cajas son un item que tengo que usar para que me dé el
+logro. Esto es así porque más adelante se va a poder tradear.
+
+> **Cambia el modelo entero de logros, no es un ajuste.** Hoy un logro se cumple solo
+> cuando se cumple su condición (`achievements.ts:187-198`), y por eso existe un
+> logro "Cien cajas. Ni una más." que aparece por abrir cajas. Con esto, **la caja te
+> da un item y el logro llega cuando lo usas**: alguien más puede pasártelo y lo
+> desbloqueas tú sin abrir 100 cajas.
+>
+> **El motivo que das —el intercambio— es de peso, pero conviene dejarlo escrito,
+> porque tiene un coste:** un logro se puede tirar, y "tirar un logro" es una cosa rara
+> que hay que decidir de verdad. Si se puede regalar, alguien puede regalar logros que no
+> quiere, y el resumen del perfil y el ranking dirán cosas distintas de lo que el
+> jugador hizo (un logro pesa 50.000 puntos, y uno secreto 250.000).
+>
+> **Lo que hay que decidir antes:** qué pasa con el item si ya tienes el logro (se vende,
+> se guarda, no se puede usar dos veces), y si los logros **seguros** son tradeares o
+> solo los de caja. Los quince actuales llegan todos por la vía directa.
+
+### F20 · Elegir imagen de perfil: cinco, y packs e logros como fuentes
+
+Permitamos elegir una imagen entre varias 5 a los jugadores en su perfil. Son como
+iconos, se pueden desbloquear o comprar en un pack aleatorio, y **algunos salen en
+logros**. Se podrá tradear más adelante.
+
+> **El avatar ya existe como sitio, pero no guarda nada:** `identityCard()` monta tres
+> capas y el centro son **las dos iniciales del nombre** (`profilePage.ts:54,72`). El
+> hueco para la imagen está ahí, y es el `.avatar-core` del `.avatar-stack`
+> (`style.modules.css:192`).
+>
+> **Encaja con el sistema que ya hay:** es un cuarto tipo de cosmético al lado de título,
+> marco y banner, y ya están las cuatro piezas que hacen falta: `COSMETICS_BY_TYPE()`
+> para la rejilla, `unlockCosmetic()` para el desbloqueo, `rollCrateCosmetic()` para el
+> pack, y los logros de caja para los que se ganan jugando. Lo que **no** existe y hay
+> que añadir: el "pack aleatorio" como producto comprable (hoy las cajas lo son, y eso ya
+> es exactamente lo que se pide) y la fuente de los logros.
+>
+> **Un aviso de privacidad, porque esto va justo donde B8 y no lo resuelve por
+> accidente:** una imagen de perfil es lo primero que se ve de un jugador en el ranking,
+> y es **lo primero que hay que poder leer de un documento ajeno**. La arquitectura
+> correcta es que la imagen viaje en el documento público de la identidad —el mismo
+> donde irá la tarjeta de B8—, no en el guardado privado.
+
+### F21 · Los logros de caja necesitan un nombre y no un "???"
+
+*(Sale de F19.)*
+
+> Los dos secretos (`ghost` y `hidden`) se llaman `???` con la descripción "Un logro
+> que nadie te pidió completar." (`achievements.ts:153,167`). Si van a ser **items que
+> se usan y se traded**, un logro sin nombre no se puede ni buscar, ni regalar, ni
+> revelar. Y la fecha de revelación —al recibirlo, al usarlo, o al intentar usarlo dos
+> veces— es una decisión, y es buena: es el momento que hoy no existe.
+
+### F22 · Sin poder comparar, media lista es trabajo a medias
+
+*(No es una petición del lote: es la consecuencia de hacerlo todo, y está aquí para que
+no se pierda.)*
+
+> Si se pueden abrir cajas en lote (F18), ver el perfil de otro (B8), llevar un avatar
+> propio (F20) y tener logros que se regalan (F19), **el juego se vuelve competitivo y no
+> hay ninguna forma de comparar tu partida con la de otro**: el ranking solo da una
+> puntuación compuesta.
+>
+> Con los bancos que ya hay sale casi gratis: los 17 bancos miden precios por tier,
+> progresión y curvas. Lo que falta es una vista de la partida de un jugador —su mejor
+> recolector, sus compañeros, su árbol— con la tuya al lado.
+
 ---
 
 ## Balance y dificultad
@@ -321,21 +656,29 @@ arriba lo tocan:
 | F1-F3 valoración | `gameLoop.ts`, `ui/playerPanel.ts`, `data/valuation.ts` |
 | F4 buffs | `gameLoop.ts`, `ui/buffHud.ts`, `data/items.ts` |
 | F5-F6 cajas y llaves | `gameLoop.ts`, `data/items.ts`, `components/crateLoot.ts` |
-| F7 slots de compañero | `gameLoop.ts`, `components/store.ts`, `data/prestige.ts` |
+| **B6-B7 las llaves** | `data/items.ts`, `data/store.ts`, `components/crateLoot.ts` — **ya no el motor** |
+| F7-F11 slots de compañero | `gameLoop.ts`, `components/store.ts`, `data/store.ts` |
 | B1 primer slot | `gameLoop.ts`, `ui/playerPanel.ts` |
 | F8-B2 marco y banner | `gameLoop.ts` (un `setDoc`), `components/rankings.ts`, `services/rankingService.ts` |
 | **B3-B4 cartel y pista de logros** | `gameLoop.ts` (`checkAchievements`), `main.ts`, `achievements.ts`, `ui/profilePage.ts` |
+| **B9 AFK solo** | `gameLoop.ts` (el tick), y `AFK_THRESHOLD_MS` |
+| F12 modal de compra | `gameLoop.ts` (`buyStoreItem`), `components/store.ts` |
+| F14 comprar por cantidad | `gameLoop.ts`, `components/store.ts` |
+| F15 desglose de cosméticos | `ui/profilePage.ts` — **no toca el motor** |
+| F18 abrir cajas en lote | `gameLoop.ts` (`openCrateBox`), `components/warehouse.ts` |
 | P1-P3 balance | `gameLoop.ts`, `data/tiers.ts`, `data/prestige.ts` |
 
-Siete de siete grupos sobre el mismo fichero significa que **con varios agentes a la
+Nueve de nueve grupos sobre el mismo fichero significa que **con varios agentes a la
 vez se pisan**, y un conflicto ahí no es un conflicto de texto: es economía. Un
 `Math.floor` que se mueve cambia el juego y los bancos siguen en verde.
 
-**Las dos excepciones, y por eso pueden ir en cualquier momento:** F8-B2 toca
+**Las excepciones, y por eso pueden ir en cualquier momento:** F8-B2 toca
 `gameLoop.ts` pero solo en el bloque del `setDoc` de `rankings/{uid}` (dos campos
-más), y el resto del trabajo vive en `rankings.ts`. Y **F9-F10 no tocan el motor**:
-F9 es una decisión de dónde enseñar una pista que ya existe, y F10 es una decisión
-sobre si se toca la mecánica del trompo (mi recomendación es que no).
+más), y el resto del trabajo vive en `rankings.ts`. **B6-B7 ya no tocan el motor**:
+con la mudanza del paso 3 las llaves viven en `data/items.ts`, así que el nudo de las
+llaves se puede desatascar sin tocar el fichero de 3.242 líneas. Y **F9, F10, F13, F15,
+F20, F21 y F22 tampoco**: F15 es una línea de `profilePage.ts`, F13 y F20 son
+contenido, F9-F10-F21-F22 son decisiones.
 
 ### Los cuatro pasos
 
@@ -354,6 +697,30 @@ sobre si se toca la mecánica del trompo (mi recomendación es que no).
    cumplir, y `data/items.ts` llegaba a hacer `import type { CrateType } from
    '../gameLoop'`.
 4. **F1-F8**, que ya tocan menos sitio.
+
+### Lo que cambió con el lote del 20 de octubre
+
+El paso 3 está hecho, así que **el cuello de botella ya no es el mismo** y el orden
+anterior hay que corregirlo:
+
+- **Lo primero ya no es una feature: es B6-B7, las llaves.** No porque sea la más
+  urgente, sino porque es la única que hace el juego **imposible de completar**: la
+  caja legendaria no tiene llave en ninguna parte del juego. Un tramo entero del
+  contenido no existe. Y tiene la virtud de que ya no toca el motor, así que se
+  puede hacer con el árbol en paz.
+- **Después, B9 (AFK solo) y B3 (el cartel de logro).** Los dos sonmedianteros: son
+  medianos y R10, que es una regla, no una opinión.
+- **F17 y F18 van juntas, en ese orden.** Abrir cajas en lote sin poder saltar el
+  trompo son 26 segundos de espera por tanda: F17 es la condición de F18.
+- **F11 antes que F12.** El tope de 6 toca la tabla de ranuras, y F12 necesita la
+  tabla de compras que F11 ya toca. Juntas, una sola pasada por `store.ts`.
+- **F13 y F20 son contenido, y pueden ir cuando quieras.** No dependen de nada y son
+  las que más te pagan.
+- **F19 y F21 juntos, y son los últimos.** Cambian el modelo de logros entero, y
+  F21 (el nombre de los secretos) sale de F19.
+- **B8 es una decisión tuya antes que una línea de código**, porque es una de
+  privacidad: es lo único del lote que no debería hacer un agente sin que le digas
+  qué has decidido.
 
 ### El paso 3 en detalle: qué se mudó
 
@@ -408,6 +775,11 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
 - [x] **Paso 3 · las tablas fuera de `gameLoop.ts`.** A `data/store.ts`,
       `data/buffs.ts`, `data/generators.ts` y `crafting.ts`. Ningún `data/` importa
       ya del motor.
+- [x] **F1-F3 · la valoración y el desglose del daño a la vista.** La valoración
+      del almacén va abierta (sigue pudiéndose cerrar) y ahora también está en el
+      panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
+      y las tres partes suman el total exacto porque las calcula el motor, no la
+      vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
 - [x] **B5 · el trompo ya no explica cómo está hecho por dentro.** Los dos textos
       que lo hacían —la tarjeta de la llave en la tienda y el modal de confirmar
       abrir caja— cuentan ahora lo que vive el jugador. La mecánica no se ha tocado:

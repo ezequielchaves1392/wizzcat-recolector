@@ -737,7 +737,14 @@ function renderPlayerPanel(state: any) {
   const ingresoDe = typeof activeGameInstance?.getCompanionOutput === 'function'
     ? (id: string) => activeGameInstance.getCompanionOutput(id)
     : undefined;
-  renderPanel(state, realDamage, slots, ingresoDe);
+  // El desglose del daño también lo da el motor, partido en base, nivel y bonos.
+  // La vista no lo deduce restando: si lo hiciera, un buff que expirara entre el
+  // pintado y la lectura haría que las partes no sumaran el total, que es
+  // justo el descuadre que esto viene a arreglar.
+  const desgloseDe = typeof activeGameInstance?.getClickDamageBreakdown === 'function'
+    ? () => activeGameInstance.getClickDamageBreakdown()
+    : undefined;
+  renderPanel(state, realDamage, slots, ingresoDe, desgloseDe);
 }
 
 // Cuánto vive en pantalla un "+X" flotante. El companion click usa un valor
