@@ -69,7 +69,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 17 bancos = 1153 pruebas (el total varía ±1: una prueba es condicional)
+npm run verify    # 17 bancos = 1162 pruebas (el total varía ±1: una prueba es condicional)
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en

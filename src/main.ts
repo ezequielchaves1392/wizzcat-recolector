@@ -983,8 +983,14 @@ function showCompanionClickInCollector(power: number) {
 // ingreso pasivo entra entero y de una vez cada segundo (`msParaCobroPasivo`),
 // así que el segundo es la unidad real del cobro: un aviso por segundo y un
 // bloque por segundo son la misma cosa, y montarlo como evento del motor sería
-// una segunda vía para lo que el tick ya resuelve. Lo que sí estaba mal era la
-// CIFRA, y de eso se encarga el motor (ver `getCompanionOutput`).
+// una segunda vía para lo que el tick ya resuelve.
+//
+// LO QUE YA NO SE DECIDE AQUÍ. Antes esta función recorría los compañeros por su
+// cuenta y se quedaba con los de tipo `click`, así que los `passive` no
+// anunciaban nada: el Avatar del Vacío —power 65— salía de una caja, se
+// equipaba, y no aparecía nunca. La pregunta de QUIÉN avisa la responde ahora el
+// motor (`getAnunciablesIngreso`), que es donde vive la regla y donde un banco
+// puede comprobarla. Aquí solo se pinta lo que el motor dice que pintan.
 let avisoIngresoInterval: number | null = null;
 
 function avisoDeIngreso(game: any) {
@@ -995,23 +1001,23 @@ function avisoDeIngreso(game: any) {
   // Solo en la vista principal: en las demás el recolector no existe.
   if (!document.querySelector('#click-btn')) return;
 
-  const state = game.getState();
-  const clickCompanions = state.activeCompanions
-    .map((compId: string) => state.companions.find((c: any) => c.id === compId))
-    .filter((c: any) => c && c.type === 'click');
+  // El motor decide la lista y la cifra. El respaldo es para un motor viejo que
+  // no tenga el método: entonces se cae al reparto simple de los `click`, que
+  // es como funcionaba antes y es mejor que no pintar nada.
+  const anunciables = typeof game.getAnunciablesIngreso === 'function'
+    ? game.getAnunciablesIngreso()
+    : (game.getState().activeCompanions as string[])
+        .map((id: string) => game.getState().companions.find((c: any) => c.id === id))
+        .filter((c: any) => c && c.type === 'click')
+        .map((c: any) => ({ id: c.id, cantidad: c.power }));
 
-  clickCompanions.forEach((comp: any, index: number) => {
-    // Lo que aporta ESTE compañero, ya con multiplicadores y con el reparto
-    // justo de la fracción. Se pintaba `comp.power`, que es su valor desnudo:
-    // con un multiplicador de 1,5 la ficha decía "+3 /s" y el contador subía
-    // 4,5, así que el "+3" flotante era una cifra que no había entrado en la
-    // cuenta. Y como el ingreso es UN bloque por segundo, la suma de estos
-    // números es exactamente lo que sube el contador.
-    const aporta = typeof game.getCompanionOutput === 'function'
-      ? game.getCompanionOutput(comp.id)
-      : comp.power;
+  anunciables.forEach((a: { id: string; cantidad: number }, index: number) => {
+    // Escalonado para que dos números a la vez no se pisen. El hueco es de 100 ms
+    // y el bloque de texto dura bastante más, así que con muchos compañeros
+    // activos se solapan; eso lo resuelve `showFloatingText`, que retira el más
+    // viejo cuando se llega al tope.
     setTimeout(() => {
-      showCompanionClickInCollector(aporta);
+      showCompanionClickInCollector(a.cantidad);
     }, index * 100);
   });
 }

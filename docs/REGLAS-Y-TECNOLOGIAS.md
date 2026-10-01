@@ -1,4 +1,4 @@
-﻿# Reglas y tecnologías del proyecto
+# Reglas y tecnologías del proyecto
 sin resolver.
 | `balanceCheck` | **Que el precio siga al poder, y que no se rompa en silencio.** El coste por punto de poder es la regla entera: tiene que SUBIR con el tier —150 en T1 hasta ~416 en T10, el sobreprecio deliberado del que habla el código—, y **un tier superior NUNCA puede salir mejor por punto que el anterior**. Esa segunda regla es la que ata el bug real: los precios escalaban 1.5x y el poder 1.62x, así que el T10 salía a 38 por punto contra 142 del T1, y comprarlo era 3.7x más rentable que comprar T1. También que compañero y recolector cuesten lo mismo (mismo `TIER_SYSTEM.ranges`), que el final de la partida se estire (los dos últimos tiers son más de la mitad del total) y que sintonizar no sea un botón (nivel 20 cuesta ~47% del recolector, no un 4%). | 29 |
 # Reglas y tecnologías del proyecto
@@ -702,7 +702,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los **17 bancos** dan **1153 pruebas**, todas en verde.
+   cambiar nada. Los **17 bancos** dan **1162 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

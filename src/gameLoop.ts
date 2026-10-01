@@ -2226,6 +2226,34 @@ function syncMaterialCounters() {
      */
     getCompanionOutput: (companionId: string) => ingresoPorCompanion.get(companionId) ?? 0,
     /**
+     * Qué compañeros anuncian su ingreso, y cuánto.
+     *
+     * POR QUÉ ESTA FUNCIÓN Y NO UN FILTRO EN LA VISTA. Antes la vista recorría
+     * los activos buscando los de tipo `click` y pintaba un "+N" para cada uno.
+     * El efecto: **los compañeros `passive` no anunciaban nunca**. De los cinco
+     * compañeros de caja, tres son `passive` —y entre ellos el Avatar del
+     * Vacío, power 65, el mayor ingreso individual del juego—, así que
+     * comprarlo y equiparlo no producía ninguna señal. El jugador veía su
+     * ingreso en el HUD y los números flotantes de un compañero que no
+     * aparecía, y no tenía forma de saber por qué.
+     *
+     * La regla es "anuncia quien paga directo". Un `passive` paga, con lo que
+     * cobra el bloque de cada segundo. Un `multiplier` NO paga: multiplica el
+     * de los demás, así que no tiene cifra propia que enseñar, y por eso sigue
+     * fuera.
+     *
+     * Y que la decisión sea del MOTOR y no de la vista es lo que la hace
+     * comprobable: la regla queda en un sitio (R2) y `senalCheck` puede mirarla
+     * sin DOM, cosa que un filtro dentro de `updateUI()` no permite.
+     */
+    getAnunciablesIngreso: (): { id: string; cantidad: number }[] =>
+      state.activeCompanions
+        .map(id => ({ id, cantidad: ingresoPorCompanion.get(id) ?? 0 }))
+        .filter(x => {
+          const comp = state.companions.find((c: any) => c.id === x.id);
+          return comp && comp.type !== 'multiplier';
+        }),
+    /**
      * Los clicks del árbol que aún no se han anunciado, y vacía la cola.
      *
      * Vaciar en el mismo acto es lo que evita el doble anuncio: la nota se

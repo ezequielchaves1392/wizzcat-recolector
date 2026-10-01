@@ -359,6 +359,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 23 | Los clics automaticos del arbol no tenian ninguna senal | **arreglada** |
 | 24 | El precio de las cartas NO seguia al poder: el T10 salia 3,7x mas rentable que el T1 | **arreglada** |
 | 25 | Sintonizar un recolector a nivel maximo costaba un 4% del item: no habia decision | **arreglada** |
+| 26 | Los companeros de tipo `passive` no anunciaban su ingreso: el Avatar del Vacio (power 65) salia de una caja y no mostraba nada | **arreglada** |
 
 ### 21. La sintonización no tenía ruleta — ARREGLADA
 
@@ -513,7 +514,7 @@ DOM de verdad.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado, el botín y el ritmo del cobro**,
-no el pintado ni la navegación. **17 bancos, 1153 pruebas.** El total varía en ±1
+no el pintado ni la navegación. **17 bancos, 1162 pruebas.** El total varía en ±1
 según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que
 depende del botín. Queda fuera a propósito:
 

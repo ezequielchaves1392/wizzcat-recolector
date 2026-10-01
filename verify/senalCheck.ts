@@ -332,6 +332,100 @@ async function main() {
       'salida=' + g.getCompanionOutput?.('no_existe'));
   }
 
+  // -----------------------------------------------------------------------
+  //  7. QUIEN ANUNCIA SU INGRESO.
+  //
+  //     Esta es la regla que rompio B1. La vista filtraba por `type === click` y
+  //     se quedaba sin pintar los `passive`, asi que el Avatar del Vacio -power
+  //     65, el mayor ingreso individual del juego- no producia ninguna senal:
+  //     salia de una caja, se equipaba, y no aparecia nada. El jugador no tenia
+  //     forma de saber si el companero estaba mal o si era el juego.
+  //
+  //     La regla ahora es "anuncia quien paga directo": los `passive` y los
+  //     `click` avisan, los `multiplier` no, porque multiplican a los demas y no
+  //     tienen cifra propia.
+  // -----------------------------------------------------------------------
+  {
+    // Los cinco companeros de caja REALES, con su tipo y su power. Si se anadiera
+    // uno nuevo y no estuviera en esta lista, este banco dejaria de mirarlo, y esa
+    // es la forma exacta de que el bug vuelva.
+    const DE_CAJA = [
+      { id: 'fantasma', nombre: 'Fantasma Cuantico', type: 'multiplier', power: 0.35 },
+      { id: 'oraculo', nombre: 'Oraculo Tribal', type: 'multiplier', power: 0.75 },
+      { id: 'avatar', nombre: 'Avatar del Vacio', type: 'passive', power: 65 },
+      { id: 'fenix', nombre: 'Fenix de Datos', type: 'passive', power: 40 },
+      { id: 'centinela', nombre: 'Centinela Eterno', type: 'click', power: 32 }
+    ];
+
+    for (const c of DE_CAJA) {
+      const g = await boot(baseSave([collector('r1')], {
+        nanites: 0,
+        totalNanitesProduced: 0,
+        companions: [ficha(c.id, 3, { power: c.power, type: c.type })],
+        activeCompanions: [c.id]
+      }));
+
+      const lista = typeof g.getAnunciablesIngreso === 'function' ? g.getAnunciablesIngreso() : [];
+      const anuncia = lista.map((a: any) => a.id);
+      const debeAnunciar = c.type !== 'multiplier';
+
+      check(
+        `${c.nombre} (${c.type}) ${debeAnunciar ? 'anuncia' : 'NO anuncia'}`,
+        debeAnunciar ? anuncia.includes(c.id) : !anuncia.includes(c.id),
+        `anunciables=[${anuncia.join(', ')}] ingreso=${g.getState().passiveIncome}`
+      );
+
+      // Y si anuncia, que anuncie la cifra REAL y no su power desnudo: el mismo
+      // descuadre que el reparto, aplicado al aviso.
+      if (debeAnunciar) {
+        const cuota = lista.find((a: any) => a.id === c.id);
+        check(`${c.nombre}: y su aviso lleva la cifra que entra en la cuenta`,
+          cuota?.cantidad === g.getState().passiveIncome,
+          `aviso=${cuota?.cantidad} ingreso=${g.getState().passiveIncome} power=${c.power}`);
+      }
+    }
+
+    // El multiplicador NO debe tragarse a los demas: si alguien cambiara la regla
+    // a "todos los activos", el multiplicador empezaria a pintar un numero que no
+    // es suyo, y este banco lo canta.
+    {
+      const g = await boot(baseSave([collector('r1')], {
+        nanites: 0,
+        totalNanitesProduced: 0,
+        companions: [
+          ficha('mx', 3, { power: 0.5, type: 'multiplier' }),
+          ficha('av', 3, { power: 65, type: 'passive' })
+        ],
+        activeCompanions: ['mx', 'av']
+      }));
+      const anuncia = (g.getAnunciablesIngreso?.() ?? []).map((a: any) => a.id);
+      check('con un multiplicador al lado, el passive sigue anunciando',
+        anuncia.includes('av') && !anuncia.includes('mx'),
+        `anunciables=[${anuncia.join(', ')}]`);
+    }
+
+    // Y que la suma de lo anunciado sea exactamente lo que cobra el bloque. Si
+    // manana un companero pagara una parte al bloque y otra a otro sitio, esto se
+    // abre, que es justo lo que el jugador no podria ver.
+    {
+      const g = await boot(baseSave([collector('r1')], {
+        nanites: 0,
+        totalNanitesProduced: 0,
+        companions: [
+          ficha('a', 1, { power: 6, type: 'click' }),
+          ficha('b', 3, { power: 18, type: 'passive' }),
+          ficha('c', 5, { power: 42, type: 'passive' })
+        ],
+        activeCompanions: ['a', 'b', 'c']
+      }));
+      const suma = (g.getAnunciablesIngreso?.() ?? [])
+        .reduce((a: number, x: any) => a + x.cantidad, 0);
+      check('lo que anuncian los tres suma el ingreso del bloque',
+        suma === g.getState().passiveIncome,
+        `anuncian=${suma} ingreso=${g.getState().passiveIncome}`);
+    }
+  }
+
   resumen('senal: lo que se enseña es lo que se cobra');
 }
 
