@@ -4,7 +4,10 @@ Historial **macro**: qué cambió de verdad en el juego y por qué, no el detall
 fichero. El detalle está en los mensajes de commit (`git log`) y en las cabeceras
 `// ===...===` de cada módulo.
 
-Rama: `main`. Último commit: `ce3a346` (fase 8).
+Rama: `main`. Último contenido: **`v1.1.0`** (fase 11), **publicado** — tag en
+GitHub y juego en GitHub Pages. Detrás van dos commits de mantenimiento:
+`3021eab` (el despliegue) y `8ae5b91` + `ba4bc91` (los artefactos que el
+`.gitignore` cubría pero no expulsaba del índice).
 
 > **Aviso importante sobre el estado del repositorio.** A la hora de escribir esto
 > el árbol de trabajo tenía **un lote sin commitear** —la fase 8: la ruleta del

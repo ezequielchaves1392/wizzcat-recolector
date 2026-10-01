@@ -44,15 +44,25 @@ tocarla, para que no viva solo en una conversación.
 
 ### 2. `git status` y `git diff` antes de investigar
 
-El working tree es la referencia, **no el último commit**. Rama `main`. El último
-lote —la ruleta del sintonizador, la refactorización de la ruleta de cajas en tres
-ficheros y la retirada del botón de huecos del almacén— entró en `ce3a346` y está
-descrito como fase 8 de `docs/CAMBIOS-MACRO.md`.
+El working tree es la referencia, **no el último commit**. Rama `main`.
+
+**Estado a 1 de octubre de 2026:** `v1.1.0` está **publicado** —tag en GitHub y
+juego en GitHub Pages con `.github/workflows/publicar.yml`—. Es la fase 11 de
+`docs/CAMBIOS-MACRO.md`: el contenido inalcanzable (llaves, cristales, Espectro
+Azulado), el AFK automático, el cartel de logro, la valoración a la vista y el
+rebalanceo de la fase 10. La lista de lo implementado está en el apartado
+**v1.1.0** de `docs/PENDIENTES.md`.
 
 Aun así, **comprueba `git status` antes de dar por buena cualquier afirmación
 sobre el estado del repo**: el árbol puede ir por delante del último commit, y
-fue justo lo que pasó durante la fase 8. Si hay algo sin commitear, manda el
-working tree.
+fue justo lo que pasó dos veces (la fase 8 sin commitear, y `8ae5b91`, que
+escribió las reglas del `.gitignore` sin ejecutar el `git rm --cached` que las
+hace cumplir). Si hay algo sin commitear, manda el working tree.
+
+Y una trampa de este repo, ya pagada dos veces: **una regla del `.gitignore` no
+des-rastrea nada**. Si un fichero ya está en el índice, hay que quitarlo con
+`git rm --cached` explícitamente, y `git check-ignore` sobre un fichero
+rastreado sale con código 1 y parece que la regla no existe.
 
 ### 3. Comprueba si hay otro agente trabajando
 
@@ -69,7 +79,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 22 bancos = 1391 pruebas (el total varía ±1: una prueba es condicional)
+npm run verify    # 22 bancos = 1399 pruebas (el total varía ±1: una prueba es condicional)
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
