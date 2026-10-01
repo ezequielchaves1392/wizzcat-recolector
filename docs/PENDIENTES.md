@@ -497,7 +497,7 @@ miente.
 > pista **llegue al tope por el árbol** (20 con capacidad 26) y que sin árbol sea
 > exactamente la base. `toastCheck` pasó de 25 a 31.
 
-### B5 · Las tarjetas de la tienda contaban cómo está hecho el trompo
+### B5 · Las tarjetas de la tienda contaban cómo está hecho el trompo — HECHO
 
 Este es el texto de la imagen: "Abrir una da una tirada de ruleta con el botín ya
 decidido antes de girar".
@@ -1898,23 +1898,64 @@ Los cristales de mejora valen muy baratos, es muy fácil mejorar los ítems...
 _Cualquier cosa que surja implementando otra cosa y haga falta decidir. Se van
 apilando aquí al final, y se suben a "Features" cuando toca hacerlas._
 
+### El despliegue a GitHub Pages falla, y no es el código
+
+Los tres pushes desde `3021eab` han construido bien y **han fallado al
+publicar**, siempre en el mismo paso:
+
+```
+[5] Construir (solo la página del juego)          -> success
+[6] Comprobar que admin.html NO se ha publicado    -> success
+[7] actions/configure-pages                       -> FAILURE   <-- aqui
+[8] actions/upload-pages-artifact                 -> skipped
+```
+
+Los pasos que dependen del código están los dos en verde, y el que falla es el
+primero que habla con GitHub. La causa es que **Pages no está activado en el
+repo**: la API contesta `has_pages: false` y `/pages` da 404. Y la URL del
+juego, `https://ezequielchaves1392.github.io/wizzcat-recolector/`, devuelve
+**"Site not found"**.
+
+**Y esto es lo que hay que hacer, y es lo único que falta.** No lo puede hacer
+un commit: es un ajuste del repo.
+
+1. **Settings → Pages → Source → *GitHub Actions***. Con eso `configure-pages`
+   deja de fallar y los tres pushes siguientes publican solos.
+2. **Y el dominio en Firebase Auth → Authorized domains**, porque si no el login
+   va a fallar. El juego se sirve desde un subcamino
+   (`.../wizzcat-recolector/`), y Firebase compara el dominio entero.
+
+> **Por qué está aquí y no en un commit.** El workflow es correcto y la red que
+> tiene encima funciona: `tsc` es puerta de entrada, y hay un paso que **falla
+> el despliegue si `dist/admin.html` existe**. Los dos pasaron. Lo único que
+> falla es la activación manual, que el commit `3021eab` ya decía en su cuerpo:
+> *"Lo que falta y es de la cuenta del usuario"*. Lo que faltaba era mirarlo.
+
 ---
 
 ## v1.1.0 - 1 de octubre de 2026
 
 **Esta versión cambia el juego en cinco sitios y arregla cinco bugs que no se veían.**
 Lo que hay abajo no es una lista de deseos: es lo que **está implementado y verificado**
-en el tag 1.1.0.
+en el tag `v1.1.0`.
+
+> **Ojo con una cosa que este apartado daba por hecha y no era verdad:** el tag está
+> en GitHub, pero **el juego todavía no está publicado**. Los tres pushes han
+> fallado en `configure-pages` porque Pages no está activado en el repo. Está
+> escrito con el paso a paso en **Tareas añadidas durante el trabajo**.
 
 ### Arreglado
 
 - **La caja legendaria ya se puede abrir.** No tenías llave. Ahora existe (18cf36d).
 - **El AFK se pone solo** mirando la pantalla, y el ratón deja de despertarlo (ec3fb01).
-- **El cartel de logro aparece**, y su pista mide el almacén que ves (04ab9f).
+- **El cartel de logro aparece**, y su pista mide el almacén que ves (a04ab9f).
 - **Ya no hay buffs pasivos**, solo tarjetas (2e42e7d).
 - **Escuadra de 6 ranuras**, sin el +3 de golpe (77d8f6e).
 - **Las cajas tienen un peldaño de sorpresa**, y el Espectro Azulado ya sale (42aa3a5).
 - **La valoración y el desglose del daño** están a la vista (7843a52).
+- **El segundo prestigio dice cuánto falta** para el siguiente núcleo (b3ea2de).
+- **Los compañeros `passive` anuncian su ingreso**, que antes no producían ninguna
+  señal (7b6def9).
 
 ### Decidido y especificado, sin implementar todavía
 
@@ -2058,51 +2099,105 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       del árbol tienen señal.
 - [x] La ruleta del sintonizador, y la de las cajas partida en tres ficheros
       (`ce3a346`).
-- [x] **P1-P3 · balance.** El precio de las cartas sigue al poder y sube con el
-      tier; sintonizar ya no es un botón. `balanceCheck` (29) es el banco nuevo.
-- [x] **B1 · los compañeros `passive` no anunciaban su ingreso.** Regla movida al
-      motor. `senalCheck` pasó de 30 a 36.
-- [x] **Paso 3 · las tablas fuera de `gameLoop.ts`.** A `data/store.ts`,
+Todo lo de abajo está **en el historial y verificado**, no en un árbol sin
+commitear. La tabla de bancos y commits se comprobó contra `git log` uno por uno.
+
+### La economía y el ritmo (`v1.1.0`)
+
+- [x] **P1-P3 · balance** (`dd12b6e`). El precio por punto de poder **bajaba** con
+      el tier, así que el T10 salía 3,7x más rentable que el T1 y la partida se
+      resolvía sola en 20 minutos. Ahora el coste por punto **sube** 12% por tier
+      (150 → 416), recolector y compañero cuestan lo mismo porque sacan el poder
+      de la misma tabla, y sintonizar dejó de ser un botón. `balanceCheck` (29),
+      que ata que un tier superior nunca sea mejor por punto que el anterior.
+- [x] **Paso 3 · las tablas fuera de `gameLoop.ts`** (`839595b`). A `data/store.ts`,
       `data/buffs.ts`, `data/generators.ts` y `crafting.ts`. Ningún `data/` importa
-      ya del motor.
-- [x] **F1-F3 · la valoración y el desglose del daño a la vista.** La valoración
-      del almacén va abierta (sigue pudiéndose cerrar) y ahora también está en el
-      panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
-      y las tres partes suman el total exacto porque las calcula el motor, no la
-      vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
-- [x] **F6 · probabilidad baja de tier superior en las cajas, y D1.** El salto es
-      una entrada de la tabla de botín (así la ruleta puede pintarlo), sube un peldaño
-      y sale entre el 3% y el 6% real según la caja. El Espectro Azulado ya sale de la
-      legendaria. `saltoCheck` (42).
-- [x] **F4 · fuera los buffs pasivos, solo tarjetas.** No era que fueran buffs: es
-      que un buff pasivo activo anula el corte del AFK, así que compraban ingreso sin
-      mirar. El efecto sigue en el motor para las partidas viejas. `tarjetaCheck` (17).
-- [x] **F7-F11 · escuadrón de 6 con las ranuras en una tabla.** Tres cartas, tope
-      6, ningún salto de +3, y el número de ranuras en un solo sitio. `ranuraCheck`
-      (34) es el banco nuevo.
-- [x] **B3-B4 · el cartel de logro y su pista.** La compra de ampliar el almacén ya
-      evalua logros (era la única de las diez rutas que no), el cartel se encola
-      cuando todavía no hay layout y se vacía en cuanto lo hay, y la pista mide la
-      capacidad real con el árbol. `toastCheck` pasó de 25 a 31.
-- [x] **B9 · el AFK se pone solo estando en la pantalla.** La pregunta va en el
-      tick, no en el manejador de presencia; el `mousemove` ha dejado de contar como
-      actividad (hacía el AFK inútil); el umbral sube a 60 s. `tickCheck` pasó de 14
-      a 20.
-- [x] **B6-B7-F5 · las llaves.** La cadena cierra: cada caja suelta la llave que
-      la abre, y los cuatro textos se generan con la regla que decide si abre, así
-      que no pueden mentir. Cuatro cartas en la tienda con nombres y precios que
-      ya son los del item. La caja legendaria se puede abrir. Banco nuevo:
-      `llaveCheck` (92).
-- [x] **B5 · el trompo ya no explica cómo está hecho por dentro.** Los dos textos
-      que lo hacían —la tarjeta de la llave en la tienda y el modal de confirmar
-      abrir caja— cuentan ahora lo que vive el jugador. La mecánica no se ha tocado:
-      `ruleta-preview.html` gira, frena y la casilla y el cartel dicen lo mismo.
-      Sin commit todavía.
-- [x] **B12 · el segundo prestigio ya dice cuánto falta (`b3ea2de`).** La vista restaba el
-      umbral del primer núcleo en vez del siguiente (bug de valor: el motor
-      cobraba bien); `coreProgress()` además estaba invertida. El faltante y el
-      progreso salen de `data/prestige.ts`, así que lo enseñado es lo cobrado.
-      `stateCheck` pasó de 212 a 219.
+      ya del motor, que era R29 sin cumplir.
+- [x] **F1-F3 · la valoración y el desglose del daño a la vista** (`7843a52`). La
+      valoración del almacén va abierta (sigue pudiéndose cerrar) y ahora también
+      está en el panel principal. El daño se desglosa en `100 base · +50 nivel ·
+      +37 bonos` y las tres partes suman el total exacto, porque las calcula el
+      motor y no la vista. Banco nuevo: `desgloseCheck` (31).
+
+### El contenido que no se podía conseguir
+
+- [x] **B6-B7-F5 · las llaves** (`18cf36d`). La cadena cierra: cada caja suelta la
+      llave que la abre, y los cuatro textos **se generan** con la regla que decide
+      si abre, así que no pueden volver a mentir. La escalera tenía **tres**
+      peldaños rotos, no dos: la Llave del Vacío no salía de ninguna parte, la
+      Rúnica solo salía de la legendaria, y la épica no soltaba llave ninguna. La
+      caja legendaria ya se puede abrir. Banco nuevo: `llaveCheck` (92).
+- [x] **F6 · el peldaño de sorpresa de las cajas, y D1** (`42aa3a5`). El salto es
+      una entrada más de la tabla de botín —no un `if` al abrir, porque un premio
+      que no está en la tabla la ruleta no lo puede pintar— y sube **un** peldaño
+      solo. Sale entre el 3% y el 6% real según la caja, medido con tiradas de
+      verdad y no mirando el peso. El Espectro Azulado ya sale de la legendaria.
+      Banco nuevo: `saltoCheck` (42).
+
+### Los medianeros: R10 y el cableado
+
+- [x] **B9 · el AFK se pone solo estando en la pantalla** (`ec3fb01`). La pregunta
+      va en el **tick**, no en el manejador de presencia, porque abrir una segunda
+      puerta al cobro es la forma más fácil de que las dos se desincronicen. Y el
+      `mousemove` ha dejado de contar como actividad: estaba registrado, así que
+      **cualquier movimiento del ratón sacaba del AFK** y el corte era casi
+      inútil. El listener se quitó entero y el umbral sube a 60 s.
+      `tickCheck` pasó de 14 a 20.
+- [x] **B3-B4 · el cartel de logro y su pista** (`a04ab9f`). Dos causas, y por eso
+      no había **ni un solo cartel en toda la partida**: la compra que amplía el
+      almacén era la única de las diez rutas que no evaluaba logros, y el cartel se
+      descartaba en silencio porque `#achievement-stack` todavía no estaba en el
+      documento. Ahora hay **cola**: si no hay dónde pintarlo, espera, y se vacía en
+      cuanto hay layout. Y la pista mide `warehouseCapacity + bonus.storageSlots`,
+      la misma regla que `getCapacity()`, así que el logro llega por la vía que el
+      jugador ve funcionar. `toastCheck` pasó de 25 a 31.
+
+### Los que no parecían bugs
+
+- [x] **B1 · los compañeros `passive` no anunciaban su ingreso** (`7b6def9`). La
+      sospecha inicial —que fuera el primer slot— era falsa: la vista filtraba por
+      `type === 'click'`, y de los cinco compañeros de caja tres son `passive`.
+      Entre ellos el **Avatar del Vacío, power 65, el mayor ingreso individual del
+      juego**: comprarlo y equiparlo no producía ninguna señal. La regla
+      ("anuncia quien paga directo") vive ahora en el motor. `senalCheck` 30 → 36.
+- [x] **B12 · el segundo prestigio ya dice cuánto falta** (`b3ea2de`). Bug de
+      **valor**, no de flujo: la vista restaba el umbral del *primer* núcleo en vez
+      del siguiente, así que con 1 M producido en la segunda vuelta la resta daba
+      0 y el botón se apagaba con el motor cobrando bien. Y `coreProgress()` no
+      solo estaba sin usar: estaba **al revés** (1 con 1 M, 0,67 con 2 M). El
+      faltante y el progreso salen de `data/prestige.ts`, así que lo enseñado es lo
+      cobrado. `stateCheck` 212 → 219.
+- [x] **F4 · fuera los buffs pasivos, solo tarjetas** (`2e42e7d`). No era que fueran
+      buffs: es que `isEffectivelyAfk` anula el corte del AFK si hay un buff pasivo
+      activo, así que **un buff pasivo era un pago por no mirar la pantalla** —800
+      nanitas por media hora de ingreso sin estar delante. Eso rompe R10, que es una
+      regla. El efecto **sigue en el motor** para las partidas viejas; se retira la
+      compra, no el buff. `tarjetaCheck` (17), que además ata que nada comprable
+      dure más de 15 minutos.
+- [x] **F7-F11 · escuadrón de 6 con las ranuras en una tabla** (`77d8f6e`). Tres
+      cartas, tope 6, **ningún salto de +3** (antes el segundo compraba 2 → 5 de
+      golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
+      vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
+      `ranuraCheck` (34).
+- [x] **B5 · el trompo ya no explica cómo está hecho por dentro** (`839595b`). Los
+      dos textos que lo hacían —la tarjeta de la llave en la tienda y el modal de
+      confirmar abrir caja— contaban una frase interna, y el jugador dedujo de un
+      texto que la ruleta era un adorno. Ahora cuentan lo que vive el jugador. La
+      mecánica **no se ha tocado** (F10 explica por qué). Comprobado en
+      `ruleta-preview.html`: la casilla, la aguja y el cartel dicen lo mismo.
+
+### Antes de esto
+
+- [x] **El contador deja de enseñar números que nadie cobra** (`558a394`). El
+      ingreso se repartía ya entero entre los que aportan, con el sobrante del
+      redondeo a partes iguales, para que la suma de las fichas sea exactamente
+      `state.passiveIncome`. Y los clics del árbol, que no tenían cartel, ahora lo
+      tienen. `senalCheck` nace aquí.
+- [x] **La ruleta del sintonizador, y la de las cajas partida en tres ficheros**
+      (`ce3a346`). `rouletteSpin.ts` no importa nada, y esa es la razón de que
+      exista: son números puros, que es lo que los hace comprobables en Node.
+      `rouletteCheck` (59) no podría existir si la aritmética hubiera quedado
+      dentro del fichero que levanta el audio y el DOM.
 
 ---
 
@@ -2111,7 +2206,10 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
 _Lo que se decidió no hacer, y por qué. Esto vale más que la lista de "hecho":
 una idea que se descartó con un motivo escrito no vuelve a proponerla nadie._
 
-_(vacío)_
+**Y lo que no es un descarte pero se dejó aquí para que no se pierda:** D1 está
+**resuelto** (era un compañero que nadie sacaba) y D4 es **el patrón** que
+emerge de tres bugs, no una petición. Los dos son decisiones con su porqué, que
+es lo que los hace valiosos aquí.
 
 ### D3 · La llave de una caja no puede ser más cara que la caja
 

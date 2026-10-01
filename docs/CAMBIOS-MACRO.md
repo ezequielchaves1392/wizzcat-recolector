@@ -631,6 +631,53 @@ fallos. El total varía ±1 porque `playthroughCheck` tiene un `check()` condici
 
 ---
 
+## Fase 12 — Publicar, y que casi no se publica (2026-10-01, `3021eab` y después)
+
+`v1.1.0` es la fase 11, y esto es lo que pasó con ella después: el tag existe en
+GitHub y **el juego no está publicado**. Los tres pushes desde `3021eab` han
+fallado, siempre en el mismo paso.
+
+### El fallo, y por qué no lo es del código
+
+```
+[5] Construir (solo la página del juego)          -> success
+[6] Comprobar que admin.html NO se ha publicado    -> success
+[7] actions/configure-pages                       -> FAILURE
+[8] actions/upload-pages-artifact                 -> skipped
+```
+
+Los dos pasos que dependen del código están en verde —incluida la red que
+**falla el despliegue si `dist/admin.html` existe**— y el que falla es el primero
+que habla con GitHub. La API contesta `has_pages: false`, `/pages` da 404, y la
+URL del juego devuelve "Site not found".
+
+**La causa es una casilla sin marcar:** Settings → Pages → Source → *GitHub
+Actions*. Y el propio commit `3021eab` lo decía en su cuerpo, en la última
+línea: *"Lo que falta y es de la cuenta del usuario: activar Pages… y anadir el
+dominio a Firebase Auth"*. Lo que faltaba era mirarlo.
+
+### Por qué el workflow es como es, y no se toca
+
+`publicar.yml` construye con `GH_PAGES=1`, y esa variable decide **dos cosas a
+la vez**: `base: './'` —Pages sirve desde un subcamino— y **quita `admin.html`
+del build**. Y están juntas a propósito: si alguien las separara y creyera que
+`GH_PAGES` solo cambia el `base`, publicaría el botón que borra la base de
+datos.
+
+Lo que hace que esto sea un proyecto y no un ejercicio de `git push` es que el
+despliegue **no depende de acordarse de lanzarlo**: cada push a `main`
+reconstruye. El coste es que un push roto se deployed sin que nadie lo mire
+hasta que alguien mira, que es justo lo que pasó aquí.
+
+### Qué se comprobó
+
+- `npm run build` y `npm run verify`: 22 bancos, **1399 pruebas**, sin fallos.
+- Los tres runs de Actions, leídos por la API: mismo paso, mismo fallo, tres
+  veces. Con los pasos 5 y 6 en `success`.
+- La URL del juego por HTTP: **404, "Site not found"**.
+
+---
+
 ## La forma de los commits
 
 Vale la pena copiar este estilo, porque es el que hace legible el historial:
