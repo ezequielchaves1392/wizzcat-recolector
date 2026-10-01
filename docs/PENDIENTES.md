@@ -1437,6 +1437,110 @@ por cristales**. Y la forja debe pedir **dos** items del mismo tier, no tres.
 > y ahora además es obligatoria: la forja no tiene "acierto", tiene "sale bien o sale mal",
 > así que **perder niveles no puede ser ahí**.
 
+### F34 · Los tres números que quedaban, decididos — y lo que "tiers infinitos" cuesta de verdad
+
+1. Los cristales tienen la misma lógica: **se compran los tier 0 y los otros se obtienen**.
+2. La forja permite llegar a **tiers infinitos**.
+3. **La probabilidad de forjar SUBE con el tier**, y por eso existen las piedras de forja
+   que la aumentan. En tiers altos **no se debe poder llegar al 100%**: un máximo de 75%
+   en un tier alto y casi final. Pero que **sea realmente costoso** y **siempre haya
+   riesgo**.
+4. Y en una mezcla, la calidad del resultante se determina por las características de los
+   dos que se usan: si son dos T1 perfectos, el nuevo sale perfecto; si no, **se promedian**.
+
+> **El punto 3 es el que cambia la tensión del juego entero, y va en contra de lo que
+> entendí antes.** No es "la misma probabilidad y más cristales": **la probabilidad de
+> forjar SUBE con el tier** —los tiers altos son **más fáciles de forjar**— y lo que los
+> hace caros son los **cristales**. Las dos cosas se mueven en direcciones opuestas, y
+> deliberadamente:
+>
+> | Sube el tier | ¿Qué pasa? |
+> |---|---|
+> | Probabilidad de forja | **Sube** (es más fácil sacar el item) |
+> | Coste en materiales | **Duplica** (2ⁿ) |
+> | Coste en cristales | **Sube**, y no se compran (salen de cajas altas) |
+>
+> **Y está medido, pero al revés de lo que se pedía.** Hoy `baseSuccessChance()` hace
+> `Math.max(0.30, 0.78 - (tier - 1) × 0.05)`: **T1 es 78% y baja a 33% en el T10**. O sea
+> que **ahora los tiers altos son MÁS DIFÍCILES de forjar**, y lo que se quiere es lo
+> contrario. Es un cambio de signo en la curva, y es lo que da forma al tramo alto.
+>
+> **Y hay un tope que ya existe y hay que mover.** Hoy `successChance()` acaba en
+> `Math.min(0.95, total)`, y el comentario de las piedras lo dice: "topado a 95%". Lo que
+> se pide es **75% en un tier alto y casi final**. O sea que **el tope baja**, y eso no es
+> un ajuste: es lo que garantiza que **siempre haya riesgo**. Un tope del 95% es un 5% de
+> fracaso; uno del 75% es un 25%.
+>
+> **POR QUÉ ES LA DECISIÓN CORRECTA, y hay un número detrás.** Con 100% de éxito en el
+> tramo final, **la partida se acaba y el jugador no tiene nada que hacer**. Con 75%, el
+> T20 es un objetivo que se **persigue**: tres o cuatro intentos, uno sale, dos se pierden.
+> Y como el material **no se devuelve** —hoy se consumen 3 y en éxito se devuelve 1—, un
+> fallo a 75% en el tramo final cuesta **dos materiales de T19**. Eso es coste real con
+> riesgo real, que son las dos cosas que se piden en la misma frase.
+>
+> **Lo que hay que decidir es la curva, y son dos números:**
+> - **Dónde está el techo de 75% y a partir de qué tier.** "Un tier alto y casi final"
+>     sin número es un techo que se moverá cuando alguien lo toque. Y hay una pregunta que
+>     sale del coste: ¿en qué tier el 25% de fallo cuesta más nanos de los que puedes
+>   recuperar? **Ese es el tier donde el techo tiene que empezar a doler.**
+> - **¿El techo se queda en 75% para siempre, o en los muy altos es más peligroso?** Hoy la
+>   curva baja y se topa; lo que se quiere es que suba y se tope. Y con "tiers infinitos"
+>   hay que decidir qué pasa en el 30: ¿también 75%, o el techo vuelve a bajar?
+>
+> **Y EL PUNTO 4 ES LA MEJOR COSA DE ESTA RONDA.** El resultado se promedia con los dos
+> materiales: dos T1 perfectos dan un T1 perfecto, y si no, el promedio. Eso significa que
+> **mezclar no tiene sorpresa**: un jugador que junta dos imperfectos **sabe** que le va
+> a salir imperfecto. No hay ruleta en la mezcla, hay **una aritmética visible**, y la
+> decisión es "¿tengo dos buenos?". Para un juego de tomar decisiones eso vale más que
+> cualquier número de probabilidad.
+>
+> ---
+> ---
+>
+> **LO QUE "TIERS INFINITOS" COSTA, Y ES TRABAJO REAL, NO UNA FRASE.**
+>
+> Hoy el tier está escrito en **datos literales**, y todo lo que tiene que dar de sí un
+> número que no existe todavía. Con 10 tiers, "no hay más" era una omisión. Con tiers
+> infinitos, **cada uno de estos sitios necesita una regla, no un número**:
+>
+> | Qué | Hoy | Qué necesita "infinito" |
+> |---|---|---|
+> | **El rango de poder** | `TIER_SYSTEM.ranges` es una tabla literal de 1 a 10 (5-7 … 373-559) | **Una fórmula** para el tier 11 y siguientes |
+> | **La rareza** | `rarityByTier` tiene 1-10 y `collectorRarity` hace `Math.min(tier, 10)` | **Dejar de recortar en 10**, o decidir que la rareza sí tiene tope |
+> | **El nombre del item** | `collectorNames` y `companionNames` tienen 3 nombres para 1-10 | **Generar** nombres del 11 en adelante |
+> | **El techo de la forja** | `maxTier = 11`, y `tier >= 11` se rechaza | **Quitar el rechazo** |
+> | **Los saltos de caja** | `TIER_PROPIO` es 1/3/6/8 y el salto es `Math.min(10, ...)` | **Dejar de recortar en 10** |
+> | **La carta de tienda** | `collectorCardT1..T10` | No hace falta: con la tienda en tier 0 solo se compra la T1 |
+> | **El precio de las cartas** | Curva de 10 valores | **No aplica**: con la tienda en tier 0 solo se compra la T1 |
+>
+> **Y AQUÍ ESTÁ EL LÍMITE REAL, Y NO ES UN MURO: SON LOS NÚMEROS.**
+>
+> El poder sube ×1,62 por tier. Con esa razón:
+>
+> | Tier | Poder del rango | En pantalla |
+> |---|---|---|
+> | 10 | 373 - 559 | 559 |
+> | 20 | ~25.000 - ~38.000 | 38,02 K |
+> | 30 | ~1,7 M - ~2,6 M | 2,6 M |
+> | 40 | ~120 M - ~180 M | 180 M |
+> | 50 | ~8.000 M - ~12.000 M | 12 B |
+>
+> **`formatNumber` aguanta hasta 1e33** con sufijos cortos, así que **no se rompe**. Pero a
+> partir del tier 20 cualquier cifra del juego —el poder, el ingreso, el precio— **está en
+> millones**, y las comparaciones dejan de ser intuitivas. **"Infinito" en la práctica acaba
+> siendo 25-30 tiers**, no porque haya un tope, sino porque un jugador no puede con un
+> 2³⁰ de materiales de T1.
+>
+> **Y ESO ES BUENO, y conviene decirlo porque es la decisión escondida:** no hace falta un
+> tope porque **el precio se encarga**. La forja cuesta 2ⁿ materiales, así que el juego se
+> para solo mucho antes de que los números se vuelvan incomprensibles. Un tope explícito
+> sería quitarnos esa ayuda.
+>
+> **El trabajo que sí hay que hacer, y es de una tarde:** una fórmula de poder por tier en
+> vez de una tabla, la rareza sin recorte, y **nombres generados del 11 en adelante**. Los
+> tres van juntos: si el poder es fórmula pero el nombre no existe, el item forjado del T15
+> se llama `undefined` — y eso es el patrón de D4 otra vez.
+
 ### F32 · A partir del nivel 10, fallar puede restar 1 o 2 niveles
 
 A partir por ejemplo de la mejora 10 de las armas, al fallar haya probabilidad de bajar de
