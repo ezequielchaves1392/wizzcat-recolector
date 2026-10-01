@@ -223,6 +223,110 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  //  B9 · MIRANDO LA PANTALLA Y SIN HACER NADA, TAMPOCO SE COBRA.
+  //
+  //  El caso de arriba (pestaña oculta) ya pasaba, pero no es el que se pidió:
+  //  ahí el corte lo hace `visibilitychange`. Lo que fallaba es **mirar la
+  //  pantalla sin hacer nada**, que no dispara ningún evento de presencia: el
+  //  `isAfk` solo se recalculaba dentro de ese manejador, así que con la
+  //  pestaña visible el tick seguía cobrando indefinidamente y la etiqueta AFK
+  //  de la interfaz mentía.
+  //
+  //  Se comprueba por los DOS lados, y los dos importan:
+  //    · que el ingreso se corte solo al pasar el umbral, sin evento de por medio;
+  //    · que los clicks automáticos del árbol NO lo reactiven. Es la trampa
+  //      importante: si contaran como actividad, el juego no se pondría en AFK
+  //      nunca, porque el árbol genera clicks solo. Que eso se comprueba aquí es
+  //      la mitad del motivo de este bloque.
+  // -----------------------------------------------------------------------
+  {
+    const { lista, restaurar } = capturarIntervalos();
+    const visibilidadOriginal = document.visibilityState;
+    try {
+      const g = await boot(baseSave([], {
+        nanites: 0,
+        totalNanitesProduced: 0,
+        companions: [ficha('c1', 1, { power: 5, type: 'passive' })],
+        activeCompanions: ['c1'],
+        maxCompanionSlots: 3
+      }));
+      const tick = tickDe(lista);
+
+      // Se avanza el reloj del motor sin tocar el de los ticks: el umbral se mide
+      // con `Date.now()`, y el banco necesita cruzar 60 s sin esperar un minuto.
+      const reloj = g.getState();
+      const realNow = Date.now;
+      let falso = realNow();
+      Date.now = () => falso;
+
+      try {
+        // Primero: dos segundos de juego normal y el ingreso entra.
+        falso = realNow();
+        for (let i = 0; i < 4; i++) tick();
+        const antesDelUmbral = nanites(g);
+        check('B9: mirando y activo, el ingreso entra', antesDelUmbral > 0, 'saldo=' + antesDelUmbral);
+
+        // Y ahora se salta el umbral. El tick se llama MUCHAS veces seguidas, que
+        // es lo que haría el reloj si el navegador estirase el intervalo: con un
+        // contador de ticks esto cruzaría el umbral en un par de vueltas y la
+        // prueba no probaría nada.
+        falso = realNow() + 61_000;
+        for (let i = 0; i < 4; i++) tick();
+        const despues = nanites(g);
+
+        check('B9: sin hacer nada, el ingreso se corta solo',
+          despues === antesDelUmbral,
+          `antes=${antesDelUmbral} despues=${despues}`);
+
+        check('B9: y ni un tick más de los cuatro cobra nada',
+          nanites(g) === antesDelUmbral, 'saldo=' + nanites(g));
+
+        // Y el estado AFK es el que se pinta, que es lo que mentía. El HUD lo recibe en
+        // `onUpdate(state, isAfk)`, así que lo que se comprueba es la misma
+        // variable que va al `onUpdate`: si el ingreso se cortara por otro
+        // camino, esto seguiría diciendo que no.
+        check('B9: y el estado dice AFK, para que lo que se ve sea lo que pasa',
+          g.isAfk() === true, 'isAfk=' + g.isAfk());
+
+        // LOS CLICS AUTOMÁTICOS DEL ÁRBOL NO CUENTAN COMO ACTIVIDAD, y no pueden
+        // mantener el juego despierto. Es la mitad del motivo de este bloque: si
+        // contaran, el juego no entraría nunca en AFK por su cuenta, que es justo
+        // lo que se pidió arreglar.
+        //
+        // Y COMPROBARLO TIENE UNA TRAMPA, que es la que hace que esta prueba
+        // pueda no comprobar nada: con el árbol dormido, el AFK entraría igual y
+        // la prueba pasaría sin mirarlo. Por eso lo que se mide no es "el árbol
+        // produjo", sino **"con el árbol tirando clicks, el saldo no se movió"**.
+        // Si el corte del AFK no alcanzara a los clicks del árbol, en estos 200
+        // ticks (100 s) habrían entrado unos 50 clicks de daño, y el fallo se vería
+        // en el número en vez de pasar desapercibido.
+        //
+        // La forma de comprobarlo es poner el árbol a producir mientras el reloj
+        // avanza y ver que el AFK entra igualmente. Con el árbol a 0,5 clicks/s,
+        // estos 200 ticks son 100 s y son 50 clicks de daño: si el árbol se
+        //uduerma, el AFK entraría igual y la prueba no probaría nada.
+        reloj.bonus.autoClick = 0.5;
+        falso = realNow() + 61_000;
+        const antesConArbol = nanites(g);
+        for (let i = 0; i < 200; i++) tick();
+        const conArbol = nanites(g);
+
+        check('B9: el árbol estaba tirando clicks y el saldo no se ha movido',
+          conArbol === antesConArbol,
+          `antes=${antesConArbol} conArbol=${conArbol} — si el corte del AFK no alcanzara al árbol, aquí habría entrado daño de sus clicks`);
+
+        check('B9: y aun así, con el árbol trabajando, el AFK se mantiene',
+          g.isAfk() === true, 'isAfk=' + g.isAfk());
+      } finally {
+        Date.now = realNow;
+      }
+    } finally {
+      (document as any).visibilityState = visibilidadOriginal;
+      restaurar();
+    }
+  }
+
+  // -----------------------------------------------------------------------
   //  Sin mirar, no se cobra. Y como el tick se detiene ANTES de acumular, el
   //  tiempo ausente no vuelve como un segundo entero de golpe al volver.
   // -----------------------------------------------------------------------

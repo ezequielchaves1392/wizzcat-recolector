@@ -706,7 +706,19 @@ function syncMaterialCounters() {
   // 0 = está presente. Se usa performance.now() porque no lo afecta cambiar la
   // hora del sistema, a diferencia de Date.now().
   let awayAt = 0;
-  const AFK_THRESHOLD_MS = 45000;
+  // B9 · 60 SEGUNDOS, Y POR QUÉ NO 45.
+//
+// El umbral era 45 s y el jugador pidió "1 min al menos". Se sube a 60 s porque
+// hay un caso que 45 rompe: alguien leyendo la descripción de una caja larga, o
+// un texto de logro, pasa de 45 a 60 s sin hacer nada y volvería a la pantalla
+// con el ingreso cortado a mitad de lectura. El coste de esperar 60 en vez de 45
+// son 15 segundos de ingreso pasivo; el de 45 es que el jugador pierde la partida
+// mientras lee.
+//
+// Y es un umbral de tiempo **mirando la pantalla**, no de tiempo total: en el
+// tiempo que pasa el AFK el ingreso se corta (R10), así que la espera no le
+// cuesta nada mientras no mire.
+const AFK_THRESHOLD_MS = 60000;
 
   const userRef = doc(db, 'users', user.uid);
   const rankingRef = doc(db, 'rankings', user.uid);
@@ -1871,6 +1883,16 @@ function syncMaterialCounters() {
       return;
     }
     // Solo actualizar timestamp con click real (no con mousemove)
+    //
+    // B9 · ESTE ES EL OTRO LADO DE B9, Y HAY QUE MIRAR LOS DOS.
+    // Sacar del AFK pide un click, y no con que el ratón se mueva: si el ratón
+    // sirviera, bastaría moverlo para que volviera a entrar el ingreso mientras
+    // el jugador no ha hecho nada, que es el mismo problema que la otra mitad.
+    //
+    // Y al volver hay `awaitingClickAfterAfk`: el primer click DESPUÉS de salir
+    // del AFK no cobra pasivo, solo limpia la espera. Sin eso, el jugador que
+    // vuelve tras una pausa tendría el tick con medio segundo acumulado de
+    // cuando estaba en AFK, y cobraría un tiempo que no le corresponde.
     if (e && e.type === 'click') {
       lastActiveTimestamp = Date.now();
       if (isAfk) {
@@ -1882,7 +1904,22 @@ function syncMaterialCounters() {
     }
   };
 
-  const handleMouseMove = () => { lastActiveTimestamp = Date.now(); };
+  // POR QUÉ NO HAY `mousemove` EN ESTE BLOQUE (B9).
+  //
+  // Aquí hubo un `handleMouseMove` que hacía `lastActiveTimestamp = Date.now()`, y
+  // el listener se quedaba registrado. Se ha quitado el listener entero en vez de
+  // dejar una función vacía: un listener que no hace nada es una línea que se lee,
+  // se supone que significa algo y no lo significa.
+  //
+  // Lo que cuenta como actividad es **un click de verdad**, en
+  // `handleUserActivity`. Con el ratón contando, el AFK no se notaba casi nunca:
+  // bastaba con que el cursor se moviera sobre la ventana sin hacer nada, y el
+  // juego seguía cobrando pasivo como si el jugador estuviera leyendo. Y un
+  // jugador leyendo un texto largo no mueve el ratón durante minutos, que es
+  // justo el caso que el AFK existe para cubrir.
+  //
+  // Si algún día hace falta distinguir "movió el ratón" de "hizo algo", la pista
+  // es este comentario.
 
   // Page Lifecycle API: el navegador congela la página en segundo plano. Es la
   // única señal fiable cuando el sistema suspende o la pantalla se bloquea.
@@ -1899,7 +1936,6 @@ function syncMaterialCounters() {
   window.addEventListener('pagehide', handlePresenceChange);
   docWithLifecycle.addEventListener('freeze', handlePresenceChange);
   docWithLifecycle.addEventListener('resume', handlePresenceChange);
-  window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('keydown', handleUserActivity);
   window.addEventListener('click', handleUserActivity);
 
@@ -2029,6 +2065,39 @@ function syncMaterialCounters() {
       if (!isPlayerPresent()) {
         handlePresenceChange();
         return;
+      }
+
+      // B9 · EL AFK SE PONE SOLO, AQUI, Y NO EN EL MANEJADOR DE PRESENCIA.
+      //
+      // `isAfk` solo se recalculaba dentro de `handlePresenceChange`, que es el
+      // manejador de `visibilitychange` / `focus` / `blur` / `pageshow`. Con la
+      // pestaña visible y el cursor quieto **ninguno de esos eventos se dispara**,
+      // así que el tick seguía cobrando pasivo indefinidamente y el `isAfk` que se
+      // pintaba en pantalla mentía: decía AFK cuando el ingreso seguía entrando.
+      //
+      // La pregunta va aquí porque este es el sitio donde ya se decide si entra
+      // ingreso. Ponerla en otro sitio sería abrir una segunda puerta al cobro,
+      // que es la forma más fácil de que las dos se desincronicen.
+      //
+      // Y EL CORTE ALCANZA A TODO, INCLUIDOS LOS CLICS DEL ÁRBOL. No es solo el
+      // ingreso pasivo: el tick se va entero por `return` cuando `isAfk` está
+      // puesto, así que los clicks automáticos del árbol también dejan de contar.
+      // Es lo que pide R10 —nada de ingreso si el jugador no está mirando— y es
+      // lo coherente: el árbol genera clicks solo, y si colaran mientras el
+      // jugador mira la pantalla sin hacer nada, el AFK sería inútil para siempre.
+      //
+      // Y POR QUÉ `Date.now()` Y NO EL ACUMULADOR DEL TICK. El tick tiene su
+      // ritmo propio (`TICK_RATE_MS`) y puede estirarse: si el navegador congela
+      // la pestaña, al volver el tick se ejecuta muchas veces seguidas y un
+      // contador iría mucho más rápido que el reloj. `Date.now()` no se salta.
+      const inactivoMs = Date.now() - lastActiveTimestamp;
+      if (!isAfk && inactivoMs > AFK_THRESHOLD_MS) {
+        isAfk = true;
+        // El resto del tick va a volver con `onUpdate(state, true)`, que es lo
+        // que repinta la pausa. Aquí solo se marca el estado y se tira el medio
+        // segundo pendiente: si no, al volver el jugador el primer cobro contaría
+        // un tiempo en el que estuvo en AFK.
+        msParaCobroPasivo = 0;
       }
 
       recalculatePassiveIncome();
@@ -3302,7 +3371,6 @@ function syncMaterialCounters() {
       window.removeEventListener('pagehide', handlePresenceChange);
       docWithLifecycle.removeEventListener('freeze', handlePresenceChange);
       docWithLifecycle.removeEventListener('resume', handlePresenceChange);
-      window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleUserActivity);
       window.removeEventListener('click', handleUserActivity);
       // Los de la cola. Sin estos, cerrar sesión y volver a entrar dejaba tres

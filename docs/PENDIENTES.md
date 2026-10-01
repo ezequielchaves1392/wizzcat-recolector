@@ -361,34 +361,45 @@ principal y sus estadísticas actuales.
 > con lo que decide enseñar. Y de paso le daría en qué apoyarse a **F20**: la imagen
 > de perfil es justo el dato que hay que poder leer de otro.
 
-### B9 · El AFK no se pone solo estando en la pantalla
+### B9 · El AFK no se ponía solo estando en la pantalla — HECHO
 
 El juego también se pone en AFK si el jugador está en la pantalla pero no hace
 movimientos durante 1 min al menos.
 
-> **Medido: el umbral existe y son 45 segundos, no 1 minuto**
-> (`AFK_THRESHOLD_MS = 45000`, `gameLoop.ts:700`). Así que la mitad de lo que pides ya
-> está, y lo que falta es la otra mitad, que es la importante.
+> **Arreglado, y el diagnóstico tenía dos piezas que faltaban.**
 >
-> **Lo que NO ocurre es que se ponga en AFK estando en la pantalla.** `isAfk` se
-> recalcula **solo** dentro de `handlePresenceChange` (`gameLoop.ts:1785-1786`), que es
-> el manejador de `visibilitychange`/`focus`/`blur`/`pageshow`/`freeze`. Con la
-> pestaña visible y el cursor quieto **ninguno de esos eventos se dispara**:
-> `handleUserActivity` va anotando `lastActiveTimestamp` con cada click, pero nadie
-> mira ese reloj hasta que la ventana recupera el foco. Y el watchdog del intervalo
-> solo comprueba si el jugador *sigue presente* (`gameLoop.ts:1952`), no si lleva rato
-> sin hacer nada.
+> **Lo que sí estaba:** el corte por pestaña oculta. Lo que no ocurría era lo otro.
+> `isAfk` se recalculaba **solo** dentro de `handlePresenceChange`, que es el
+> manejador de `visibilitychange` / `focus` / `blur` / `pageshow` / `freeze`. Con la
+> pestaña visible y el cursor quieto **ninguno de esos eventos se dispara**, así que
+> el tick seguía cobrando indefinidamente y **el `isAfk` que ya se pintaba en
+> pantalla mentía**: decía AFK cuando el ingreso seguía entrando.
 >
-> Traducido: **el tick nunca se para solo, y el `isAfk` que ya se pinta en pantalla
-> miente** — dice "AFK" cuando el ingreso sigue entrando. Y hay una regla del
-> proyecto detrás (R10): nada de ingreso pasivo si el jugador no está mirando.
+> **La pregunta va ahora en el tick**, que es donde ya se decide si entra ingreso;
+> ponerla en otro sitio sería abrir una segunda puerta al cobro, que es la forma más
+> fácil de que las dos se desincronicen. Y se mide con `Date.now()` y no con un
+> contador de ticks: si el navegador congela la pestaña, al volver el tick se
+> ejecuta muchas veces seguidas y un contador cruzaría el umbral en un par de
+> vueltas.
 >
-> **Dónde se comprueba:** en el propio tick, que es donde ya se decide si entra
-> ingreso: `Date.now() - lastActiveTimestamp > umbral`. Los dos números a decidir:
-> 45 s es poco para quien está leyendo un texto largo, y 1 min es lo que pides. Y un
-> aviso importante: **los clics automáticos del árbol no pueden contar como
-> actividad**, porque si cuentan el juego nunca se pone en AFK solo — que es
-> exactamente el caso que describes.
+> **La segunda pieza era el `mousemove`, y era peor de lo que parecía.** El handler
+> estaba registrado y actualizaba `lastActiveTimestamp` con cada movimiento:
+> **cualquier movimiento del ratón sacaba del AFK**. Con eso el AFK no se notaba
+> casi nunca, porque el cursor se mueve por la ventana sin hacer nada. Se ha quitado
+> el listener entero en vez de dejarlo vacío, porque un listener que no hace nada es
+> una línea que se lee y se supone que significa algo. Ahora cuenta un click de
+> verdad, que es lo que pasa cuando alguien lee un texto largo.
+>
+> **El umbral sube de 45 s a 60 s** (lo que pediste) y por el caso de quien está
+> leyendo: con 45, una descripción larga de caja lo parte a mitad de lectura y vuelve
+> con el ingreso cortado. Son 15 segundos de pasivo a cambio de no perder la partida
+> mientras se lee — y el tiempo en AFK no cuesta nada, porque el ingreso está cortado
+> (R10).
+>
+> **El corte alcanza también a los clicks del árbol**, que es lo coherente: si colaran
+> mientras el jugador mira sin hacer nada, el AFK sería inútil para siempre.
+>
+> Cubre `tickCheck` (de 14 a 20 pruebas).
 
 ---
 
@@ -823,6 +834,10 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       panel principal. El daño se desglosa en `100 base · +50 nivel · +37 bonos`,
       y las tres partes suman el total exacto porque las calcula el motor, no la
       vista. Banco nuevo: `desgloseCheck` (31). Sin commit todavía.
+- [x] **B9 · el AFK se pone solo estando en la pantalla.** La pregunta va en el
+      tick, no en el manejador de presencia; el `mousemove` ha dejado de contar como
+      actividad (hacía el AFK inútil); el umbral sube a 60 s. `tickCheck` pasó de 14
+      a 20.
 - [x] **B6-B7-F5 · las llaves.** La cadena cierra: cada caja suelta la llave que
       la abre, y los cuatro textos se generan con la regla que decide si abre, así
       que no pueden mentir. Cuatro cartas en la tienda con nombres y precios que
