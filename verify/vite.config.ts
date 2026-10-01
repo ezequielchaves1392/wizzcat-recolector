@@ -42,7 +42,8 @@ export default defineConfig({
         stateCheck: resolve(here, 'stateCheck.ts'),
         gapCheck: resolve(here, 'gapCheck.ts'),
         lootCheck: resolve(here, 'lootCheck.ts'),
-        queueCheck: resolve(here, 'queueCheck.ts')
+        queueCheck: resolve(here, 'queueCheck.ts'),
+        playthroughCheck: resolve(here, 'playthroughCheck.ts')
       },
       formats: ['es']
     }

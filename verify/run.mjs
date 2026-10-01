@@ -27,7 +27,8 @@ for (const banco of [
   'stateCheck',
   'gapCheck',
   'lootCheck',
-  'queueCheck'
+  'queueCheck',
+  'playthroughCheck'
 ]) {
   console.log(`\n=== ${banco} ===`);
   try {

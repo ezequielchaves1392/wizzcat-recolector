@@ -278,6 +278,51 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
     serializar los guardados, pero se probó y **empeora el juego**: aplazar la
     escritura hace que "comprar y recargar al instante" pierda datos.
 
+15. **Recargar duplicaba el material: llaves y cristales de más.**
+    **ARREGLADO.** `saveToFirebase` escribía `keys` (el total) pero **no**
+    `keysByTier` ni `crystalsByTier`. Y al cargar, la migración reparte el material
+    con esos cubos por nivel: `data.keys` es un TOTAL, así que meterlo en el cubo
+    del nivel 0 compara un total contra una parte y siempre sobraba. Resultado: en
+    cada recarga se materializaba material de más. La llave que acababas de gastar
+    al abrir una caja volvía.
+
+    El propio código lo describe en `gameLoop.ts:980-987` y hasta explica por qué
+    existe el reparto por niveles: **el arreglo estaba escrito pero el campo que lo
+    sostén no se guardaba**, así que solo vivía mientras la partida no se
+    recargara. Ahora los dos cubos van en el guardado, también en el del reinicio
+    de Ascensión.
+
+    **No lo detectó ningún banco porque dos pruebas eran vacías.** El stub de
+    Firestore guardaba el documento con una copia superficial, así que
+    `__MEM_DB__.warehouse` era la MISMA matriz que `state.warehouse`: comparar el
+    almacén tras recargar era comparar un array consigo mismo. Al hacer que el
+    stub serialice como Firestore, dos pruebas se pusieron a mirar de verdad y una
+    falló. Ver discrepancia 16.
+
+16. **El stub de Firestore guardaba referencias vivas, no datos.**
+    **ARREGLADO.** `setDoc` hacía `{...previo, ...data}`, una copia superficial: el
+    documento retenía una referencia al array `warehouse` del juego. Un bucle que
+    mutase su memoria reescribía el documento de otro sin guardar nada. Una
+    prueba podía pasar por un estado que el juego nunca escribió, y una regresión
+    de guardado podía esconderse detrás de un mutuo secreto entre dos bucles.
+
+    Ahora clona al escribir y al leer, como serializa Firestore. Salió esto solo, y
+    fue la causa de que la discrepancia 15 estuviera oculta durante tanto.
+
+17. **La curva de poder por tier no está aplanada como dice la documentación.**
+    **Medido, no arreglado: es una decisión de balance que no me corresponde.**
+    `CAMBIOS-MACRO.md` cuenta que el coste por punto de poder era 32× peor en T10
+    que en T1, y que tras el aplanado T10 salía "~1,3× mejor". Medido hoy con
+    `getClickDamage()` sobre las diez cartas, la curva es: T1 9,4 · T2 7,5 · T3 8,8
+    · T4 8,4 · T5 8,5 · T6 10,7 · T7 12,9 · T8 22,4 · T9 28,5 · T10 38,7. Es decir
+    **T10 entrega ~5× más poder por nanita que el peor tier**, y la curva es una
+    escalera que se dispara a partir de T8.
+
+    La consecuencia es la del bug original, del revés: las cartas de tier bajo son
+    trampas y no se compran nunca. `playthroughCheck` lo mide y lo deja como dato,
+    con un guardia de 6× puesto por encima del valor real para que una subida de
+    precios no lo dispare en silencio.
+
 ### Resumen
 
 | # | Discrepancia | Estado |
@@ -296,11 +341,14 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 12 | `huecos-almacen.md` desactualizado | **arreglada** |
 | 13 | La forja pierde valor total en T1-T4 | **documentada, no es bug** (la invariante real es por ranura y se cumple) |
 | 14 | Un guardado confirmando vaciaba la cola de otro más nuevo | **arreglada** (queda la carrera inversa, que se cura sola) |
+| 15 | Recargar duplicaba llaves y cristales | **arreglada** (`keysByTier` no se guardaba) |
+| 16 | El stub de Firestore guardaba referencias vivas | **arreglada** (hacía vacuas dos pruebas) |
+| 17 | La curva de poder por tier no está aplanada como dice el doc | **medida**: T10 da ~5× el poder por nanita del peor tier, no 1,3× |
 
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **11 bancos, 865 pruebas.** Queda fuera a propósito:
+la navegación. **12 bancos, 962 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.

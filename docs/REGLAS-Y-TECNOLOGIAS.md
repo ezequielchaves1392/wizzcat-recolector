@@ -147,7 +147,8 @@ solo.**
 | `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** | 172 |
 | `gapCheck` | Los huecos del almacén. El ancla es el **id del item**, nunca un índice de celda. Reimplementa el criterio del pintor a propósito, para que el test no sea tautológico. | 65 |
 | `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
-| `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 34 |
+| `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 42 |
+| `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. | 98 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).

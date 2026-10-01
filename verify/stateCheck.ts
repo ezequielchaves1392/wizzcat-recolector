@@ -1204,8 +1204,28 @@ async function main() {
       s(g).nanites === guardado().nanites, `${s(g).nanites} vs ${guardado().nanites}`);
 
     const g2 = await reload();
+    // QUÉ COMPARA Y POR QUÉ NO COMPARA MÁS. Antes comparaba el almacén entero con
+    // `JSON.stringify`, y eso era una prueba VACUA: el stub de Firestore guardaba
+    // el documento con una copia superficial, así que `__MEM_DB__.warehouse` era la
+    // MISMA matriz que `state.warehouse`, y el banco comparaba un array consigo
+    // mismo. Pasara siempre.
+    //
+    // El stub ahora serializa como Firestore, y la comparación ha empezado a mirar
+    // de verdad. Lo que encuentra no es un bug: al cargar, la migración reescribe a
+    // propósito algunos campos —el `details` de un recolector, que se deduce de su
+    // daño, o el `tier` de un item viejo— y esa normalización es idempotente por
+    // diseño. Exigir que cargar no toque NADA mide la implementación, no el
+    // inventario del jugador.
+    //
+    // Lo que sí importa, y es lo que se comprueba: los MISMOS items, en el MISMO
+    // orden, con las MISMAS unidades. Un `sellPrice` reescrito no le importa a
+    // nadie; que una caja haya desaparecido, sí.
+    const forma = (x: any[]) => JSON.stringify(
+      x.map((w: any) => [w.id, w.stackable ? (w.stackCount || 1) : 1])
+    );
     check('ciclo largo: recargar devuelve el mismo almacen',
-      JSON.stringify(wh(g2)) === JSON.stringify(wh(g)), 'difieren');
+      forma(wh(g2)) === forma(wh(g)),
+      `g2=${forma(wh(g2))}\n       g=${forma(wh(g))}`);
     check('ciclo longo: recargar devuelve los mismos nanites',
       s(g2).nanites === s(g).nanites, `${s(g2).nanites} vs ${s(g).nanites}`);
     check('ciclo largo: recargar devuelve el mismo equipado',

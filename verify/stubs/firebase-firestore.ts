@@ -12,8 +12,17 @@ export const getFirestore = (app: any) => app;
 export const doc = (_db: any, ...path: string[]) => ({ id: path.join('/') });
 export const getDoc = async (ref: any) => {
   const doc = globalThis.__MEM_DB__?.[ref.id];
-  return { exists: () => !!doc, data: () => doc };
+  // SE DEVUELVE UNA COPIA, y es lo que hace Firestore. Antes devolvía el objeto
+  // tal cual, con lo que `__MEM_DB__` guardaba una REFERENCIA VIVA al array
+  // `warehouse` del juego: un bucle que mutase su memoria reescribía el documento
+  // del otro sin guardar nada. Una prueba podía entonces pasar por un estado que
+  // el juego nunca escribió, y una regresión de guardado podía esconderse detrás
+  // de un mutuo secreto entre dos bucles.
+  return { exists: () => !!doc, data: () => (doc ? clonar(doc) : undefined) };
 };
+
+const clonar = (v: any) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
+
 export const setDoc = async (ref: any, data: any, options?: { merge?: boolean }) => {
   // FALLO PROGRAMADO.
   //
@@ -47,6 +56,9 @@ export const setDoc = async (ref: any, data: any, options?: { merge?: boolean })
     await espera;
   }
   const db = globalThis.__MEM_DB__;
+  // Se guarda una COPIA también al escribir. Sin esto, el documento retiene una
+  // referencia al array del juego y el "guardado" de un bucle mezcla su memoria
+  // con la del siguiente. Firestore serializa; el stub tiene que serializar.
   const previo = options?.merge ? db[ref.id] : undefined;
-  db[ref.id] = previo ? { ...previo, ...data } : data;
+  db[ref.id] = clonar(previo ? { ...previo, ...data } : data);
 };

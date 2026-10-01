@@ -1158,6 +1158,14 @@ function syncMaterialCounters() {
         totalInfraestructure: 0,
         cratesOpened: 0,
         keys: state.keys,
+        // Los cubos por nivel TIENEN que guardarse, y antes no se guardaban. Al
+        // cargar, la migración reparte el material con `data.keysByTier`: `data.keys`
+        // es el TOTAL de llaves, y meter un total en el cubo del nivel 0 compara un
+        // total contra una parte y siempre sobra, así que en CADA recarga se
+        // materializaba una llave y un cristal de más. El reparto por niveles solo
+        // vivía mientras la partida no se recargara, que es justo cuando no sirve.
+        keysByTier: state.keysByTier,
+        crystalsByTier: state.crystalsByTier,
         upgradeCrystals: state.upgradeCrystals,
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
@@ -1644,6 +1652,11 @@ function syncMaterialCounters() {
         totalInfraestructure: state.totalInfraestructure,
         cratesOpened: state.cratesOpened,
         keys: state.keys,
+        // Los mismos cubos por nivel que en el reinicio, y por el mismo motivo: sin
+        // ellos, la migración de carga mete un TOTAL en el cubo del nivel 0 y
+        // materializa una llave de más en cada recarga.
+        keysByTier: state.keysByTier,
+        crystalsByTier: state.crystalsByTier,
         upgradeCrystals: state.upgradeCrystals,
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
