@@ -216,7 +216,7 @@ Después de `d3c71ef`, sin commitear. Tres cosas de aquí merecen un párrafo pr
 porque son decisiones y no solo código:
 
 **La suite de pruebas.** Nace entera en este lote y es lo que sostiene todo lo
-demás: **11 bancos, 806 pruebas**, sobre el game loop real con Firebase sustituido
+demás: **13 bancos** (el número de pruebas sube con cada tanda), sobre el game loop real con Firebase sustituido
 por un store en memoria. La regla que la gobierna es que **cada comprobación
 termina en `reload()`**, porque lo que solo vive en memoria es el bug que más
 veces ha llegado a producción. `queueCheck` es el ejemplo de por qué: la mitad de
@@ -244,7 +244,7 @@ enseña la tira.
 | Módulo de apilado | `src/data/stacking.ts` |
 | Huecos del almacén | `warehouseGaps` en types/gameLoop/warehouse, `src/dragTest.ts` |
 | Cosméticos de caja | `src/data/cosmetics.ts` (`crateCosmetics`), `crateLoot.ts`, `gameLoop.ts` |
-| **Suite de pruebas** | `verify/` completa (**11 bancos**, kit, stubs) |
+| **Suite de pruebas** | `verify/` completa (**13 bancos**, kit, stubs) |
 | Mejoras varias | `auth.ts`, `store.ts`, `warehouse.ts`, `rankings.ts`, `main.ts`, `layout.ts`, `pageShell.ts`, `router.ts`, `audio.ts`, `theme.ts`, `style.css`, `style.modules.css` |
 | Configuración | `vite.config.ts` (multipágina), `tailwind.config.js` |
 | Bancos de pruebas visuales | `ruleta-preview.html`, `src/ruletaPreview.ts`, `drag-test.html`, `src/dragTest.ts` |

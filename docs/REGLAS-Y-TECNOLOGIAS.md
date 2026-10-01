@@ -133,7 +133,15 @@ eso el entorno es un módulo y no dos. Léelo antes de tocarlo: **un stub que no
 cubre lo que el código toca no es un stub más pequeño, es un banco que se apaga
 solo.**
 
-### Los 11 bancos
+Y tiene una segunda mitad, que salió al escribir `toastCheck`: **un stub que
+cubre de más tampoco vale.** `appendChild` era una sinónima porque hasta ahora
+nadie miraba el DOM, y no mirarlo era correcto. En cuanto un banco afirma sobre
+nodos, ese no-op deja de ser inocuo y pasa a ser una mentira: el banco se puede
+llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar el
+stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
+en producción.
+
+### Los 13 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -149,9 +157,46 @@ solo.**
 | `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
 | `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 42 |
 | `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. | 98 |
+| `toastCheck` | **La pila de avisos flotantes.** `showToast` es el overlay más llamado del juego (71 llamadas entre las siete pantallas, la terminal y el propio `gameLoop`) y no estaba cubierto por nada. Que no haya un nodo por aviso, que lo repetido se cuente (`×5`) en vez de apilar cinco iguales, el tope de cuatro vivos, que se coloque midiendo la cabecera y no con una constante, y que lo retirado no se quede apuntado en la lista. Ver abajo, porque necesita un stub con DOM de verdad. | 25 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).
+
+### El primer banco que necesita DOM de verdad, y lo que costó
+
+`toastCheck` es el primero que **mira nodos en vez de mirar números**. Los doce
+anteriores afirmaban sobre el estado del juego, que es JavaScript puro, y por eso
+el `elementoFalso()` de `entorno.mjs` podía quedarse en `appendChild() {}`: no
+había nada que.appendear.
+
+Para comprobar que los avisos no se pisan hay que contar hijos, y con un
+`appendChild` que no hace nada el banco se podía llamar "pila que no se pisa"
+**sin estar mirando una pila**. El stub se amplió con `children`, `appendChild`,
+`removeChild`, `remove`, `parentElement` y `firstChild`, y `document.body` pasó a
+ser un nodo de verdad. Todo lo anterior sigue igual: los doce bancos siguen dando
+el mismo número de pruebas.
+
+Y se añadió `__DOM__`, el mismo truco que `__MEM_DB__` para Firestore: un banco
+publica en `__DOM__['header']` la cabecera que quiera, con su borde inferior, y
+`document.querySelector` la devuelve. `syncToastOffset()` coloca la pila midiendo
+el `<header>`, así que sin esto no había forma de mirar esa regla: solo se podía
+comprobar el camino de reserva, que es el que se usa cuando **no** hay cabecera.
+
+**LO QUE ESTE BANCO ENSEÑÓ AL ESCRIBIRLO, y que no se habría visto mirando la
+pantalla:**
+
+- Al expulsar un aviso **no se borra en el acto**: se va desvaneciéndose 300 ms,
+  así que hay cinco hijos durante ese instante. El tope de cuatro es correcto; la
+  aserción que lo comprueba tiene que mirar después del desvanecido, no durante.
+- Los bancos **comparten el módulo `toast.ts`**, porque es uno solo en el proceso.
+  Al empezar la sección de la retirada, la pila ya tenía dentro lo que fue
+  dejando la cola de nanitas de los bancos anteriores (`Guardado. Tu progreso ya
+  está en la nube`, `Recuperadas 3.24 K nanitas...`). No es un residuo del stub:
+  es el juego funcionando. `vaciarPila()` los espera en vez de borrarlos a golpes.
+
+Las dos cosas son la misma lección: **un banco que mira el DOM hereda el estado
+que dejaron los demás**, y por eso necesita vaciar lo que encuentra antes de
+afirmar sobre lo que acaba de poner.
 
 ### Cómo se añade un banco
 
@@ -186,7 +231,7 @@ $env:ONE_BANK="gapCheck"; npx vite build --config verify/vite.one.config.ts
 node verify/one.mjs gapCheck
 ```
 
-**Los once bancos funcionan así.** Antes no: `one.mjs` arrastraba un entorno más
+**Los trece bancos funcionan así.** Antes no: `one.mjs` arrastraba un entorno más
 pobre que `run.mjs` y cuatro bancos morían antes de imprimir, con un error que no
 señalaba su causa. Los dos runners toman el entorno de `verify/entorno.mjs`, así
 que ya no pueden separarse. Si añades un banco y no se puede depurar en solitario,
@@ -605,7 +650,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              11 bancos.
+  <subject>Check.ts              13 bancos.
 docs/                           Este directorio.
 ```
 
@@ -628,7 +673,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los **12 bancos** dan **987 pruebas**, todas en verde.
+   cambiar nada. Los **13 bancos** dan **1013 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

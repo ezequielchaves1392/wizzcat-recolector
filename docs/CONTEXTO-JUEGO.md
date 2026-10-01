@@ -348,11 +348,14 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado y el botín**, no el pintado ni
-la navegación. **12 bancos, 963 pruebas.** Queda fuera a propósito:
+la navegación. **13 bancos, 1013 pruebas.** Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
-- `services/*` salvo la cola, `utils/*`, `theme.ts`, `data/tree`.
+- `services/*` salvo la cola, `theme.ts`, `data/tree`.
+- `utils/*` salvo `toast.ts`, que sí tiene banco (`toastCheck`): es el único
+  overlay cuyo comportamiento —que no se pisen y que lo repetido se cuente— se
+  puede afirmar sin navegador. `modal.ts` sigue sin cubrirse.
 - `data/cosmetics` solo está cubierto en lo que toca las cajas (`lootCheck`); los
   Caminos de logros, núcleos y ranking no.
 - El **arrastre real por puntero**: solo se prueba a mano con `drag-test.html`,

@@ -43,7 +43,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 12 bancos = 987 pruebas (el total varía ±1: una prueba es condicional)
+npm run verify    # 13 bancos = 1013 pruebas (el total varía ±1: una prueba es condicional)
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
@@ -73,7 +73,7 @@ El resto está en `docs/REGLAS-Y-TECNOLOGIAS.md`.
 ```bash
 npm run dev       # servidor de desarrollo
 npm run build     # tsc && vite build — el type-check es puerta de entrada
-npm run verify    # banco de pruebas propio: 12 bancos sobre el game loop real
+npm run verify    # banco de pruebas propio: 13 bancos sobre el game loop real
 ```
 
 Para un banco suelto:
@@ -103,6 +103,7 @@ src/data/*           LAS REGLAS DEL JUEGO en datos puros.
 src/components/*     Pantallas. warehouse.ts es el grande.
 src/ui/*             Cromo y páginas.
 src/services/*       Backend. naniteQueue.ts es la pieza más cuidadosa.
+src/utils/toast.ts   La pila de avisos. ÚNICA de utils/* con banco.
 verify/*             Banco de pruebas propio. NO está en tsconfig.json.
 docs/*               Este directorio.
 ```
