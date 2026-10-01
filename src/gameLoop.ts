@@ -169,7 +169,7 @@ export const COLLECTOR_BASE_COSTS = {
 
 export const STORE_ITEMS = {
   key: { cost: 250, label: 'Llave de Cifrado' },
-  upgradeCrystal: { cost: 60, label: 'Cristal de Mejora' },
+  upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
   warehouseSlot: { cost: 6000, label: 'Ampliar Almacén (+5 slots)' },
   commonCrate: { cost: 500, label: 'Caja Común' },
   rareCrate: { cost: 1500, label: 'Caja Rara' },
@@ -188,42 +188,60 @@ export const STORE_ITEMS = {
   // una decisión, no algo que se compre en masa y se gaste sin pensar.
   calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },
   stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y un afijo extra)' },
-  // Escala 1.5x por tier. El poder por tier crece algo más rápido (1.62x) para
-  // que el coste por punto de poder no se dispare: en T10 sale ~1.3x mejor que
-  // en T1, no 32x peor como antes.
+  // Escala 1.62x por tier, IGUAL que el poder, y el coste por punto SUBE un 12%
+  // en cada salto. Esa es toda la regla, y son las dos mitades de lo mismo:
+  //
+  //   · Escalar IGUAL que el poder mantiene el coste por punto plano, así que
+  //     subir de tier nunca es una optimisation. El comentario de abajo promise
+  //     esto desde hace tiempo y era falso: el daño real va de 6 a 466 (78x,
+  //     por `TIER_SYSTEM.ranges`) y el precio iba de 850 a 17 500 (20,6x). El
+  //     arreglo original se hizo sobre un rango de daño que ya no existía.
+  //   · El 12% por tier es el SOBREPRECIO DELIBERADO: el T10 cuesta 416 por
+  //     punto y el T1 150. Subir de tier da un número más grande y peor valor,
+  //     y esa es la promesa del juego: el T10 es un objeto de escaparate.
+  //
+  // POR QUÉ EL 12% Y NO UN NÚMERO PLANO. Con coste por punto constante el tiempo
+  // para cada tier también es constante, y el juego se termina en un rato: medido
+  // sobre la partida real, los diez tiers se compraban en 20 minutos. Con el
+  // sobreprecio el último tier cuesta 193 850 y el accumulated llega a 431 400,
+  // así que la partida se estira sola hacia el final sin tocar el ingreso.
+  //
+  // Y las dos curvas —compañero y recolector— usan la MISMA tabla porque el poder
+  // sale de `TIER_SYSTEM.ranges` en los dos: mismo poder, mismo precio.
   companionCardT1: { cost: 900, label: 'Compañero Tier 1' },
-  companionCardT2: { cost: 1600, label: 'Compañero Tier 2' },
-  companionCardT3: { cost: 2700, label: 'Compañero Tier 3' },
-  companionCardT4: { cost: 4500, label: 'Compañero Tier 4' },
-  companionCardT5: { cost: 7400, label: 'Compañero Tier 5' },
-  companionCardT6: { cost: 12000, label: 'Compañero Tier 6' },
-  companionCardT7: { cost: 19500, label: 'Compañero Tier 7' },
-  companionCardT8: { cost: 31000, label: 'Compañero Tier 8' },
-  companionCardT9: { cost: 49000, label: 'Compañero Tier 9' },
-  companionCardT10: { cost: 77000, label: 'Compañero Tier 10' },
-  // Recolectores: el precio sigue al DAÑO, no al número de tier.
+  companionCardT2: { cost: 1700, label: 'Compañero Tier 2' },
+  companionCardT3: { cost: 3000, label: 'Compañero Tier 3' },
+  companionCardT4: { cost: 5500, label: 'Compañero Tier 4' },
+  companionCardT5: { cost: 9900, label: 'Compañero Tier 5' },
+  companionCardT6: { cost: 18000, label: 'Compañero Tier 6' },
+  companionCardT7: { cost: 32550, label: 'Compañero Tier 7' },
+  companionCardT8: { cost: 59050, label: 'Compañero Tier 8' },
+  companionCardT9: { cost: 106950, label: 'Compañero Tier 9' },
+  companionCardT10: { cost: 193850, label: 'Compañero Tier 10' },
+  // Recolectores: la MISMA tabla que los compañeros.
   //
-  // Antes escalaba 1.5x por tier igual que los compañeros, y ahí estaba
-  // el error: el daño va de 5 a 77 entre T1 y T10 (15.4x) mientras el
-  // precio iba 39x. El coste por punto de daño pasaba de 166 (T1) a 506
-  // (T10): comprar un T10 era 3x peor que comprar un T1, así que el
-  // jugador se compraba siempre T1. Los tiers altos eran una trampa
-  // invisible, porque el número grande siempre parecía mejor.
+  // Comparten precio a propósito, y no por pereza: `generateCollectorByTier()` y
+  // `generateCompanionByTier()` sacan el poder del mismo `TIER_SYSTEM.ranges`, así
+  // que un T10 de uno y un T10 del otro dan exactamente el mismo poder. Que
+  // costaran distinto haría que el jugador pagara un sobreprecio invisible por un
+  // número que no existe.
   //
-  // Ahora el coste por punto de daño se mantiene entre 170 y 235 en todo
-  // el rango: 1.38x de dispersión. Subir de tier sigue siendo algo peor
-  // que comprar muchos T1, y ese sobreprecio es deliberado: el T10 es
-  // un objeto de escaparate, no una optimización.
-  collectorCardT1: { cost: 850, label: 'Recolector Tier 1' },
-  collectorCardT2: { cost: 1600, label: 'Recolector Tier 2' },
-  collectorCardT3: { cost: 2500, label: 'Recolector Tier 3' },
-  collectorCardT4: { cost: 3700, label: 'Recolector Tier 4' },
-  collectorCardT5: { cost: 5300, label: 'Recolector Tier 5' },
-  collectorCardT6: { cost: 7200, label: 'Recolector Tier 6' },
-  collectorCardT7: { cost: 9400, label: 'Recolector Tier 7' },
-  collectorCardT8: { cost: 11900, label: 'Recolector Tier 8' },
-  collectorCardT9: { cost: 14600, label: 'Recolector Tier 9' },
-  collectorCardT10: { cost: 17500, label: 'Recolector Tier 10' }
+  // El arreglo de esto está en el comentario de `companionCardT1`, y el motivo
+  // de que el precio siga al DAÑO es que antes escalaba 1.5x por tier mientras el
+  // poder iba 1.62x: el coste por punto de daño subía y el T10 acababa siendo
+  // 3x peor que el T1, o sea una trampa invisible detrás de un número grande.
+  // Con la tabla de arriba el sobreprecio es al revés y a propósito: el T10 es un
+  // objeto de escaparate, no una optimización.
+  collectorCardT1: { cost: 900, label: 'Recolector Tier 1' },
+  collectorCardT2: { cost: 1700, label: 'Recolector Tier 2' },
+  collectorCardT3: { cost: 3000, label: 'Recolector Tier 3' },
+  collectorCardT4: { cost: 5500, label: 'Recolector Tier 4' },
+  collectorCardT5: { cost: 9900, label: 'Recolector Tier 5' },
+  collectorCardT6: { cost: 18000, label: 'Recolector Tier 6' },
+  collectorCardT7: { cost: 32550, label: 'Recolector Tier 7' },
+  collectorCardT8: { cost: 59050, label: 'Recolector Tier 8' },
+  collectorCardT9: { cost: 106950, label: 'Recolector Tier 9' },
+  collectorCardT10: { cost: 193850, label: 'Recolector Tier 10' }
 };
 
 // Coste de cada slot de compañero adicional (índice = slots ya poseídos).
@@ -240,8 +258,21 @@ export const COMPANION_SLOT_COSTS = [0, 1200, 4500, 16000, 55000, 180_000, 520_0
 // estuvo el techo mirando solo a 20 la mitad de los recolectores del juego
 // tenían un límite que su propia ficha no enseñaba.
 export function collectorUpgradeCost(level: number): number {
-  // 1,1,2,2,3,3,4,5,6,7,8,9,11,13,15,18,21,25,30,35 -> ~190 cristales en total
-  return Math.max(1, Math.floor(1.2 * Math.pow(1.14, level)));
+  // 1,1,2,2,3,4,6,7,9,11,14,17,21,26,33,41,52,66,84,106 -> 456 cristales en
+  // total, 91 200 nanitas con el cristal a 200.
+  //
+  // POR QUÉ SUBIÓ DE 1.14 A 1.26. Antes subir a nivel 20 costaba 100 cristales,
+  // que a 60 cada uno salían 6 000 nanitas: menos del 4% de un T10. No había
+  // nada que decidir, era un botón. Ahora subir al máximo cuesta la mitad del
+  // recolector, que es la relación que hace que "¿llevo esto a 15 o a 16?" sea
+  // una pregunta de verdad.
+  //
+  // Y por qué NO depende del tier del recolector, que es lo tentador: porque el
+  // coste es POR INTENTO, no por item. Sube un T1 y sale carísimo; sube un T10 y
+  // sale la mitad de su precio. La consecuencia buscada es que no se desperdicie
+  // cristal en un recolector malo, que es exactamente lo que se quiere: el
+  // jugador invierte en lo que le va a durar la partida.
+  return Math.max(1, Math.floor(1.2 * Math.pow(1.26, level)));
 }
 
 /**

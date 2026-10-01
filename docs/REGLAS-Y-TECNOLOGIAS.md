@@ -1,3 +1,6 @@
+﻿# Reglas y tecnologías del proyecto
+sin resolver.
+| `balanceCheck` | **Que el precio siga al poder, y que no se rompa en silencio.** El coste por punto de poder es la regla entera: tiene que SUBIR con el tier —150 en T1 hasta ~416 en T10, el sobreprecio deliberado del que habla el código—, y **un tier superior NUNCA puede salir mejor por punto que el anterior**. Esa segunda regla es la que ata el bug real: los precios escalaban 1.5x y el poder 1.62x, así que el T10 salía a 38 por punto contra 142 del T1, y comprarlo era 3.7x más rentable que comprar T1. También que compañero y recolector cuesten lo mismo (mismo `TIER_SYSTEM.ranges`), que el final de la partida se estire (los dos últimos tiers son más de la mitad del total) y que sintonizar no sea un botón (nivel 20 cuesta ~47% del recolector, no un 4%). | 29 |
 # Reglas y tecnologías del proyecto
 
 Este fichero tiene dos mitades: **con qué está construido** (la parte estable) y
@@ -114,7 +117,7 @@ Un banco de pruebas **propio**. Sin Vitest, sin Jest, sin Playwright.
 
 ```
 npm run verify
-  = vite build --config verify/vite.config.ts   # 14 entries → verify/out/
+  = vite build --config verify/vite.config.ts   # 17 entries -> verify/out/
   && node verify/run.mjs                        # entorno + importa todos
 ```
 
@@ -150,7 +153,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 16 bancos
+### Los 17 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -172,6 +175,7 @@ en producción.
 
 | `tickCheck` | **El ritmo del cobro pasivo.** Que el ingreso entre ENTERO y de una vez, no la mitad del tick: el HUD anuncia "+5 / segundo" y con un tick de 500 ms el saldo subía 2,5, así que el entero alternaba +2 y +3. Y la que no se puede perder de vista: **el ingreso por segundo NO cambia** —diez ticks son cinco segundos y tienen que haber dado cinco cobros—, porque un arreglo de ritmo visual que de paso inflara o recortara la economía se vería igual de bonito y sería un desastre. También que un compañero de tipo `click` cuente igual, y que con la pestaña oculta no entre nada ni se acumule para después. | 14 |
 | `senalCheck` | **Que lo que se enseña sea lo que se cobra.** El `tickCheck` ata el ritmo del bloque entero; este ata **el reparto dentro de ese bloque**. Que las fichas sumen EXACTAMENTE `state.passiveIncome` —ni un nanita de más ni de menos— y que no se pueda deshacer repartiendo `floor(power × multiplicadores)` por separado, porque los floors no suman: con dos compañeros de 3 y ×1,5 el ingreso es 9 y los floors son 4 y 4. Que el `+N` flotante y la ficha digan 9 y no el `power` desnudo. Y que los **clics del árbol tengan señal**, que no la tenían: entran en la cuenta, suman `totalClicks` y no se veían por ningún lado, así que de las tres fuentes del contador solo dos tenían cartel. | 26 |
+| `balanceCheck` | **Que el precio siga al poder, y que no se rompa en silencio.** El coste por punto de poder es la regla entera de las cartas: tiene que SUBIR con el tier —150 en T1 hasta ~416 en T10, el sobreprecio deliberado del que habla el código—, y **un tier superior NUNCA puede salir mejor por punto que el anterior**. Esa segunda regla es la que ata el bug real: los precios escalaban 1.5x y el poder 1.62x, así que el T10 salía a 38 por punto contra 142 del T1 y comprarlo era 3.7x más rentable que comprar T1. También que compañero y recolector cuesten lo mismo (mismo `TIER_SYSTEM.ranges`), que el final de la partida se estire (los dos últimos tiers son más de la mitad del total) y que sintonizar no sea un botón (nivel 20 cuesta ~47% del recolector, no un 4%). | 29 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).
@@ -675,7 +679,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              16 bancos.
+  <subject>Check.ts              17 bancos.
 docs/                           Este directorio.
 ```
 
@@ -698,7 +702,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   cambiar nada. Los **16 bancos** dan **1123 pruebas**, todas en verde.
+   cambiar nada. Los **17 bancos** dan **1153 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

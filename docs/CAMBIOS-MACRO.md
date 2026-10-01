@@ -1,4 +1,4 @@
-﻿# Cambios macro por actualización
+# Cambios macro por actualización
 
 Historial **macro**: qué cambió de verdad en el juego y por qué, no el detalle de
 fichero. El detalle está en los mensajes de commit (`git log`) y en las cabeceras
@@ -483,8 +483,74 @@ conectada de una que no lo está: para eso hace falta el caso con multiplicador,
 ese es el del banco.
 
 
----
+## Fase 10 — El precio sigue al poder (2026-10-01)
 
+Una partida se medía en **20 minutos**: los diez tiers de recolector y compañero,
+comprados. Eso no es una partida larga, es un formulario.
+
+### La causa era peor de lo que parecía
+
+Los precios de las cartas escalaban **1.5x por tier** y el poder escala **1.62x**.
+El coste por punto de poder, entonces, **bajaba** al subir de tier:
+
+| | precio | poder | coste por punto |
+|---|---|---|---|
+| T1 | 850 | 6 | 142 |
+| T6 | 7 200 | 68 | 106 |
+| T10 | 17 500 | 466 | **38** |
+
+El T10 salía **3.7x más rentable** que el T1. El juego se resolvía solo.
+
+**Y el comentario que explicaba el arreglo anterior era falso.** Decía "el coste
+por punto se mantiene entre 170 y 235 en todo el rango". No era verdad, y no lo
+era por un motivo concreto: **ese arreglo se hizo cuando el daño iba de 5 a 77**,
+y luego `TIER_SYSTEM.ranges` abrió el T10 a `[373, 559]` sin tocar los precios. El
+comentario describía un sistema correcto que ya no era el que corría.
+
+Es la segunda vez en dos días que un comentario afirma algo que el código ya no
+hace. Un comentario no se verifica solo. **Esto sí: `balanceCheck`.**
+
+### Qué cambió
+
+- **Una sola tabla** para compañero y recolector, que cuestan lo mismo porque
+  sacan el poder del mismo `TIER_SYSTEM.ranges`. Antes el T10 de uno costaba
+  77 000 y el del otro 17 500, por el mismo poder.
+- **El coste por punto sube 12% por tier**, de 150 en T1 a 416 en T10. Esa
+  subida es el **sobreprecio deliberado** que el código promete: el T10 es un
+  objeto de escaparate, no una optimización. Y es lo que estira la partida sin
+  tocar el ingreso: el total de T1 a T10 pasa de ×21 a ×479, y los dos últimos
+  tiers se llevan el 70% de todo.
+- **Sintonizar ya no es un botón.** La curva de coste de cristal subió de 1.14 a
+  1.26 por nivel y el cristal de 60 a 200. Subir a nivel 20 pasaba a costar un
+  4% del recolector —menos que comprarlo— y ahora cuesta el 47%.
+- **De paso, una tercera discrepancia de precios**: `CRYSTAL_DEFS[1].cost` decía
+  1 440 y `STORE_ITEMS.upgradeCrystal.cost` decía 60. Cobraba el segundo; el
+  primero es un campo muerto que nadie lee.
+
+### Lo que rompió, y por qué importa
+
+El cambio tumbó **9 pruebas** de `buyCheck` y `stateCheck` que tenían los precios
+escritos a mano (60, 850, 17500, 99 cristales). Ninguna era un bug del juego:
+**el test tenía su propia copia de la tabla de precios**, que es exactamente el
+error del comentario. Se arreglaron leyendo `STORE_ITEMS` y
+`collectorUpgradeCost` en vez del número escrito.
+
+Es la misma lección por tercera vez, y la que más caro sale: **en este proyecto
+nadie verifica lo que dice un número**.
+
+### Qué se comprobó
+
+`npm run build` (tsc limpio) y `npm run verify`: **17 bancos, 1153 pruebas**. Los
+30 nuevos son de `balanceCheck`, que ata cuatro cosas: la banda de coste por
+punto, que **un tier superior nunca sea mejor por punto que el anterior** (esa es
+la que habría servido para cazar este bug), que las dos curvas coincidan y que la
+partida se estire.
+
+**Lo que el banco NO comprueba, y solo se verifica jugando:** que la partida
+dure lo que tiene que durar. Los números pueden encajar entre sí y seguir siendo
+una partida de veinte minutos. Queda como **P4** en `PENDIENTES.md`.
+
+---
 ## La forma de los commits
 
 Vale la pena copiar este estilo, porque es el que hace legible el historial:

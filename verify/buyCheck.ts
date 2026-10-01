@@ -1,4 +1,4 @@
-// ==========================================================================
+﻿// ==========================================================================
 //  Banco de pruebas de la COMPRA
 //
 //  Cubre `buyStoreItem` (la tienda entera) y `buyNode` (el arbol de pasivas).
@@ -65,19 +65,32 @@ async function main() {
     { k: 'clickX3Card', tipo: 'consumable', coste: 15000, nombre: 'Click x3' },
     { k: 'calibrationStone', tipo: 'consumable', coste: 45000, nombre: 'Calibración' },
     { k: 'stabilityNano', tipo: 'consumable', coste: 90000, nombre: 'Nanopartícula' },
-    { k: 'companionCardT1', tipo: 'companion', coste: 900 },
-    { k: 'companionCardT5', tipo: 'companion', coste: 7400 },
-    { k: 'collectorCardT1', tipo: 'collector', coste: 850 },
-    { k: 'collectorCardT10', tipo: 'collector', coste: 17500 }
+    { k: 'companionCardT1', tipo: 'companion' },
+    { k: 'companionCardT5', tipo: 'companion' },
+    { k: 'collectorCardT1', tipo: 'collector' },
+    { k: 'collectorCardT10', tipo: 'collector' }
   ];
 
+  // POR QUÉ EL COSTE NO ESTÁ EN LA LISTA. Estaba, escrito a mano en cada fila, y
+  // cuando la curva de balance se rehizo estas pruebas fallaron sin que hubiera
+  // ningún bug: el test tenía su propia copia de la tabla de precios. Con el
+  // precio leído de `STORE_ITEMS` el banco sigue comprobando lo que dice
+  // comprobar —que se cobra lo que la carta cuesta— y si mañana cambia el precio
+  // no tiene nada que(actualizarse.
+  //
+  // Y la cartera se siembra por ENCIMA del precio más caro de la lista, no con
+  // una cifra fija: con 200 000 justos el T10 se quedaba sin margen y el fallo
+  // habría parecido de saldo en vez de de tabla.
+  const masCaro = Math.max(...casos.map(c => (STORE_ITEMS as Record<string, { cost: number }>)[c.k].cost));
+
   for (const c of casos) {
-    const g = await boot(baseSave([], { nanites: 200_000 }));
+    const coste = (STORE_ITEMS as Record<string, { cost: number }>)[c.k].cost;
+    const g = await boot(baseSave([], { nanites: masCaro * 2 }));
     const antesN = wh(g).length;
     const antesNanites = nanites(g);
     const item = g.buyStoreItem(c.k as any);
 
-    check(`tienda ${c.k}: cobra ${c.coste}`, nanites(g) === antesNanites - c.coste,
+    check(`tienda ${c.k}: cobra ${coste}`, nanites(g) === antesNanites - coste,
       `cobrado=${antesNanites - nanites(g)}`);
     check(`tienda ${c.k}: mete 1 item de tipo ${c.tipo}`,
       wh(g).length === antesN + 1 && deType(g, c.tipo) === 1,
@@ -140,16 +153,23 @@ async function main() {
   {
     // El borde: nanitas EXACTAMENTE iguales al precio. Si el `>=` esta al reves,
     // el jugador con la cantidad justa no puede comprar nunca.
-    const g = await boot(baseSave([], { nanites: 60 }));
+    //
+    // Y EL PRECIO SE LEE DE `STORE_ITEMS`, no se escribe aqui. Estaba puesto a
+    // mano (60) y cuando el cristal paso a 200 esta prueba fallo sin que hubiera
+    // ningun bug: el test tenia su propia copia del numero. Es la misma clase de
+    // error que un comentario que describe un precio.
+    const precioCristal = (STORE_ITEMS as Record<string, { cost: number }>).upgradeCrystal.cost;
+    const g = await boot(baseSave([], { nanites: precioCristal }));
     const r = g.buyStoreItem('upgradeCrystal');
     check('tienda: con las nanitas justas SI se compra', r !== false, String(r));
-    check('tienda: y deja la cartera a cero', nanites(g) === 0, 'nanites=' + nanites(g));
+    check('tienda: y deja la cartera a cero', nanites(g) === 0, 'nanitas=' + nanites(g));
   }
   {
-    const g = await boot(baseSave([], { nanites: 59 }));
+    const menos = (STORE_ITEMS as Record<string, { cost: number }>).upgradeCrystal.cost - 1;
+    const g = await boot(baseSave([], { nanites: menos }));
     const r = g.buyStoreItem('upgradeCrystal');
-    check('tienda: con una nanita menos NO se compra', r === false && nanites(g) === 59,
-      'nanites=' + nanites(g));
+    check('tienda: con una nanita menos NO se compra', r === false && nanites(g) === menos,
+      'nanitas=' + nanites(g));
   }
   {
     // Una clave que no existe en la tienda no puede cobrar nada, aunque se le

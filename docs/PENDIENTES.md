@@ -74,17 +74,50 @@ segundo compañero sí muestra el daño. A lo mejor es un problema con el primer
 _Preguntas sobre si el juego va bien de ritmo. No son bugs: son decisiones tuyas
 sobre cuánto debería costar._
 
-### P1 · Se llega muy rápido a compañeros de tier 6
+### P1 · Se llega muy rápido a compañeros de tier 6 — ARREGLADO
 
 Llegué muy rápido a los compañeros tier 6... ¿está bien el balance? ¿podrás ver?
 
-### P2 · Se llega muy rápido a recolectores de tier 7
+> **Causa:** el precio por punto de poder BAJABA al subir de tier, porque los
+> precios escalaban 1.5x y el poder 1.62x. El T10 salía a 38 por punto contra
+> 150 del T1. Medido sobre 20 minutos de partida real: los diez tiers, comprados.
+>
+> **Arreglado:** el coste por punto sube ahora con el tier (150 → 416), que es el
+> sobreprecio deliberado que el propio código promete. La partida se estira sola
+> hacia el final. Cubre `balanceCheck`.
+
+### P2 · Se llega muy rápido a recolectores de tier 7 — ARREGLADO
 
 Lo mismo que a los recolectores, llegué muy rápido al recolector tier 7.
 
-### P3 · Los cristales de mejora son muy baratos
+> **Causa:** la misma, y aquí era más grave. Los recolectores escalaban 1.5x
+> igual, pero el daño real va de 6 a 466 (78x, por `TIER_SYSTEM.ranges`) y el
+> precio iba de 850 a 17 500 (20.6x). El comentario del código decía "el coste
+> por punto se mantiene entre 170 y 235" y era falso: medido, T10 salía a 38.
+>
+> **El arreglo anterior no estaba mal, quedó viejo.** Se hizo cuando el daño iba
+> de 5 a 77; luego el daño se abrió a 466 y los precios no se tocaron. Por eso
+> los dos reparos coinciden ahora en una tabla.
+>
+> **Arreglado:** recolector y compañero cuestan lo mismo. Cubre `balanceCheck`.
+
+### P3 · Los cristales de mejora son muy baratos — ARREGLADO
 
 Los cristales de mejora valen muy baratos, es muy fácil mejorar los ítems...
+
+> **Causa:** subir a nivel 20 costaba 100 cristales, que a 60 cada uno salían
+> 6 000 nanitas: un 4% del recolector. No había nada que decidir, era un botón.
+> Y el cristal costaba 60 en `STORE_ITEMS` y 1 440 en `CRYSTAL_DEFS`, que es un
+> campo muerto: dos precios para la misma cosa.
+>
+> **Arreglado:** curva de coste de 1.14 a 1.26 por nivel y el cristal a 200.
+> Nivel 20 cuesta ahora ~47% del recolector. Cubre `balanceCheck`.
+
+### P4 · Verificar en partida real
+
+> **Pendiente de tu lado.** El banco comprueba que los números encajen entre sí,
+> no que la partida dure lo que tiene que durar. Para eso hace falta jugarla:
+> otra partida nueva y decir hasta dónde llegas y en cuánto tiempo.
 
 ---
 
@@ -121,10 +154,11 @@ se pisan**, y un conflicto ahí no es un conflicto de texto: es economía. Un
 
 ### Los cuatro pasos
 
-1. **P1-P3 · balance.** Son números puros en `data/`, se pueden paralelizar sin
-   tocarse, y **dan información**: si el tier 6 llega demasiado rápido, igual F7
-   deja de ser una feature y pasa a ser un ajuste. Programar F7 antes de esto es
-   adivinar.
+1. ~~**P1-P3 · balance.**~~ **HECHO.** Se midió sobre tu partida de 20 minutos y
+   el diagnóstico fue el que sospechábamos pero peor: el precio por punto de
+   poder **bajaba** al subir de tier, así que comprar T10 era 3.7x más rentable
+   que comprar T1. Corregido, con `balanceCheck` atando que no vuelva a pasar.
+   Queda **P4**, que solo se verifica jugando otra vez.
 2. **B1 · el bug del primer slot.** El único defecto real, y es de los que
    rompen una regla del proyecto: lo que se enseña tiene que ser lo que se cobra.
 3. **Mudanza de las 230 líneas de datos a `src/data/`.** Ver abajo. Riesgo casi
@@ -172,6 +206,8 @@ _Lo terminado, para no perder el hilo. Una línea por cosa y el commit donde ent
       del árbol tienen señal.
 - [x] La ruleta del sintonizador, y la de las cajas partida en tres ficheros
       (`ce3a346`).
+- [x] **P1-P3 · balance.** El precio de las cartas sigue al poder y sube con el
+      tier; sintonizar ya no es un botón. `balanceCheck` (29) es el banco nuevo.
 
 ---
 

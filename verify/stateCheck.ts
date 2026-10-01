@@ -588,17 +588,25 @@ async function main() {
     // "ya no puedes": la barra de la ficha prometia 28 niveles y el motor daba
     // 20. Un techo que la pantalla no enseña hace que el jugador pague por algo
     // que no existe.
+    // Y la cantidad de cristales se CALCULA, no se escribe. Estaba fija en 99 y
+    // cuando la curva de coste de sintonización se endureció (1.14 a 1.26 por
+    // nivel) el nivel 20 pasó a costar 132 y estas pruebas fallaron sin ningún
+    // bug: la partida de test se había quedado sin cristales. El banco tiene que
+    // depender del coste, no de un número que alguien escribió una vez.
+    const paraPasarDe20 = collectorUpgradeCost(20);
+    const cristalesDe20 = paraPasarDe20 + 10;
+
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 20, maxLevel: 28, potential: 3 }),
-      crystal('x1', 1, 99)
+      crystal('x1', 1, cristalesDe20)
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const r = conRoll(0, () => g.upgradeEquippedCollector(1));
     check('mejora: un recolector forjado pasa del 20 si su techo da',
       r.success === true && find(g, 'r1').level === 21,
       `nivel=${find(g, 'r1').level} msg=${r.msg ?? ''}`);
-    check('mejora: y el gasto es real', find(g, 'x1').stackCount === 99 - collectorUpgradeCost(20),
-      `x1=${find(g, 'x1').stackCount}`);
+    check('mejora: y el gasto es real', find(g, 'x1').stackCount === cristalesDe20 - paraPasarDe20,
+      `x1=${find(g, 'x1').stackCount} menos ${paraPasarDe20}`);
     const g2 = await reload();
     check('mejora: y el nivel 21 sobrevive a la recarga', find(g2, 'r1')?.level === 21,
       'nivel=' + find(g2, 'r1')?.level);
