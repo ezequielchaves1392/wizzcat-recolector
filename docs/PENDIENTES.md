@@ -310,18 +310,22 @@ decisiones grandes, no ajustes._
 fallar pueda restar 1 o 2 niveles. Encaja con F31 y explica por qué la forja de T10 es
 aburrida hoy: **fallar no cuesta nada**.
 
-**Las cuatro decisiones ya están tomadas**, y con F26 cerrada solo queda **una ambigüedad
-que no puedo decidir yo:** en F26 dijiste "no surge efecto **o** se necesitan varios", y
-son dos comportamientos distintos. El que recomiendo es **"varios del mismo"** (el cristal se
-queda corto y el jugador nunca desperdicia); el otro obliga a **decirlo en la ficha**, o
-el jugador compra Entropía que no hace nada — el mismo R3 de las llaves—.
+**Las cuatro decisiones ya están tomadas** y ya no queda ninguna ambigüedad abierta. Con
+F26 cerrada, **ninguna de las trece peticiones necesita una respuesta para empezar a
+programar**; lo que queda es trabajo y tres números:
+
+| # | Número abierto |
+|---|---|
+| **F26** | ¿10 niveles de cristal, o bandas? Y **qué caja suelta cada uno** — hoy solo hay 2 obtenibles de 4. |
+| **F31** | **¿El techo de la forja sigue siendo T11?** Hoy `tier >= 11` se rechaza, así que la forja no pasa de T10. |
+| **F32** | **¿La probabilidad de fallo sube con el nivel?** Si no sube, la pérdida de niveles solo afecta al tramo 10-20. |
 
 **Y cuatro decisiones que ya están tomadas** (respondidas, medido lo que se puede medir):
 
 | # | Decisión | Qué implica |
 |---|---|---|
 | **F23** | **Negarse a entrar**, no expulsar al otro | Nadie pierde la partida en curso. La otra sesión sigue viva hasta que se cierre sola. |
-| **F26** | **La cantidad depende del cristal**: 1 superior sustituye a varios inferiores, y en un tramo alto el mismo superior se queda corto. | **Cambia el eje del cristal**: de "probabilidad" a "cuánto avanza". Eso elimina el azar de la sintonización y obliga a F32 a redefinirse. |
+| **F26** | **El cristal tiene que ser del mismo tier del item, estrictamente.** La progresión se mantiene como está, así que el fallo sigue existiendo. | No cambia la economía, pero **obliga a que existan 10 niveles de cristal**: hoy solo hay 4 definidos y **solo 2 obtenibles**. Si el T8 pide cristal T8 y ese cristal no sale de ninguna caja, el T8 es un muro. |
 | **F29** | **Los núcleos entran en el cálculo del definitivo Y tienen pestaña aparte** | Puntúan y además se ven. |
 | **F31** | **El tier sube por forja, o bien una caja inferior puede tirar llaves y cajas de tier superior** | Dos vías, no una. |
 
@@ -1000,72 +1004,67 @@ Mover el mercado al primer segundo amor porque siempre lo confundo.
 >
 > Y es justo la clase de cosa que **no necesita un banco**: es posición en un array.
 
-### F26 · La cantidad depende del cristal: uno superior sustituye a varios, pero no siempre
+### F26 · El cristal tiene que ser del mismo tier del item, estrictamente
 
-Si la cantidad depende del cristal, un cristal de tier superior requiere 1 en items de tier
-inferior porque es más fuerte; pero ese mismo cristal en un tier más alto no surge efecto o
-se necesitan varios del mismo.
+Arreglarlo para que necesite cristales del mismo tier del item que estoy mejorando
+estrictamente, y que la progresión se mantenga como está ahora para que haya fallo.
 
-> **Decidido, y tiene una consecuencia que simplifica el sistema entero: si el cristal
-> aporta una CANIDAD, entonces la cosa que debe escalar es "cuánta mejora cuesta", no
-> "con qué probabilidad".**
+> **DECIDIDO, y es mejor que la variante que yo había propuesto. Tres razones:**
 >
-> **La regla, con tus palabras:** el cristal es **una medida del progreso**, no un
-> multiplicador de suerte. Un cristal de nivel superior hace el trabajo de varios de los
-> inferiores —"1 en vez de muchos"— y por eso en un tramo bajo **con uno basta**. Y en
-> un tramo alto, ese mismo cristal **no alcanza**: o no surte efecto, o hacen falta varios.
+> 1. **Es mucho menos invasivo.** No cambia la economía: el cristal sigue siendo lo que
+>    multiplica la **probabilidad de acierto** (`crystalSuccessChance`) y la cantidad
+>    sigue siendo `collectorUpgradeCost` con su 1,26 por nivel. No hay que tocar la curva
+>    de progresión.
+> 2. **El fallo se conserva, y eso salva a F32.** Si el cristal sigue siendo probabilidad
+>    y no cantidad, la sintonización **puede fallar**, y entonces tu idea de perder 1 o 2
+>    niveles a partir del 10 sigue teniendo dónde aplicarse. Con mi propuesta el azar
+>    desaparecía y F32 se quedaba sin sitio.
+> 3. **Y hace legible la elección.** Con la regla estricta no hay que hacer cuentas: el
+>    botón dice "necesitas Cristal T8" y está claro. Mi versión de "puntos de cristal"
+>    obligaba al jugador a dividir para saber qué comprar.
 >
-> **Y eso no necesita dos reglas, sale de una.** Si el coste del nivel N se mide en
-> **puntos de cristal**, y cada cristal aporta tantos puntos como su nivel, entonces sale
-> solo:
+> **Y tiene un efecto secundario que va justo a donde quieres con F31:** si un T8
+> **exige** cristal T8, y el cristal T8 sale de las cajas altas, **entonces las cajas
+> dejan de ser un adorno y pasan a ser obligatorias para progresar**. Eso es la misma cosa
+> que pedías en F31, resuelta por otro camino y sin tocar la forja.
 >
-> | Nivel del item | Coste en puntos | Se paga con |
+> ---
+>
+> **EL PROBLEMA QUE ESTA REGLA DESTAPA, Y ES EL TERCERO DEL MISMO TIPO.**
+>
+> Con items de tier 1 a 10, **la regla estricta necesita cristales de nivel 1 a 10**. Y
+> los que hay hoy son otra cosa:
+>
+> | Nivel de cristal | Nombre | ¿De dónde sale? |
 > |---|---|---|
-> | 5 | 3 puntos | 3 de Afino, o 1 de Fase |
-> | 10 | 12 puntos | 12 de Afino, o 2 de Fase, o 1 de Entropía |
-> | 18 | 60 puntos | 60 de Afino, o 6 de Entropía, o **varios** de Singular |
+> | 1 | Afino | **Se compra** (200) y sale de las cajas comunes, raras y épicas |
+> | 2 | Fase | **Solo cajas legendarias** |
+> | 3 | Entropía (x2,75) | **De ningún sitio** |
+> | 4 | Singular (x4) | **De ningún sitio** |
 >
-> El "1 en vez de muchos" y el "hacen falta varios" **son el mismo número visto desde
-> niveles distintos**. Por eso no hace falta una regla de "a partir del 10 el cristal
-> superior deja de servir": es que el coste sube y el mismo cristal se queda corto.
+> **Medido: las cuatro cajas solo dan `materialTier` 1, y la legendaria da 2.** O sea que
+> **`CRYSTAL_DEFS` declara cuatro cristales y el juego solo puede dar dos**. El 3 y el 4
+> tienen nombre, multiplicador y probabilidad de caída escritas, y **no los saca nadie**.
 >
-> **LO QUE ESTO CAMBIA, Y ES LO IMPORTANTE: hoy el cristal no mide progreso, mide
-> suerte.** `crystalSuccessChance` multiplica la **probabilidad de acierto**, y la
-> cantidad la lleva `collectorUpgradeCost` con un 1,26 plano por nivel. Cambiarlo a "el
-> cristal mide cuánto avanzas" **elimina el azar de la sintonización**: si compras el
-> cristal exacto, mejoras seguro. Y eso, con F32, cambia el carácter del
-> juego entero, para bien y para mal:
+> **Es el mismo fallo por tercera vez, y ya se puede llamar patrón:** la Llave del Vacío que
+> no salía de ninguna parte (**B6**), el Espectro Azulado que no sacaba ninguna tabla
+> (**D1**) y ahora los cristales 3 y 4. **Los tres eran una cosa definida y otra cosa que
+> nunca se conectaron.** Y aquí pasa a ser grave, porque con la regla estricta **si el T8
+> pide cristal T8 y el cristal T8 no existe, el T8 no se puede mejorar**: no es contenido
+> inalcanzable, es un **muro**.
 >
-> - **A favor:** el jugador deja de perder 40 cristales a lo loco, y el coste de subir
->   un nivel **se puede calcular de antemano**, que es lo que hace un incremental
->   legible ("me faltan 8 puntos, tengo 5").
-> - **En contra:** si la sintonización ya no puede fallar, **F32 se queda sin sitio**.
->   No se puede "perder 1 o 2 niveles" en algo que siempre acierta.
->
-> **Así que F26 y F32 juntas exigen partir el trabajo en dos ejes**, y creo que es lo
-> que quieres sin haberlo escrito:
->
-> - **El cristal decide CUÁNTO** (eje de progreso).
-> - **El nivel decide si ACIERTA y qué pasa si falla** (eje de riesgo), y F32 mete la
->   pérdida de niveles a partir del 10.
->
-> Así los dos se entienden y ninguno se pisa. **Pero es la confirmación más grande de
-> todo el lote**, porque quita el azar de la sintonización.
->
-> **Y queda una ambigüedad en tu frase que no puedo decidir yo:** "no surge efecto o se
-> necesitan varios". Son dos comportamientos distintos:
-> - **Se necesitan varios** (lo que sale de la tabla de arriba): el cristal sigue
->   sirviendo y solo se queda corto. **El jugador nunca desperdicia nada.**
-> - **No surge efecto:** por encima de cierto tramo el cristal bueno se vuelve inútil y
->   hay que bajar al básico. Eso **fuerza al jugador a tener los cuatro**, y es más
->   interesante a corto plazo y una mala idea a largo: el jugador deja de mirar el
->   cristal y vuelve al botón.
->
-> Yo haría **"varios del mismo"**, porque el otro comportamiento hace que el jugador
-> **tome decisiones con información equivocada**: si el botón dice 3 Entropía y en
-> realidad no hacen nada, el jugador va a comprarlos. **Y si el cristal no surtiera
-> efecto, tendría que decirlo en la ficha antes**, porque si no es el mismo R3 de las
-> llaves: un texto que promete algo que la regla no da.
+> **Lo que hay que hacer, y es contenido:**
+> - **Un nivel de cristal por tier de item**, o **bandas** si 10 niveles son demasiados. Con
+>   10 hay que escribir 10 nombres y 10 descripciones, y decidir qué caja suelta cada uno.
+> - **Y hay que decidir de dónde salen los altos**, que es la decisión de verdad: si solo
+>   salen de la legendaria, el tramo 8-10 **depende de una caja que cuesta 21.000 más
+>   llave**, y eso hay que medirlo. Si hay dos cajas que los sueltan, el tramo alto tiene
+>   dos fuentes y el juego no tiene un cuello de botella único.
+> - **Y la ficha tiene que decirlo antes**: con la regla estricta, si el jugador tiene
+>   Afino y toca un T8, el botón tiene que estar apagado con "necesitas Cristal T8", no
+>   enabled y fallando después. Es R3 otra vez, y aquí el coste de no hacerlo es alto: el
+>   jugador gasta 200 en cristal que no le sirve para nada.
+
 
 ### F27 · El almacén necesita un tope y las ampliaciones deben escalarse por tipo
 
@@ -1618,3 +1617,36 @@ como índice 5, y **la tabla de botín no lo usa**: solo se referencian los índ
 > guardado apunta al 5. `saltoCheck` lo comprueba, y comprueba también que los índices
 > 0 a 4 **siguen saliendo** — que es lo que rompería un guardado antiguo si alguien
 > reordenara el array.
+
+### D4 · El patrón: una cosa definida y otra que nunca se conectaron
+
+*(No es una petición del jugador. Es lo que emerge de los tres bugs anteriores, y está
+aquí para que el cuarto no pase.)*
+
+> **Tres veces en este lote, el mismo fallo exacto:**
+>
+> | | Qué está definido | Qué nunca se conectó |
+> |---|---|---|
+> | **B6** | La Llave del Vacío, con nombre y rareza | Ninguna caja la soltaba: la legendaria era **imposible de abrir** |
+> | **D1** | El Espectro Azulado, con tipo, poder y rareza | Ninguna tabla lo usaba: el índice 5 se saltaba |
+> | **F26** | Los cristales 3 y 4, con nombre y multiplicador | Ninguna caja los soltaba: **4 declarados, 2 obtenibles** |
+>
+> **La forma del fallo es siempre la misma:** hay una **tabla que describe** una cosa
+> (llaves, compañeros, cristales) y otra **tabla que la reparte**, y **las dos no tienen
+> por qué estar de acuerdo**. Ninguno de los tres casos era un error de cálculo: era una
+> lista que declaraba algo y un reparto que nunca lo mencionaba.
+>
+> **Por qué no lo detecta ningún banco, y esto es lo importante:** los tres eran
+> **contenido inalcanzable**, y el juego **funcionaba perfectamente** sin ellos. No había
+> ningún número que saliera mal — el saldo cuadraba, el guardado cuadraba, la ruleta
+> cuadraba. Lo único que faltaba era una cosa que el jugador nunca iba a ver.
+>
+> **Y por eso el banco que sirve aquí es uno de cobertura, no de números:** preguntar
+> "todo lo que está definido, ¿se puede conseguir?" no es una aserción de que un valor
+> sea tal cual, es una pregunta sobre **la unión de dos tablas**. Ninguno de los tres
+> bancos que cierran esto (`llaveCheck`, `saltoCheck`, y el que falta para los cristales)
+> podría haberlo visto antes de que la regla nueva lo pidiera.
+>
+> **La regla que sale de esto, para lo que se añada:** cuando se declara una cosa con
+> nombre, multiplicador y probabilidad, **tiene que haber un banco que pregunte de dónde
+> sale**. No que funcione: que exista. Es barato, y los tres bugs eran gratis de evitar.
