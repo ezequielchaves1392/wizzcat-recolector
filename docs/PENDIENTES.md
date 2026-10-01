@@ -1900,6 +1900,35 @@ apilando aquí al final, y se suben a "Features" cuando toca hacerlas._
 
 ---
 
+## v1.1.0 - 1 de octubre de 2026
+
+**Esta versión cambia el juego en cinco sitios y arregla cinco bugs que no se veían.**
+Lo que hay abajo no es una lista de deseos: es lo que **está implementado y verificado**
+en el tag 1.1.0.
+
+### Arreglado
+
+- **La caja legendaria ya se puede abrir.** No tenías llave. Ahora existe (18cf36d).
+- **El AFK se pone solo** mirando la pantalla, y el ratón deja de despertarlo (ec3fb01).
+- **El cartel de logro aparece**, y su pista mide el almacén que ves (04ab9f).
+- **Ya no hay buffs pasivos**, solo tarjetas (2e42e7d).
+- **Escuadra de 6 ranuras**, sin el +3 de golpe (77d8f6e).
+- **Las cajas tienen un peldaño de sorpresa**, y el Espectro Azulado ya sale (42aa3a5).
+- **La valoración y el desglose del daño** están a la vista (7843a52).
+
+### Decidido y especificado, sin implementar todavía
+
+Once peticiones que **cambian la economía**, especificadas con la cuenta a la vista en
+**F23-F36**: caja por tier, cristal del mismo tier del item, la tienda solo con cajas
+básicas, la forja de dos materiales que hereda el stat, techo del 75% desde el tier 20,
+y items y cristales hasta el tier 30.
+
+**Por qué no están en el código:** son un cambio de una vez. Hacerlos por partes dejaría
+el juego en un estado que no es ni el viejo ni el nuevo, y **los bancos pasarían en verde
+mientras el juego no tiene final**. Cuando quieras, se hacen seguidos y en orden.
+
+---
+
 ## Plan de trabajo
 
 _El orden que se va a seguir, y por qué en ese orden. Es una decisión, no una

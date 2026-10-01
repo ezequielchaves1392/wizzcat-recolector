@@ -551,6 +551,83 @@ dure lo que tiene que durar. Los números pueden encajar entre sí y seguir sien
 una partida de veinte minutos. Queda como **P4** en `PENDIENTES.md`.
 
 ---
+
+## Fase 11 - El contenido inalcanzable y la mitad visual (2026-10-01, `v1.1.0`)
+
+Siete commits, `7843a52` a `fd4e88f`. La fase corta pero la que más contenido
+inalcanzable destapa, y **tres de los cinco bugs eran cosas que el juego hacía
+exactamente igual sin un solo número que saliera mal.**
+
+### Los bugs
+
+| | Qué pasaba |
+|---|---|
+| **B6-B7** | **La caja legendaria no se podía abrir nunca.** La Llave del Vacío no salía de ninguna parte, la Rúnica solo salía de la legendaria y la épica no soltaba llave ninguna: tres peldaños rotos, no dos. Los cuatro textos de las llaves mentían. La tienda llamaba "Llave de Cifrado" a una carta que entregaba la Reforzada, con el precio en un tercer sitio. |
+| **B9** | **El AFK no se ponía solo mirando la pantalla.** El corte solo vivía en el manejador de presencia, que no dispara con la pestaña visible; y el `mousemove` estaba registrado, así que **cualquier movimiento del ratón sacaba del AFK**. |
+| **B3-B4** | **El cartel de logro no salía nunca**, por dos causas: la compra de ampliar el almacén no evaluaba logros, y el cartel se descartaba porque no había layout todavía. Y la pista del logro medía la base del almacén, no la capacidad real. |
+| **D1** | El Espectro Azulado estaba definido y ninguna tabla lo sacaba. |
+
+### Las features
+
+**F1-F3** valoración abierta y en el panel, con el daño desglosado en base, nivel
+y bonos. **F4** fuera los buffs pasivos. **F7-F11** escuadrón de 6 ranuras. **F6**
+un peldaño de tier en las cajas.
+
+### Lo que las dos mitades juntas DMAÑAN
+
+Cada bug tenía **dos mitades**, y solo se había visto una en todos los casos:
+
+- El motor funcionaba y **la vista mentía** (el desglose, la forja, la pista del
+  logro).
+- El número estaba **en dos sitios y no coincidían** (el reparto del buff de
+  nivel, las cuatro cartas de llave, el precio de reventa).
+- El cálculo era correcto **y lo que se enseñaba no lo era** (`desgloseCheck`:
+  el buff se adjudicaba a "nivel", así que el panel decía "+200 nivel" para un item
+  cuyo nivel vale 50).
+
+Y hay un **patrón que se repitió tres veces** (**D4**): la Llave del Vacío, el
+Espectro Azulado y los cristales 3 y 4. **Una tabla que DESCRIBE una cosa y otra que
+la REPARTE, que no tienen por qué estar de acuerdo.** Los tres eran contenido
+inalcanzable y **el juego funcionaba perfectamente sin ellos**: el saldo cuadraba,
+el guardado cuadraba, la ruleta cuadraba. Por eso ningún banco los detectó, y
+por eso la regla que sale es que **cuando se declara algo con nombre, multiplicador
+y probabilidad, tiene que haber un banco que pregunte de dónde sale**. No que
+funcione: que exista.
+
+### Los cinco bancos nuevos
+
+`desgloseCheck` (31), `llaveCheck` (92), `ranuraCheck` (34), `tarjetaCheck` (17),
+`saltoCheck` (42). **Los cinco se validaron rompiendo el arreglo a propósito**, que
+es lo único que prueba que un banco sirve: 2, 4, 3, 1 y 4 fallos respectivamente.
+
+Y aparecieron **cuatro cosas que no buscaba**:
+- `Math.random()` evaluado al construir la tabla de botín, no al abrir la caja: toda
+  caja de la partida daba la misma cantidad de llaves.
+- El plural de "Llave Rúnica" mal, y una aserción que lo aceptaba porque miraba
+  `includes('Llaves')`.
+- `pickLoot` devuelve la entrada, no el premio.
+- **Un banco atado al bug sin saberlo**: `stackCheck` montaba una pila de nivel 1
+  *porque* la tienda entregaba la llave equivocada, y después daba por comprobado
+  que la correcta se fundía con ella. Un banco que mide el bug da verde con el
+  bug puesto.
+
+### Lo que se decidió y NO se implementó
+
+Once peticiones más quedaron **especificadas y sin código**, con la cuenta a la
+vista: caja por tier, cristal del mismo tier que el item, forja de dos materiales que
+hereda el stat y promedia, techo del 75% desde el tier 20, items y cristales hasta el
+30, tienda solo con cajas básicas. **El motivo de no implementarlas es que son un
+cambio de economía de una vez, no un bug**: hacerlas por partes dejaría el juego en
+un estado que no es el viejo ni el nuevo, y los bancos pasarían en verde mientras
+el juego no tiene final. Están en `PENDIENTES.md` con el porqué de cada número.
+
+### Qué se comprobó
+
+`npm run build` (tsc limpio) y `npm run verify`: **22 bancos, 1398 pruebas**, sin
+fallos. El total varía ±1 porque `playthroughCheck` tiene un `check()` condicional.
+
+---
+
 ## La forma de los commits
 
 Vale la pena copiar este estilo, porque es el que hace legible el historial:
