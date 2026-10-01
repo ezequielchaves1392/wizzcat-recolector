@@ -1,4 +1,4 @@
-﻿// ==========================================================================
+// ==========================================================================
 //  Banco de pruebas de la COMPRA
 //
 //  Cubre `buyStoreItem` (la tienda entera) y `buyNode` (el arbol de pasivas).
