@@ -259,10 +259,28 @@ export function renderPrestigePage(
   }, body));
 
   wireNav(root, { back: onBack, go });
-  wireEvents(root, game, onBack, state);
+  wireEvents(root, game, onBack, state, go);
 }
 
-function wireEvents(container: HTMLElement, game: any, onBack: () => void, state: any) {
+/**
+ * Conecta los manejadores de la Ascensión.
+ *
+ * `root` es el nodo que `mountInto` acaba de crear, y los listeners van ahí
+ * (R5). El re-render, en cambio, necesita el CONTENEDOR, y son cosas distintas:
+ * `mountInto` sustituye el `[data-page-root]` que es hijo del contenedor, así
+ * que si se le pasa el nodo montado no encuentra ninguno y hace `appendChild`.
+ *
+ * Consecuencia, y era un bug visible: comprar un nodo del árbol o pulsar
+ * "Reciclar" montaba una copia entera de la página DENTRO de la que ya estaba, y
+ * la copia no recibía `onHome` ni `go`: a partir del primer clic, el botón de
+ * inicio y los `data-nav` dejaban de responder y no había forma de salir.
+ *
+ * El contenedor se recupera con `root.parentElement`, que es exactamente lo que
+ * `mountInto` usó como padre. Es el mismo truco que usan `warehouse.ts` y
+ * `forgePage.ts`.
+ */
+function wireEvents(root: HTMLElement, game: any, onBack: () => void, state: any, go?: (r: any) => void) {
+  const container = root.parentElement as HTMLElement;
   // --- Reciclar ---
   container.querySelector('#recycle-btn')?.addEventListener('click', () => {
     const gained = nextCores({
@@ -278,7 +296,7 @@ function wireEvents(container: HTMLElement, game: any, onBack: () => void, state
         if (res.success) {
           sfx.prestige();
           showToast(`Ascendido: ${res.msg}`, 'success');
-          renderPrestigePage(container, game, onBack);
+          renderPrestigePage(container, game, onBack, go);
         } else {
           showToast(res.msg, 'error');
         }
@@ -320,7 +338,7 @@ function wireEvents(container: HTMLElement, game: any, onBack: () => void, state
             sfx.error();
             showToast(res.msg, 'error');
           }
-          renderPrestigePage(container, game, onBack);
+          renderPrestigePage(container, game, onBack, go);
         },
         {
           sublabel: `${cat?.label ?? 'Nodo'} · nivel ${level + 1}/${node.maxLevel}`,

@@ -1102,9 +1102,21 @@ function syncMaterialCounters() {
           ...(data.cosmetics?.unlocked ?? [])
         ]))
       };
-      // `totalCores` ausente en saves anteriores a la librería de restarting.
-      // Se reconstruye del mejor valor posible para no perder el histórico.
-      if (!data.totalCores) {
+      // `totalCores` no venía en las partidas anteriores a la librería de
+      // reinicios, así que hay que reconstruirlo.
+      //
+      // SOLO si el jugador ya recicló alguna vez. Con `resets === 0` el
+      // histórico es cero por definición —nadie ha ganado ningún núcleo todavía—
+      // y rellenar lo dejaba en un valor que nadie había ganado. El efecto era
+      // que `nextCores` restaba ese histórico fantasma y el primer Ascenso, con
+      // 1 M de producción, no daba ni un núcleo: el juego pedía 3,17 M y ninguna
+      // pantalla decía por qué.
+      //
+      // Con `resets > 0` el valor es una estimación y no un hecho, porque las
+      // partidas viejas no dejaron el dato. Se acepta el riesgo: perder el
+      // histórico sería peor que estimarlo, y en cuanto el jugador recicle una
+      // vez más el contador ya es real.
+      if (!data.totalCores && (data.resets ?? 0) > 0) {
         state.totalCores = pendingCores(state.totalNanitesProduced);
       }
       state.buffs = {
@@ -2778,9 +2790,23 @@ function syncMaterialCounters() {
       if (gained <= 0) {
         return { success: false, gained: 0, msg: 'Necesitas producir más para reciclar.' };
       }
-      if (!state.totalCores) {
-        state.totalCores = pendingCores(state.totalNanitesProduced);
-      }
+      // POR QUÉ AQUÍ NO HAY NINGÚN RELLENO A CERO.
+      //
+      // Hubo uno: si `totalCores` venía a cero se rellenaba con
+      // `pendingCores(totalNanitesProduced)`, pensando en las partidas viejas que
+      // no traían el campo. La idea era que el histórico no se quedara congelado.
+      //
+      // El problema es que el histórico ANTES de este reinicio ya está incluido en
+      // `gained`, y volver a rellenarlo lo contaba dos veces. Con 1 M de producción
+      // la primera Ascensión daba 8 núcleos —correcto— y dejaba el histórico en 16.
+      // Como `nextCores` RESTA el histórico, el segundo ascenso no daba un núcleo
+      // hasta producir 3,17 M en vez de 1 M: el primer reinicio salía por la mitad
+      // de precio y no lo decía por ninguna parte.
+      //
+      // Con `resets > 0` el histórico sí se puede reconstruir; con `resets === 0`
+      // es cero y punto, porque el jugador no ha reciclado nunca. Un guardado viejo
+      // que no traía el campo se comporta como el que sí: cobra de más una vez, y
+      // a partir de ahí el contador ya es real.
 
       const keptShards = state.shards;
       const keptForged = state.forgedCount;

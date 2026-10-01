@@ -273,7 +273,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
   }, body));
 
   wireNav(root, { back: onBack, go });
-  wire(root, game, onBack);
+  wire(root, game, onBack, go);
 }
 
 function lockedBody(state: any): string {
@@ -299,8 +299,26 @@ function lockedBody(state: any): string {
   `;
 }
 
-function wire(container: HTMLElement, game: any, onBack: () => void) {
-  const redraw = () => draw(container, game, onBack);
+/**
+ * Conecta los manejadores de la Forja.
+ *
+ * `root` es el nodo que `mountInto` acaba de crear, y los listeners van ahí
+ * (R5). El re-render, en cambio, necesita el CONTENEDOR, y son cosas distintas:
+ * `mountInto` sustituye el `[data-page-root]` que es hijo del contenedor, así
+ * que si se le pasa el nodo montado no encuentra ninguno y hace `appendChild`.
+ *
+ * Consecuencia, y era un bug visible: la Forja se anidaba dentro de sí misma y
+ * cada vez que se marcaba una piedra o se lanzaba una fusión aparecía una copia
+ * entera de la pantalla debajo. Además el redraw no repassaba `go`, así que a
+ * partir del segundo render el botón de inicio y los `data-nav` dejaban de
+ * responder y no había forma de salir de la página.
+ *
+ * El contenedor se recupera con `root.parentElement`, que es exactamente lo que
+ * `mountInto` usó como padre. Es el mismo truco que usa `warehouse.ts`.
+ */
+function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
+  const container = root.parentElement as HTMLElement;
+  const redraw = () => draw(container, game, onBack, go);
 
   // Estado derivado que los manejadores necesitan. Se recalcula aquí en vez de
   // capturarlo en `draw`, porque cuando llegan los eventos `draw` ya ha

@@ -237,19 +237,33 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
     }));
 
     let activo = true;
-    const pintar = () => {
-      if (!activo) return;
+    let rafId = 0;
 
-      // El color se lee del tema en cada frame: la lluvia cambia con el tema
-      // sin tener que recrear el canvas.
-      const accent = getComputedStyle(container).getPropertyValue('--accent').trim() || '#38bdf8';
+    /**
+     * Apaga la lluvia y suelta todo lo que registro.
+     *
+     * El bucle se para solo cuando el canvas sale del documento, y hace falta
+     * mirar `isConnected` en CADA frame en vez de solo al empezar: `renderAuth`
+     * se vuelve a llamar en cada ciclo de login y logout, así que la lluvia del
+     * acceso anterior se quedaba pidiendo frames para siempre sobre un canvas
+     * que ya no estaba en la pantalla. Una fuga por sesión, y en móvil es
+     * batería. Antes solo paraba al ocultar la pestaña, así que entrar y salir
+     * sin cambiar de pestaña la dejaba viva.
+     */
+    function parar() {
+      activo = false;
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      window.removeEventListener('resize', medir);
+      document.removeEventListener('visibilitychange', alCambiarVisibilidad);
+    }
 
-      // Rastro: se pinta un velo en lugar de borrar, y los caracteres se
-      // desvanecen solos.
+    function pintar() {
       ctx.fillStyle = 'rgba(3, 9, 22, 0.14)';
       ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
       ctx.font = TAM + 'px ui-monospace, monospace';
-      ctx.fillStyle = accent;
+      // El color se lee del tema en cada frame: la lluvia cambia con el tema
+      // sin tener que recrear el canvas.
+      ctx.fillStyle = getComputedStyle(container).getPropertyValue('--accent').trim() || '#38bdf8';
       ctx.globalAlpha = 0.15;
 
       for (const g of gotas) {
@@ -261,16 +275,34 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
         }
       }
       ctx.globalAlpha = 1;
-      requestAnimationFrame(pintar);
+    }
+
+    const seguir = () => {
+      if (!activo) return;
+      if (!canvas.isConnected) { parar(); return; }
+      pintar();
+      rafId = requestAnimationFrame(seguir);
     };
-    requestAnimationFrame(pintar);
 
     // Se detiene con la pestaña oculta: en algunos navegadores un rAF sigue
     // corriendo en segundo plano, y en móvil eso es batería.
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { activo = false; return; }
-      if (!activo) { activo = true; requestAnimationFrame(pintar); }
-    });
+    function alCambiarVisibilidad() {
+      if (document.hidden) {
+        activo = false;
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+        return;
+      }
+      // Al volver, solo se reanuda si el canvas sigue en pantalla. Si el jugador
+      // entró y salió mientras la pestaña estaba oculta, reanudar un canvas
+      // huérfano es justo la fuga que se está evitando.
+      if (!activo && canvas.isConnected) {
+        activo = true;
+        rafId = requestAnimationFrame(seguir);
+      }
+    }
+
+    document.addEventListener('visibilitychange', alCambiarVisibilidad);
+    rafId = requestAnimationFrame(seguir);
   }
 
   // ==========================================================================

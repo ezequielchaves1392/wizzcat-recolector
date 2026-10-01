@@ -22,7 +22,7 @@
 // ==========================================================================
 
 import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
-import { nextCores } from '../src/data/prestige';
+import { nextCores, pendingCores } from '../src/data/prestige';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel } from '../src/data/crafting';
 import { CRATE_LOOT } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity } from '../src/data/valuation';
@@ -1258,6 +1258,68 @@ async function main() {
     check('logros: los desbloqueados coinciden con el estado',
       g.getAchievements().filter((a: any) => a.unlocked).every((a: any) =>
         s(g).unlockedAchievements.includes(a.id)), 'desincronizado');
+  }
+
+  {
+    // LA PRIMERA ASCENSIÓN, QUE ES DONDE NADA MIRABA.
+    //
+    // Todas las pruebas de prestigio que había partían de `totalCores: 12` y
+    // `resets: 3`, así que nunca pasaban por el caso de un jugador que aún no ha
+    // reciclado nunca. Y ahí estaba el bug: se rellenaba `totalCores` con
+    // `pendingCores()` y luego se le sumaba `gained`, que ya incluye lo mismo. El
+    // histórico quedaba en el doble de lo ganado, y como `nextCores` lo resta,
+    // el segundo ascenso costaba 3,17 M de producción en vez de 1 M sin que nada
+    // lo dijera.
+    const g = await boot(baseSave([collector('r1')], {
+      totalNanitesProduced: 1_000_000,
+      cores: 0, totalCores: 0, resets: 0
+    }));
+    const esperado = pendingCores(1_000_000, s(g).bonus.coreGain);
+
+    const r = g.prestige();
+    check('prestigio: la primera ascencion da los nucleos justos',
+      r.success && r.gained === esperado, `ganado=${r.gained} esperado=${esperado}`);
+    check('prestigio: y el historico NO se cuenta dos veces',
+      s(g).totalCores === esperado, `totalCores=${s(g).totalCores} esperado=${esperado}`);
+    check('prestigio: la cartera queda con exactamente lo ganado',
+      s(g).cores === esperado, `cores=${s(g).cores} esperado=${esperado}`);
+    check('prestigio: y queda en un reinicio',
+      s(g).resets === 1, `resets=${s(g).resets}`);
+
+    const g2 = await reload();
+    check('prestigio: el historico corregido sobrevive a la recarga',
+      g2.getState().totalCores === esperado,
+      `totalCores=${g2.getState().totalCores}`);
+    check('prestigio: el anuncio de la pagina coincide con lo ya ganado',
+      g2.getPrestigeInfo().totalCores === esperado,
+      String(g2.getPrestigeInfo().totalCores));
+  }
+  {
+    // Y la mitad que de verdad se nota: el umbral del SEGUNDO ascenso.
+    //
+    // Con el histórico en el doble, producir 1 M por segunda vez no daba nada y
+    // el jugador tenía que llegar a 3,17 M sin que ninguna pantalla dijera por
+    // qué. Ahora el segundo ascenso empieza a dar en cuanto la producción
+    // justifica un núcleo más que el primero.
+    const g = await boot(baseSave([collector('r1')], {
+      totalNanitesProduced: 1_000_000,
+      cores: 0, totalCores: 0, resets: 0
+    }));
+    g.prestige();
+    // Se simula que el jugador vuelve a producir 1 M Exactamente.
+    const justo = pendingCores(1_000_000, s(g).bonus.coreGain);
+    g.getState().totalNanitesProduced = 1_000_000;
+    check('prestigio: al reconducir 1 M otra vez no hay segundo noyau todavia',
+      g.getPrestigeInfo().pending === 0 && justo > 0,
+      `pending=${g.getPrestigeInfo().pending} primerAscension=${justo}`);
+
+    // Un poco más de producción, y ya da uno.
+    g.getState().totalNanitesProduced = 2_000_000;
+    const segundo = g.getPrestigeInfo().pending;
+    check('prestigio: pasar de 1 M SI da el segundo núcleo',
+      segundo >= 1, `pending=${segundo}`);
+    check('prestigio: y da MENOS que el primero, porque el histórico se descuenta',
+      segundo < justo, `segundo=${segundo} primero=${justo}`);
   }
 
   resumen('estado, migracion y economia');
