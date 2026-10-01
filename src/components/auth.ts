@@ -211,6 +211,17 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Los dos estrechos, capturados en constantes.
+    //
+    // `pintar` y `alCambiarVisibilidad` son DECLARACIONES de función, y una
+    // declaración se puede llamar antes de los `if (!x) return` de arriba, así que
+    // TypeScript no les conserva el estrechamiento y las marcaba `possibly null`
+    // aunque aquí el `return` haga inalcanzable el null. `medir` y `seguir`, que
+    // son `const`, sí lo conservan: la diferencia es la forma, no los datos. Con
+    // estas dos constantes —ya estrechas— las dos declaraciones ven el tipo bueno.
+    const lienzo = canvas;
+    const contexto = ctx;
+
     // Se mide en píxeles reales del dispositivo: con `width=390` en un móvil se
     // vería borroso, porque el buffer no coincide con los píxeles que se pintan.
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -258,23 +269,23 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
     }
 
     function pintar() {
-      ctx.fillStyle = 'rgba(3, 9, 22, 0.14)';
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-      ctx.font = TAM + 'px ui-monospace, monospace';
+      contexto.fillStyle = 'rgba(3, 9, 22, 0.14)';
+      contexto.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      contexto.font = TAM + 'px ui-monospace, monospace';
       // El color se lee del tema en cada frame: la lluvia cambia con el tema
       // sin tener que recrear el canvas.
-      ctx.fillStyle = getComputedStyle(container).getPropertyValue('--accent').trim() || '#38bdf8';
-      ctx.globalAlpha = 0.15;
+      contexto.fillStyle = getComputedStyle(container).getPropertyValue('--accent').trim() || '#38bdf8';
+      contexto.globalAlpha = 0.15;
 
       for (const g of gotas) {
-        ctx.fillText(glifos[Math.floor(Math.random() * glifos.length)], g.x, g.y * TAM);
+        contexto.fillText(glifos[Math.floor(Math.random() * glifos.length)], g.x, g.y * TAM);
         g.y += g.v;
         if (g.y > filas + 2) {
           g.y = Math.random() * -8;
           g.v = 0.12 + Math.random() * 0.22;
         }
       }
-      ctx.globalAlpha = 1;
+      contexto.globalAlpha = 1;
     }
 
     const seguir = () => {
@@ -295,7 +306,7 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
       // Al volver, solo se reanuda si el canvas sigue en pantalla. Si el jugador
       // entró y salió mientras la pestaña estaba oculta, reanudar un canvas
       // huérfano es justo la fuga que se está evitando.
-      if (!activo && canvas.isConnected) {
+      if (!activo && lienzo.isConnected) {
         activo = true;
         rafId = requestAnimationFrame(seguir);
       }
