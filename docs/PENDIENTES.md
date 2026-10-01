@@ -1341,6 +1341,72 @@ sin comprar casi cajas; para darle más valor a las cajas, nivelemos todo.
 > **Es la petición más grande del lote**: no cambia un número, cambia de dónde sale el
 > poder. (b) y (c) ya están decididas y encajan bien.
 
+### F33 · La forja es el camino a los items perfectos: hereda el nivel de los materiales
+
+Lo que tiene la forma de beneficio es que se puede forzar un item perfecto. Si los items
+de tier 1 que mezclo están al máximo, su mezcla va a ser un tier 2 al máximo; y a su vez
+va a tener un plus de forja. La idea es obtener tiers, buscar los perfectos y tratar de
+forjarlos.
+
+> **ESTO RESUELVE EL NÚMERO QUE DI ANTES, y no lo hace cambiando el precio: cambia qué
+> estás comprando.** Yo había dicho que forjar hasta el T10 cuesta unas 75 veces más que
+> comprarlo. Con la herencia de nivel, **esas 75 veces compran algo que no se compra de
+> ninguna otra manera**: un T10 **con sus niveles**. La carta del T10 sale en nivel 0, y
+> la caja te da un T10 en nivel 0. **El único camino a un T10 perfecto es la forja**, y
+> eso es lo que hace que el precio exponencial sea justo en vez de absurdo.
+>
+> **Y la mitad de la idea YA ESTÁ HECHA. Medido, en `rollPotential()`:**
+>
+> ```ts
+> const levelScore = (m.level || 0) * 0.06;
+> score += rarityScore * 0.4 + levelScore;
+> ```
+>
+> O sea que **los materiales al máximo ya suben el potencial**, y el potencial 1-5 mueve
+> la rareza (`collectorRarity`), el techo de niveles (`maxLevel = 20 + potencial × 3`,
+> hasta 35), los afijos y el daño. Tres T1 al máximo aportan `3 × 20 × 0,06 = 3,6` puntos
+> de potencial, que es **casi el máximo de la escala**. O sea que el "si están al
+> máximo, sale mejor" **ya funciona**.
+>
+> **LO QUE NO EXISTE, Y ES LA MITAD IMPORTANTE:** el item forjado sale **siempre en nivel
+> 0**. En `attemptForge()` está literal: `level: 0`. Así que hoy, encima de subir de tier,
+> **se pierde todo el trabajo de subir niveles de los materiales**. La forja actual es
+> "tira tres collectors y recibe uno nuevo sin resiniciar".
+>
+> **Y ESO ES LO QUE HAY QUE AÑADIR: la herencia.** Y con ella sale el "plus de forja" que
+> dices, que puede ser una cosa o dos:
+> - **La herencia de nivel**: el forjado conserva una parte del nivel de los materiales.
+> - **El plus de forja**: una marca o bonus propio de lo forjado, que lo hace mejor que un
+>   T2 de la tienda aunque tenga menos nivel.
+>
+> ---
+>
+> **LA PREGUNTA QUE HAY QUE DECIDIR, Y ES DE BALANCE PURO: ¿cómo se hereda el nivel?**
+>
+> Si el forjado sale **exactamente** al nivel del material, hay un problema: un T2 en
+> nivel 20 se consigue en una sola forja, y **el afinar de ese T2 se vuelve inútil** — ya
+> está al techo. Y al revés, el forjado hereda un nivel que puede estar **por encima del
+> techo del nuevo tier** (un T1 de nivel 35 forjado da un T2 cuyo techo es 20 o 35).
+>
+> Las dos salidas que tienen sentido:
+>
+> - **Proporcional: `nivelNuevo = nivelViejo × (techoNuevo / techoViejo)`.** Tres T1 al
+>   máximo (20/20) dan un T2 al **100% de su techo**, que es 20 — o 35 si el potencial es
+>   alto. Y tres T1 al 50% dan un T2 al 50%. **La inversión se conserva como fracción**, el
+>   techo nuevo manda, y el afinar el T2 sigue teniendo trabajo por delante.
+> - **Por mínimo: se queda el más bajo de los tres.** Trivial de entender ("si uno está
+>   bajo, el resultado está bajo"), pero el jugador tiene que llevar **tres** al máximo
+>   para no perder, y se le castiga por el material que le sobró.
+>
+> Yo haría la **proporcional**, y el motivo es que hace que "buscar los perfectos" siga
+> valiendo la pena: con la proporcional, un T2 al 60% es mejor que uno al 40%, y el jugador
+> sigue teniendo motivo para no conformarse con el primero que le salga.
+>
+> **Y una consecuencia que encaja con F32, y es buena:** si el nivel se hereda en la
+> forja, **la pérdida de niveles no puede ser en la forja** (ahí no hay "{acierto}", hay
+> "sale mal"). La pérdida de 1 o 2 niveles es de la **sintonización**, que es donde ya
+> falla hoy. Los dos mecanismos no se pisan.
+
 ### F32 · A partir del nivel 10, fallar puede restar 1 o 2 niveles
 
 A partir por ejemplo de la mejora 10 de las armas, al fallar haya probabilidad de bajar de
