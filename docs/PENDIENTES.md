@@ -289,6 +289,133 @@ Obtuve el logro del almacen en 20 y no me salió un cartel.
 > `preview.html`. La cola está documentada en el código, no en el banco, porque es
 > una función local de un módulo que importa Firebase.
 
+---
+
+## Más cosas que pediste — este lote
+
+_Trece peticiones más, con tu texto intacto. Tres son **bugs** y van en el apartado
+de Bugs (B10-B12); las otras diez son Features (F23-F31), y dos de ellas son
+decisiones grandes, no ajustes._
+
+**Antes de empezarlas hay tres datos que solo tú tienes** y que evitan adivinar:
+
+1. **Forja (F24):** ¿el detalle enseña **1** y has metido 3 de verdad, o enseña 3 y has
+   metido 1? De eso depende que el arreglo sea una línea de vista o una migración de
+   partidas ya tocadas.
+2. **Sesión y theme (B11):** ¿el botón de cerrar sesión **está** y no responde, o **no
+   está**? Y en el mismo móvil, ¿pasa en horizontal y en vertical?
+3. **Almacén (F27):** ¿sabes si alguna partida tuya ya pasó de 50 ranuras? Decide si hace
+   falta migración.
+
+**Y cuatro decisiones que son tuyas, no código:**
+
+| # | La decisión | Por qué no es un ajuste |
+|---|---|---|
+| **F23** | ¿Expulsa al otro dispositivo o se niega a entrar? | Cambia quién pierde la partida en curso. |
+| **F26** | ¿La cantidad la fija el tipo de cristal, o el tipo solo multiplica? | Decide cuánto pesa el final de partida. |
+| **F29** | ¿Los núcleos entran en la puntuación o van solo en su pestaña? | Si puntúan, el reinicio pasa a ser rentable. |
+| **F31** | ¿Cómo se sube de tier: forja o cajas? | Es la petición que cambia de dónde sale el poder. |
+
+**Y un aviso honesto sobre el tamaño:** F31 y F27 se estorban entre sí. Si todo el poder
+pasa por la forja y la forja consume items, el almacén se llena de material —y F27
+quiere acotarlo—. Con las dos juntas hay que decidir qué pasa con el material que no te
+cabe: venderlo rompe tu progreso, y no venderlo te bloquea. **Conviene hacer F27 antes
+que F31.**
+
+---
+
+### B10 · En AFK por inactividad no sale el cartel, y el botón sigue animado
+
+El AFK al estar en la pantalla pero estar quieto debe mostrar el cartel y detener la
+animación en el botón de recolección.
+
+> **Lo de "debe mostrar el cartel" ya funciona por B9**, y conviene separarlo porque
+> son dos mitades que se confundían: ahora, estando quieto en la pantalla, el ingreso
+> **se corta solo** y `isAfk` **dice la verdad** — eso es B9, y `tickCheck` lo comprueba
+> con el reloj corrido. **Lo que falta es la mitad visual**, que es lo que pides aquí.
+>
+> **1 · El cartel.** Cuando el AFK salta por inactividad, el tick marca `isAfk` y
+> vuelve con `onUpdate(state, true)`, que es lo que repinta la pausa. B9 garantiza que
+> la variable es cierta; lo que falta comprobar es que **llegue a pintarse** en el
+> punto donde el jugador lo ve. Eso es el mismo reparto que B3: mitad medible, mitad
+> cableado.
+>
+> **2 · La animación del botón de recolección.** Esta es la que de verdad importa, y es
+> un caso de **CSS, no de lógica**: si hay una pulsación o una "respiración" cosida con
+> `animation: ... infinite`, esa animación **no depende de JavaScript** y sigue
+> corriendo con el juego parado. **Ningún banco lo detecta**, porque un banco
+> comprueba si la clase está puesta —y la clase va a estar puesta sí o sí— y no si el
+> píxel se está moviendo.
+>
+> **Lo que hay que hacer:** atar la animación a un atributo que el estado controle —un
+> `data-afk` en el contenedor, o una clase en `body`— para que el CSS pueda pararla con
+> una regla y no con JavaScript. Y **esto hay que verlo en `preview.html` a 390×844 con
+> el reloj corriendo**, porque es de los pocos fallos que no se pueden medir con un
+> número: hay que mirar.
+
+### B11 · En el celular no se puede cerrar sesión ni cambiar de theme
+
+En celu no puedo cerrar sesión ni cambiar de theme.
+
+> **Sin medir, y por eso no te voy a inventar la causa.** Lo que sí es una pista
+> fuerte, y sale del propio código: **el panel de tema está marcado para móvil**.
+> En `layout.ts` es `<div id="theme-sheet" class="lg:hidden ...">`, y `hidden` en
+> Tailwind es el breakpoint `lg` —ancho de escritorio—, no "tamaño de pantalla". O sea
+> que en un móvil **debería** verse, y no verse es un fallo de verdad.
+>
+> Quedan tres candidatos, y son muy distintos entre sí:
+> - **Que el botón esté pero no se pueda tocar.** Si el panel se abre debajo de otro
+>   elemento, o `safe-area-inset-bottom` no está contemplado en móvil, el síntoma es
+>   exactamente "está ahí y no hace nada".
+> - **Que no haya camino hasta él.** Que cerrar sesión esté en una página a la que no se
+>   llega, o detrás de un menú que no cabe en 390 px.
+> - **Que el botón no exista en ese build.** Menos probable, pero es lo primero que
+>   descartaría.
+>
+> **Lo que necesito de ti para no adivinar:** ¿el botón **está** y no responde, o **no
+> está**? Con eso se separa el caso de layout del caso de que falte el camino. Y si
+> pasa en horizontal y en vertical por igual, eso apunta a `safe-area`; si solo en
+> vertical, a la altura.
+
+### B12 · El segundo prestigio dice "produce 0 más" y no dice cuánto falta
+
+El segundo prestigio dice produce 0 más, pero no indica bien cuánto falta para poder
+prestigiar.
+
+> **Este sí está diagnosticado, es un bug real, y hay dos causas distintas. Medido.**
+>
+> **1 · El "produce 0 más" tiene la causa exacta.** En `prestigePage.ts:169-177` hay un
+> `if` que decide qué se pinta, y el caso de "todavía no hay ningún núcleo" dice:
+>
+> ```
+> Produce ${Math.max(0, PRESTIGE_MIN_NANITES - state.totalNanitesProduced)} más
+> ```
+>
+> `PRESTIGE_MIN_NANITES` es 1.000.000 y **es el umbral del PRIMER núcleo**, no el del
+> siguiente. En el segundo Ascenso ya lo has superado de sobra, la resta da 0, y el
+> texto dice "produce 0 más". La condición no contempla que ya haya núcleos: es un
+> caso pensado solo para la partida nueva.
+>
+> **2 · "No indica cuánto falta" es que el número no se enseña, aunque exista.** Y sí
+> existe: `nextCores()` es exactamente `pendingCores(producido) - totalCores`, o sea
+> **la diferencia entre lo que tu producción actual daría y lo que ya te llevaste**.
+> Está calculada, y se usa para decidir si el botón se enciende (`canRecycle =
+> pending > 0`). **Pero nunca se pinta.** El jugador ve un botón que o no se enciende,
+> y el motivo es un número que el motor tiene y nadie enseña.
+>
+> Peor: **`coreProgress()` también existe** y devuelve el progreso 0..1 hacia el
+> siguiente núcleo, y **tampoco se usa**. O sea que la barra está escrita y desconectada
+> — el mismo patrón que el ranking en B2: un campo que se calcula y nadie lee.
+>
+> **Lo que hay que hacer es enseñar, no calcular:** el `pending` como cifra y la barra
+> de `coreProgress()`. Los dos están listos.
+>
+> **Y hay una ambigüedad que hay que resolver antes**, porque el arreglo la hace visible:
+> `pendingCores()` **devuelve 0 por debajo del umbral**, y ese 0 es correcto para el
+> botón pero **no para una barra** — hay que distinguir "todavía no puedes" de "ya
+> puedes y esto es lo que te falta". Con el texto actual el jugador no puede saber en
+> cuál de los dos está.
+
 ### B4 · La pista del logro del almacén cuenta slots que no tienes — HECHO
 
 Relacionado con lo que dijiste de la "pista": el progreso de "Almacén Masivo"
@@ -741,7 +868,286 @@ logros**. Se podrá tradear más adelante.
 > revelar. Y la fecha de revelación —al recibirlo, al usarlo, o al intentar usarlo dos
 > veces— es una decisión, y es buena: es el momento que hoy no existe.
 
-### F22 · Sin poder comparar, media lista es trabajo a medias
+### F23 · No se pueden abrir dos sesiones a la vez, ni en dos dispositivos
+
+No debería poder abrir dos sesiones en dos dispositivos o en el mismo dispositivo. Si una
+está activa, validarlo y no dejar conectar otra hasta que se desloguee la otra.
+
+> **Revisado, y aquí no hay bug: el mecanismo nunca existió. Es una decisión, y una
+> de las que tocan la confianza del jugador.**
+>
+> **Lo que hay hoy, medido:**
+> - **No hay ningún bloqueo de sesión.** Ni `deviceId`, ni `heartbeat`, ni "sesión
+>   activa" en ningún sitio: `grep` sobre `src/` sale limpio. `firestore.rules` no
+>   tiene ninguna regla de sesión.
+> - Los dos dispositivos **juegan a la vez** contra el mismo documento
+>   `users/{uid}`, y `saveToFirebase()` escribe el estado **completo** con
+>   `setDoc(..., { merge: true })` cada 15 segundos. O sea que **se pisan el uno al
+>   otro**, sin error y sin aviso.
+> - Hay mitigación parcial y funciona: al cargar, la cola local **solo se adopta si es
+>   más nueva que el documento**, así que el segundo dispositivo no pisa al primero
+>   con datos viejos. Pero eso protege **el arranque**, no la partida en curso.
+> - Lo más grave: **la Ascensión paga con núcleos y borra las nanitas.** Si los dos
+>  Reinician a la vez, el segundo `prestige()` ve un saldo ya a cero y paga 0 núcleos
+>   por un reinicio que no le correspondía. La cola local protege ese caso (por eso
+>   existe), pero un prestige **con la pestaña abierta y sin recargar** no pasa por
+>   la cola.
+>
+> **Tu propuesta es la correcta, y tiene una forma que no complica nada:** un
+> `deviceId` guardado en `localStorage` (o `sessionStorage`), un `heartbeat` en
+> `users/{uid}`, y al arrancar, si el `deviceId` del documento es otro y su latido es
+> **reciente**, se rechaza la entrada con un mensaje. "Reciente" es la palabra clave:
+> hace falta un reloj de expiración corto (30-60 s) para que **cerrar la pestaña
+> libere la cuenta**, o el jugador se quedaría fuera de su propia partida.
+>
+> **LO QUE HAY QUE DECIDIR, Y ES TUYO:**
+> - **¿Expulsar al otro o negarse a entrar?** Si el nuevo **expulsa** al viejo, es lo
+>   más cómodo para quien juega y lo más agresivo para quien tenía el juego abierto
+>   en otra pestaña. Si **se niega a entrar**, nadie se queda sin su partida a medias
+>   pero hay que reintentar.
+> - **Y en el mismo dispositivo, dos pestañas** es el caso raro pero el que más
+>   gente se va a encontrar. Con `sessionStorage` en vez de `localStorage`, cada
+>   pestaña tiene su id y el caso se resuelve solo.
+
+### F24 · La forja: tocar un item gasta los 3 y no se puede desequipar
+
+Ver funcionamiento de la forja. Al tocar un item me toma como si cargué los 3. Necesito 3
+items. No puedo desequipar material que ingresé en la forja.
+
+> **Son dos cosas distintas y hay que separarlas, porque una puede ser un dato
+> perdido y la otra es un botón que falta.**
+>
+> **1 · "Al tocar un item me toma como si cargué los 3".** Aquí **no he medido nada**,
+> y por eso no te voy a inventar la causa: no sé si la forja guarda 3 unidades de lo
+> que tocaste, o si solo lo muestra así. **La diferencia es enorme**: si solo es el
+> pintado, es R3 —lo que se ve no es lo que hay— y se arregla en una vista; si guarda 3,
+> entonces cada toque de un solo item **destruye dos**, y eso no es un bug de texto sino
+> de economía, y las partidas que ya has jugado están tocadas.
+>
+> **Lo que sí se puede decir del síntoma:** "necesito 3 items" y "al tocar uno me toma
+> los 3" apuntan a que la casilla **no tiene cantidad**: o está llena o vacía. Si
+> hubiera un "x1/x2/x3" en la casilla, el jugador vería que solo ha cargado una.
+>
+> **Para cerrarlo hace falta un dato que solo tú tienes:** ¿el detalle de la forja
+> enseña **1** y has metido 3 de verdad, o enseña 3 y solo has metido 1? Con eso se
+> sabe si hay que tocar la vista o el motor.
+>
+> **2 · "No puedo desequipar material".** Esto es independiente y no necesita
+> diagnóstico: **si el material está en un estado aparte del almacén y no hay salida,
+> cada intento fallido es una pérdida permanente.** Metes un item que no te vale, lo
+> ves fallar, y no puedes sacarlo. Eso es lo que hace que la forja dé miedo de usar, y
+> por eso está en Features y no en Bugs: no es que falle, es que **no existe**.
+>
+> El arreglo barato es un botón de **quitar** por casilla que devuelva el item al
+> almacén. Y tiene una decisión de fondo que es tuya: si al quitar se queda sin
+> material para completar la receta, ¿se cancela el intento entero o se queda a medias?
+> Lo natural es cancelarlo entero, y además evita el estado raro de "intento a medias
+> guardado en el save".
+
+### F25 · El mercado va primero, porque siempre lo confundo
+
+Mover el mercado al primer segundo amor porque siempre lo confundo.
+
+> **Lo más barato del lote.** Y lo que hay que decidir es solo **cuál** es el mercado:
+> si es la pantalla de venta del almacén o una sección aparte, porque "primer
+> segundo" significa distinta cosa en cada caso. Una línea de orden en el array de
+> navegación y nada más.
+>
+> Y es justo la clase de cosa que **no necesita un banco**: es posición en un array.
+
+### F26 · Las mejoras de nivel piden cristales mejores, no solo más de los mismos
+
+Los tienes superiores requieren o cristales de distintos tipos o más cristales base para
+mejorarse.
+
+> **Revisado, y tu intuición es correcta pero a medias: los dos sistemas YA existen,
+> solo que no se hablan.**
+>
+> - **El multiplicador ya es por tipo de cristal.** `CRYSTAL_DEFS` tiene cuatro
+>   niveles: Afino (x1, el que se compra), Fase (x1,75), Entropía (x2,75) y Singular
+>   (x4). Los tres últimos **salen de las cajas altas**. O sea que **un nivel alto ya
+>   necesita un cristal mejor**: es lo que hace `crystalSuccessChance`.
+> - **La cantidad es plana.** `collectorUpgradeCost` multiplica 1,26 por nivel y
+>   **siempre del mismo cristal**. Ahí no hay tipo.
+>
+> Traducido: hoy el cristal decide **si** mejoras y cuánto cobra, pero **no qué**
+> gastas. Un jugador con 40 Entropía tiene que gastar 40 Afino, y los Afino son los
+> que se compran.
+>
+> **Y lo que hay que decidir es el punto dulce, y no sé cuál prefieres:**
+> - **(a) La cantidad también la fija el tipo** (un T8 pide 3 Singular, no 400
+>   Afino). El inventario pesa mucho menos y el final de partida se acelera, lo que
+>   va contra P1-P2 y contra "que el juego no se termine en un día".
+> - **(b) El tipo solo multiplica y la cantidad sigue subiendo** (lo que hay), y solo
+>   se **dice mejor** en la ficha qué cristal conviene.
+>
+> Yo haría una mezcla: **el tipo fija la cantidad a partir de cierto nivel** y por
+> debajo sigue siendo el básico. Pero es justo lo que decide el ritmo del final de
+> partida, así que es tuyo.
+
+### F27 · El almacén necesita un tope y las ampliaciones deben escalarse por tipo
+
+El almacén es infinito aparentemente. Ponerle un cupo, hacer que el agrandar almacén sea
+un objeto y las mejoras requieran un tipo mayor de mejora de almacén a medida que más
+cantidad tengo. Ej: Expansor T1, Expansor T2, etc.
+
+> **Revisado, y tu memoria de "infinito" es casi correcta: el tope existe y es un
+> número escrito a mano.**
+>
+> **Lo que hay:**
+> - `state.warehouseCapacity` sube **+5 por ampliación** y **no tiene techo en el
+>   motor**. El árbol de pasivas añade `+3` y `+8` aparte.
+> - La tienda **sí** tiene un tope visible: `backpackExpander` se apaga con
+>   "Al máximo" en `warehouseCapacity >= 50`. **Ese 50 está en la vista**, no en
+>   ninguna tabla. O sea que el tope que tú no ves es un número en `store.ts` que
+>   nadie puede cambiar sin abrir dos ficheros.
+> - **El objeto ya existe**: `Ranura de Almacén` es un consumible que sale de las
+>   cajas y da +1. Así que lo de "que sea un objeto" no hay que crearlo.
+>
+> **Y el segundo problema es más caro que el tope: el precio no escala.** Todas las
+> ampliaciones cuestan **6.000**, las que quieras y las que falten. Una carta de T10
+> cuesta **193.850**. O sea que ampliar 4 veces son 24.000 por un objeto permanente
+> — comparable a una carta entera de tier alto—, y **eso hace que se compre por
+> ser barato y no porque lo quieras**. Si además el tope de la vista es un 50 falso,
+> el jugador nunca sabe cuánto le queda.
+>
+> **Lo que hay que hacer, en orden:** (1) el tope sale de una tabla y no de un `50` en
+> la vista; (2) **Expansor T1 / T2 / T3** como pides, cada uno con más ranuras y más
+> precio —que es lo que hace la forja y no el almacén—; (3) decidir **qué pasa con las
+> partidas que ya pasaron del 50**, que es la razón por la que esto necesita una
+> migración y no solo un cambio de precios.
+>
+> **Y una consecuencia de fondo que hay que tener en cuenta:** con un tope de verdad, el
+> almacén pasa a ser **un recurso que obliga a vender**. Eso es bueno para el juego
+> (F30 quiere que las cajas valgan algo), pero significa que **`sellPrice` deja de ser
+> decorativo**: si un jugador no puede crecer porque el almacén está lleno y no le
+> compensa vender, está atrapado. Vale la pena decidir cómo es la salida.
+
+### F28 · La ruleta va demasiado rápido en el navegador y bien en el celular
+
+En el navegador la ruleta se ejecuta muy rápido, en celular anda bien. A lo mejor con un
+delta time.
+
+> **Tu hipótesis es la correcta, y hay un sitio donde ya está escrito por qué debería
+> funcionar — y por eso esinteresting que no funcione.**
+>
+> `crateRoulette.ts` cuenta las vueltas en **ventanas de tiempo visibles**, no en un
+> número de vueltas fijo, y `rouletteCheck` lo comprueba. O sea que el diseño ya
+> contempla que el trompo dure lo mismo en móvil y en escritorio. **Si en el navegador
+> va más rápido, es que algo por debajo cuenta otra cosa.**
+>
+> **Y la causa más probable es exactamente la que dices**, por una razón concreta: si
+> la animación avanza con `requestAnimationFrame` **contando frames**, entonces un
+> monitor de 144 Hz hace la misma animación en la mitad de tiempo real que uno de
+> 60 Hz. En el móvil el navegador baja a 60 (o a 30 con ahorro de energía), así que
+> **allí va "bien" por accidente**. El síntoma —"rápido justo donde hay más potencia"—
+> encaja con esto mejor que con ninguna otra explicación.
+>
+> **Y sí: delta time.** Es la solución estándar. Si ya cuenta milisegundos, entonces el
+> problema es otro y hay que mirarlo con un cronómetro: **`rouletteCheck` mide la
+> matemática de la curva, no cuánto tarda en pantalla**, así que esto no lo cubre
+> ningún banco. Es un caso de `ruleta-preview.html` con un reloj al lado.
+
+### F29 · Los núcleos van al ranking como pestaña nueva, y no como puntos
+
+Agregar al ranking núcleos adquiridos como nueva pestaña. No mostrar en base a qué se ganan
+puntos, que sea un cálculo interno; la adquisición de núcleos va a afectar a la nueva
+fórmula.
+
+> **Las dos mitades son distintas y la segunda es la buena.**
+>
+> **1 · Núcleos en el ranking, como pestaña.** Sale casi gratis: `state.cores` ya está
+> en el guardado y `getPrestigeInfo()` lo devuelve. El ranking solo no lo publica, y
+> eso es F22 diciendo que no se puede comparar. Y a diferencia de lo que dije de B8,
+> **aquí no hay decisión de privacidad**: un número de núcleos es "cuántas veces has
+> reiniciado", no tu saldo ni tu inventario.
+>
+> **2 · "Que no se vea en qué se ganan puntos, que sea un cálculo interno".** Esta es
+> la petición que más bien viene. Ahora el ranking **enseña una fórmula**: hay
+> `logro pesa 50.000, y uno secreto 250.000` repartidos, y un jugador que lo sepa
+> optimiza **la puntuación** en vez de **la partida** —que es justo lo contrario de lo
+> que quieres. Y F19 (logros que se regalan) vuelve esto peligroso de verdad: con los
+> pesos a la vista, regalar un logro de 250.000 puntos deja de ser un detalle y pasa a
+> ser lo más rentable que puede hacer un jugador — y por supuesto te lo haría a ti.
+>
+> Y **tu frase "va a afectar a la nueva fórmula" es la clave**: los núcleos ya van a
+> estar dentro, pero no como un número más de la suma. Si el núcleo **sube la
+> puntuación**, entonces reiniciar es una decisión rentable y el prestige deja de ser
+> un reinicio para pasar el rato. **Eso es una decisión de economía y es tuya**, y por
+> eso lo de la pestaña nueva tiene sentido: **los núcleos se enseñan aparte porque
+> no puntúan igual.**
+
+### F30 · Al pasar de 99 hay que generar otra pila — y revisar todos los apilables
+
+Al comprar más de 99 llaves se tiene que generar otro stack en el inventario. Lo mismo
+con los cristales, checkear los apilables en general.
+
+> **Aquí tu diagnóstico es correcto sobre lo que ves y hay que corregirlo sobre lo que
+> pasa.** Y lo importante: **no se pierden llaves.**
+>
+> `MAX_STACK` es `{ consumable: 20, crate: 20, key: 99, crystal: 99 }`, y el comentario
+> del propio fichero lo dice: es un **tope de pintado**, no de almacenamiento. Detrás de
+> una pila puede haber 25 cajas y el detalle sigue enseñando las 25. **Comprar 150
+> llaves no pierde llaves**; lo que hace es que la esquina se queda en 99.
+>
+> O sea que hay dos preguntas y **solo una es un bug**:
+> 1. **¿Se pierden al pasar de 99?** `stackCheck` comprueba que **no** (19 unidades,
+>    una sola pila, `stackCount` correcto, y sobrevive a la recarga). **Con 150 no está
+>    comprobado**, porque el banco se detiene en 19, y ese es el número que hay que
+>    probar antes de dar esto por cerrado.
+> 2. **¿Es correcto que se vea 99 cuando hay 150?** **Aquí tienes razón**, y es R3 otra
+>    vez: lo que se ve no es lo que hay. El jugador ve "99" y no tiene forma de saber
+>    que hay más ni cuánto. La solución obvia es **"99+"**, o enseñar el número de
+>    **pilas** en vez de un tope que parece un recorte.
+>
+> **Y "checkear los apilables en general" es la parte que más valor da**, porque
+> `MAX_STACK` son **cuatro números escritos a mano** y el criterio se repite en tres
+> sitios (`warehouse.ts:359`, `:908` y la línea 1344, que es la vista de venta). Tres
+> sitios que pueden discrepar. Lo que hay que hacer es **una función de apilado** que
+> sea la que decide el tope, el desglose y el número pintado, y que las tres vistas
+> llamen — que es exactamente el patrón que se acaba de aplicar a las llaves y a las
+> ranuras.
+
+### F31 · La tienda solo vende tier 0; los siguientes, por fusión o cajas
+
+Reestructuramos el sistema para que de la tienda solo se puedan comprar los tier 0 y
+mediante fusión o cajas se puedan comprar los siguientes tiers. Puede pasar el juego
+sin comprar casi cajas; para darle más valor a las cajas, nivelemos todo.
+
+> **La observación es buena y el número que la sostiene salió de P1-P2, pero falta la
+> mitad de la medición.**
+>
+> Lo que está atado con `balanceCheck`: **el precio por punto de poder sube con el
+> tier** (150 → 416), así que la progresión **por compras** está bien. Lo que **no**
+> está medido es **cuánto del camino se puede hacer sin abrir una caja** — y eso es
+> exactamente lo que estás diciendo. Con veinte cartas de 900 a 193.850 y un almacén
+> que se amplía pagando, es plausible que se llegue al final sin abrir ninguna.
+>
+> **Si es así, las cajas son un adorno con animación**, y eso es un problema de verdad:
+> el jugador no ve para qué están.
+>
+> **Lo que hay que decidir antes de escribir nada, y son tres cosas serias:**
+> - **(a) ¿Qué es el tier 0?** Hoy el T1 ya está en la tienda a 900. Si "tier 0" es el
+>   T1, la tienda pasa de 20 cartas a 2. Si es algo más bajo que aún no existe, hay que
+>   inventarlo.
+> - **(b) ¿Cómo se sube de tier?** La forja ya existe y mezcla 3 items (F24). Si los
+>   tiers altos salen de la forja, **la forja pasa de ser un minijuego a ser el camino**,
+>   y eso toca su economía entera, su coste y su tasa de fallo.
+> - **(c) ¿Qué dan las cajas?** Hoy dan **poder directo** (`companion_t6`,
+>   `collector_oc6`). Si el poder solo llega por fusión, la caja tiene que dar
+>   **material**, no compañeros ya montados. Eso es un rediseño del botín entero, no un
+>   ajuste de pesos.
+>
+> Y hay un **cuello de botella que aparece al hacerlo** y que conviene tener en la
+> cabeza: si todo el poder pasa por la forja, y la forja consume items, entonces el
+> **almacén se llena de material de forja** —y F27 quiere ponerle un tope. Los dos
+> cambios juntos se estorban: con el almacén acotado, hacer más poder exige vender más,
+> y hay que decidir si el material de forja se puede vender sin perder el progreso.
+>
+> **Es la petición más grande del lote**: no cambia un número, cambia de dónde sale el
+> poder. (b) y (c) son tuyas.
+
+### F22 · Sin poder comparar, media lista es trabajo a medios
 
 *(No es una petición del lote: es la consecuencia de hacerlo todo, y está aquí para que
 no se pierda.)*
