@@ -43,11 +43,11 @@ interface ForgeUIState {
 const ui: ForgeUIState = { selected: [], stones: 0, nano: false, tier: 0 };
 
 /** Punto de entrada. Re-monta la página conservando la selección. */
-export function renderForgePage(container: HTMLElement, game: any, onBack: () => void, onHome?: () => void, go?: (r: any) => void) {
-  draw(container, game, onBack, onHome, go);
+export function renderForgePage(container: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
+  draw(container, game, onBack, go);
 }
 
-function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: () => void, go?: (r: any) => void) {
+function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
   const state = game.getState();
   const unlocked = (state.nodeLevels?.blueprint || 0) > 0;
   const info = game.getForgeInfo();
@@ -264,7 +264,6 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
     subtitle: unlocked ? 'Fusión, autoría y potencial' : 'Bloqueada · necesitas 1 ◆',
     icon: 'anvil',
     onBack,
-    onHome,
     state,
     actions: unlocked ? `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
@@ -273,7 +272,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, onHome?: ()
       </span>` : ''
   }, body));
 
-  wireNav(root, { back: onBack, home: onHome, go });
+  wireNav(root, { back: onBack, go });
   wire(root, game, onBack);
 }
 

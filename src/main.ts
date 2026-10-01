@@ -9,7 +9,7 @@ import { renderAuth } from './components/auth';
 import { renderBloqueado } from './components/blocked';
 import { consultarBloqueo } from './services/bloqueoService';
 import { createGameLoop, type BuffKey } from './gameLoop';
-import { showToast } from './utils/toast';
+import { showToast, syncToastOffset } from './utils/toast';
 import { renderWarehouseTab } from './components/warehouse';
 import { renderRankings } from './components/rankings';
 import { renderStoreTab } from './components/store';
@@ -379,13 +379,6 @@ function renderRoute(route: Route) {
     renderRoute(router.current);
   };
 
-  /** Ir a la base ignorando el historial. Es el botón de "inicio" de escritorio. */
-  const goHome = () => {
-    sfx.nav();
-    router.goTo('base');
-    renderRoute(router.current);
-  };
-
   const go = (r: Route) => {
     sfx.nav();
     router.goTo(r);
@@ -399,24 +392,31 @@ function renderRoute(route: Route) {
     case 'almacen':
       renderWarehouseTab(app, activeGameInstance, goBack, () => {
         updateUI(activeGameInstance.getState(), activeGameInstance.isAfk());
-      }, goHome, go);
+      }, go);
       break;
     case 'forja':
-      renderForgePage(app, activeGameInstance, goBack, goHome, go);
+      renderForgePage(app, activeGameInstance, goBack, go);
       break;
     case 'tienda':
-      renderStoreTab(app, activeGameInstance, goBack, goHome, go);
+      renderStoreTab(app, activeGameInstance, goBack, go);
       break;
     case 'perfil':
-      renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'), goHome, go);
+      renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'), go);
       break;
     case 'ranking':
-      renderRankings(app, activeUser, goBack, goHome, go);
+      renderRankings(app, activeUser, goBack, go);
       break;
     case 'prestigio':
-      renderPrestigePage(app, activeGameInstance, goBack, goHome, go);
+      renderPrestigePage(app, activeGameInstance, goBack, go);
       break;
   }
+
+  // Los avisos flotantes se colocan midiendo el borde inferior de la cabecera, y
+  // la cabecera es distinta en cada vista (y le crece una fila con los buffs).
+  // Aquí se recolocan al terminar de montar, no cuando ya esté un aviso en
+  // pantalla: un aviso que sale durante el `app.innerHTML = ''` se quedaría
+  // pegado a la esquina.
+  syncToastOffset();
 }
 
 /** Vista principal: el recolector, el escuadrón y la navegación. */

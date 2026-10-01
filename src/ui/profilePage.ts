@@ -93,7 +93,6 @@ export function renderProfilePage(
   game: any,
   onBack: () => void,
   onGoPrestige: () => void,
-  onHome?: () => void,
   go?: (r: any) => void
 ) {
   const state = game.getState();
@@ -311,7 +310,6 @@ export function renderProfilePage(
     subtitle: 'Identidad, cosméticos y logros',
     icon: 'user',
     onBack,
-    onHome,
     state,
     // La píldora de nanitas de la cabecera se retiraba: el perfil ya trae su
     // propia cifra en la franja de estadísticas, con el mismo rombo delante de
@@ -321,14 +319,14 @@ export function renderProfilePage(
   }, body));
 
   // --- Eventos ---
-  wireNav(root, { back: onBack, home: onHome, go });
+  wireNav(root, { back: onBack, go });
   root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
 
   root.querySelectorAll<HTMLElement>('[data-cos-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       sfx.nav();
       ui.tab = btn.dataset.cosTab as 'title' | 'frame' | 'banner';
-      renderProfilePage(container, game, onBack, onGoPrestige, onHome, go);
+      renderProfilePage(container, game, onBack, onGoPrestige, go);
     });
   });
 
@@ -343,7 +341,7 @@ export function renderProfilePage(
       }
       sfx.equip();
       game.equipCosmetic(tab, cosId);
-      renderProfilePage(container, game, onBack, onGoPrestige, onHome, go);
+      renderProfilePage(container, game, onBack, onGoPrestige, go);
     });
   });
 }

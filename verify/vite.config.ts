@@ -43,7 +43,8 @@ export default defineConfig({
         gapCheck: resolve(here, 'gapCheck.ts'),
         lootCheck: resolve(here, 'lootCheck.ts'),
         queueCheck: resolve(here, 'queueCheck.ts'),
-        playthroughCheck: resolve(here, 'playthroughCheck.ts')
+        playthroughCheck: resolve(here, 'playthroughCheck.ts'),
+        toastCheck: resolve(here, 'toastCheck.ts')
       },
       formats: ['es']
     }

@@ -32,6 +32,26 @@
 const listeners = () => ({ addEventListener() {}, removeEventListener() {} });
 
 /**
+ * Busca por `id` en el árbol ya construido, y solo para selectores de id.
+ *
+ * Lo único que devuelve algo es lo que el propio código acaba de crear con
+ * `appendChild`: `#toast-stack` en `body`, por ejemplo. Un selector de clase o
+ * de etiqueta sigue dando `null`, porque decidir eso en Node significaría
+ * inventarse un DOM entero.
+ */
+function porId(raiz, sel) {
+  if (!raiz || typeof sel !== 'string' || !sel.startsWith('#')) return null;
+  const id = sel.slice(1);
+  const apilado = [raiz];
+  while (apilado.length) {
+    const nodo = apilado.shift();
+    if (nodo.id === id) return nodo;
+    if (Array.isArray(nodo.children)) apilado.push(...nodo.children);
+  }
+  return null;
+}
+
+/**
  * Un `localStorage` QUE GUARDA.
  *
  * Con un `{ getItem: () => null }` la cola de nanitas no se puede ni escribir
@@ -65,26 +85,43 @@ export function crearAlmacenLocal() {
  */
 export function elementoFalso() {
   const clases = new Set();
-  return {
+  const el = {
     textContent: '',
     innerHTML: '',
     dataset: {},
     style: {},
+    attributes: {},
+    children: [],
+    parentElement: null,
     classList: {
       add: (...c) => c.forEach(x => clases.add(x)),
       remove: (...c) => c.forEach(x => clases.delete(x)),
       toggle: (c, on) => (on ? clases.add(c) : clases.delete(c)),
       contains: (c) => clases.has(c)
     },
-    setAttribute() {},
-    removeAttribute() {},
-    appendChild() {},
-    remove() {},
+    setAttribute(k, v) { el.attributes[k] = String(v); },
+    getAttribute(k) { return k in el.attributes ? el.attributes[k] : null; },
+    hasAttribute(k) { return k in el.attributes; },
+    removeAttribute(k) { delete el.attributes[k]; },
+    appendChild(hijo) {
+      el.children.push(hijo);
+      if (hijo) hijo.parentElement = el;
+      return hijo;
+    },
+    removeChild(hijo) {
+      el.children = el.children.filter(x => x !== hijo);
+      if (hijo) hijo.parentElement = null;
+      return hijo;
+    },
+    remove() { el.parentElement?.removeChild(el); },
+    get firstChild() { return el.children[0] ?? null; },
+    get firstElementChild() { return el.children[0] ?? null; },
     querySelector: () => null,
     querySelectorAll: () => [],
     addEventListener() {},
     removeEventListener() {}
   };
+  return el;
 }
 
 /**
@@ -97,17 +134,35 @@ export function elementoFalso() {
  * `setTimeout` NO se anula a propósito: los avisos lo usan, y si el reloj no
  * corriera, un `setTimeout` que reventara pasaría desapercibido. Es
  * precisamente un `setTimeout` el que ha destapado el `classList` que faltaba.
+ *
+ * `__DOM__`: LA CABECERA DE LA PRUEBA.
+ *
+ * `showToast` coloca la pila de avisos leyendo el borde inferior del `<header>`
+ * de verdad, porque su alto no es fijo. Sin cabecera, `document.querySelector`
+ * devuelve `null` y el aviso se queda en el margen por defecto: ese camino es el
+ * de los bancos, y hay que poder mirarlo también.
+ *
+ * Así que un banco publica el nodo que quiera en `__DOM__['header']` y lo
+ * quita al terminar. Es el mismo truco que `__MEM_DB__` con Firestore: el
+ * entorno es el que sabe imitar al navegador, no cada banco por su cuenta. Por
+ * eso `querySelector` NO devuelve cualquier cosa: devuelve lo publicado, y `null`
+ * para todo lo demás, que es la respuesta correcta en Node.
  */
 export function instalarEntorno() {
+  globalThis.__DOM__ = {};
   globalThis.document = {
     visibilityState: 'visible',
     hasFocus: () => true,
     addEventListener() {},
     removeEventListener() {},
     createElement: () => elementoFalso(),
-    querySelector: () => null,
+    // Por `__DOM__` primero, y luego por `id` en el árbol que el código ya ha
+    // construido. Lo segundo no es adivinar: `#toast-stack` lo pone `toast.ts`
+    // sobre `body`, así que un banco puede mirar el contenedor de verdad por su
+    // id sin que el entorno sepa nada de avisos.
+    querySelector: (sel) => globalThis.__DOM__?.[sel] ?? porId(globalThis.document.body, sel),
     querySelectorAll: () => [],
-    body: { appendChild() {} }
+    body: elementoFalso()
   };
   globalThis.window = { ...listeners() };
   globalThis.performance ??= { now: () => Date.now() };

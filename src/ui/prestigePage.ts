@@ -85,7 +85,6 @@ export function renderPrestigePage(
   container: HTMLElement,
   game: any,
   onBack: () => void,
-  onHome?: () => void,
   go?: (r: any) => void
 ) {
   const state = game.getState();
@@ -249,7 +248,6 @@ export function renderPrestigePage(
     subtitle: 'Núcleos y árbol de pasivas',
     icon: 'recycle',
     onBack,
-    onHome,
     state,
     actions: `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
@@ -260,7 +258,7 @@ export function renderPrestigePage(
     `
   }, body));
 
-  wireNav(root, { back: onBack, home: onHome, go });
+  wireNav(root, { back: onBack, go });
   wireEvents(root, game, onBack, state);
 }
 

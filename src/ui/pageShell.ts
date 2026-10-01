@@ -34,8 +34,19 @@
 // esquina superior izquierda, que es el gesto de "atrás" que ya se esperaba, y
 // que además nunca falla: si el historial no tiene nada más, cae a la base.
 //
-// En escritorio la salida es doble por diseño: el `‹` de vuelta atrás y el
-// botón de inicio, que ignora el historial y salta siempre a la base.
+// LA ESQUINA SUPERIOR DERECHA SE QUEDÓ VACÍA A PROPÓSITO.
+//
+// En escritorio había ahí un botón de "inicio" (el icono del microchip) que
+// ignoraba el historial y saltaba a la base. Se quitó porque es justo donde
+// aterrizan los avisos flotantes: los tapaba, y encima era el segundo control
+// de navegación en una esquina que ya tiene el contador de nanitas y las
+// acciones de la página.
+//
+// La salida no se pierde: el `‹` es el mismo en las siete pantallas y, como
+// `back()` cae a la base cuando no queda historial, nunca deja al jugador en un
+// sitio del que no pueda salir. Lo que se pierde es el atajo de un clic al
+// panel principal, y a cambio la esquina superior derecha queda libre para lo
+// que el jugador tiene que leer.
 // ==========================================================================
 
 import { ic } from './icons';
@@ -48,8 +59,6 @@ export interface PageShellOptions {
   icon?: string;
   /** Botón de volver. Si no se pasa `onBack`, no se pinta. */
   onBack?: () => void;
-  /** Ir directo a la base. Es distinto de `onBack`: no Depends del historial. */
-  onHome?: () => void;
   /** Contenido extra del encabezado a la derecha, antes del contador. */
   actions?: string;
   /** Estado de la partida, para pintar el contador de nanitas. */
@@ -113,15 +122,15 @@ export function unmount(container: HTMLElement): void {
 }
 
 /**
- * Conecta la navegación de una página: botón de volver, botón de inicio y
- * cualquier elemento con `data-nav`.
+ * Conecta la navegación de una página: botón de volver y cualquier elemento
+ * con `data-nav`.
  *
  * Se delega en el contenedor en vez de registrar un manejador por botón,
  * porque los botones se recrean en cada render y un listener por botón se
  * acumularía sobre nodos muertos. Un solo listener en la raíz, y la raíz se
  * recrea limpia con `mountInto`.
  */
-export function wireNav(root: HTMLElement, cb: { back?: () => void; home?: () => void; go?: (r: Route) => void }) {
+export function wireNav(root: HTMLElement, cb: { back?: () => void; go?: (r: Route) => void }) {
   root.addEventListener('click', (e) => {
     const nav = (e.target as HTMLElement).closest('[data-nav]') as HTMLElement | null;
     if (nav) {
@@ -133,12 +142,6 @@ export function wireNav(root: HTMLElement, cb: { back?: () => void; home?: () =>
     if (back) {
       e.stopPropagation();
       cb.back?.();
-      return;
-    }
-    const home = (e.target as HTMLElement).closest('[data-nav-home]') as HTMLElement | null;
-    if (home) {
-      e.stopPropagation();
-      cb.home?.();
     }
   });
 }
@@ -155,20 +158,6 @@ export function pageShell(opts: PageShellOptions, body: string): string {
                 transition-transform active:scale-90"
          style="min-width:44px;min-height:44px" aria-label="Volver">
          <span class="[&>span>svg]:w-5 [&>span>svg]:h-5">${ic('back')}</span>
-       </button>`
-    : '';
-
-  // El botón de inicio es el atajo de escritorio: ignora el historial y salta
-  // a la base. Hace falta porque un sector se puede encadenar con otro
-  // (perfil → prestigio), y entonces el `‹` devuelve al perfil, no al menú
-  // principal. En móvil no se pinta porque ahí el `‹` ya es el gesto de salida
-  // y la base siempre está en el fondo de la pila.
-  const homeBtn = opts.onHome
-    ? `<button data-nav-home
-         class="hit-expand hidden lg:inline-flex w-9 h-9 rounded-lg btn-ghost items-center justify-center
-                cursor-pointer flex-shrink-0 transition-transform active:scale-90"
-         style="min-width:44px;min-height:44px" title="Volver a la base" aria-label="Volver a la base">
-         <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('chip')}</span>
        </button>`
     : '';
 
@@ -205,7 +194,6 @@ export function pageShell(opts: PageShellOptions, body: string): string {
         </div>
         ${nanites}
         ${opts.actions ? `<div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions}</div>` : ''}
-        ${homeBtn}
       </header>
 
       <main class="relative z-10 flex-grow min-h-0 w-full max-w-[68rem] mx-auto

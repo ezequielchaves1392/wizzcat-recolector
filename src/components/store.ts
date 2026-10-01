@@ -222,7 +222,6 @@ export function renderStoreTab(
   container: HTMLElement,
   game: any,
   onBack: () => void,
-  onHome?: () => void,
   go?: (r: any) => void
 ) {
   const state = game.getState();
@@ -366,12 +365,11 @@ export function renderStoreTab(
     subtitle: discount > 0 ? `Descuento del árbol aplicado: −${Math.round(discount * 100)}%` : 'Todo se paga con nanitas',
     icon: 'store',
     onBack,
-    onHome,
     state,
     hideNanites: true
   }, body));
 
-  wireNav(root, { back: onBack, home: onHome, go });
+  wireNav(root, { back: onBack, go });
 
   // El indicador se posiciona al montar, una vez que el navegador conoce los
   // anchos. Antes que nada se deja fuera de pantalla: si se pinta en 0 y luego
@@ -390,7 +388,7 @@ export function renderStoreTab(
       // continuación y no como un salto de vuelta al origen.
       const strip = root.querySelector('#cat-tabs') as HTMLElement | null;
       ui.stripScroll = strip?.scrollLeft ?? 0;
-      renderStoreTab(container, game, onBack, onHome, go);
+      renderStoreTab(container, game, onBack, go);
     });
   });
 
@@ -417,7 +415,7 @@ export function renderStoreTab(
       }
       sfx.buy();
       showToast('Comprado', 'success');
-      renderStoreTab(container, game, onBack, onHome, go);
+      renderStoreTab(container, game, onBack, go);
       return;
     }
 
@@ -425,14 +423,14 @@ export function renderStoreTab(
     if (info) {
       sfx.pick();
       ui.detail = ui.detail === info.dataset.info ? null : info.dataset.info!;
-      renderStoreTab(container, game, onBack, onHome, go);
+      renderStoreTab(container, game, onBack, go);
       return;
     }
 
     if ((target as HTMLElement).closest('[data-detail-close]')) {
       sfx.pick();
       ui.detail = null;
-      renderStoreTab(container, game, onBack, onHome, go);
+      renderStoreTab(container, game, onBack, go);
     }
   });
 

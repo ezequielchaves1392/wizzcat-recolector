@@ -45,7 +45,6 @@ export function renderRankings(
   container: HTMLElement,
   currentUser: any,
   onBack: () => void,
-  onHome?: () => void,
   go?: (r: any) => void
 ) {
   const meId = currentUser?.uid ?? currentUser?.userId;
@@ -54,15 +53,14 @@ export function renderRankings(
     title: 'Ranking global',
     subtitle: 'La tabla general y los tres criterios por separado',
     icon: 'trophy',
-    onBack,
-    onHome
+    onBack
   }, `
     <div class="flex flex-col gap-2" id="rank-body">
       ${skeleton()}
     </div>
   `));
 
-  wireNav(root, { back: onBack, home: onHome, go });
+  wireNav(root, { back: onBack, go });
 
   const body = root.querySelector('#rank-body')!;
 
