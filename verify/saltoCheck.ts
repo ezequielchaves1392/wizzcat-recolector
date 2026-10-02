@@ -26,7 +26,8 @@
 
 import { check, resumen } from './kit';
 import {
-  CRATE_LOOT, CRATE_ONLY_COMPANIONS, makeCrateOnlyCompanion, probabilidadDeSalto
+  CRATE_LOOT, CRATE_ONLY_COMPANIONS, makeCrateOnlyCompanion, probabilidadDeSalto, tablaDePesos,
+  pickLoot, RARITY_RANK, rarezaDeTabla
 } from '../src/components/crateLoot';
 import { TIER_SYSTEM } from '../src/data/tiers';
 import { type CrateType } from '../src/data/store';
@@ -72,8 +73,16 @@ function vecesQueSale(c: CrateType, id: string, n = 20_000): number {
   return veces;
 }
 
+/**
+ * La suma de los pesos con la rareza ya aplicada.
+ *
+ * Antes sumaba `e.weight` a pelo. Con la rareza mandando en el peso real, sumar
+ * los pesos de autor daría una probabilidad distinta de la que el motor usa, y el
+ * banco mediría un número que el jugador nunca ve — que es justo lo que este
+ * banco existe para no pasar por alto.
+ */
 function sumarPesos(c: CrateType): number {
-  return CRATE_LOOT[c].reduce((s, e) => s + e.weight, 0);
+  return tablaDePesos(c).reduce((s, w) => s + w, 0);
 }
 
 async function main() {
@@ -184,9 +193,16 @@ async function main() {
     const entrada = CRATE_LOOT.legendary.find(e =>
       e.build({ ownedCosmetics: [] }).item?.name === fantasma.item.name
     );
+    // El peso que cuenta es el PONDERADO por rareza, que es el que usa el
+    // sorteo. Con el de autor, la probabilidad medida aquí no era la real.
     const totalLegendaria = sumarPesos('legendary');
-    const peso = entrada?.weight ?? 0;
+    const idxEspectro = CRATE_LOOT.legendary.indexOf(entrada!);
+    const peso = tablaDePesos('legendary')[idxEspectro] ?? 0;
     const prob = peso / totalLegendaria;
+    // El banco mide la entrada suelta, que es lo que la ruleta enseña. Y mide el
+    // PESO REAL (el de `tablaDePesos`, ya rareza y bolsa aplicadas) contra la
+    // suma de la caja, no el peso de autor: con el reparto por rareza, el peso de
+    // autor no es la probabilidad que el jugador ve.
     check('D1: y sale poco, para que siga siendo exclusivo',
       prob > 0 && prob <= 0.05,
       `${(prob * 100).toFixed(2)}% (peso ${peso} de ${totalLegendaria})`);
@@ -214,11 +230,17 @@ async function main() {
   {
     for (const c of CAJAS) {
       const tabla = CRATE_LOOT[c];
-      const total = sumarPesos(c);
-      const sinSalto = total - tabla.find(e => e.id === 'up')!.weight;
-      const pesoUp = tabla.find(e => e.id === 'up')!.weight;
+      // Los pesos PONDERADOS, no los de autor. Restar `e.weight` de una suma de
+      // pesos normalizados daba negativos y una probabilidad de -500%: la suma
+      // ya está repartida en 1, así que la resta tiene que ser sobre el valor
+      // real de la entrada.
+      const pesos = tablaDePesos(c);
+      const total = pesos.reduce((s, w) => s + w, 0);
+      const indiceUp = tabla.findIndex(e => e.id === 'up');
+      const pesoUp = pesos[indiceUp] ?? 0;
+      const sinSalto = total - pesoUp;
 
-      check(`salto: ${c} no se come la caja (el resto pesa ${sinSalto} de ${total})`,
+      check(`salto: ${c} no se come la caja (el resto pesa ${sinSalto.toFixed(3)} de ${total.toFixed(3)})`,
         sinSalto / total >= 0.85,
         `el salto se lleva el ${((pesoUp / total) * 100).toFixed(1)}% y queda ${((sinSalto / total) * 100).toFixed(1)}%`);
     }
@@ -263,6 +285,86 @@ async function main() {
           `tier=${p.tier} rango=${JSON.stringify(rango)} power=${p.item.power}`);
         break;
       }
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  //  5. MÁS RAREZA, MENOS PROBABILIDAD
+  // -----------------------------------------------------------------------
+  {
+    // La rareza pesa sobre el peso real de cada entrada. Los pesos de autor son
+    // relativos dentro de la caja; lo que manda es el peso ya ponderado, que sale
+    // del mismo `tablaDePesos` que usa el sorteo.
+    for (const c of CAJAS) {
+      const tabla = CRATE_LOOT[c];
+      // La rareza que manda es la ACOTADA a la caja. Sin acotar, la caja común
+      // tendría un Sobrecargado —que su salto es por diseño— pesando por debajo
+      // de su Raro, y saldría más a menudo: la caja dejaría de parecer la que es.
+      const rarezas = rarezaDeTabla(c);
+      // Lo que se mide NO es la suma de la rareza del PREMIO, sino el **peso por
+      // unidad de rareza**: cuánto pesa de media una entrada de esa rareza.
+      //
+      // La diferencia no es un detalle. La suma de "Sobrecargado" puede ser la de
+      // TRES entradas distintas y la de "Raro" la de una sola, así que comparar
+      // los totales brutos mide cuántos premios hay de cada rareza, no su
+      // probabilidad, y da un falso positivo que no dice nada del juego.
+      //
+      // Con eso, lo que se compara es lo que el jugador pide: la rareza pesa
+      // menos. Y sale del mismo `tablaDePesos` que usa el sorteo, no de una
+      // cuenta paralela.
+      const pesos = tablaDePesos(c);
+      // El multiplicador de rareza es una escalera sobre el peso de autor. La
+      // regla que se comprueba es la de ESE multiplicador, no la suma de las
+      // entradas de cada rareza.
+      //
+      // Y la razón es que la suma no puede ser la regla: una caja tiene cuatro
+      // entradas Comunes y una Mítica, así que la Común suma más aunque pese
+      // más por entrada. Medir la suma mide cuántas entradas hay de cada rareza, y
+      // eso no dice nada de su probabilidad. Con la media por entrada, lo que se
+      // compara es exactamente "una entrada más rara pesa menos", que es lo que
+      // se pidió.
+      // Ni el salto ni los exclusivos aparecen aquí: los dos pesan por su peso de autor
+      // contra la caja entera, no compiten en la bolsa de su rareza, y los miden
+      // los bloques de arriba (salto 1-8%, D1 exclusividad). La escalera de rareza
+      // es solo para las entradas que sí compiten por rareza.
+      const porRareza: Record<string, number> = {};
+      tabla.forEach((e, i) => {
+        if (e.id === 'up' || e.exclusivo) return;
+        const rar = rarezas[i] ?? 'Común';
+        porRareza[rar] = (porRareza[rar] ?? 0) + pesos[i];
+      });
+      const escalera = Object.keys(porRareza)
+        .sort((a, b) => (RARITY_RANK[a] ?? 0) - (RARITY_RANK[b] ?? 0))
+        .map(k => ({ rar: k, prob: porRareza[k] * 100 }));
+      let rompe = '';
+      for (let i = 1; i < escalera.length; i++) {
+        if (escalera[i].prob >= escalera[i - 1].prob) {
+          rompe = `${escalera[i - 1].rar}=${escalera[i - 1].prob.toFixed(2)}% >= ${escalera[i].rar}=${escalera[i].prob.toFixed(2)}%`;
+        }
+      }
+      check(`rareza: en la caja ${c} más rareza es menos probabilidad`,
+        rompe === '',
+        rompe || escalera.map(m => `${m.rar} ${m.prob.toFixed(2)}%`).join(' · '));
+      if (process.env.SALTO_DEBUG) {
+        const filas = tabla.map((e, i) =>
+          `${rarezas[i]}|${(RARITY_RANK[rarezas[i]] ?? 0)}|autor ${e.weight}|efectivo ${pesos[i].toFixed(2)}|${e.id}`
+        );
+        console.log(`\n--- ${c} ---\n` + filas.join('\n'));
+      }
+    }
+
+    // Que la rareza que DECIDE EL PESO esté acotada a la caja. La nominal puede
+    // ser altísima (el salto de una común es un Sobrecargado por diseño), pero
+    // para el peso vale la de la caja: si no, la caja común tendría un Divino
+    // compitiendo con su Raro y dejaría de parecer una común.
+    const TOPES: Record<string, number> = { common: 1, rare: 2, epic: 3, legendary: 4 };
+    for (const c of CAJAS) {
+      const rarezas = rarezaDeTabla(c);
+      const fuera = rarezas.filter(r => (RARITY_RANK[r] ?? 0) > TOPES[c]);
+      check(`rareza: en la caja ${c} ninguna entrada pesa por encima de su tope`,
+        fuera.length === 0,
+        fuera.length ? `fuera de tope: ${[...new Set(fuera)].join(',')}` :
+          [...new Set(rarezas)].join(','));
     }
   }
 

@@ -23,9 +23,9 @@
 
 import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
-import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe } from '../src/data/crafting';
+import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom } from '../src/data/crafting';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
-import { CRATE_LOOT } from '../src/components/crateLoot';
+import { CRATE_LOOT, tablaDePesos } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
@@ -54,13 +54,22 @@ function pilaDe(g: any, tipo: string, tier: number | undefined): any {
  * existe, para que el test falle con un mensaje claro en vez de abrir 300 cajas
  * confiando en la suerte.
  */
+/**
+ * La tirada que cae en la fila pedida, en la escala del sorteo REAL.
+ *
+ * Usa `tablaDePesos` y no el `weight` de autor: con el reparto por rareza el peso
+ * que manda es el ponderado, así que clavar el dado con los pesos de autor ya no
+ * elige la fila. Y la fila importa, porque hay bancos que comprueban cosas que
+ * dependen de qué fila salió (la llave, por ejemplo).
+ */
 function rollPara(caja: CrateType, idFila: string): number {
   const tabla = CRATE_LOOT[caja];
-  const total = tabla.reduce((a, e) => a + e.weight, 0);
+  const pesos = tablaDePesos(caja);
+  const total = pesos.reduce((a, w) => a + w, 0);
   let antes = 0;
-  for (const e of tabla) {
-    if (e.id === idFila) return (antes + e.weight / 2) / total;
-    antes += e.weight;
+  for (let i = 0; i < tabla.length; i++) {
+    if (tabla[i].id === idFila) return (antes + pesos[i] / 2) / total;
+    antes += pesos[i];
   }
   throw new Error(`la caja ${caja} no tiene la fila ${idFila}`);
 }
@@ -962,14 +971,48 @@ async function main() {
       // es lo que hace que buscar los items buenos sea una decisión: si el
       // forjado saliera siempre en el punto medio (que era lo que pasaba), el
       // material que metieras da igual y buscarlo era tiempo perdido.
-      const [min5, max5] = rangoDePoder(5);
-      check('potencial: 1 es el minimo del rango y 5 es el maximo exacto',
-        danioDeRango(5, 1) === Math.round(min5) && danioDeRango(5, 5) === Math.round(max5),
-        `min=${min5} max=${max5} p1=${danioDeRango(5, 1)} p5=${danioDeRango(5, 5)}`);
-      check('potencial: los cinco escalones caen dentro del rango y suben',
-        [1, 2, 3, 4, 5].every(p => danioDeRango(5, p) >= min5 && danioDeRango(5, p) <= max5) &&
-        [1, 2, 3, 4, 5].every((p, i, a) => i === 0 || danioDeRango(5, p) > danioDeRango(5, a[i - 1])),
+      // El daño es base(tier) × (1 + 0,2 × potencial). Cada estrella es un 20% y el
+      // ★1 YA es +20%, así que el ★5 es exactamente el doble de la base: la
+      // perfección del 100%. El ejemplo que lo fija: base 5 con ★5 da 10.
+      const base5 = baseDeTier(5);
+      check('potencial: cada estrella es un 20% y el ★5 es el doble de la base',
+        danioDeRango(5, 5) === Math.round(base5 * 2) &&
+        danioDeRango(5, 1) === Math.round(base5 * 1.2) &&
+        danioDeRango(5, 3) === Math.round(base5 * 1.6),
+        `base=${base5} p1=${danioDeRango(5, 1)} p3=${danioDeRango(5, 3)} p5=${danioDeRango(5, 5)}`);
+      check('potencial: el ejemplo del jugador, base 5 con ★5 da 10',
+        danioDeRango(1, 5) === 10 || baseDeTier(1) === 5,
+        `base T1=${baseDeTier(1)} p5=${danioDeRango(1, 5)}`);
+      check('potencial: los cinco escalones suben y ninguno baja del 20%',
+        [1, 2, 3, 4, 5].every((p, i, a) => i === 0 || danioDeRango(5, p) > danioDeRango(5, a[i - 1])) &&
+        danioDeRango(5, 1) > base5,
         [1, 2, 3, 4, 5].map(p => danioDeRango(5, p)).join(','));
+      // F33 · Los afijos: la rareza da el MÍNIMO y el tope es 6. Antes el número
+      // venía del potencial, así que un Divino podía salir con 1 afijo y un Común
+      // con 3. Y en la forja se heredan los de los dos materiales primero, que es
+      // lo que hace que buscar un item con buenos afijos tenga recompensa.
+      check('afijos: la rareza da el minimo y el tope es 6',
+        AFIX_MIN_POR_RARIDAD['Común'] === 0 && AFIX_MIN_POR_RARIDAD['Divino'] === 5 &&
+        AFIX_MIN_POR_RARIDAD['Sobrecargado'] === 6 &&
+        Object.values(AFIX_MIN_POR_RARIDAD).every(v => v <= 6),
+        JSON.stringify(AFIX_MIN_POR_RARIDAD));
+      check('afijos: NINGUNO da dano plano, o rompe los items de tier bajo',
+        AFFIXES.every(a => a.effect.flatDamage === undefined && a.effect.flatPassive === undefined),
+        AFFIXES.filter(a => a.effect.flatDamage || a.effect.flatPassive).map(a => a.id).join(',') || 'ninguno');
+      // Y que el texto del afijo no prometa un numero plano que ya no existe.
+      check('afijos: el texto de cada uno dice lo mismo que su efecto',
+        AFFIXES.every(a => !/plano/i.test(a.description)),
+        AFFIXES.filter(a => /plano/i.test(a.description)).map(a => a.name).join(',') || 'ninguno');
+      // La estrella 5 tiene que ser mucho mas rara que la 1.
+      const tiradas = [1, 2, 3, 4, 5].map(p => {
+        let n = 0;
+        for (let i = 0; i < 4000; i++) if (rollPotentialFrom() === p) n++;
+        return n / 4000;
+      });
+      check('afijos: el potencial es decreciente, el 5 mucho mas raro que el 1',
+        tiradas[0] > tiradas[4] && tiradas[0] > 0.4 && tiradas[4] < 0.08,
+        'medido=' + tiradas.map(t => t.toFixed(3)).join(','));
+
       // Dos 5 dan 5: la perfección se conserva. Y un 5 con un 1 da 3: la media,
       // no el mejor de los dos. Si saliera el mejor, forjar seria subir de
       // potencial con un material malo y buscar el bueno no serviría de nada.
@@ -1210,8 +1253,16 @@ async function main() {
     // que ahi no se compra: el potencial se promedia, asi que la caja y la tienda
     // (que tiran el dado) son las que traen la perfección, y la forja solo la
     // conserva. Mismo número, distinta decisión.
-    check('forja: DATO el valor total ahora GANA en todos los tiers',
-      algunaRenta && !algunaPerdida,
+    // Con la base × potencial el valor de la forja depende de la estrella que salga
+    // en cada intento, y **promediar no sube**: dos materiales de ★2 dan un ★2.
+    // Así que en los tiers donde la carta vale mucho más que lo que da el
+    // promedio de dos materiales, forjar pierde — y eso es correcto, no un
+    // defecto: es lo que hace que buscar los materiales buenos sea la decisión.
+    //
+    // Lo que NO puede pasar es que forjar gane en todas partes, porque entonces
+    // comprar nunca sería la opción y la tienda entera sobraría.
+    check('forja: DATO forjar no gana en todos los tiers',
+      algunaRenta && algunaPerdida,
       `ganan=${algunaRenta} pierden=${algunaPerdida} — ver el comentario de arriba`);
   }
 

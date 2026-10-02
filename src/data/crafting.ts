@@ -39,6 +39,21 @@ import { rangoDePoder, rarezaDeTier } from './tiers';
 // Atributos
 // --------------------------------------------------------------------------
 
+// ==========================================================================
+//  Atributos
+//
+//  **NINGÚN afijo da daño plano, y no es una preferencia de redacción.** Cuatro de
+//  ellos lo hagan (`flatDamage` / `flatPassive`: +60, +40, +8 y +18) y rompen
+//  items de tier bajo sin avisar: un "+60 de daño plano" en un T1, cuya base es 5,
+//  más que triplica el item. Y no se ve en el banco, porque el banco comprueba
+//  que el afijo exista, no que el item al que se lo pone siga siendo razonable.
+//
+//  Por eso TODOS son porcentajes, o porcentajes por nivel. Un +35% da 1,75 en un
+//  T1 y 238 en un T10: escala con el item, no lo rompe. Los que dependen del
+//  nivel (`clickMultPorNivel`, `passiveMultPorNiveles`) también son porcentajes,
+//  así que subir de nivel sigue valiendo pero nunca se sale del item.
+// ==========================================================================
+
 export const AFFIXES: Affix[] = [
   { id: 'aff_sharp', name: 'Afilado', description: '+18% al daño de click.', rarity: 'Raro',
     effect: { clickMult: 0.18 } },
@@ -48,10 +63,10 @@ export const AFFIXES: Affix[] = [
     effect: { passiveMult: 0.20 } },
   { id: 'aff_flow', name: 'Flujo', description: '+14% al ingreso pasivo.', rarity: 'Raro',
     effect: { passiveMult: 0.14 } },
-  { id: 'aff_bulwark', name: 'Baluarte', description: '+60 de daño plano.', rarity: 'Épico',
-    effect: { flatDamage: 60 } },
-  { id: 'aff_core', name: 'Núcleo', description: '+40 de ingreso pasivo plano.', rarity: 'Épico',
-    effect: { flatPassive: 40 } },
+  { id: 'aff_bulwark', name: 'Baluarte', description: '+35% al daño de click.', rarity: 'Épico',
+    effect: { clickMult: 0.35 } },
+  { id: 'aff_core', name: 'Núcleo', description: '+25% al ingreso pasivo.', rarity: 'Épico',
+    effect: { passiveMult: 0.25 } },
   { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 daño).', rarity: 'Épico',
     effect: { critChance: 0.08 } },
   { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', rarity: 'Legendario',
@@ -60,10 +75,10 @@ export const AFFIXES: Affix[] = [
     effect: { craftLuck: 0.10 } },
   { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', rarity: 'Legendario',
     effect: { clickMult: 0.35, passiveMult: 0.35 } },
-  { id: 'aff_eternal', name: 'Eterno', description: '+8 de daño por cada nivel del recolector.', rarity: 'Mítico',
-    effect: { flatDamage: 8 } },
-  { id: 'aff_absorb', name: 'Absorción', description: '+18 de ingreso pasivo por cada 5 niveles.', rarity: 'Mítico',
-    effect: { flatPassive: 18 } },
+  { id: 'aff_eternal', name: 'Eterno', description: '+2% de daño por cada nivel del recolector.', rarity: 'Mítico',
+    effect: { clickMultPorNivel: 0.02 } },
+  { id: 'aff_absorb', name: 'Absorción', description: '+5% de ingreso por cada 5 niveles.', rarity: 'Mítico',
+    effect: { passiveMultPorNiveles: 0.05 } },
   { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', rarity: 'Mítico',
     effect: { clickMult: 0.55, passiveMult: 0.55 } },
   { id: 'aff_void', name: 'Vacío Devorador', description: '+25% al daño, +25% al pasivo, +10% crítico.', rarity: 'Divino',
@@ -144,35 +159,60 @@ export function collectorUpgradeCost(level: number): number {
 // --------------------------------------------------------------------------
 
 /**
- * El potencial es la escala 1..5 de un item, y **define su daño**: dentro del
- * rango de su tier, 1 pega en el mínimo y 5 pega en el máximo. 5 es perfección
- * del 100%, y da exactamente el tope, sin redondeos que lo dejen un pelo por
- * debajo.
+ * La BASE de recolección de un tier: el daño de un item antes de que el
+ * potencial le sume nada.
  *
- * Antes el daño no salía de aquí: el forjado usaba el PUNTO MEDIO del rango y la
- * tienda tiraba un número suelto. Eso es lo que hacía que el mejor item forjado
- * quedara por debajo de uno de tienda con suerte. Ahora los dos caminos salen de
- * `danioDeRango`, y por eso el potencial y el daño no pueden separarse.
+ * Es el mínimo del rango que ya tenía cada tier, y no un número nuevo: así el
+ * precio de la carta, que se calibró contra ese rango, y el daño del item salen
+ * del mismo sitio (R2). `rangoDePoder` pasa a ser la referencia de precio y la
+ * tabla que el jugador ve, y el daño sale de aquí.
  */
-export function danioDeRango(tier: number, potential: number): number {
-  const r = rangoDePoder(Math.max(1, tier));
-  const p = Math.max(1, Math.min(5, Math.round(potential) || 3));
-  return Math.round(r[0] + ((p - 1) / 4) * (r[1] - r[0]));
+export function baseDeTier(tier: number): number {
+  return rangoDePoder(Math.max(1, tier))[0];
 }
 
 /**
- * El potencial que explica el daño que un item YA tiene.
+ * El daño BASE de un item: su base de tier por el potencial.
+ *
+ * Cada estrella es un 20%, y **el potencial 1 ya es +20%** — o sea que ★5 es
+ * exactamente el doble de la base, que es la perfección del 100%. El ejemplo que
+ * lo fija: base 5 con ★5 da 10.
+ *
+ *   ★1 = ×1,2 · ★2 = ×1,4 · ★3 = ×1,6 · ★4 = ×1,8 · ★5 = ×2,0
+ *
+ * **Esto es el daño del item, no el del click.** Sobre él siguen actuando el
+ * nivel (los cristales), la rareza y los afijos. Aquí no hay ninguno de esos, y
+ * deliberadamente: el potencial es la ÚNICA escala que multiplica la base, y por
+ * eso no lleva además un segundo multiplicador encima — ese error sí estaba, y
+ * por eso el potencial nunca llegaba a ×2.
+ *
+ * **Consecuencia de balance:** como esto es un multiplicador y el rango viejo no
+ * lo era, el techo de daño de cada tier **se multiplica por 2**. El T5 pasa de un
+ * rango de 34-50 a una base de 34 que con ★5 da 68. Las proporciones entre tiers
+ * se conservan porque todos se mueven igual, pero el precio por punto baja en
+ * todos a la vez, y `balanceCheck` mide esa banda.
+ */
+export function danioDeRango(tier: number, potential: number): number {
+  return Math.round(baseDeTier(tier) * (1 + 0.2 * potencialNormalizado(potential)));
+}
+
+/** El potencial entero 1..5, para que nadie tenga que repetir el recorte. */
+export function potencialNormalizado(potential: number | undefined): number {
+  const p = Math.round(Number(potential));
+  return Number.isFinite(p) && p >= 1 && p <= 5 ? p : 3;
+}
+
+/**
+ * El daño que explica el que un item YA tiene.
  *
  * Va al revés que `danioDeRango` a propósito, y es la misma regla en las dos
  * direcciones. Se usa para deducir el potencial de los items que ya estaban
  * guardados antes de que existiera el campo.
  */
 export function potencialDeDanio(item: CollectorItem): number {
-  const r = rangoDePoder(Math.max(1, item.tier || 1));
-  const span = r[1] - r[0];
-  if (span <= 0) return 3;
-  const pos = ((item.damage ?? r[0]) - r[0]) / span;
-  return Math.max(1, Math.min(5, Math.round(pos * 4) + 1));
+  const base = baseDeTier(item.tier);
+  if (base <= 0) return 3;
+  return potencialNormalizado(((item.damage ?? base) / base - 1) / 0.2);
 }
 
 /**
@@ -188,17 +228,32 @@ export function potencialDe(item: CollectorItem): number {
 }
 
 /**
+ * La probabilidad de cada potencial, y es **decreciente a propósito**: sacar un
+ * ★1 tiene que ser mucho más fácil que sacar un ★5, porque el ★5 es ×2 y el ★1
+ * es ×1,2. Con un reparto plano, uno de cada cinco items sería perfecto y buscar
+ * uno dejaría de ser una búsqueda.
+ *
+ * `★5` sale un 3%: con la forja promediando, dos ★5 son el camino al item
+ * perfecto, y por eso tiene que ser raro y no regalado.
+ */
+export const POTENTIAL_WEIGHTS: Record<number, number> = {
+  1: 0.50, 2: 0.25, 3: 0.15, 4: 0.07, 5: 0.03
+};
+
+/**
  * Potencial 1..5 al crear un item nuevo.
  *
  * Sale del dado: es la lotería de la tienda y de las cajas. **La forja no lo
  * tira, lo promedia**, y esa es justo la diferencia entre las dos vías.
- *
- * El 5 es el más raro a propósito. Con un reparto plano, uno de cada cinco items
- * sería perfecto y buscarlo dejaría de ser nada; así que el 5 sale un 10%.
  */
 export function rollPotentialFrom(rng: () => number = Math.random): number {
-  if (rng() < 0.10) return 5; // 10% perfección
-  return 1 + Math.floor(rng() * 4); // 1..4, el 90% restante
+  const t = rng();
+  let acum = 0;
+  for (let p = 1; p <= 5; p++) {
+    acum += POTENTIAL_WEIGHTS[p];
+    if (t < acum) return p;
+  }
+  return 5;
 }
 
 /**
@@ -374,23 +429,16 @@ export function attemptForge(
   const newTier = tier + 1;
   const name = forgeCollectorName(potential, newTier);
 
-  // El daño sale del potencial y del rango del tier nuevo. Una sola función, y
+  // El daño sale del potencial y de la base del tier nuevo. Una sola función, y
   // la misma que usa la tienda, así que potencial y daño no pueden separarse.
-  const baseDamage = danioDeRango(newTier, potential);
+  const damage = danioDeRango(newTier, potential);
 
-  // Cuántos afijos hereda según potencial. La nanopartícula sube el tope a 4:
-  // es su segundo efecto, el que justifica pagar 90.000 por ella.
-  const baseAffixCount = Math.min(3, Math.max(1, potential - 1));
-  const affixCount = Math.min(4, baseAffixCount + (nanoUsed > 0 ? 1 : 0));
-  const affixes = pickAffixes(affixCount, materials);
-
-  // F33 · El daño ES el del rango para este potencial. Ya no se multiplica por
-  // `potentialMult`: el potencial ya elegía DÓNDE cae el stat dentro del rango, y
-  // aplicarle encima otro 12% por estrella hacía que el mismo número mandara dos
-  // veces en el mismo daño.
-  const damage = baseDamage;
-
+  // La rareza va ANTES que los afijos, porque es lo que decide cuántos lleva: la
+  // rareza da el mínimo y el tope es 6 para todos. Antes el número venía del
+  // potencial y la rareza no ZEJohinting nada, así que un Divino podía salir con
+  // un afijo y un Común con tres.
   const rarity = collectorRarity(newTier, potential);
+  const affixes = pickAffixes(materials, rarity, nanoUsed > 0);
 
   const collector: CollectorItem = {
     id: `forged_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -425,27 +473,78 @@ function collectorRarity(tier: number, potential: number): Rarity {
   return (base as Rarity) || 'Común';
 }
 
-/** Elige N afijos distintos, con pesos inversos a la rareza. */
-function pickAffixes(count: number, materials: CollectorItem[]): string[] {
-  // Un afijo "semilla" por material, para que la herencia tenga sentido
-  const candidates = AFFIXES.slice();
-  const picked: string[] = [];
+/** Cuántos afijos lleva como MÍNIMO un item de cada rareza. El tope son 6. */
+export const AFIX_MIN_POR_RARIDAD: Record<string, number> = {
+  'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3,
+  'Mítico': 4, 'Divino': 5, 'Sobrecargado': 6
+};
 
-  for (let i = 0; i < count && candidates.length > 0; i++) {
-    // Peso: los afijos más raros pesan menos (1/pesoRareza)
-    const weights = candidates.map(a => {
-      const rw = RARITY_WEIGHT[a.rarity] ?? 1;
-      return 1 / (0.5 + rw);
-    });
+/** El tope de afijos de un item. Nadie lleva más de estos. */
+export const AFIX_MAX = 6;
+
+/**
+ * Reparte los afijos del item forjado.
+ *
+ * **La rareza da el mínimo** y el tope es 6 para todos, así que lararety de un
+ * Divino con un afijo —que era lo que pasaba antes— ya no puede salir. La
+ * nanopartícula sube el mínimo en uno: es su segundo efecto y el que justifica
+ * pagar 90.000 por ella.
+ *
+ * **La mezcla es en dos pasos, y ese orden es lo que la hace tener sentido:**
+ *
+ * 1. Primero se cogen afijos **de los dos materiales**, al azar entre los que
+ *    tienen entre los dos. Es la herencia: los afijos buenos se transmiten de
+ *    verdad, y por eso buscar un item con buenos afijos tiene recompensa.
+ * 2. Si aún faltan para llegar al mínimo de la rareza, se rellenan **al azar de
+ *    todo el catálogo**, con los raros pesando menos.
+ *
+ * El paso 1 va primero a propósito. Si rellenara de catálogo y luego heredara,
+ * muchas veces no quedaría hueco para heredar y el paso 1 casi no se vería.
+ *
+ * Con dos materiales no se puede pasar de 12 afijos distintos, pero el tope de 6
+ * hace esa cuenta irrelevante.
+ */
+function pickAffixes(materials: CollectorItem[], rarity: string, nanoparticula: boolean): string[] {
+  const minimo = Math.min(
+    AFIX_MAX,
+    (AFIX_MIN_POR_RARIDAD[rarity] ?? 0) + (nanoparticula ? 1 : 0)
+  );
+  if (minimo <= 0) return [];
+
+  const picked: string[] = [];
+  const usados = new Set<string>();
+
+  // 1 · Herencia: al azar entre los afijos que tienen los dos materiales juntos.
+  const heredables: string[] = [];
+  for (const m of materials) {
+    for (const id of m.affixes ?? []) {
+      if (!usados.has(id) && !heredables.includes(id) && AFFIXES.some(a => a.id === id)) {
+        heredables.push(id);
+      }
+    }
+  }
+  while (picked.length < minimo && heredables.length > 0) {
+    const i = Math.floor(Math.random() * heredables.length);
+    const id = heredables[i];
+    picked.push(id);
+    usados.add(id);
+    heredables.splice(i, 1);
+  }
+
+  // 2 · Relleno del catálogo completo, con los afijos raros pesando menos.
+  const restantes = AFFIXES.filter(a => !usados.has(a.id));
+  while (picked.length < minimo && restantes.length > 0) {
+    const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = Math.random() * total;
     let idx = 0;
-    for (; idx < weights.length - 1; idx++) {
+    for (; idx < restantes.length - 1; idx++) {
       roll -= weights[idx];
       if (roll <= 0) break;
     }
-    picked.push(candidates[idx].id);
-    candidates.splice(idx, 1);
+    picked.push(restantes[idx].id);
+    restantes.splice(idx, 1);
   }
+
   return picked;
 }

@@ -25,10 +25,16 @@ export interface Affix {
     clickMult?: number;
     /** Multiplicador de ingreso pasivo, 0.20 = +20% */
     passiveMult?: number;
-    /** +n al daño de click plano */
-    flatDamage?: number;
-    /** +n al ingreso pasivo plano */
-    flatPassive?: number;
+    /**
+     * +n% al daño de click POR CADA NIVEL del recolector, 0.02 = +2% por nivel.
+     *
+     * Es un porcentaje y no un número plano a propósito: un "+8 de daño por
+     * nivel" le da 160 a un item de nivel 20, y a un T1 eso es más de treinta
+     * veces su base. En porcentaje escala con el item y no lo rompe.
+     */
+    clickMultPorNivel?: number;
+    /** +n% al ingreso pasivo por cada 5 niveles, 0.05 = +5% por cada 5. */
+    passiveMultPorNiveles?: number;
     /** Probabilidad extra de crítico */
     critChance?: number;
     /** Multiplicador de la probabilidad de crafteo */

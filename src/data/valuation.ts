@@ -81,8 +81,10 @@ export function affixValueMult(collector: CollectorItem): number {
     let contrib = 0;
     if (a.effect.clickMult) contrib += a.effect.clickMult * 0.8;
     if (a.effect.passiveMult) contrib += a.effect.passiveMult * 0.8;
-    if (a.effect.flatDamage) contrib += Math.min(0.5, a.effect.flatDamage / 400);
-    if (a.effect.flatPassive) contrib += Math.min(0.5, a.effect.flatPassive / 400);
+    // Los de nivel se valoran por su tope: un afijo que da +2% por nivel llega al
+    // +40% en el techo de 20. Es un porcentaje del item, así que no rompe nada.
+    if (a.effect.clickMultPorNivel) contrib += a.effect.clickMultPorNivel * 20;
+    if (a.effect.passiveMultPorNiveles) contrib += a.effect.passiveMultPorNiveles * 4;
     if (a.effect.critChance) contrib += a.effect.critChance * 2.5;
     if (a.effect.craftLuck) contrib += a.effect.craftLuck * 1.5;
     mult += contrib;

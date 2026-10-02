@@ -1692,19 +1692,22 @@ const AFK_THRESHOLD_MS = 60000;
    * se hornean en `item.damage`: si se guardaran, vender y volver a comprar el
    * mismo objeto cambiaría su estadística.
    */
-  function equippedAffixEffect(): { clickMult: number; passiveMult: number; flat: number } {
-    const out = { clickMult: 0, passiveMult: 0, flat: 0 };
+  function equippedAffixEffect(): { clickMult: number; passiveMult: number } {
+    const out = { clickMult: 0, passiveMult: 0 };
     if (!state.equippedCollectorId) return out;
     const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
     if (!item?.affixes?.length) return out;
+    const nivel = item.level || 0;
     for (const affixId of item.affixes) {
       const affix = AFFIX_BY_ID[affixId];
       if (!affix) continue;
       out.clickMult += affix.effect.clickMult || 0;
       out.passiveMult += affix.effect.passiveMult || 0;
-      // Los afijos planos escalan con el nivel del recolector: es lo que hace que
-      // subir un recolector crafteado siga valiendo algo.
-      out.flat += (affix.effect.flatDamage || 0) * (1 + (item.level || 0) * 0.08);
+      // Los que dependen del nivel suman un PORCENTAJE por nivel, no un número
+      // plano: es lo que hace que subir de nivel siga valiendo sin que un
+      // "+8 por nivel" turned un T1 en un T10. Ver el comentario de AFFIXES.
+      out.clickMult += (affix.effect.clickMultPorNivel || 0) * nivel;
+      out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nivel / 5);
     }
     return out;
   }
@@ -1734,7 +1737,7 @@ const AFK_THRESHOLD_MS = 60000;
     const base = item.damage || 0;
     const levelMultiplier = 1 + ((item.level || 0) * 0.10);
     const conNivel = base * levelMultiplier;
-    const total = (base + affixes.flat)
+    const total = base
       * levelMultiplier
       * calculateCompanionMultiplier()
       * (1 + achievementState.clickBonus)

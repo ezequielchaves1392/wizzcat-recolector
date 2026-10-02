@@ -153,6 +153,266 @@ const COSMETIC_ICON: Record<string, string> = {
   banner: 'layers'
 };
 
+/**
+ * Cuánto pesa una entrada POR su rareza. Más rareza, menos probabilidad.
+ *
+ * El multiplicador vive AQUÍ y no en el `weight` de cada entrada, que es la única
+ * forma de que la regla no se rompa en la siguiente caja que se añada. Los pesos
+ * de la tabla son "cuánto tira de esto" —el tipo de premio que es— y la rareza lo
+ * baja después.
+ *
+ * **La escalera es fuerte a propósito** (de 1,00 a 0,03), porque si fuera suave
+ * los pesos de autor —que están escritos por "qué premio es", no por "qué tan
+ * raro"— mandarían sobre ella y la regla no se cumpliría. Con los números
+ * medidos, la entrada Común más pesada pesa 34 y la Legendaria más pesada 3,7:
+ * un salto de 9x, que es lo que hace que abrir una legendaria se sienta distinto.
+ */
+/**
+ * Cuántas veces menos se reparte una rareza respecto a la anterior. 3,5 quiere
+ * decir que la Raro se lleva la tercera parte de la Común, la Épica la novena...
+ *
+ * Está medido contra el salto de caja, que es la única referencia real que hay: el
+ * botín de arriba tiene que seguir saliendo, porque un salto del 0% convierte el
+ * cofre en una garantía y la ruleta deja de ser una ruleta.
+ */
+const FALLO_POR_RAREZA = 3.5;
+
+/**
+ * El suelo de una entrada, en bolsas Comunes. Es un 0,8% de la caja como mínimo
+ * para cualquier premio: por debajo, el premio es prácticamente inexistente y la
+ * caja anuncia algo que no da.
+ *
+ * **No lo necesita el salto**, que pesa por su peso de autor y ya lo mide
+ * `saltoCheck`. Está para los premios que son el único miembro de una rareza alta
+ * —el Espectro Azulado es el caso real— y que sin él se llevarían el 100% de una
+ * bolsa pequeña y dejarían de ser exclusivos.
+ */
+const PESO_MINIMO_POR_ENTRADA = 0.008;
+
+/**
+ * La bolsa de los exclusivos. No es una rareza: son las entradas que se sortean
+ * por su peso de autor contra la caja entera, y son dos cosas por dos razones
+ * distintas que se pueden leer en `tablaDePesos`.
+ */
+const BOLSA_EXCLUSIVO = '__exclusivo__';
+
+/**
+ * La bolsa de los exclusivos, en la misma escala que la rareza Común (1,00). Es
+ * "la caja de los exclusivos": por dentro se reparten por su peso de autor —el
+ * Espectro con el 5 se lleva la menor parte— y contra el resto de la caja vale lo
+ * que el multiplicador dice.
+ *
+ * El 0,06 sale de medir lo que se necesita: los seis exclusivos de la legendaria
+ * con sus pesos de autor tienen que quedar en el 5-20% de la caja, no en el 99%
+ * ni en el 2%. Y con el Espectro al 2,6% sale lo que `saltoCheck` pide.
+ */
+const BOLSA_EXCLUSIVOS = 0.025;
+
+/**
+ * Los compañeros EXCLUSIVOS de caja (`exclusive: true`) tampoco compiten por la
+ * bolsa de su rareza, por la misma razón que el salto: son el único miembro de
+ * su rareza en la caja, así que dentro del reparto se llevarían la bolsa entera.
+ *
+ * El caso real es el Espectro Azulado, que es el único Épico de la legendaria y
+ * con bolsa se llevaba el 53% de la caja — un compañero exclusivo que salía una
+ * de cada dos veces y había dejado de serlo. Y no es que el modelo esté mal: es
+ * que **"único de su rareza" y "exclusivo" son la misma cosa**, y las dos
+ * necesitan que su peso sea propio y no el de un grupo.
+ *
+ * Su peso de autor sigue mandando: el 5 de la tabla, que es el más bajo de la
+ * legendaria, y es el 1-5% que `saltoCheck` mide.
+ */
+
+/**
+ * El salto de tier va FUERA de las bolsas de rareza, y esto es lo que evita que
+ * se llevara el 100% de la suya.
+ *
+ * El salto es la entrada más repetida de todas: es la única que aparece en las
+ * cuatro cajas y su rareza nominal es la más alta de cada una. Si repartiera por
+ * rareza como las demás, en la legendaria sería el único Legendario y se llevaría
+ * la bolsa entera —73% de la caja— que es justo lo contrario de "un peldaño de
+ * sorpresa".
+ *
+ * La rareza del salto está dentro de la caja por construcción, y su rareza nominal
+ * no significa nada: el salto del tier 2 no es más raro que el del 9. Por eso
+ * lleva un peso propio y absolute, y `faseDeRareza` le devuelve una bolsa neutra.
+ */
+/**
+ * El peso de una rareza respecto a la anterior: 1 para la Común, `1/3,5` para la
+ * Raro, `1/3,5²` para la Épica. Se exporta para que el banco pueda comprobar la
+ * escalera que usa el sorteo sin tener que copiarla.
+ */
+export function pesoDeRareza(rank: number): number {
+  return 1 / Math.pow(FALLO_POR_RAREZA, rank);
+}
+
+/** Hasta qué rareza llega cada caja. Es su identidad, no un detalle de la tabla. */
+const RARIDAD_TOPE_CAJA: Record<CrateType, number> = {
+  common: 1, rare: 2, epic: 3, legendary: 4
+};
+
+/**
+ * La rareza que DECIDE el peso de una entrada: la nominal **acotada a su caja**.
+ *
+ * Sin el recorte, el salto de una caja común —que es un Sobrecargado por diseño—
+ * pesaría por debajo del Épico que le toca, y la caja común tendría el premio
+ * más caro con el peso más bajo. Acotada, la caja se parece a lo que es.
+ */
+function rarezaAcotada(crateType: CrateType, rarity: string): string {
+  const tope = RARIDAD_TOPE_CAJA[crateType];
+  const r = RARITY_RANK[rarity] ?? 0;
+  if (r <= tope) return rarity;
+  for (const [nombre, rango] of Object.entries(RARITY_RANK)) {
+    if (rango === tope) return nombre;
+  }
+  return rarity;
+}
+
+/**
+ * La rareza que DECIDE el peso de cada entrada de una caja. Se exporta para que
+ * el banco mida la misma cifra que usa el sorteo, y no una copia de ella.
+ */
+export function rarezaDeTabla(crateType: CrateType): string[] {
+  const guardado = RARIDAD_CACHE[crateType];
+  if (guardado) return guardado;
+  const tabla = CRATE_LOOT[crateType];
+  // El salto (`up`) NO compite por rareza, por una razón concreta: su rareza
+  // nominal es la más alta de su caja, pero eso no significa que sea el premio
+  // más raro. El salto del tier 2 no es más raro que el del 9.
+  //
+  // Se marca como `'salto'` —una bolsa propia— en vez de como Común o como su
+  // rareza nominal, porque las dos otras opciones fallaban y las dos están medidas
+  // en `saltoCheck`:
+  //
+  //   - Como su rareza nominal, se quedaba solo en su bolsa y se llevaba el 70% de
+  //     la caja (es el único Legendario de la legendaria, el único Épico de la
+  //     rara). Eso es un "premio garantizado", no un peldaño de sorpresa.
+  //   - Como Común, pasaba lo mismo pero en la bolsa grande: se llevaba el 73-87%.
+  //
+  // Con bolsa propia, lo que pesa es su `weight` de autor contra el total de la
+  // caja, que es el 1-8% de siempre y lo que la ruleta le promete al jugador.
+  const salida = tabla.map(e => {
+    if (e.id === 'up') {
+      // El salto no va en las bolsas de rareza (se reparte aparte, abajo) pero su
+      // rareza es la de su caja, para que el banco lo pueda mostrar.
+      return Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === RARIDAD_TOPE_CAJA[crateType]) ?? 'Común';
+    }
+    // Los exclusivos tampoco, por lo mismo que el salto (ver `PESO_EXCLUSIVO`).
+    if (e.exclusivo) return BOLSA_EXCLUSIVO;
+    if (e.pesoComo) return rarezaAcotada(crateType, e.pesoComo);
+    let nominal = 'Común';
+    try {
+      nominal = e.build({} as any)?.rarity ?? 'Común';
+    } catch {
+      nominal = 'Común';
+    }
+    return rarezaAcotada(crateType, nominal);
+  });
+  RARIDAD_CACHE[crateType] = salida;
+  return salida;
+}
+
+/**
+ * Los pesos de una caja con la rareza ya aplicada, calculados UNA vez.
+ *
+ * El motivo de memorizarlos es que la rareza de varias entradas vive dentro del
+ * `build()` —que tira el dado—, así que sacarla por entrada y por tirada haría que
+ * el peso dependiera del azar. Y eso rompería la regla que la tabla tiene que
+ * cumplir: la ruleta **enseña** la casilla que sale. Se calcula una vez y se
+ * cachea, así que el peso es el mismo en todas las cajas de la partida.
+ */
+const PESOS_CACHE: Partial<Record<CrateType, number[]>> = {};
+const RARIDAD_CACHE: Partial<Record<CrateType, string[]>> = {};
+
+export function tablaDePesos(crateType: CrateType): number[] {
+  const guardado = PESOS_CACHE[crateType];
+  if (guardado) return guardado;
+  const tabla = CRATE_LOOT[crateType];
+  const rarezas = rarezaDeTabla(crateType);
+  const brutos = tabla.map(e => e.weight);
+
+  // Cada rareza se lleva una BOLSA de peso, y las bolsas son más pequeñas
+  // cuanto más rara. Así la regla es cierta POR CONSTRUCCIÓN y no porque los
+  // pesos de autor happen to estar ordenados: la rareza decide cuánto se reparte
+  // el grupo entero, y los `weight` de autor solo ordenan DENTRO de cada grupo.
+  //
+  // La razón de hacerlo así, y no con un multiplicador por entrada: una caja
+  // tiene cuatro entradas Comunes y una Mítica, y con multiplicador por entrada
+  // la suma de las Comunes siempre le ganaba a la Mítica. Eso no es un bug de
+  // números, es que se estaba comparando el número de entradas de cada rareza
+  // con su peso. Repartir por bolsa compara lo que pediste: **cuánto se reparte
+  // más rareza, menos**.
+  const porRareza: Record<string, number[]> = {};
+  rarezas.forEach((rar, i) => {
+    if (tabla[i].id === 'up') return;
+    if (tabla[i].exclusivo) return;
+    (porRareza[rar] ??= []).push(i);
+  });
+  // La rareza con la que el salto COMPITE, que es su rareza nominal acotada.
+  const rarezaDeSalto = (c: CrateType): string =>
+    Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === RARIDAD_TOPE_CAJA[c]) ?? 'Común';
+
+  // El salto entra en el reparto de su rareza como cualquier otra entrada, con su
+  // peso de autor, y por eso se queda en el 1-8% que siempre tuvo. Sacarlo de su
+  // bolsa —que es lo que se probó— lo convertía en el 80% de la caja, porque al
+  // quedarse solo en la suya se llevaba el 100% de una bolsa que era el 80% del
+  // total. Ver `saltoCheck`, que es el banco que mide esto.
+  // Una rareza con UNA SOLA entrada se llevaría el 100% de su bolsa, que es el
+  // caso real del salto de la legendaria y del Espectro Azulado. Con eso el salto
+  // bajaba al 0,2% (un premio que nunca sale) y el Espectro subía al 73% (un
+  // compañero exclusivo que deja de serlo), que es justo el daño que esta regla
+  // iba a evitar.
+  //
+  // Por eso la bolsa se reparte entre las entradas de la rareza CON SU PESO DE
+  // AUTOR en lugar de por partes iguales: con partes iguales, una entrada sola se
+  // lleva todo, y con el peso de autor sigue llevándose la bolsa (que ya es
+  // pequeña) pero competiría con las de su misma rareza si alguna vez hay más de
+  // una. El suelo de `PESO_MINIMO_POR_ENTRADA` es lo que evita que una bolsa
+  // pequeña se convierta en una probabilidad tan baja que el premio desaparece.
+  const pesos = new Array<number>(tabla.length).fill(0);
+  for (const [nombre, indices] of Object.entries(porRareza)) {
+    const bolsa = pesoDeRareza(RARITY_RANK[nombre] ?? 0);
+    const suma = indices.reduce((s, i) => s + brutos[i], 0) || 1;
+    for (const i of indices) pesos[i] = (brutos[i] / suma) * bolsa;
+  }
+  const exclusivos = tabla.map((e, i) => (e.exclusivo ? i : -1)).filter(i => i >= 0);
+  if (exclusivos.length > 0) {
+    const sumaExcl = exclusivos.reduce((s, i) => s + brutos[i], 0) || 1;
+    for (const i of exclusivos) pesos[i] = (brutos[i] / sumaExcl) * BOLSA_EXCLUSIVOS;
+  }
+  // El salto se reparte dentro de la bolsa de SU rareza nominal, junto a las
+  // entradas de esa rareza y con su peso de autor, que es lo que lo deja en el
+  // 1-8% de siempre. La rareza nominal del salto es la más alta de su caja
+  // (`rarezaAcotada` la deja donde está), así que compite contra los premios
+  // buenos de esa caja, que es exactamente lo que es un peldaño de sorpresa.
+  //
+  // Y NO lleva bolsa propia: con bolsa propia, su peso de autor (4-6) competía
+  // contra las bolsas ya divididas por 3,5 y se llevaba el 90% de la caja.
+  const indiceSalto = tabla.findIndex(e => e.id === 'up');
+  if (indiceSalto >= 0) {
+    const nominal = rarezaDeSalto(crateType);
+    const bolsa = pesoDeRareza(RARITY_RANK[nominal] ?? 0);
+    const companeros = porRareza[nominal] ?? [];
+    const suma = (brutos[indiceSalto] + companeros.reduce((s, i) => s + brutos[i], 0)) || 1;
+    pesos[indiceSalto] = (brutos[indiceSalto] / suma) * bolsa;
+  }
+  // Ningún premio baja del suelo: por debajo, la caja anuncia algo que no da.
+// El suelo NO se aplica al salto ni a los exclusivos: los dos pesan por su autor
+// contra la caja entera y tienen su propia prueba, y aplicarles el suelo de la
+// bolsa Común los subía a todos al mismo valor (el Espectro, que debe ser el más
+// raro de la legendaria, quedaba igual que el Avatar).
+const suelo = pesoDeRareza(0) * PESO_MINIMO_POR_ENTRADA;
+  for (let i = 0; i < pesos.length; i++) {
+    if (tabla[i].id === 'up' || tabla[i].exclusivo) continue;
+    pesos[i] = Math.max(pesos[i], suelo);
+  }
+
+  const total = pesos.reduce((s, w) => s + w, 0);
+  const salida = pesos.map(w => w / total);
+  PESOS_CACHE[crateType] = salida;
+  return salida;
+}
+
 /** Recolectores sobrecargadas: mismo tier, daño por encima del rango normal del tier. */
 export function makeOverclockCollector(tier: number): { item: any; name: string; rarity: string; details: string } {
   const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
@@ -277,6 +537,22 @@ export interface RouletteTile {
 interface LootEntry {
   id: string;
   weight: number;
+  /**
+   * Premio exclusivo de caja: se sortea por su peso de autor contra la caja
+   * entera, sin competir en la bolsa de su rareza. Ver `BOLSA_EXCLUSIVO`.
+   */
+  exclusivo?: boolean;
+  /**
+   * La rareza con la que PESA esta entrada, cuando la que devuelve el botín no
+   * sirve para eso.
+   *
+   * El caso real es el cosmético: `rollCrateCosmetic` devuelve un cosmético
+   * cualquiera, y casi siempre uno Común aunque salga de la caja legendaria. Si se
+   * pesara por esa rareza, el cosmético pesaría lo mismo en las cuatro cajas y la
+   * legendaria —la caja de los premios raros— tendría el premio más común con el
+   * peso más alto. Aquí la rareza es la de la caja de donde sale.
+   */
+  pesoComo?: string;
   /**
    * Construye el premio. `exclusive: true` marca lo que no se puede comprar.
    *
@@ -430,7 +706,7 @@ function buildUpLoot(crateType: CrateType): LootEntry {
 }
 
 /** Pesos del salto, por caja. Medidos, no redondeados. */
-const UP_WEIGHTS: Record<CrateType, number> = { common: 6, rare: 5, epic: 4, legendary: 4 };
+const UP_WEIGHTS: Record<CrateType, number> = { common: 6, rare: 5, epic: 4, legendary: 3 };
 
 /**
  * EL SALTO SE COMPRUEBA AL ABRIR, NO AL CONSTRUIR LA TABLA.
@@ -526,7 +802,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     buildKeyLoot('common'),
     buildUpLoot('common'),
     buildExpansorLoot(1),
-    { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
+    { id: 'cosmetic', weight: 5, pesoComo: 'Raro', build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
   ],
   rare: [
     { id: 'crystals', weight: 26, build: () => { const a = rand(6, 10); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Épico', icon: 'crystal', materialTier: 1 }; } },
@@ -536,15 +812,15 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     buildKeyLoot('rare'),
     buildUpLoot('rare'),
     buildExpansorLoot(2),
-    { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
+    { id: 'cosmetic', weight: 5, pesoComo: 'Épico', build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
   ],
   epic: [
     { id: 'crystals', weight: 22, build: () => { const a = rand(16, 24); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Legendario', icon: 'crystal', materialTier: 1 }; } },
     { id: 'calibration_stone', weight: 18, build: () => { const a = rand(1, 2); return { kind: 'consumable', amount: a, name: 'Piedra de Calibración', label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', icon: 'flask', item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: a, sellPrice: 11250 } }; } },
     { id: 'companion_t6', weight: 20, build: () => { const t = TIER_SYSTEM.ranges[6]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Titán de Acero', label: 'Titán de Acero', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', icon: 'companion', tier: 6, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Titán de Acero', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', tier: 6, companionType: 'passive', power: p, sellPrice: 2500 } }; } },
     { id: 'collector_oc6', weight: 16, build: () => { const w = makeOverclockCollector(6); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 6, item: w.item }; } },
-    { id: 'ghost', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
-    { id: 'phoenix', weight: 10, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
+    { id: 'ghost', weight: 12, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
+    { id: 'phoenix', weight: 10, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
     { id: 'legendary_crate', weight: 10, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Legendaria', label: '+1 Caja Legendaria', details: 'Abre una caja de botín máximo', rarity: 'Legendario', icon: 'trophy', item: { id: `crate_legendary_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0, sellPrice: 4500, stackable: true, stackCount: 1 } }) },
     // Esta faltaba: la caja épica no soltaba NINGUNA llave, así que la Rúnica
     // solo se conseguía abriendo una legendaria, que a su vez necesitaba una
@@ -553,15 +829,15 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     buildKeyLoot('epic'),
     buildUpLoot('epic'),
     buildExpansorLoot(3),
-    { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
+    { id: 'cosmetic', weight: 6, pesoComo: 'Legendario', build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
   ],
   legendary: [
     { id: 'crystals', weight: 20, build: () => { const a = rand(45, 65); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Mítico', icon: 'crystal', materialTier: 2 }; } },
     { id: 'collector_oc8', weight: 18, build: () => { const w = makeOverclockCollector(8); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 8, item: w.item }; } },
     { id: 'stability_nano', weight: 14, build: () => ({ kind: 'consumable', amount: 1, name: 'Nanopartícula de Estabilidad', label: 'Nanopartícula de Estabilidad', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', icon: 'flask', item: { id: `crate_nano_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 1, sellPrice: 55000 } }) },
-    { id: 'avatar', weight: 16, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
-    { id: 'oracle', weight: 14, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
-    { id: 'sentinel', weight: 12, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
+    { id: 'avatar', weight: 16, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
+    { id: 'oracle', weight: 14, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
+    { id: 'sentinel', weight: 12, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
     // D1 · EL ESPECTRO AZULADO (índice 5) ESTABA DEFINIDO Y NO LO SACABA NADIE.
     //
     // Los seis compañeros exclusivos de caja: la tabla usaba 0 a 4 y el quinto se
@@ -571,18 +847,18 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     //
     // El índice 5 NO lo usa nadie más, así que ningún guardado lo apunta y no hay
     // migración que hacer. Si algún día hay que moverlo, esto es el sitio.
-    { id: 'espectro', weight: 5, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[5]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
+    { id: 'espectro', weight: 3, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[5]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
     buildKeyLoot('legendary'),
     buildUpLoot('legendary'),
     buildExpansorLoot(3),
-    { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
+    { id: 'cosmetic', weight: 6, pesoComo: 'Mítico', build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
   ]
 };
 
 /** Compra una entrada por peso. */
 export function pickLoot(crateType: CrateType, weights?: number[]): LootEntry {
   const table = CRATE_LOOT[crateType];
-  const w = weights ?? table.map(e => e.weight);
+  const w = weights ?? tablaDePesos(crateType);
   const total = w.reduce((a, b) => a + b, 0);
   let roll = Math.random() * total;
   for (let i = 0; i < table.length; i++) {
