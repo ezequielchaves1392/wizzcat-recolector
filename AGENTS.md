@@ -86,7 +86,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 24 bancos = 1549 pruebas (el total varía ±1: una prueba es condicional)
+npm run verify    # 25 bancos = 1649 pruebas (el total varía ±1: una prueba es condicional)
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
@@ -116,7 +116,7 @@ El resto está en `docs/REGLAS-Y-TECNOLOGIAS.md`.
 ```bash
 npm run dev       # servidor de desarrollo
 npm run build     # tsc && vite build — el type-check es puerta de entrada
-npm run verify    # banco de pruebas propio: 24 bancos sobre el game loop real
+npm run verify    # banco de pruebas propio: 25 bancos sobre el game loop real
 ```
 
 Para un banco suelto:
@@ -151,9 +151,11 @@ verify/*             Banco de pruebas propio. NO está en tsconfig.json.
 docs/*               Este directorio.
 ```
 
-`src/types.ts`, `src/state.ts`, `src/components/crates.ts` y
-`src/components/upgrades.ts` son **vestigiales**: no los imports nadie y sus
-valores contradicen los reales. No los uses como referencia.
+`src/types.ts`, `src/state.ts` y `src/components/upgrades.ts` son **vestigiales**:
+no los importa nadie y sus valores contradicen los reales. No los uses como
+referencia. (`src/components/crates.ts` era el cuarto y **se ha borrado** con
+F31: llevaba muerto desde hacía tiempo y leía `state.crates.common`, que con
+diez niveles de caja habría mostrado `undefined` en cuatro tarjetas.)
 
 ---
 

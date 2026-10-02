@@ -42,6 +42,10 @@
 // ==========================================================================
 
 import { STORE_ITEMS } from '../src/gameLoop';
+import { costeDeCaja } from '../src/data/store';
+import { danioDeRango } from '../src/data/crafting';
+import { CRATE_TYPES, type CrateType } from '../src/data/store';
+import { KEY_DEFS, type KeyTier } from '../src/data/items';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find,
   baseSave, collector, crystal, consumable, guardado
@@ -122,7 +126,7 @@ async function main() {
   // =========================================================================
   {
     const g3 = await reload();
-    const barato = 'collectorCardT1';
+    const barato = 'keyT1';
 
     // Sin nanitas no se compra, y sobre todo: no se COBRA. Un "no compres" que
     // descuenta es peor que un bug visible, porque el jugador pierde sin ver por
@@ -150,7 +154,7 @@ async function main() {
 
     const g4 = await reload();
     check('tienda: la compra sobrevive a la recarga',
-      deType(g4, 'collector') === 2, 'recolectores=' + deType(g4, 'collector'));
+      deType(g4, 'key') === 1, 'llaves=' + deType(g4, 'key'));
     check('tienda: y la cartera vacía también sobrevive', nanites(g4) === 0, 'nanitas=' + nanites(g4));
   }
 
@@ -206,7 +210,7 @@ async function main() {
       ranuras === 4,
       `items=${ranuras} cajas=${deType(g7, 'crate')} unidades=2`);
     check('almacén: con sitio de sobra la compra cabe',
-      g7.canBuyStoreItem('collectorCardT2') === true, 'no cabe con ' + ranuras + ' de 15');
+      g7.canBuyStoreItem('keyT2') === true, 'no cabe con ' + ranuras + ' de 15');
 
     // Ampliar el almacén tiene UN camino: el expansor es un CONSUMIBLE que se
     // compra y se usa después (F27). El permiso directo de antes ya no existe:
@@ -242,24 +246,24 @@ async function main() {
     // comprobaciones de "lleno" pasarían sin probar nada. Y una de esas quince es
     // una pila de cajas, que es lo que da sentido a la comparación.
     const g9 = await boot(baseSave(
-      [...Array.from({ length: 14 }, (_, i) => collector('c' + i)), cr('pila', 'common', 5)],
+      [...Array.from({ length: 14 }, (_, i) => collector('c' + i)), cr('pila', 1, 5)],
       { nanites: 100_000, warehouseCapacity: 15 }
     ));
     check('almacén lleno: está lleno de verdad',
       g9.getCapacity() === 15 && wh(g9).length === 15,
       `${wh(g9).length}/${g9.getCapacity()}`);
     check('almacén lleno: un item que necesita ranura NO cabe',
-      g9.canBuyStoreItem('collectorCardT1') === false, 'dice que cabe');
+      g9.canBuyStoreItem('keyT1') === false, 'dice que cabe');
     check('almacén lleno: y al comprarlo no se cobra',
-      (() => { g9.buyStoreItem('collectorCardT1'); return nanites(g9) === 100_000; })(),
+      (() => { g9.buyStoreItem('keyT1'); return nanites(g9) === 100_000; })(),
       'nanitas=' + nanites(g9));
     check('almacén lleno: pero otra caja del mismo tipo SÍ cabe, porque se apila',
-      g9.canBuyStoreItem('commonCrate') === true,
+      g9.canBuyStoreItem('crateT1') === true,
       `hay una pila de ${wh(g9).find((w: any) => w.id === 'pila')?.stackCount} cajas`);
     check('almacén lleno: y al comprarla no ocupa ranura nueva',
       (() => {
         const antes = wh(g9).length;
-        const comprada = g9.buyStoreItem('commonCrate');
+        const comprada = g9.buyStoreItem('crateT1');
         return Boolean(comprada) && wh(g9).length === antes;
       })(), `items=${wh(g9).length}`);
     check('almacén lleno: y la pila suma las unidades',
@@ -320,7 +324,7 @@ async function main() {
   // =========================================================================
   {
     const g12 = await boot(baseSave(
-      [{ ...collector('r1', 3, { damage: 60 }) }, cr('c1', 'common'), keyT1('k1', 2)],
+      [{ ...collector('r1', 3, { damage: 60 }) }, cr('c1', 1), keyT1('k1', 2)],
       { nanites: 0, warehouseCapacity: 30 }
     ));
     const antes = nanites(g12);
@@ -344,8 +348,15 @@ async function main() {
       .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
 
     check('caja: se abre', r.ok === true, r.msg ?? '');
+    // F31 · ABRIR UNA CAJA PUEDE DEJAR OTRA CAJA, Y POR ESO YA NO SE CUENTAN.
+    //
+    // El criterio era "desaparece un item de caja", que era verdad con cuatro
+    // cajas donde la T1 no soltaba ninguna. Con la cadena de F31 la caja T1 suelta
+    // la T2, así que abrir una puede dejar los mismos dos items: uno consumido y
+    // uno nuevo. Lo que sí tiene que ser cierto es que **el número de cajas de
+    // nivel T1 baja**, que es la caja que se abrió.
     check('caja: la caja se consume',
-      deType(g12, 'crate') < cajas, 'cajas=' + deType(g12, 'crate'));
+      (s(g12).crates[1] ?? 0) < cajas, `cajasT1=${s(g12).crates[1]} items=${deType(g12, 'crate')}`);
     check('caja: y se gasta UNA llave',
       totalLlaves(g12) === llavesDeFabrica,
       `llaves=${totalLlaves(g12)} esperado=${llavesDeFabrica} (botín soltó ${sueltas})`);
@@ -397,8 +408,10 @@ async function main() {
     const cajas13 = deType(g13, 'crate');
     const llaves13 = wh(g13).filter((w: any) => w.type === 'key')
       .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
+    // F31 · La caja que se abrió no vuelve, aunque el botín haya dejado otra caja
+    // en su sitio. Se mide por nivel, que es donde vive el contador.
     check('caja: la caja abierta no vuelve',
-      cajas13 < cajas, `cajas=${cajas13} (antes ${cajas})`);
+      (s(g13).crates[1] ?? 0) < cajas, `cajasT1=${s(g13).crates[1]} items=${cajas13} (antes ${cajas})`);
     check('caja: abrir una caja NO multiplica el material',
       totalLlaves(g13) <= llavesDeFabrica,
       `llaves=${llaves13} tope=${llavesDeFabrica} (antes ${llaves}, botín soltó ${sueltas})`);
@@ -416,25 +429,27 @@ async function main() {
   //  compraba T1. Ese es un fallo de juego, no una preferencia: hace que la mitad
   //  de la tienda sean trampas.
   //
-  //  Se mide por poder REAL, no por el número de la carta: se compra la carta, se
-  //  equipa, y se lee `getClickDamage()`. Así el banco no reimplementa la fórmula
-  //  de daño; usa la misma que ve el jugador.
+  //  Se mide por poder REAL, no por un número escrito en el test: el precio sale
+  //  de `costeDeCaja()` y el daño de `danioDeRango()`, que son las dos funciones
+  //  que usa el juego. Así el banco no reimplementa ninguna fórmula.
+  //
+  //  F31 · ESTE BLOQUE MEDÍA LAS CARTAS DE TIER, Y YA NO HAY CARTAS DE TIER.
+  //
+  //  Lo que se mide ahora es **la caja de cada tier**, que es el camino que
+  //  queda: la caja T{n} cuesta la mitad de un T{n} y suelta un T{n}. Los ratios
+  //  son los mismos que los de las cartas —el precio está partido por dos en los
+  //  dos lados—, así que los umbrales de abajo siguen valiendo sin tocarlos.
   // =========================================================================
   {
-    const g14 = await boot(baseSave([collector('base', 3, { damage: 60 })],
-      { nanites: 5_000_000, warehouseCapacity: 40 }));
-
     const poder: { tier: number; coste: number; danio: number }[] = [];
     for (let tier = 1; tier <= 10; tier++) {
-      const carta = `collectorCardT${tier}` as keyof typeof STORE_ITEMS;
-      const comprado = g14.buyStoreItem(carta);
-      if (!comprado) continue;
-      const id = (comprado as any).id;
-      g14.equipCollector(id);
-      poder.push({ tier, coste: STORE_ITEMS[carta].cost, danio: g14.getClickDamage() });
-      // Se vende para no llenar el almacén: 10 cartas no caben en 15 ranuras.
-      g14.equipCollector('base');
-      g14.sellItem(id);
+      poder.push({
+        tier,
+        coste: costeDeCaja(tier),
+        // Potencial 1: el PEOR recolector del tier. Con el mejor la dispersión
+        // sería menor y la comprobación más floja.
+        danio: danioDeRango(tier, 1)
+      });
     }
 
     const detalle = poder.map((p) => `T${p.tier}:${(p.danio / p.coste * 1000).toFixed(1)}`).join(' ');
@@ -581,20 +596,29 @@ async function main() {
 //  atajos de lectura para que el banco se lea como se juega.
 // --------------------------------------------------------------------------
 
-/** Una caja con el nombre que el juego reconoce al abrirla. */
-function cr(id: string, tipo: 'common' | 'rare' | 'epic' | 'legendary', stack = 1) {
-  const NOMBRES = { common: 'Caja Común', rare: 'Caja Rara', epic: 'Caja Épica', legendary: 'Caja Legendaria' };
+/**
+ * Una caja con el nombre que el juego reconoce al abrirla.
+ *
+ * F31 · El nombre es `Caja T{n}` y el nivel es el número. Antes eran los cuatro
+ * nombres de rareza, y el juego los recognacía por palabra suelta; con diez
+ * cajas el número va en el nombre, así que la fábrica escribe lo que escribe el
+ * juego. Si no, el banco mide un item que el juego no sabe abrir —y de hecho
+ * falló con "No se reconoce el tipo de esta caja" antes de arreglar esto.
+ */
+function cr(id: string, tier: number, stack = 1) {
+  const def = CRATE_TYPES[tier as CrateType];
   return {
-    id, name: NOMBRES[tipo], type: 'crate', details: 'x', rarity: 'Raro',
+    id, name: def.name, type: 'crate', details: def.details, rarity: def.rarity,
     tier: 0, sellPrice: 500, stackable: true, stackCount: stack
   };
 }
 
-/** Una llave de nivel 0, que abre las cajas comunes. */
-function keyT1(id: string, stack: number) {
+/** Una llave de su nivel, la que abre la caja de ese nivel. */
+function keyT1(id: string, stack: number, tier = 1) {
+  const def = KEY_DEFS[tier as KeyTier];
   return {
-    id, name: 'Llave de Cifrado', type: 'key', details: 'x', rarity: 'Raro',
-    tier: 0, sellPrice: 480, stackable: true, stackCount: stack
+    id, name: def.name, type: 'key', details: def.details, rarity: def.rarity,
+    tier, sellPrice: 480, stackable: true, stackCount: stack
   };
 }
 

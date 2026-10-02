@@ -305,11 +305,11 @@ async function main() {
     // EL ACIERTO: el dado salio, y la ruleta tiene que girar.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 1, 9)
+      crystal('x1', 3, 9)
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const nivelAntes = find(g, 'r1').level;
-    const res = conRoll(0, () => g.upgradeEquippedCollector(1));
+    const res = conRoll(0, () => g.upgradeEquippedCollector());
     const roll = tuningRoll(res, nivelAntes, find(g, 'r1').level);
 
     check('contrato: en el acierto se tira el dado', res.rolled === true,
@@ -332,11 +332,11 @@ async function main() {
     // EL FALLO DEL DADO: se gasto el cristal, y hay que decirlo.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 1, 9)
+      crystal('x1', 3, 9)
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const nivelAntes = find(g, 'r1').level;
-    const res = conRoll(0.999, () => g.upgradeEquippedCollector(1));
+    const res = conRoll(0.999, () => g.upgradeEquippedCollector());
     const roll = tuningRoll(res, nivelAntes, find(g, 'r1').level);
 
     check('contrato: el fallo del dado tambien es una tirada', res.rolled === true,
@@ -363,16 +363,20 @@ async function main() {
     // inventarse un resultado.
     const rechazos: Array<{ nombre: string; save: any; equipo?: string }> = [
       {
+        // F26 · Un T3 con cristal T1: el rejections ya no es "el jugador pidió
+        // otro nivel", es "este recolector necesita el suyo y no lo tienes".
+        // Antes el caso era un `crystal('x1', 1, ...)` con un `upgrade...(1)`
+        // explícito; ahora el nivel lo pone el item y no se puede pedir otro.
         nombre: 'sin cristales de ese nivel',
-        save: baseSave([collector('r1', 3, { damage: 60, level: 4 }), crystal('x1', 3, 5)], { nanites: 0 })
+        save: baseSave([collector('r1', 3, { damage: 60, level: 4 }), crystal('x1', 1, 5)], { nanites: 0 })
       },
       {
         nombre: 'con menos cristales de los necesarios',
-        save: baseSave([collector('r1', 3, { damage: 60, level: 10 }), crystal('x1', 1, 1)], { nanites: 0 })
+        save: baseSave([collector('r1', 3, { damage: 60, level: 10 }), crystal('x1', 3, 1)], { nanites: 0 })
       },
       {
         nombre: 'en el techo de niveles',
-        save: baseSave([collector('r1', 3, { damage: 60, level: 20, maxLevel: 20 }), crystal('x1', 1, 99)], { nanites: 0 })
+        save: baseSave([collector('r1', 3, { damage: 60, level: 20, maxLevel: 20 }), crystal('x1', 3, 99)], { nanites: 0 })
       },
       {
         nombre: 'sin recolector equipado',
@@ -388,7 +392,7 @@ async function main() {
         .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
 
       const nivelAntes = find(g, 'r1')?.level;
-      const res = g.upgradeEquippedCollector(1);
+      const res = g.upgradeEquippedCollector();
       const roll = tuningRoll(res, nivelAntes ?? 0, find(g, 'r1')?.level ?? 0);
       const crystalsDespues = (g.getState().warehouse as any[])
         .filter((w: any) => w.type === 'crystal')
@@ -422,11 +426,11 @@ async function main() {
     // "5 -> 5" que esta seccion existe para cerrar.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 1, 9)
+      crystal('x1', 3, 9)
     ], { nanites: 0 }));
     g.equipCollector('r1');
-    const ok = conRoll(0, () => g.upgradeEquippedCollector(1));
-    const mal = conRoll(0.999, () => g.upgradeEquippedCollector(1));
+    const ok = conRoll(0, () => g.upgradeEquippedCollector());
+    const mal = conRoll(0.999, () => g.upgradeEquippedCollector());
     check('contrato: el motor devuelve el nivel con el que se queda',
       ok.level === 5 && mal.level === 5,
       `acierto=${ok.level} fallo=${mal.level}: el fallo no retrocede, asi que los dos suben`);

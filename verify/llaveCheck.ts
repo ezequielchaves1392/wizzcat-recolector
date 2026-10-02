@@ -33,10 +33,13 @@ import { check, resumen, boot, baseSave, key, crate } from './kit';
 import {
   KEY_DEFS, KEY_TIER_ORDER, CRATE_KEY_TIER, STORE_KEY_TIER, keyOpens, cratesOpenedBy
 } from '../src/data/items';
-import { STORE_ITEMS, KEY_COSTS, CRATE_TYPES, type CrateType } from '../src/data/store';
+import { STORE_ITEMS, KEY_COSTS, CRATE_TYPES, costeDeCaja, type CrateType } from '../src/data/store';
 import { CRATE_LOOT, pickLoot } from '../src/components/crateLoot';
 
-const CAJAS = Object.keys(CRATE_KEY_TIER) as CrateType[];
+// F31 · Object.keys de un `Record` con claves numéricas devuelve strings, y una
+// string no es una caja. Se convierten a número una sola vez, aquí, y el resto del
+// banco trabaja con niveles como hace el juego.
+const CAJAS = Object.keys(CRATE_KEY_TIER).map(Number) as CrateType[];
 
 async function main() {
   // -----------------------------------------------------------------------
@@ -168,10 +171,18 @@ async function main() {
         `${KEY_COSTS[i - 1]} -> ${KEY_COSTS[i]}`);
     }
 
+    // F31 · EL PRECIO DE LA CAJA NO SE LEE DE UNA CARTA, PORQUE SOLO HAY UNA.
+    //
+    // Antes era `STORE_ITEMS[`${caja}Crate`].cost`, con cuatro cartas. Ahora solo
+    // existe `crateT1`, así que el precio sale de `costeDeCaja()`, que es la
+    // función de donde leen el reventa y la compensación. La aserción se queda
+    // igual y sigue teniendo sentido para las diez: la llave de un nivel tiene
+    // que ser más barata que la caja de ese nivel, o comprar llave y caja sería
+    // tirar el dinero.
     for (const c of CAJAS) {
       const t = CRATE_KEY_TIER[c];
-      const precioCaja = (STORE_ITEMS as any)[`${c}Crate`]?.cost ?? 0;
-      check(`precio: la llave de ${c} (T${t}) no es mas cara que ${c}`,
+      const precioCaja = costeDeCaja(c);
+      check(`precio: la llave T${t} no es mas cara que la caja T${c}`,
         (KEY_DEFS[t].cost as number) < precioCaja,
         `llave=${KEY_DEFS[t].cost} caja=${precioCaja}`);
     }
@@ -200,7 +211,7 @@ async function main() {
     // documentada, que sí lo permite. Se comprueba explícitamente para que la
     //exception esté escrita y no sea un accidente.
     const g = await boot(baseSave([
-      crate('c1', 'common'),
+      crate('c1', 1),
       key('k3', 3, 1, { name: KEY_DEFS[3].name })
     ], { nanites: 0 }));
     const r = g.openCrateBox('c1', 'k3');

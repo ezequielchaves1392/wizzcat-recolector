@@ -46,16 +46,16 @@ interface Caso {
 }
 
 const CASOS: Caso[] = [
-  { titulo: 'Nanitas (común)', caja: 'common', id: 'nanites' },
-  { titulo: 'Cristales (rara)', caja: 'rare', id: 'crystals' },
-  { titulo: 'Llaves (común)', caja: 'common', id: 'keys' },
-  { titulo: 'Caja épica (rara)', caja: 'rare', id: 'epic_crate' },
-  { titulo: 'Piedras x2 (épica)', caja: 'epic', id: 'calibration_stone' },
-  { titulo: 'Recolector sobrecargado', caja: 'rare', id: 'collector_t4' },
-  { titulo: 'Avatar del Vacío', caja: 'legendary', id: 'avatar' },
-  { titulo: 'Cosmético: título (común)', caja: 'common', id: 'cosmetic' },
-  { titulo: 'Cosmético: marco (legendaria)', caja: 'legendary', id: 'cosmetic' },
-  { titulo: 'Cosmético: banner (épica)', caja: 'epic', id: 'cosmetic' }
+  { titulo: 'Nanitas (T1)', caja: 1, id: 'nanites' },
+  { titulo: 'Cristal T2 (caja T2)', caja: 2, id: 'crystals' },
+  { titulo: 'Llaves (T1)', caja: 1, id: 'keys' },
+  { titulo: 'Caja T4 (caja T3)', caja: 3, id: 'nextCrate' },
+  { titulo: 'Piedras x2 (T6)', caja: 6, id: 'calibrationStone' },
+  { titulo: 'Recolector sobrecargado (T3)', caja: 3, id: 'collector' },
+  { titulo: 'Avatar del Vacío (T10)', caja: 10, id: 'exclusivo_2' },
+  { titulo: 'Cosmético: título (T1)', caja: 1, id: 'cosmetic' },
+  { titulo: 'Cosmético: marco (T10)', caja: 10, id: 'cosmetic' },
+  { titulo: 'Cosmético: banner (T3)', caja: 3, id: 'cosmetic' }
 ];
 
 /** Construye el premio de un caso sin tocar el azar del resto. */
@@ -118,7 +118,7 @@ repetido.addEventListener('click', () => {
     kind: 'nanites', amount: 27000, name: 'Compensación', label: '+27000 Nanitas',
     details: 'Ya tienes todos los cosméticos de esta caja', rarity: 'Común',
     icon: 'bolt', exclusive: false
-  }, 'legendary', () => {});
+  }, 10, () => {});
 });
 botones.appendChild(repetido);
 

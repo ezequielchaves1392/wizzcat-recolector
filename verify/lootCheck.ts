@@ -24,7 +24,9 @@ import { formatNumber } from '../src/utils/format';
 import type { CrateType } from '../src/gameLoop';
 import { check, resumen } from './kit';
 
-const CAJAS = Object.keys(CRATE_LOOT) as CrateType[];
+// F31 · LAS CAJAS SON LOS NIVELES, no las claves de un objeto. Object.keys de un
+// Record con claves numéricas devuelve strings, y una string no abre una caja.
+const CAJAS = Object.keys(CRATE_LOOT).map(Number) as CrateType[];
 
 /** Lo que se ha aplicado de verdad, para poder compararlo con lo que se enseña. */
 type Recuento = { nanitas: number; cristales: number; llaves: number; ids: string[] };
@@ -153,16 +155,30 @@ async function main() {
     const sinNada = conEntrada.filter(c => crateCosmetics(c).length === 0);
     check('cosméticos: toda caja con la entrada tiene al menos un cosmético',
       sinNada.length === 0, sinNada.join(','));
+
+    // F31 · Y LA OTRA DIRECCIÓN, QUE ANTES NO SE COMPROBABA.
+    //
+    // El catálogo reparte nueve cosméticos entre cuatro cajas (1, 3, 6 y 10), y
+    // con diez cajas eso deja seis con la entrada `cosmetic` apuntando a una bolsa
+    // vacía: la ruleta las enseña como si tuvieran premio y el sorteo compensa
+    // en nanitas. No es un fallo grave, pero es una casilla que miente.
+    //
+    // Con cuatro cajas las cuatro coinciden por casualidad —o porque la tabla se
+    // escribió cuando solo había cuatro— y el banco no lo veía. Ahora la entrada
+    // se pone **sola** en las cajas que tienen catálogo, y esto lo ata.
+    const sobran = CAJAS.filter(c => !conEntrada.includes(c) && crateCosmetics(c).length > 0);
+    check('cosméticos: ninguna caja con catálogo se queda sin entrada',
+      sobran.length === 0, sobran.join(','));
   }
   {
     // Sorteando mucho, todo cosmético de la legendaria tiene que salir.
     const vistos = new Set<string>();
     for (let i = 0; i < 4000; i++) {
       const { cuenta, applier } = crearApplier();
-      rollCrateReward('legendary', applier);
+      rollCrateReward(10, applier);
       cuenta.ids.forEach(id => vistos.add(id));
     }
-    const esperados = crateCosmetics('legendary').map(c => c.id);
+    const esperados = crateCosmetics(10).map(c => c.id);
     const faltan = esperados.filter(id => !vistos.has(id));
     check('cosméticos: los de la legendaria salen todos con el tiempo',
       faltan.length === 0, `faltan ${faltan.join(',')} de ${esperados.length}`);
@@ -170,11 +186,11 @@ async function main() {
   {
     // El cosmético entra en la lista de desbloqueados, no en el almacén.
     const { cuenta, applier, poseidos } = crearApplier();
-    for (let i = 0; i < 6000 && poseidos.size < crateCosmetics('common').length; i++) {
-      rollCrateReward('common', applier);
+    for (let i = 0; i < 6000 && poseidos.size < crateCosmetics(1).length; i++) {
+      rollCrateReward(1, applier);
     }
     check('cosméticos: se desbloquean en la lista, no como item del almacén',
-      poseidos.size === crateCosmetics('common').length && cuenta.ids.length === poseidos.size,
+      poseidos.size === crateCosmetics(1).length && cuenta.ids.length === poseidos.size,
       `desbloqueados=${poseidos.size} veces=${cuenta.ids.length}`);
 
     const primero = COSMETICS_BY_ID[[...poseidos][0]];
@@ -184,12 +200,12 @@ async function main() {
   }
   {
     // Lo que NO puede pasar: ganar algo que ya tienes.
-    const todos = crateCosmetics('legendary').map(c => c.id);
+    const todos = crateCosmetics(10).map(c => c.id);
     let repetidos = 0;
     let compensado = 0;
     for (let i = 0; i < 4000; i++) {
       const { applier } = crearApplier(true, todos);
-      const premio = rollCrateReward('legendary', applier);
+      const premio = rollCrateReward(10, applier);
       if (premio.cosmeticId) repetidos++;
       if (premio.details.includes('cosméticos')) compensado++;
     }
@@ -207,10 +223,10 @@ async function main() {
     const { cuenta, applier, poseidos } = crearApplier(false);
     let cosmeticos = 0;
     for (let i = 0; i < 6000; i++) {
-      if (rollCrateReward('common', applier).kind === 'cosmetic') cosmeticos++;
+      if (rollCrateReward(1, applier).kind === 'cosmetic') cosmeticos++;
     }
     check('cosméticos: con el almacén lleno el cosmético entra igual',
-      cosmeticos > 0 && poseidos.size === crateCosmetics('common').length,
+      cosmeticos > 0 && poseidos.size === crateCosmetics(1).length,
       `veces=${cosmeticos} desbloqueados=${poseidos.size}`);
     check('cosméticos: y ninguno se compensó por falta de sitio',
       cuenta.ids.length === poseidos.size,
@@ -219,15 +235,15 @@ async function main() {
   {
     // El duplicado paga lo mismo que el almacén lleno. Si divergieran, el
     // jugador vería en la ruleta un número que la tabla no explica.
-    const coste = Math.round(CRATE_META.legendary.cost * 1.5);
+    const coste = Math.round(CRATE_META[10].cost * 1.5);
     let porAlmacen = 0;
     let porDuplicado = 0;
     const sinEspacio = crearApplier(false);
-    const conTodo = crearApplier(true, crateCosmetics('legendary').map(c => c.id));
+    const conTodo = crearApplier(true, crateCosmetics(10).map(c => c.id));
     for (let i = 0; i < 4000; i++) {
-      const a = rollCrateReward('legendary', sinEspacio.applier);
+      const a = rollCrateReward(10, sinEspacio.applier);
       if (a.details === 'No cabía el objeto, se compensó en nanitas') porAlmacen = a.amount;
-      const b = rollCrateReward('legendary', conTodo.applier);
+      const b = rollCrateReward(10, conTodo.applier);
       if (b.details.includes('Ya tienes todos')) porDuplicado = b.amount;
     }
     check('cosméticos: el duplicado paga lo mismo que el almacén lleno',

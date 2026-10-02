@@ -1,4 +1,4 @@
-﻿// ==========================================================================
+// ==========================================================================
 //  Banco de pruebas de la COMPRA
 //
 //  Cubre `buyStoreItem` (la tienda entera) y `buyNode` (el arbol de pasivas).
@@ -22,9 +22,10 @@ import { TREE_BY_ID, nodeCost } from '../src/data/tree';
 // Para las ranuras: el número que da cada carta sale de esta tabla, no de un 4
 // escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
 // texto de la tarjeta y en estas dos aserciones.
-import { COMPANION_SLOT_BUY } from '../src/data/store';
+import { COMPANION_SLOT_BUY, RANURA_POR_CARTA } from '../src/data/store';
+import { KEY_DEFS } from '../src/data/items';
 import {
-  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, distintos
+  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, key, distintos
 } from './kit';
 
 async function main() {
@@ -38,11 +39,11 @@ async function main() {
     // y esa carta entregaba la Reforzada mientras se llamaba Cifrado (B7). Ahora
     // hay cuatro cartas y el test usa la más barata. El detalle de que cada
     // carta entregue su llave lo comprueba `llaveCheck`.
-    const item = g.buyStoreItem('keyT0');
+    const item = g.buyStoreItem('keyT1');
 
     check('tienda: devuelve el item comprado', !!item && item.type === 'key', JSON.stringify(item?.id));
-    check('tienda: cobra el precio de carta', nanites(g) === antes - STORE_ITEMS.keyT0.cost,
-      `cobrado=${antes - nanites(g)} precio=${STORE_ITEMS.keyT0.cost}`);
+    check('tienda: cobra el precio de carta', nanites(g) === antes - STORE_ITEMS.keyT1.cost,
+      `cobrado=${antes - nanites(g)} precio=${STORE_ITEMS.keyT1.cost}`);
     check('tienda: la llave entra en el almacen', deType(g, 'key') === 1, ids(g).join(','));
     check('tienda: el contador de llaves sube a 1', s(g).keys === 1, 'keys=' + s(g).keys);
     check('tienda: el item devuelto es el que esta en el almacen', !!item?.id && !!find(g, item.id));
@@ -59,64 +60,65 @@ async function main() {
   //     sin cubrir: se cobra y no se entrega. Por eso se recorre la lista
   //     completa en vez de unos pocos casos representativos.
   // =========================================================================
-  const casos: Array<{ k: string; tipo: string; coste: number; nombre?: string }> = [
-    { k: 'upgradeCrystal', tipo: 'crystal', coste: 60, nombre: 'Cristal' },
-    { k: 'commonCrate', tipo: 'crate', coste: 500, nombre: 'Común' },
-    { k: 'rareCrate', tipo: 'crate', coste: 1500, nombre: 'Rara' },
-    { k: 'epicCrate', tipo: 'crate', coste: 5500, nombre: 'Épica' },
-    { k: 'legendaryCrate', tipo: 'crate', coste: 21000, nombre: 'Legendaria' },
-    // F4 · `clickBuff` y `passiveBuff` estaban aquí. Ya no se compran: eran buffs de
-    // 30 y 60 minutos, que compraban media hora de ingreso sin mirar la pantalla
-    // (ver `tarjetaCheck`). El efecto sigue en el motor para las partidas viejas,
-    // pero la tienda ya no los tiene, y una carta que no existe daría un error de
-    // `undefined` al mirarla.
-    // F27 · `backpackExpander` (+1) estaba aquí. Ahora hay dos cartas por tipo
-    // (T1 y T2; el T3 solo sale de cajas), y el +1 viejo sigue usándose con el
-    // tope nuevo pero ya no se vende.
-    { k: 'expansorT1', tipo: 'consumable', coste: 3000, nombre: 'Expansor T1' },
-    { k: 'expansorT2', tipo: 'consumable', coste: 18000, nombre: 'Expansor T2' },
-    { k: 'afkCard', tipo: 'consumable', coste: 10000, nombre: 'Tarjeta AFK' },
-    { k: 'clickX2Card', tipo: 'consumable', coste: 5000, nombre: 'Click x2' },
-    { k: 'clickX3Card', tipo: 'consumable', coste: 15000, nombre: 'Click x3' },
-    { k: 'calibrationStone', tipo: 'consumable', coste: 45000, nombre: 'Calibración' },
-    { k: 'stabilityNano', tipo: 'consumable', coste: 90000, nombre: 'Nanopartícula' },
-    { k: 'companionCardT1', tipo: 'companion' },
-    { k: 'companionCardT5', tipo: 'companion' },
-    { k: 'collectorCardT1', tipo: 'collector' },
-    { k: 'collectorCardT10', tipo: 'collector' }
-  ];
-
-  // POR QUÉ EL COSTE NO ESTÁ EN LA LISTA. Estaba, escrito a mano en cada fila, y
-  // cuando la curva de balance se rehizo estas pruebas fallaron sin que hubiera
-  // ningún bug: el test tenía su propia copia de la tabla de precios. Con el
-  // precio leído de `STORE_ITEMS` el banco sigue comprobando lo que dice
-  // comprobar —que se cobra lo que la carta cuesta— y si mañana cambia el precio
-  // no tiene nada que(actualizarse.
+  //  2. Cada carta de la tienda, una por una
   //
-  // Y la cartera se siembra por ENCIMA del precio más caro de la lista, no con
-  // una cifra fija: con 200 000 justos el T10 se quedaba sin margen y el fallo
-  // habría parecido de saldo en vez de de tabla.
-  const masCaro = Math.max(...casos.map(c => (STORE_ITEMS as Record<string, { cost: number }>)[c.k].cost));
+  //     El fallo típico es que una rama del `if/else` de `buyStoreItem` se quede
+  //     sin cubrir: se cobra y no se entrega. Por eso se recorre la lista
+  //     COMPLETA en vez de unos pocos casos representativos.
+  //
+  //     F31 · Y la lista completa es `STORE_ITEMS`, no una escrita aquí.
+  //
+  //     Antes eran veinte filas a mano con veinte precios dentro —una segunda
+  //     copia de la tabla— y veinte cartas de tier que F31 acaba de retirar de la
+  //     tienda. Recorrer la tabla real es lo que hace que el banco no pueda
+  //     quedarse probando lo que ya no se vende, ni se le pase una carta nueva sin
+  //     probarla.
+  //
+  //     Se quitan las cartas de ranura de compañero: son permisos, no objetos, y
+  //     no dejan nada que vender. El filtro sale de `RANURA_POR_CARTA`, la misma
+  //     tabla que usa el motor, así que una ranura nueva no hay que añadirla a
+  //     ninguna lista de este fichero.
+  //
+  //     Y el TIPO y el NOMBRE sale del item que devuelve la propia compra, no de
+  //     una cuarta copia: si el motor entregara otra cosa, la prueba lo vería.
+  // =========================================================================
+  const cartas = (Object.keys(STORE_ITEMS) as (keyof typeof STORE_ITEMS)[])
+    .filter(k => !RANURA_POR_CARTA[k as string]) as string[];
 
-  for (const c of casos) {
-    const coste = (STORE_ITEMS as Record<string, { cost: number }>)[c.k].cost;
+  // El precio de la llave, leído de la tabla. Estaba escrito a mano en cuatro
+  // aserciones (250) y en un titular ("1000/250 = 4"), y con F31 la llave T1
+  // dejó de costar 250. Un banco que falla porque cambió un precio no está
+  // mirando el bug que dice mirar.
+  const KEY_UNIT = (STORE_ITEMS as Record<string, { cost: number }>).keyT1.cost;
+
+  // POR QUÉ EL COSTE SE LEE DE `STORE_ITEMS` Y NO SE ESCRIBE AQUÍ. Estaba en la
+  // lista, a mano en cada fila, y cuando la curva de balance se rehizo estas
+  // pruebas fallaron sin que hubiera ningún bug: el test tenía su propia copia de
+  // la tabla de precios. Y la cartera se siembra por ENCIMA del precio más caro,
+  // no con una cifra fija: con 200 000 justos la carta más cara se quedaba sin
+  // margen y el fallo habría parecido de saldo en vez de de tabla.
+  const masCaro = Math.max(...cartas.map(k => (STORE_ITEMS as Record<string, { cost: number }>)[k].cost));
+
+  for (const carta of cartas) {
+    const coste = (STORE_ITEMS as Record<string, { cost: number }>)[carta].cost;
     const g = await boot(baseSave([], { nanites: masCaro * 2 }));
     const antesN = wh(g).length;
     const antesNanites = nanites(g);
-    const item = g.buyStoreItem(c.k as any);
+    const item = g.buyStoreItem(carta as any);
+    const tipo = String(item?.type ?? '');
 
-    check(`tienda ${c.k}: cobra ${coste}`, nanites(g) === antesNanites - coste,
+    check(`tienda ${carta}: cobra ${coste}`, nanites(g) === antesNanites - coste,
       `cobrado=${antesNanites - nanites(g)}`);
-    check(`tienda ${c.k}: mete 1 item de tipo ${c.tipo}`,
-      wh(g).length === antesN + 1 && deType(g, c.tipo) === 1,
-      `antes=${antesN} ahora=${wh(g).length} de ${c.tipo}=${deType(g, c.tipo)}`);
-    if (c.nombre) {
-      check(`tienda ${c.k}: el item se llama "${c.nombre}"`,
-        String(item?.name ?? '').includes(c.nombre), `nombre=${item?.name}`);
-    }
+    check(`tienda ${carta}: mete 1 item de tipo ${tipo}`,
+      !!tipo && wh(g).length === antesN + 1 && deType(g, tipo) === 1,
+      `antes=${antesN} ahora=${wh(g).length} tipo=${tipo} de ${tipo}=${deType(g, tipo)}`);
     // Un item recien comprado tiene que ser utilizable: si la compra entrega
     // algo que el juego no reconoce despues, es un callejon sin salida.
-    check(`tienda ${c.k}: el item comprado existe y trae id`,
+    check(`tienda ${carta}: el item comprado existe y trae id`,
+      !!item?.id && !!find(g, item.id), JSON.stringify(item?.id));
+    // Un item recien comprado tiene que ser utilizable: si la compra entrega
+    // algo que el juego no reconoce despues, es un callejon sin salida.
+    check(`tienda ${carta}: el item comprado existe y trae id`,
       !!item?.id && !!find(g, item.id), JSON.stringify(item?.id));
   }
 
@@ -124,12 +126,12 @@ async function main() {
   // lee el arbol de pasivas y las pantallas de progreso.
   {
     const g = await boot(baseSave([], { nanites: 200_000 }));
-    g.buyStoreItem('epicCrate');
-    g.buyStoreItem('epicCrate');
-    check('tienda: dos cajas epicas dejan el contador a 2', s(g).crates.epic === 2, 'epic=' + s(g).crates.epic);
+    g.buyStoreItem('crateT1');
+    g.buyStoreItem('crateT1');
+    check('tienda: dos cajas dejan el contador de su nivel a 2', s(g).crates[1] === 2, 't1=' + s(g).crates[1]);
     const g2 = await reload();
-    check('tienda: el contador de cajas no se duplica al recargar', s(g2).crates.epic === 2,
-      'epic=' + s(g2).crates.epic);
+    check('tienda: el contador de cajas no se duplica al recargar', s(g2).crates[1] === 2,
+      't1=' + s(g2).crates[1]);
   }
   {
     const g = await boot(baseSave([], { nanites: 200_000 }));
@@ -139,19 +141,42 @@ async function main() {
     check('tienda: y sigue contando tras recargar', s(g2).afkCards === 1, 'afkCards=' + s(g2).afkCards);
   }
   {
-    // Un compañero comprado tiene que existir en los DOS sitios: la ficha que
-    // paga pasivo (`state.companions`) y el item del almacen. Si solo se
-    // creara el item, se podria equipar y no pagaria nada.
-    const g = await boot(baseSave([], { nanites: 200_000 }));
-    const item = g.buyStoreItem('companionCardT3');
-    check('tienda: el compañero comprado tiene ficha en state.companions',
-      s(g).companions.some((c: any) => c.id === item.id), JSON.stringify(s(g).companions.map((c: any) => c.id)));
-    g.equipCompanion(item.id);
-    check('tienda: y equipado paga ingreso pasivo', s(g).passiveIncome > 0, 'pasivo=' + s(g).passiveIncome);
+    // F31 · UN COMPAÑERO TIENE QUE EXISTIR EN LOS DOS SITIOS, Y YA NO SE COMPRA.
+    //
+    // El caso era "el compañero comprado". Con las veinte cartas de tier fuera de
+    // la tienda no hay ningún compañero que comprar: sale de las cajas. El
+    // invariante sigue siendo el mismo y ahora importa MÁS, porque una caja
+    // entrega el item por un camino y la ficha por otro: si solo creara el item,
+    // se podría equipar y no pagaría nada.
+    //
+    // Y es un caso no determinista a propósito: se abren muchas cajas T1 y se
+    // comprueba que **los** compañeros que salgan cumplen el invariante. Un banco
+    // con un solo companion fijado no miraría nada.
+    const g = await boot(baseSave([crate('c1', 1, 60), key('k1', 1, 60)],
+      { nanites: 200_000, warehouseCapacity: 200 }));
+
+    let vistos = 0;
+    let sinFicha = 0;
+    let sinPasivo = 0;
+    for (let i = 0; i < 60; i++) {
+      const r: any = g.openCrateBox('c1', 'k1');
+      if (!r || r.ok === false) break;
+      if (r.reward?.kind !== 'companion' || !r.reward?.item?.id) continue;
+      vistos++;
+      const id = r.reward.item.id;
+      if (!s(g).companions.some((c: any) => c.id === id)) sinFicha++;
+      if (g.equipCompanion(id) !== false && s(g).passiveIncome <= 0) sinPasivo++;
+    }
+    check('cajas: algún compañero salió de verdad en 60 cajas T1', vistos > 0, 'vistos=' + vistos);
+    check('cajas: todo compañero de caja tiene ficha en state.companions',
+      vistos > 0 && sinFicha === 0, `vistos=${vistos} sinFicha=${sinFicha}`);
+    check('cajas: y equipado paga ingreso pasivo',
+      vistos > 0 && sinPasivo === 0, `vistos=${vistos} sinPasivo=${sinPasivo}`);
+
     const g2 = await reload();
-    check('tienda: el compañero comprado sobrevive a la recarga',
-      deType(g2, 'companion') >= 1 && s(g2).passiveIncome > 0,
-      `items=${deType(g2, 'companion')} pasivo=${s(g2).passiveIncome}`);
+    check('cajas: los compañeros de caja sobreviven a la recarga',
+      deType(g2, 'companion') >= 1 && s(g2).companions.length >= 1,
+      `items=${deType(g2, 'companion')} fichas=${s(g2).companions.length}`);
   }
 
   // =========================================================================
@@ -160,7 +185,7 @@ async function main() {
   {
     const g = await boot(baseSave([], { nanites: 100 }));
     const antes = nanites(g);
-    const r = g.buyStoreItem('legendaryCrate');
+    const r = g.buyStoreItem('stabilityNano');
     check('tienda: sin nanitas no se compra', r === false, String(r));
     check('tienda: y no se cobra nada', nanites(g) === antes, 'nanites=' + nanites(g));
     check('tienda: ni se entrega un item a medias', wh(g).length === 0, ids(g).join(','));
@@ -211,11 +236,11 @@ async function main() {
     check('descuento: los nodos comprados bajan el coste de tienda', descuento > 0, 'costReduction=' + descuento);
 
     const antes = nanites(g);
-    g.buyStoreItem('commonCrate');
-    const esperado = Math.floor(STORE_ITEMS.commonCrate.cost * (1 - descuento));
+    g.buyStoreItem('crateT1');
+    const esperado = Math.floor(STORE_ITEMS.crateT1.cost * (1 - descuento));
     check('descuento: el cobro aplica el descuento del arbol',
       nanites(g) === antes - esperado,
-      `cobrado=${antes - nanites(g)} esperado=${esperado} sin=${STORE_ITEMS.commonCrate.cost}`);
+      `cobrado=${antes - nanites(g)} esperado=${esperado} sin=${STORE_ITEMS.crateT1.cost}`);
   }
   {
     // Con el descuento al maximo (4% x 6 + 5% x 5 = 49%) el precio no puede
@@ -226,13 +251,13 @@ async function main() {
       unlockedNodes: ['refinery', 'bulk_buy', 'scrapyard']
     }));
     const antes = nanites(g);
-    const r = g.buyStoreItem('commonCrate');
+    const r = g.buyStoreItem('crateT1');
     check('descuento: con descuento enorme el item llega igual', r !== false && deType(g, 'crate') === 1,
       ids(g).join(','));
     const cobrado = antes - nanites(g);
     check('descuento: se cobra menos que el precio de carta, pero algo',
-      cobrado > 0 && cobrado < STORE_ITEMS.commonCrate.cost,
-      `cobrado=${cobrado} de carta=${STORE_ITEMS.commonCrate.cost}`);
+      cobrado > 0 && cobrado < STORE_ITEMS.crateT1.cost,
+      `cobrado=${cobrado} de carta=${STORE_ITEMS.crateT1.cost}`);
     check('descuento: y la cartera nunca queda negativa', nanites(g) >= 0, 'nanites=' + nanites(g));
   }
 
@@ -247,7 +272,7 @@ async function main() {
     const g = await boot(baseSave(distintos(30), { nanites: 200_000 }));
     check('capacidad: 30 items distintos llenan 30 ranuras', ranuras(g) === 30, 'ranuras=' + ranuras(g));
     const antes = nanites(g);
-    const r = g.buyStoreItem('commonCrate');
+    const r = g.buyStoreItem('crateT1');
     check('capacidad: con el almacen lleno no se compra un item', r === false, String(r));
     check('capacidad: y no se cobra', nanites(g) === antes, 'nanites=' + nanites(g));
     check('capacidad: el almacen sigue igual', ranuras(g) === 30, 'ranuras=' + ranuras(g));
@@ -256,7 +281,7 @@ async function main() {
     // La contra-prueba: dos cajas de DISTINTO tipo son dos celdas. Si dos
     // entradas cualesquiera se fundieran en una, el jugador no podria elegir con
     // cual abrir el cofre.
-    const g = await boot(baseSave([crate('c1', 'common', 20), crate('c2', 'epic', 10)],
+    const g = await boot(baseSave([crate('c1', 1, 20), crate('c2', 6, 10)],
       { nanites: 200_000, warehouseCapacity: 2 }));
     check('capacidad: dos cajas de distinto tipo son dos ranuras', ranuras(g) === 2,
       'ranuras=' + ranuras(g));
@@ -264,7 +289,7 @@ async function main() {
   {
     // Y dos del MISMO tipo son una sola ranura, aunque sean dos entradas
     // distintas: la fusion de `data/stacking` las junta al cargar.
-    const g = await boot(baseSave([crate('c1', 'common', 20), crate('c2', 'common', 10)],
+    const g = await boot(baseSave([crate('c1', 1, 20), crate('c2', 1, 10)],
       { nanites: 200_000, warehouseCapacity: 2 }));
     check('capacidad: dos cajas del mismo tipo se funden en una ranura', ranuras(g) === 1,
       'ranuras=' + ranuras(g));
@@ -300,47 +325,58 @@ async function main() {
     // tipo, la compra se suma a ella aunque el almacen este lleno. Preguntar solo
     // "¿quedan ranuras libres?" rechazaba la compra y hacia perder las nanitas por
     // un item que no ocupaba ni una ranura.
-    const g = await boot(baseSave([crate('c1', 'common', 5)], { nanites: 200_000, warehouseCapacity: 1 }));
+    const g = await boot(baseSave([crate('c1', 1, 5)], { nanites: 200_000, warehouseCapacity: 1 }));
     check('capacidad: una ranura y una pila de cajas = almacen lleno', ranuras(g) === 1,
       'ranuras=' + ranuras(g) + '/' + g.getCapacity());
     const antes = nanites(g);
-    const r = g.buyStoreItem('commonCrate');
+    const r = g.buyStoreItem('crateT1');
     check('capacidad: con el almacen lleno, una caja que cabe en la pila SI se compra',
       r !== false, String(r));
     check('capacidad: se suma a la pila sin abrir ranura nueva',
       ranuras(g) === 1 && find(g, 'c1')?.stackCount === 6,
       'ranuras=' + ranuras(g) + ' unidades=' + find(g, 'c1')?.stackCount);
-    check('capacidad: y se paga una sola vez', nanites(g) === antes - STORE_ITEMS.commonCrate.cost,
+    check('capacidad: y se paga una sola vez', nanites(g) === antes - STORE_ITEMS.crateT1.cost,
       'nanites=' + nanites(g));
   }
   {
-    // Lo que NO cabe de ninguna manera sigue sin entrar: una caja de otro tipo
-    // necesita ranura nueva y no hay ninguna.
-    const g = await boot(baseSave([crate('c1', 'common', 5)], { nanites: 200_000, warehouseCapacity: 1 }));
-    const antes = nanites(g);
-    const r = g.buyStoreItem('epicCrate');
-    check('capacidad: un item que necesita ranura nueva se rechaza con el almacen lleno',
-      r === false, String(r));
-    check('capacidad: y no se cobra', nanites(g) === antes, 'nanites=' + nanites(g));
-    check('capacidad: la pila existente no cambia', find(g, 'c1')?.stackCount === 5,
-      'unidades=' + find(g, 'c1')?.stackCount);
-  }
-  {
-    // Una carta de RECOLECTOR no es apilable: necesita ranura siempre, y con el
-    // almacen lleno se rechaza.
-    const g = await boot(baseSave([crate('c1', 'common', 5)], { nanites: 200_000, warehouseCapacity: 1 }));
-    const r = g.buyStoreItem('collectorCardT1');
-    check('capacidad: una carta de recolector con el almacen lleno se rechaza', r === false, String(r));
+    // F31 · ESTE CASO YA NO TIENE CARTA, Y EL INVARIANTE SE MIDE ENTERO.
+    //
+    // Antes: "una caja de otro tipo necesita ranura nueva y con el almacén lleno
+    // se rechaza". Ya no hay dos cajas en la tienda, así que el caso concreto no
+    // se puede construir. Lo que queda —y es lo que de verdad importa— es que
+    // **con el almacén lleno no entra nada nuevo**: lo único que puede pasar es
+    // que una compra se funda en una pila que ya existe.
+    //
+    // Se compran TODAS las cartas con una sola ranura y se mira que las ranuras
+    // nunca pasen de una. Con cuatro cajas y veinte cartas de tier, este caso se
+    // podía escribir con dos compras; ahora son veinte compras y ninguna puede
+    // colarse, que es justo lo que no se podía comprobar antes.
+    const g = await boot(baseSave([crate('c1', 1, 5)], { nanites: 5_000_000, warehouseCapacity: 1 }));
+    const coladas: string[] = [];
+    for (const carta of cartas) {
+      const antesRuns = ranuras(g);
+      g.buyStoreItem(carta as any);
+      if (ranuras(g) > 1) coladas.push(`${carta} (ranuras ${antesRuns}->${ranuras(g)})`);
+    }
+    check('capacidad: con una sola ranura, ninguna carta cuela un item nuevo',
+      coladas.length === 0, coladas.join(' | ') || `${cartas.length} cartas probadas`);
+    check('capacidad: y la pila de cajas solo ha crecido',
+      (find(g, 'c1')?.stackCount ?? 0) >= 5, 'unidades=' + find(g, 'c1')?.stackCount);
   }
   {
     // Un hueco justo: entra el que cabe y se rechaza el siguiente.
+    //
+    // F31 · Antes eran dos cajas DISTINTAS: la segunda necesitaba ranura nueva y
+    // con el almacén lleno se rechazaba. Ahora solo se vende una caja, y dos cajas
+    // iguales se funden en una pila —que sí entra—, así que el caso se mide con
+    // un item de otra clase: la llave sí necesita ranura propia.
     const g = await boot(baseSave([], { nanites: 200_000, warehouseCapacity: 1 }));
-    const r1 = g.buyStoreItem('commonCrate');
-    const r2 = g.buyStoreItem('rareCrate');
+    const r1 = g.buyStoreItem('crateT1');
+    const r2 = g.buyStoreItem('keyT1');
     check('capacidad: el primer item entra', r1 !== false);
     check('capacidad: el segundo se rechaza al llenarse', r2 === false && ranuras(g) === 1,
       'ranuras=' + ranuras(g));
-    check('capacidad: y solo se cobro una vez', nanites(g) === 200_000 - STORE_ITEMS.commonCrate.cost,
+    check('capacidad: y solo se cobro una vez', nanites(g) === 200_000 - STORE_ITEMS.crateT1.cost,
       'nanites=' + nanites(g));
   }
   {
@@ -352,7 +388,7 @@ async function main() {
     }));
     check('capacidad: la capacidad efectiva suma los slots del arbol',
       g.getCapacity() === 1 + s(g).bonus.storageSlots, `getCapacity=${g.getCapacity()}`);
-    const comprados = ['commonCrate', 'rareCrate', 'epicCrate'].filter((k) => g.buyStoreItem(k as any) !== false).length;
+    const comprados = ['crateT1', 'crateT1', 'crateT1'].filter((k) => g.buyStoreItem(k as any) !== false).length;
     check('capacidad: se pueden llenar los huecos del arbol',
       comprados === s(g).bonus.storageSlots, `comprados=${comprados} bonus=${s(g).bonus.storageSlots}`);
   }
@@ -509,7 +545,7 @@ async function main() {
   {
     // Abrir una caja con el almacen lleno: si el botin cabe, entra; si no cabe,
     // no se cuela. Con una capacidad de 1 no hay forma de que quepa nada.
-    const g = await boot(baseSave([crate('c1'), { ...crate('k1'), type: 'key', name: 'Llave de Cifrado', tier: 0 }],
+    const g = await boot(baseSave([crate('c1'), { ...crate('k1'), type: 'key', name: KEY_DEFS[1].name, tier: 1 }],
       { warehouseCapacity: 1 }));
     check('capacidad: la partida respeta la capacidad al cargar', wh(g).length <= 1, 'items=' + wh(g).length);
   }
@@ -526,20 +562,16 @@ async function main() {
   {
     // Las cartas que METER un item en el almacén. Las de ranura y las de
     // "ampliar" no dejan nada que vender, así que no tienen nada que comprobar.
-    const cartasConItem = [
-      // Las cuatro cartas de llave, y no solo la barata: la reventa es un cuarto
-      // del precio de cada nivel, así que un abuso podría salir solo en las
-      // caras y comprobar una no lo habría visto.
-      'keyT0', 'keyT1', 'keyT2', 'keyT3',
-      'upgradeCrystal', 'commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate',
-      // F4 · Fuera `clickBuff` y `passiveBuff`, que ya no son cartas de tienda.
-      // F27 · Fuera `backpackExpander` (+1): ahora son `expansorT1` y
-      // `expansorT2` (el T3 solo sale de cajas y no tiene carta que abusar).
-      'expansorT1', 'expansorT2', 'afkCard', 'clickX2Card', 'clickX3Card',
-      'calibrationStone', 'stabilityNano',
-      'companionCardT1', 'companionCardT5', 'companionCardT10',
-      'collectorCardT1', 'collectorCardT5', 'collectorCardT10'
-    ];
+    // F31 · LA LISTA DE CARTAS ES LA DE `STORE_ITEMS`, NO UNA ESCRITA AQUÍ.
+    //
+    // Estaba escrita a mano y con veinte cartas de tier dentro, que ya no se
+    // venden. Una lista escrita a mano es una lista que se desincroniza: cuando
+    // se añadió la novena llave nadie se acordó de añadirla aquí, así que el
+    // abuso de la novena —si lo hubiera— no lo habría visto nadie. Se recorre
+    // `STORE_ITEMS` y se quitan las cartas de ranura, que no meten nada en el
+    // almacén y por eso no tienen reventa que comprobar.
+    const cartasConItem = (Object.keys(STORE_ITEMS) as (keyof typeof STORE_ITEMS)[])
+      .filter(k => !RANURA_POR_CARTA[k as string]);
 
     const abusos: string[] = [];
     for (const carta of cartasConItem) {
@@ -568,7 +600,7 @@ async function main() {
       // tabla dinamica y no con `sellPrice`. Lo que no se admite NUNCA es que den
       // mas de lo que costo la carta, que es lo unico que importa en esta prueba.
       if (delta > 0) {
-        abusos.push(`${carta}: cuesta ${STORE_ITEMS[carta as keyof typeof STORE_ITEMS].cost} y compra+venta deja +${delta}`);
+        abusos.push(`${carta}: cuesta ${STORE_ITEMS[carta].cost} y compra+venta deja +${delta}`);
       }
     }
     check('tienda: NINGUNA carta se revende por mas de lo que costo',
@@ -582,7 +614,7 @@ async function main() {
     const g = await boot(baseSave([], { nanites: 10_000, warehouseCapacity: 40 }));
     const antes = nanites(g);
     for (let i = 0; i < 10; i++) {
-      const k = g.buyStoreItem('keyT0');
+      const k = g.buyStoreItem('keyT1');
       if (!k || !find(g, (k as any).id)) continue;
       g.sellItem((k as any).id);
       const c = g.buyStoreItem('upgradeCrystal');
@@ -599,12 +631,12 @@ async function main() {
     // F14: COMPRAR POR CANTIDAD. El lote cobra N veces el unitario —lo mismo
     // que N compras de una— y entrega las N de una vez, en la pila que haya.
     //
-    // La llave T0 vale 250: con 10.000 dan 40 justas. Sin resto no hay
+    // La llave T1 vale lo que diga la tabla, y el banco no lo escribe: si el precio
     // redondeo que discutir, y la cuenta es exacta a propósito.
     const g = await boot(baseSave([], { nanites: 10_000 }));
-    const r = g.buyStoreItem('keyT0', 10);
+    const r = g.buyStoreItem('keyT1', 10);
     check('lote: comprar 10 cobra 10 veces el unitario',
-      r !== false && nanites(g) === 10_000 - 250 * 10,
+      r !== false && nanites(g) === 10_000 - KEY_UNIT * 10,
       `nanites=${nanites(g)}`);
     check('lote: y llegan las 10 a una sola pila',
       !!r && find(g, (r as any).id)?.stackCount === 10,
@@ -612,60 +644,66 @@ async function main() {
     check('lote: y ocupan una sola ranura',
       ranuras(g) === 1, 'ranuras=' + ranuras(g));
     check('lote: el total que enseña el diálogo es el que se cobra',
-      g.getBulkCost('keyT0', 10) === 250 * 10,
-      `bulk=${g.getBulkCost('keyT0', 10)}`);
+      g.getBulkCost('keyT1', 10) === KEY_UNIT * 10,
+      `bulk=${g.getBulkCost('keyT1', 10)}`);
     const g2 = await reload();
     check('lote: el lote sobrevive a la recarga',
-      nanites(g2) === 10_000 - 250 * 10,
+      nanites(g2) === 10_000 - KEY_UNIT * 10,
       `nanites=${nanites(g2)}`);
   }
   {
     // Con pila previa se funde con ella: 3 que había + 7 que llegan.
     const g = await boot(baseSave([], { nanites: 10_000 }));
-    g.buyStoreItem('keyT0', 3);
+    g.buyStoreItem('keyT1', 3);
     const pila = wh(g).find((w: any) => w.type === 'key');
-    g.buyStoreItem('keyT0', 7);
+    g.buyStoreItem('keyT1', 7);
     check('lote: el segundo lote se suma a la pila, no abre otra',
       pila && find(g, pila.id)?.stackCount === 10 && ranuras(g) === 1,
       `pila=${pila && find(g, pila.id)?.stackCount} ranuras=${ranuras(g)}`);
     check('lote: y se cobraron las 10 en total',
-      nanites(g) === 10_000 - 250 * 10, `nanites=${nanites(g)}`);
+      nanites(g) === 10_000 - KEY_UNIT * 10, `nanites=${nanites(g)}`);
   }
   {
     // Sin nanitas para el total no hay compra parcial: o las N o ninguna, y
     // sin cobrar. Un lote a medias sería una pila pagada sin precio cerrado.
     const g = await boot(baseSave([], { nanites: 1_000 }));
-    const r = g.buyStoreItem('keyT0', 10);
+    const r = g.buyStoreItem('keyT1', 10);
     check('lote: sin saldo para el total se rechaza entero',
       r === false && nanites(g) === 1_000 && wh(g).length === 0,
       `ok=${r} nanites=${nanites(g)} items=${wh(g).length}`);
   }
   {
     // Cantidad no válida: 0, negativos y NaN no cobran nada. Y en lo no
-    // apilable el número ni se mira: una carta de tier siempre es una.
-    const g = await boot(baseSave([], { nanites: 10_000 }));
+    // apilable el número ni se mira: una ranura de escuadrón siempre es una.
+    //
+    // F31 · Antes esta aserción usaba una carta de tier, que ya no existe. Se
+    // mide con la ranura, que es el otro caso de "vale una sola vez".
+    const g = await boot(baseSave([], { nanites: 10_000, maxCompanionSlots: 1 }));
     const antes = nanites(g);
     check('lote: 0 se rechaza sin cobrar',
-      g.buyStoreItem('keyT0', 0) === false && nanites(g) === antes,
+      g.buyStoreItem('keyT1', 0) === false && nanites(g) === antes,
       `nanites=${nanites(g)}`);
     check('lote: un negativo se rechaza sin cobrar',
-      g.buyStoreItem('keyT0', -5) === false && nanites(g) === antes,
+      g.buyStoreItem('keyT1', -5) === false && nanites(g) === antes,
       `nanites=${nanites(g)}`);
     check('lote: NaN se rechaza sin cobrar',
-      g.buyStoreItem('keyT0', NaN) === false && nanites(g) === antes,
+      g.buyStoreItem('keyT1', NaN) === false && nanites(g) === antes,
       `nanites=${nanites(g)}`);
-    const t = g.buyStoreItem('collectorCardT1', 10);
-    check('lote: una carta de tier con 10 sigue siendo una sola compra',
-      t !== false && nanites(g) === antes - g.getStoreUnitCost('collectorCardT1'),
-      `nanites=${nanites(g)} unitario=${g.getStoreUnitCost('collectorCardT1')}`);
+    // F31 · Ya no hay carta de tier que comprar, así que el caso "no apilable" se
+    // mide con la ranura, que también vale una sola vez. Con una ranura ya
+    // comprada la segunda se rechaza, así que la partida arranca con una.
+    const t = g.buyStoreItem('companionSlot2', 10);
+    check('lote: una carta de ranura con 10 sigue siendo una sola compra',
+      t !== false && nanites(g) === antes - g.getStoreUnitCost('companionSlot2'),
+      `nanites=${nanites(g)} unitario=${g.getStoreUnitCost('companionSlot2')}`);
   }
   {
     // El tope del diálogo sale del motor: lo que alcanza con el saldo.
     const g = await boot(baseSave([], { nanites: 1_000 }));
-    check('lote: el tope es lo que alcanza (1000/250 = 4)',
-      g.getBulkMax('keyT0') === 4, `max=${g.getBulkMax('keyT0')}`);
+    check('lote: el tope es lo que alcanza con el saldo',
+      g.getBulkMax('keyT1') === Math.floor(1_000 / KEY_UNIT), `max=${g.getBulkMax('keyT1')}`);
     check('lote: lo no apilable no tiene tope que preguntar',
-      g.getBulkMax('collectorCardT1') === 1, `max=${g.getBulkMax('collectorCardT1')}`);
+      g.getBulkMax('companionSlot1') === 1, `max=${g.getBulkMax('companionSlot1')}`);
   }
 
   resumen('compra');

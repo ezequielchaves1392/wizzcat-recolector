@@ -37,7 +37,7 @@ import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
 import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP } from '../data/store';
 // Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
 // nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
-import { STORE_KEY_TIER, KEY_DEFS, cratesOpenedBy } from '../data/items';
+import { STORE_KEY_TIER, KEY_DEFS, KEY_TIERS, cratesOpenedBy } from '../data/items';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { showConfirmModal } from '../utils/modal';
@@ -51,19 +51,34 @@ interface Category {
   items: string[];
 }
 
+/**
+ * F31 · LAS CATEGORÍAS DE LA TIENDA, Y LO QUE YA NO ESTÁ.
+ *
+ * Desaparecen dos categorías enteras —**Compañeros** y **Recolectores**, veinte
+ * cartas de 900 a 193.850— y la de **Cajas** se queda con una sola carta. Ese es
+ * el recorte que hace F31, y es el más grande del lote: mientras la carta del T8
+ * esté a la venta, la caja alta es un adorno y abrir cofres no progresa nada.
+ *
+ * Lo que queda es lo que de verdad es el arranque y el sostenimiento: la caja
+ * T1, las diez llaves, los expansores y las tarjetas. **Las diez llaves siguen
+ * aquí**, y hay que leer bien por qué: la llave no es la puerta, la puerta es la
+ * caja. Comprar la llave T9 es tenerla guardada para cuando la T9 llegue, que
+ * llega abriendo la T8.
+ *
+ * Las dos listas de abajo están **generadas** con `KEY_TIERS`: con diez llaves,
+ * escribirlas una a una era un sitio más donde olvidarse la novena.
+ */
 const CATEGORIES: Category[] = [
-  { id: 'llaves', label: 'Llaves', icon: 'key', items: ['keyT0', 'keyT1', 'keyT2', 'keyT3'] },
-  { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
+  { id: 'llaves', label: 'Llaves', icon: 'key', items: KEY_TIERS.map(t => `keyT${t}`) },
+  { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1'] },
   { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'expansorT1', 'expansorT2'] },
   // F4 · Solo las tres tarjetas. `clickBuff` y `passiveBuff` se han retirado de la
   // lista: la categoría ya no puede nombrarlos porque no existen, y
   // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
   // `undefined` al pintar.
-{ id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card', 'clickX3Card'] },
+  { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card', 'clickX3Card'] },
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
-  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: Object.keys(RANURA_POR_CARTA) },
-  { id: 'companeros', label: 'Compañeros', icon: 'companion', items: Array.from({ length: 10 }, (_, i) => `companionCardT${i + 1}`) },
-  { id: 'recolectores', label: 'Recolectores', icon: 'collector', items: Array.from({ length: 10 }, (_, i) => `collectorCardT${i + 1}`) }
+  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: Object.keys(RANURA_POR_CARTA) }
 ];
 
 /**
@@ -71,21 +86,9 @@ const CATEGORIES: Category[] = [
  * jugador se hace al mirar una tarjeta: "¿qué me da?" y "¿me compensa?".
  */
 const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
-  commonCrate: {
-    what: 'Caja básica con recursos de partida temprana.',
-    detail: 'Puede dar nanitas, cristales, llaves, drones T1 o un Expansor T1. Es la única caja cuyo contenido medio cubre su precio.'
-  },
-  rareCrate: {
-    what: 'Caja de nivel medio: crystals, compañeros T3 y recolectores T4 sobrecargadas.',
-    detail: 'Las recolectores sobrecargadas valen bastante más que una del mismo tier en la tienda. Suele salir rentable si necesitas material de forja.'
-  },
-  epicCrate: {
-    what: 'Caja alta: compañeros T6, recolectores T6 y Piedras de Calibración.',
-    detail: 'Puede incluir dos compañeros exclusivos que no se compran de ninguna otra forma, y es la mejor fuente de piedras de calibración.'
-  },
-  legendaryCrate: {
-    what: 'La caja máxima: recolectores T8, Nanopartículas y tres exclusivos.',
-    detail: 'El premio habitual son los compañeros Divinos que solo existen aquí. La Nanopartícula de Estabilidad sale casi siempre de esta caja.'
+  crateT1: {
+    what: 'La caja básica, y la única que se vende.',
+    detail: 'Da nanitas, cristal T1, un compañero T1, su llave y —a veces— la caja T2. Las nueve cajas siguientes no están en la tienda: se sacan abriendo la anterior.'
   },
 
   key: {
@@ -100,8 +103,8 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     detail: 'Las cajas del almacén se aperturan aquí. Gastas la llave, la ruleta gira y te dice qué ha salido. Cada caja tiene su propia tabla de botín.'
   },
   upgradeCrystal: {
-    what: 'Cristal para subir el nivel del recolector equipado.',
-    detail: 'El nivel multiplica el daño del recolector y sube hasta 20 en las de tienda, o 35 en las crafteadas. El coste en cristales crece por nivel y el éxito baja.'
+    what: 'Cristal T1, para subir el nivel de un recolector T1.',
+    detail: 'F26: cada recolector se sintoniza con el cristal de SU MISMO tier. Los otros nueve salen de las cajas de su nivel; aquí solo se vende el T1.'
   },
   expansorT1: {
     what: 'Añade 2 ranuras permanentes al almacén.',
@@ -187,19 +190,18 @@ const ui = {
 
 /** Icono del producto según su clave. */
 function iconFor(itemKey: string): IconName {
-  if (itemKey.endsWith('Crate')) return 'crate';
-  if (itemKey.startsWith('collectorCardT')) return 'collector';
-  if (itemKey.startsWith('companionCardT')) return 'companion';
+  // F31 · Las llaves se resuelven por `STORE_KEY_TIER`, no por una entrada por
+  // carta: con diez llaves, una tabla de iconos escrita a mano tenía nueve
+  // entradas de más que nadie iba a notar que faltan.
+  if (STORE_KEY_TIER[itemKey] !== undefined) return 'key';
+  if (itemKey === 'crateT1') return 'crate';
   const map: Record<string, IconName> = {
-    keyT0: 'key', keyT1: 'key', keyT2: 'key', keyT3: 'key',
     upgradeCrystal: 'crystal', expansorT1: 'warehouse', expansorT2: 'warehouse',
-    // F4 · `clickBuff` y `passiveBuff` ya no tienen carta, así que ya no hay icono que
-// inventarles. Si volvieran, volverían aquí.
-afkCard: 'clock', clickX2Card: 'bolt', clickX3Card: 'bolt',
+    afkCard: 'clock', clickX2Card: 'bolt', clickX3Card: 'bolt',
     calibrationStone: 'flask', stabilityNano: 'flask',
     // Las cartas de ranura salen de la tabla, no de una entrada por carta. Con una
-  // entrada por carta, una ranura nueva nace sin icono y con el de la última.
-  ...Object.fromEntries(Object.keys(RANURA_POR_CARTA).map(k => [k, 'layers']))
+    // entrada por carta, una ranura nueva nace sin icono y con el de la última.
+    ...Object.fromEntries(Object.keys(RANURA_POR_CARTA).map(k => [k, 'layers']))
   };
   return map[itemKey] ?? 'store';
 }
@@ -209,23 +211,22 @@ function rarityOf(itemKey: string): string | null {
   // se escribiera aparte, añadir una llave obligaría a acordarse de tocarla en
   // tres sitios y el olvido es silencioso.
   if (STORE_KEY_TIER[itemKey] !== undefined) return KEY_DEFS[STORE_KEY_TIER[itemKey]].rarity;
-  if (itemKey.endsWith('Crate')) {
-    return ({ commonCrate: 'Común', rareCrate: 'Raro', epicCrate: 'Épico', legendaryCrate: 'Legendario' } as Record<string, string>)[itemKey] ?? null;
-  }
-  if (itemKey.startsWith('companionCardT')) return tierRarity(parseInt(itemKey.slice(14)));
-  if (itemKey.startsWith('collectorCardT')) return tierRarity(parseInt(itemKey.slice(11)));
+  // F31 · Y la de la caja sale de ``CRATE_TYPES``, que es donde vive su nombre.
+  // Antes era un objeto de cuatro pares en línea, aquí, que con diez cajas solo
+  // habría acertado en cuatro.
+  if (itemKey === 'crateT1') return CRATE_TYPES[1].rarity;
   const map: Record<string, string> = {
     upgradeCrystal: 'Raro', expansorT1: 'Raro', expansorT2: 'Épico',
     // F4 · Sin `clickBuff` ni `passiveBuff`: no hay carta, no hay rareza.
-afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
+    afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
-    // La rareza de una ranura sale de su posición en la tabla: cuanto más cara, más
-  // alta. Es una regla y por eso se calcula; escribirla a mano por carta era otra
-  // cosa que hay que acordarse de tocar al añadir una.
-  ...Object.fromEntries(COMPANION_SLOT_BUY.map((_, i) => [
-    `companionSlot${i + 1}`,
-    i >= 1 ? 'Legendario' : 'Épico'
-  ]))
+    // La rareza de una ranura sale de su posición en la tabla: cuanto más cara,
+    // más alta. Es una regla y por eso se calcula; escribirla a mano por carta
+    // era otra cosa que hay que acordarse de tocar al añadir una.
+    ...Object.fromEntries(COMPANION_SLOT_BUY.map((_, i) => [
+      `companionSlot${i + 1}`,
+      i >= 1 ? 'Legendario' : 'Épico'
+    ]))
   };
   return map[itemKey] ?? null;
 }
@@ -239,8 +240,6 @@ function descFor(itemKey: string): { what: string; detail: string } {
     const def = KEY_DEFS[STORE_KEY_TIER[itemKey]];
     return { what: `Abre ${cratesOpenedBy(def.tier).map(c => CRATE_TYPES[c].name).join(', ')}.`, detail: `Las cajas sueltan llaves de su propio nivel, así que se repone sola.` };
   }
-  if (itemKey.startsWith('companionCardT')) return tierDescription('companion', parseInt(itemKey.slice(14)));
-  if (itemKey.startsWith('collectorCardT')) return tierDescription('collector', parseInt(itemKey.slice(11)));
   return { what: '', detail: '' };
 }
 

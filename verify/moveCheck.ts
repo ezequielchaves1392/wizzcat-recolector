@@ -149,7 +149,7 @@ async function main() {
     // tipo porque dos del mismo tipo son la MISMA pila (se funden al cargar en un
     // unico item con 5 unidades) y no habria tres ids que mover.
     const g = await boot(baseSave([
-      crate('p1', 'common', 2), crate('p2', 'rare', 3), crate('p3', 'epic', 1), collector('z')
+      crate('p1', 1, 2), crate('p2', 3, 3), crate('p3', 6, 1), collector('z')
     ]));
     g.moveItems(['p1', 'p2', 'p3'], 'z');
     check('mover: un bloque de tres items apilables va junto',
@@ -180,7 +180,7 @@ async function main() {
     const items = [
       collector('r1', 4, { level: 3, damage: 80, affixes: ['x'], potential: 3 }),
       companion('m1', 2),
-      crate('c1', 'epic', 4),
+      crate('c1', 6, 4),
       key('k1', 1, 7),
       crystal('x1', 3, 2),
       consumable('u1', 'afk', 5)
@@ -205,7 +205,7 @@ async function main() {
   {
     // Mover NO puede cambiar el contenido de una celda de la rejilla: una pila
     // de 5 sigue siendo una pila de 5 despues de moverla.
-    const g = await boot(baseSave([crate('p1', 'common', 5), collector('z')]));
+    const g = await boot(baseSave([crate('p1', 1, 5), collector('z')]));
     g.moveItems(['p1'], 'z');
     check('mover: la pila conserva sus unidades', findStackCount(g, 'p1') === 5, String(findStackCount(g, 'p1')));
     check('mover: y sigue siendo una sola celda', celdasDe(g).length === 2, celdasDe(g).join(','));
@@ -298,7 +298,7 @@ async function main() {
   //  7. Persistencia
   // =========================================================================
   {
-    const g = await boot(baseSave([collector('a'), collector('b'), collector('c'), crate('p1', 'common', 3)]));
+    const g = await boot(baseSave([collector('a'), collector('b'), collector('c'), crate('p1', 1, 3)]));
     g.moveItems(['p1'], 'c', 'despues');
     const esperado = ids(g).join(',');
     const g2 = await reload();

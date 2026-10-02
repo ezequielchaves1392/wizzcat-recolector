@@ -39,6 +39,7 @@ import { valuationBreakdown } from '../data/valuation';
 import {
   KEY_DEFS, CRATE_KEY_TIER, keyNameOpensCrate, keyTierFromName, type KeyTier
 } from '../data/items';
+import { MAX_CRATE_TIER, type CrateType } from '../data/store';
 
 const TYPE_ICON: Record<string, any> = {
   collector: 'collector',
@@ -1267,6 +1268,13 @@ export function matchesFilter(w: any, filtro: string): boolean {
  */
 function openCrate(game: any, item: any, redraw: () => void) {
   const crateType = inferCrateType(item.name);
+  // F31 · `inferCrateType` devuelve `null` para lo que no reconoce, y antes
+  // devolvía `legendary`: un item con el nombre corrupto se proponía como la caja
+  // más alta y el motor recibía un tipo de caja que no existía en el juego.
+  if (!crateType) {
+    showToast(`No se reconoce el tipo de ${item.name}.`, 'error');
+    return;
+  }
 
   const llaves = llavesQueSirven(game.getState(), item);
 
@@ -1475,6 +1483,7 @@ function showKeyPicker(
  */
 function llavesQueSirven(state: any, caja: any): any[] {
   const crateType = inferCrateType(caja.name);
+  if (!crateType) return [];
   return ((state.warehouse as any[]) || [])
     .filter((w: any) => w.type === 'key' && keyNameOpensCrate(w.name || '', crateType))
     .sort((a: any, b: any) => {
@@ -1486,12 +1495,29 @@ function llavesQueSirven(state: any, caja: any): any[] {
     });
 }
 
-function inferCrateType(name: string): any {
-  const l = name.toLowerCase();
-  if (l.includes('común')) return 'common';
-  if (l.includes('rara')) return 'rare';
-  if (l.includes('épica')) return 'epic';
-  return 'legendary';
+/**
+ * F31 · EL TIPO DE CAJA SE LEE DEL NÚMERO DEL NOMBRE.
+ *
+ * Antes eran cuatro palabras sueltas y, **si no reconocía el nombre, devolvía
+ * `legendary`**. Eso era lo peor de la función: un item de caja con el nombre
+ * corrupto, o de una partida vieja con un nombre que nadie escribía, se proponía
+ * como la mejor caja del juego. Aquí lo desconocido devuelve `null`, que es lo
+ * que la vista ya sabe tratar: no se puede abrir.
+ *
+ * Y las cuatro cajas viejas siguen leyéndose, en el nivel donde vivían.
+ */
+function inferCrateType(name: string): CrateType | null {
+  const l = (name || '').toLowerCase();
+  const moderna = l.match(/caja t(\d+)/);
+  if (moderna) {
+    const t = Number(moderna[1]);
+    return (t >= 1 && t <= MAX_CRATE_TIER) ? (t as CrateType) : null;
+  }
+  if (l.includes('común')) return 1;
+  if (l.includes('rara')) return 3;
+  if (l.includes('épica')) return 6;
+  if (l.includes('legendaria')) return 8;
+  return null;
 }
 
 /** Aplica un consumible. Toda la lógica vive en el game loop. */

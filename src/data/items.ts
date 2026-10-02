@@ -32,10 +32,24 @@ import type { Rarity } from '../types/domain';
  * Este módulo ya dependía de `store.ts` (por el tipo `CrateType`), así que esto
  * no crea un ciclo nuevo: la flecha va en el mismo sentido.
  */
-import { CRATE_TYPES, KEY_COSTS, type CrateType } from './store';
+import { CRATE_TYPES, KEY_COSTS, KEY_NAMES, type CrateType } from './store';
 
-/** Nivel de llave: 0 = base (comprable), 1+ = solo de cajas. */
-export type KeyTier = 0 | 1 | 2 | 3;
+/**
+ * F31 · EL NIVEL DE LLAVE **ES** EL TIER DE LA CAJA QUE ABRE.
+ *
+ * Antes eran cuatro niveles numerados 0 a 3 y cuatro cajas que no eran cuatro
+ * tiers: la legendaria soltaba T8 y no había caja para el 9. El nivel de la
+ * llave y el nivel del botín eran dos números que solo se parecían, y por eso
+ * `TIER_PROPIO` en `crateLoot.ts` era otra copia de la regla.
+ *
+ * Ahora hay diez llaves y la llave N abre la caja N, y nada más que eso. El
+ * nombre lo dice, el nivel lo dice y la caja lo dice, así que un cambio de tier
+ * no puede dejar una llave apuntando a una caja que ya no existe.
+ */
+export type KeyTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+/** Cuántas llaves hay, de menor a mayor. */
+export const KEY_TIERS: readonly KeyTier[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 /**
  * Llaves.
@@ -69,23 +83,38 @@ export interface KeyDef {
   buyable: boolean;
   /** Precio en nanitas, o null si no se vende. */
   cost: number | null;
-  /** Probabilidad de que una caja de este tipo la suelte, en porcentaje. */
-  dropRate: number;
+  /**
+   * QUITADO `dropRate` (F31).
+   *
+   * Decía "probabilidad de que una caja la suelte" y no lo decía de nadie: ni una
+   * tabla de botín lo leía, ni la vista, ni un banco. Cuatro números escritos a
+   * mano (0, 22, 14 y 4) que además ya no describían nada, porque las cajas
+   * pasaron a ser diez y la tabla de botín se escribe sola.
+   *
+   * Un campo que nadie lee no es documentación: es un sitio donde el próximo que
+   * toque la tabla pone un número y cree que significa algo. Si algún día hace
+   * falta, sale de `tablaDePesos()`, que es la cuenta real, y no de aquí.
+   */
 }
 
 /**
  * El nivel de llave se compara por índice, no por rareza textual: "Épico" no
  * ordena de forma fiable entre idiomas y es un dato editable desde Firestore.
  */
-export const KEY_TIER_ORDER: KeyTier[] = [0, 1, 2, 3];
+export const KEY_TIER_ORDER: KeyTier[] = [...KEY_TIERS];
 
-/** Qué llave necesita cada cofre. */
-export const CRATE_KEY_TIER: Record<CrateType, KeyTier> = {
-  common: 0,
-  rare: 1,
-  epic: 2,
-  legendary: 3
-};
+/**
+ * Qué llave necesita cada cofre.
+ *
+ * F31 · **LA MISMA, Y POR ESO ESTÁ CONSTRUIDA.** Antes era un `Record` de cuatro
+ * pares escritos a mano: `common: 0`, `rare: 1`... Una quinta copia de la regla
+ * "la caja N la abre la llave N", y por eso las cuatro entradas mentían cuando
+ * la tabla de botín se movió (B6). Ahora sale de los dos números que ya existen:
+ * la caja es su nivel y la llave es su nivel.
+ */
+export const CRATE_KEY_TIER: Record<CrateType, KeyTier> = Object.fromEntries(
+  Object.keys(CRATE_TYPES).map(t => [t, Number(t) as KeyTier])
+) as Record<CrateType, KeyTier>;
 
 /**
  * Los cofre que abre una llave de este nivel, de menor a mayor.
@@ -98,9 +127,7 @@ export const CRATE_KEY_TIER: Record<CrateType, KeyTier> = {
  * mentir porque no hay nadie que lo escriba.
  */
 export function cratesOpenedBy(keyTier: KeyTier): CrateType[] {
-  return (Object.keys(CRATE_KEY_TIER) as CrateType[])
-    .filter(c => keyOpens(keyTier, CRATE_KEY_TIER[c]))
-    .sort((a, b) => CRATE_KEY_TIER[a] - CRATE_KEY_TIER[b]);
+  return KEY_TIERS.filter(c => keyOpens(keyTier, CRATE_KEY_TIER[c]));
 }
 
 /** El `details` de una llave, generado con el mismo criterio que la regla. */
@@ -119,89 +146,102 @@ function detailsDeLlave(keyTier: KeyTier): string {
  * tienda acabó vendiendo una carta llamada "Llave de Cifrado" que entregaba la
  * Reforzada (B7): nombre en un sitio, entrega en otro, precio en un tercero.
  *
- * POR QUÉ LAS CUATRO SON COMPRABLES. La cadena de llaves era una escalera
+ * POR QUÉ LAS DIEZ SON COMPRABLES. La cadena de llaves era una escalera
  * imposible (B6): la del Vacío no salía de ninguna parte, así que la caja
  * legendaria no se podía abrir nunca, y la Rúnica solo salía de la legendaria.
  * Cerrar el botín arregla medio problema, pero deja la tienda como una red de
  * seguridad cara: si un jugador llega a la legendaria sin llave, tiene que poder
- * comprarla. Con las cuatro a la venta, ningún cofre es inalcanzable por
+ * comprarla. Con las diez a la venta, ningún cofre es inalcanzable por
  * defecto y la tienda deja de ser un callejón sin salida.
+ *
+ * Y F31 no cambia eso, aunque quite las cajas altas de la tienda: comprar la
+ * llave T9 sin tener la caja T9 no es tirar el dinero, es tenerla guardada. La
+ * puerta es la caja, y la caja llega por la anterior.
+ *
+ * POR QUÉ EL NOMBRE Y EL PLURAL ESTÁN ESCRITOS Y NO CALCULADOS. Porque en
+ * español el plural no es "la singular con una s": de "Llave Rúnica" sale
+ * "Llaves Rúnicas", con la s en el adjetivo, y de "Llave de Cifrado" sale
+ * "Llaves de Cifrado", sin nada que cambiar al final. Una regla que los
+ * compusiera leía "+2 Llaves Rúnica", que está mal, y un banco que solo miraba
+ * si la etiqueta contenía "Llaves" lo daba por bueno. Por eso nombre y plural
+ * viven en `KEY_NAMES` (`store.ts`) y no se calculan aquí.
  */
-export const KEY_DEFS: Record<KeyTier, KeyDef> = {
-  0: {
-    tier: 0,
-    name: 'Llave de Cifrado',
-    namePlural: 'Llaves de Cifrado',
-    details: detailsDeLlave(0),
-    rarity: 'Común',
-    buyable: true,
-    cost: KEY_COSTS[0],
-    dropRate: 0
-  },
-  1: {
-    tier: 1,
-    name: 'Llave Reforzada',
-    namePlural: 'Llaves Reforzadas',
-    details: detailsDeLlave(1),
-    rarity: 'Raro',
-    buyable: true,
-    cost: KEY_COSTS[1],
-    dropRate: 22
-  },
-  2: {
-    tier: 2,
-    name: 'Llave Rúnica',
-    namePlural: 'Llaves Rúnicas',
-    details: detailsDeLlave(2),
-    rarity: 'Épico',
-    buyable: true,
-    cost: KEY_COSTS[2],
-    dropRate: 14
-  },
-  3: {
-    tier: 3,
-    name: 'Llave del Vacío',
-    namePlural: 'Llaves del Vacío',
-    details: detailsDeLlave(3),
-    rarity: 'Legendario',
-    buyable: true,
-    cost: KEY_COSTS[3],
-    dropRate: 4
-  }
-};
+export const KEY_DEFS: Record<KeyTier, KeyDef> = Object.fromEntries(
+  KEY_NAMES.map((k, i) => {
+    const tier = (i + 1) as KeyTier;
+    return [tier, {
+      tier,
+      name: k.name,
+      namePlural: k.namePlural,
+      // El texto sale de la MISMA regla que decide si la llave abre la caja: un
+      // texto derivado no puede mentir (B6), y esta es la razón por la que los
+      // cuatro textos antiguos —que los cuatro mentían— ya no están escritos a
+      // mano.
+      details: detailsDeLlave(tier),
+      rarity: k.rarity as Rarity,
+      buyable: true,
+      cost: KEY_COSTS[i]
+    }];
+  })
+) as Record<KeyTier, KeyDef>;
 
 /**
- * Qué carta de la tienda vende cada llave: `keyT0` → nivel 0, y así.
+ * Qué carta de la tienda vende cada llave: `keyT1` → nivel 1, y así.
  *
  * ESTE MAPA ES LO QUE ARREGLA B7, y existe para que nadie tenga que escribir el
  * nivel otra vez. El fallo era que la compra usaba un `STORE_MATERIAL_TIER`
  * único para todas las llaves: una sola carta, un solo nivel, y el nombre de la
- * carta ('Llave de Cifrado') no tenía nada que ver con lo que entraba al
- * almacén. Con el nivel saliendo del nombre de la carta, el nombre y el item
- * son lo mismo por construcción.
+ * carta no tenía nada que ver con lo que entraba al almacén. Con el nivel
+ * saliendo del nombre de la carta, el nombre y el item son lo mismo por
+ * construcción.
  *
  * Va al revés que un parseo de nombre: aquí el nombre de la carta decide el
  * nivel y el nivel decide el nombre del item, en vez de adivinar el nivel a
  * partir del nombre del item. Un item guardado por una partida vieja puede
  * tener cualquier nombre; una carta de tienda es de este fichero.
+ *
+ * Y sale de `KEY_TIERS` en vez de ser diez líneas: con cuatro llaves, cuatro
+ * líneas eran manejables; con diez, la novena se olvidaba y la tienda vendía una
+ * carta que entregaba un nivel que no era el suyo. Un mapa que se construye solo
+ * no se puede desincronizar del nivel, porque su contenido ES el nivel.
  */
-export const STORE_KEY_TIER: Record<string, KeyTier> = {
-  keyT0: 0,
-  keyT1: 1,
-  keyT2: 2,
-  keyT3: 3
-};
+export const STORE_KEY_TIER: Record<string, KeyTier> = Object.fromEntries(
+  KEY_TIERS.map(t => [`keyT${t}`, t])
+) as Record<string, KeyTier>;
 
 /**
  * Cristales de mejora.
  *
- * Cada nivel multiplica la probabilidad de éxito de la sintonización. El
- * cristal básico se compra; los superiores salen de las cajas altas.
+ * F26 · **UN CRISTAL POR TIER, Y ESE ES EL ÚNICO QUE VALE.**
  *
- * El multiplicador está en pasos discretos, no en un porcentaje arbitrario:
- * el jugador puede calcular mentalmente "mi cristal da x2" y decidir sin
- * hacer cuentas. Un 1.87x o un 2.14x obligaría atrustar el número de la
- * interfaz.
+ * Antes había cuatro cristales y la elección del jugador era "qué multiplicador
+ * gasto", que es una pregunta de cuenta: con un T7 en la mano, un x2.2 y un x4
+ * parecían lo mismo y no había forma de decidir sin hacer cuentas. Y, peor: los
+ * cuatro estaban escritos y **solo dos se podían conseguir**. El 3 y el 4
+ * tenían nombre, multiplicador y probabilidad, y no los sacaba nadie de ninguna
+ * caja — con la regla estricta de F26, eso los habría convertido en el contenido
+ * que bloquea la progresión, no en una recompensa.
+ *
+ * Ahora el cristal que sirve es **el del mismo tier del recolector**, sin
+ * excepciones ni "igual o superior". Tres cosas se arreglan a la vez:
+ *
+ *    · la elección es legible: el botón dice "necesitas cristal T7" y no hay que
+ *      comparar dos números para saber cuál es;
+ *    · el cristal deja de ser un multiplicador suelto y pasa a ser **la llave de
+ *      la progresión**, que es lo que pedía F31: si el T8 exige cristal T8 y ese
+ *      cristal sale de las cajas T8, las cajas dejan de ser un adorno;
+ *    · los cuatro cristales muertos pasan a ser diez vivos, porque la caja T{n}
+ *      suelta el cristal T{n} por construcción y no por una línea a mano.
+ *
+ * El multiplicador sigue ahí y sigue siendo lo que compra el cristal caro, pero
+ * ya no es la decisión: es el premio. Y sigue en pasos redondos —x1, x1.4, x2.2—
+ * para que el jugador sepa de un vistazo cuánto riesgo se quita.
+ *
+ * EL COSTE EN UNIDADES NO SUBE CON EL NIVEL DEL CRISTAL, y es deliberado: son
+ * siempre `collectorUpgradeCost(level)`. La escasez la pone la caja, no el
+ * precio: un cristal T10 cuesta lo mismo en unidades que uno T1 y sale de un
+ * cofre T10, que sale de un T9, que sale de un T8. Si además costara más, la
+ * última etapa sería una cuenta y no una escalera que hay que subir.
  */
 export interface CrystalDef {
   tier: number;
@@ -212,57 +252,27 @@ export interface CrystalDef {
   cost: number | null;
   /** Multiplicador de probabilidad de éxito. */
   power: number;
-  dropRate: number;
+  /** QUITADO `dropRate`: no lo leía nadie (ver `KeyDef.dropRate` en este mismo fichero). */
 }
 
 export const CRYSTAL_DEFS: Record<number, CrystalDef> = {
-  1: {
-    tier: 1,
-    name: 'Cristal de Afino',
-    details: 'x1 a la probabilidad de mejora.',
-    rarity: 'Común',
-    buyable: true,
-    cost: 1_440,
-    power: 1,
-    dropRate: 0
-  },
-  2: {
-    tier: 2,
-    name: 'Cristal de Fase',
-    details: 'x1.75 a la probabilidad de mejora.',
-    rarity: 'Raro',
-    buyable: false,
-    cost: null,
-    power: 1.75,
-    dropRate: 20
-  },
-  3: {
-    tier: 3,
-    name: 'Cristal de Entropía',
-    details: 'x2.75 a la probabilidad de mejora.',
-    rarity: 'Épico',
-    buyable: false,
-    cost: null,
-    power: 2.75,
-    dropRate: 12
-  },
-  4: {
-    tier: 4,
-    name: 'Cristal Singular',
-    details: 'x4 a la probabilidad de mejora. Casi nunca falla.',
-    rarity: 'Legendario',
-    buyable: false,
-    cost: null,
-    power: 4,
-    dropRate: 4
-  }
+  1: { tier: 1, name: 'Cristal de Afino', details: 'x1 a la probabilidad de mejora.', rarity: 'Común', buyable: true, cost: 1_440, power: 1 },
+  2: { tier: 2, name: 'Cristal de Fase', details: 'x1.4 a la probabilidad de mejora.', rarity: 'Raro', buyable: false, cost: null, power: 1.4 },
+  3: { tier: 3, name: 'Cristal de Entropía', details: 'x1.8 a la probabilidad de mejora.', rarity: 'Épico', buyable: false, cost: null, power: 1.8 },
+  4: { tier: 4, name: 'Cristal Singular', details: 'x2.2 a la probabilidad de mejora.', rarity: 'Legendario', buyable: false, cost: null, power: 2.2 },
+  5: { tier: 5, name: 'Cristal Espectral', details: 'x2.6 a la probabilidad de mejora.', rarity: 'Legendario', buyable: false, cost: null, power: 2.6 },
+  6: { tier: 6, name: 'Cristal Cuántico', details: 'x3 a la probabilidad de mejora.', rarity: 'Mítico', buyable: false, cost: null, power: 3 },
+  7: { tier: 7, name: 'Cristal Prismático', details: 'x3.5 a la probabilidad de mejora.', rarity: 'Mítico', buyable: false, cost: null, power: 3.5 },
+  8: { tier: 8, name: 'Cristal del Vacío', details: 'x4 a la probabilidad de mejora.', rarity: 'Divino', buyable: false, cost: null, power: 4 },
+  9: { tier: 9, name: 'Cristal de la Singularidad', details: 'x5 a la probabilidad de mejora.', rarity: 'Divino', buyable: false, cost: null, power: 5 },
+  10: { tier: 10, name: 'Cristal Primordial', details: 'x6 a la probabilidad de mejora.', rarity: 'Divino', buyable: false, cost: null, power: 6 }
 };
 
 /** Nivel de cristal más alto conocido. */
-export const MAX_CRYSTAL_TIER = 4;
+export const MAX_CRYSTAL_TIER = 10;
 
 /** Nivel de llave más alto conocido. */
-export const MAX_KEY_TIER = 3;
+export const MAX_KEY_TIER = 10;
 
 /**
  * Probabilidad de éxito de una sintonización con el cristal dado.
@@ -283,28 +293,70 @@ export function crystalSuccessChance(level: number, crystalPower: number): numbe
 }
 
 /**
- * Devuelve el multiplicador de un cristal por su etiqueta.
+ * El nivel de un cristal a partir de su etiqueta.
  *
- * Se busca por etiqueta y no por un campo `tier` guardado, porque las partidas
- * viejas no tienen ese campo y porque la etiqueta es lo que el jugador ve.
- * Si el nombre no se reconoce, se cae al cristal básico: una mejora nunca
- * debe fallar por un dato corrupto.
+ * F26 · ANTES NO EXISTÍA, Y ESO ERA EL AGUJERO. El motor no leía el nivel del
+ * cristal: leía su **multiplicador** y traducía "x1 o no x1" a "nivel 1 o nivel
+ * 2". Con cuatro cristales eso funcionaba por casualidad; con diez, un x1.8 se
+ * habría leido como nivel 2, o sea que un T3 exigía el cristal de un T2.
+ *
+ * Se busca por etiqueta y no por un campo `tier` guardado porque las partidas
+ * viejas no tienen ese campo. El orden importa y no es arbitrario: **"Cristal de
+ * la Singularidad" contiene "singular"**, así que el T9 se tiene que mirar antes
+ * que el T4 o un nombre de nueve se leería como de cuatro. Por eso la lista
+ * está del más largo al más corto y no alfabética.
+ *
+ * Si el nombre no se reconoce se cae al cristal básico: una mejora nunca debe
+ * fallar por un dato corrupto, y el T1 siempre está a mano.
  */
-export function crystalPowerFromName(name: string): number {
+const CRISTAL_POR_NOMBRE: [string, number][] = [
+  ['singulari', 9],
+  ['primordial', 10],
+  ['prismátic', 7],
+  ['cuántic', 6],
+  ['espectral', 5],
+  ['singular', 4],
+  ['entrop', 3],
+  ['fase', 2]
+];
+
+export function crystalTierFromName(name: string): number {
   const n = (name || '').toLowerCase();
-  if (n.includes('singular')) return CRYSTAL_DEFS[4].power;
-  if (n.includes('entrop')) return CRYSTAL_DEFS[3].power;
-  if (n.includes('fase')) return CRYSTAL_DEFS[2].power;
-  return CRYSTAL_DEFS[1].power;
+  for (const [aguja, tier] of CRISTAL_POR_NOMBRE) {
+    if (n.includes(aguja)) return tier;
+  }
+  return 1;
 }
 
-/** Devuelve el nivel de llave a partir del nombre del item. */
+/** El multiplicador de un cristal por su etiqueta. Delega en el nivel. */
+export function crystalPowerFromName(name: string): number {
+  return CRYSTAL_DEFS[crystalTierFromName(name)].power;
+}
+
+/**
+ * Devuelve el nivel de llave a partir del nombre del item.
+ *
+ * F31 · La lista está del nombre **más largo al más corto** y no en orden de
+ * nivel, por el mismo motivo que en los cristales: "Llave de la Singularidad"
+ * contiene "singular" y, si se comprobara antes, el T9 saldría como T8.
+ *
+ * Y el primer nombre de cada lista es el **legacy**: las partidas viejas tienen
+ * 'Llave de Cifrado', 'Reforzada', 'Rúnica' y 'del Vacío' guardadas con su nivel
+ * viejo, así que el nombre se lee con los niveles nuevos y es el campo `tier`
+ * del item el que manda cuando existe.
+ */
 export function keyTierFromName(name: string): KeyTier {
   const n = (name || '').toLowerCase();
-  if (n.includes('vacio') || n.includes('vacío')) return 3;
-  if (n.includes('rúnica') || n.includes('runica')) return 2;
-  if (n.includes('reforzada')) return 1;
-  return 0;
+  if (n.includes('singulari')) return 9;
+  if (n.includes('primordial')) return 10;
+  if (n.includes('prismátic')) return 7;
+  if (n.includes('cuántic')) return 6;
+  if (n.includes('espectral')) return 5;
+  if (n.includes('vacio') || n.includes('vacío')) return 8;
+  if (n.includes('rúnica') || n.includes('runica')) return 3;
+  if (n.includes('fase')) return 4;
+  if (n.includes('reforzada')) return 2;
+  return 1;
 }
 
 /**

@@ -116,7 +116,7 @@ async function main() {
   {
     // El contador de la esquina son UNIDADES, no items: una pila de 5 son 5, y
     // si hay otra pila de 1 se suman en la MISMA celda hasta el tope del tipo.
-    const g = await boot(baseSave([crate('c1', 'common', 5), crate('c2')]));
+    const g = await boot(baseSave([crate('c1', 1, 5), crate('c2')]));
     const gs = visibleStacksFor(g, s(g), 'all', 'default');
     const celda = gs.find((c: any) => c.item.id === 'c1');
     check('pilas: el contador suma las unidades de la celda',
@@ -130,7 +130,7 @@ async function main() {
     // `Math.min(count, tope)` y con 25 cajas pintaba 20, que es lo que el jugador
     // reportaba como "tengo 25 y me sale 20" (R3). El tope decide el ancho del número,
     // no su valor: el texto de la esquina es "20+".
-    const g = await boot(baseSave([crate('c1', 'common', 25)]));
+    const g = await boot(baseSave([crate('c1', 1, 25)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
     check('pilas: el contador ya NO se recorta al tope (caja=20, hay 25)', celda.count === 25, 'count=' + celda.count);
     check('pilas: y el item sigue con sus unidades reales', celda.item.stackCount === 25,
@@ -142,7 +142,7 @@ async function main() {
     // El tope de llaves es 99, no 20. Con el tope metido en la función
     // `textoDeCantidad`, una tabla mezclada se ve: 120 llaves se pintarían "20+"
     // como si fueran cajas.
-    const g = await boot(baseSave([key('k1', 0, 120)]));
+    const g = await boot(baseSave([key('k1', 1, 120)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
     check('pilas: 120 llaves tampoco se recortan', celda.count === 120, 'count=' + celda.count);
     check('pilas: y con el tope de llave la esquina es "99+", no "20+"',
@@ -161,13 +161,13 @@ async function main() {
   {
     // Dos llaves de DISTINTO nivel no se aunan: el jugador tiene que poder
     // elegir con cual abrir el cofre.
-    const g = await boot(baseSave([key('k1', 0), key('k2', 1)]));
+    const g = await boot(baseSave([key('k1', 1), key('k2', 2)]));
     check('pilas: dos llaves de distinto nivel no se aunan',
       celdas(g, 'all').length === 2, celdas(g, 'all').join(','));
   }
   {
     // Dos cajas de DISTINTO tipo tampoco: abren cofres distintos.
-    const g = await boot(baseSave([crate('c1', 'common'), crate('c2', 'epic')]));
+    const g = await boot(baseSave([crate('c1', 1), crate('c2', 6)]));
     check('pilas: dos cajas de distinto tipo no se aunan',
       celdas(g, 'all').length === 2, celdas(g, 'all').join(','));
   }
@@ -322,7 +322,7 @@ async function main() {
     // "una celda con varios items detras" (que es el de verdad) esta el caso de las
     // 19 llaves de mas abajo.
     const g = await boot(baseSave([
-      crate('p1', 'common', 2), crate('p2', 'epic', 3), collector('z')
+      crate('p1', 1, 2), crate('p2', 6, 3), collector('z')
     ]));
     // Celdas: [p1, p2, z]. Soltar p1 sobre la celda 1 tiene que dejar p1 EN la
     // celda 1, es decir DETRAS de p2 (la celda 2). Si el bloque entrara siempre
@@ -337,7 +337,7 @@ async function main() {
     // Soltar una pila sobre si misma no hace nada. Antes esto podia quitar los
     // items del array y volver a insertarlos en otro sitio, duplicando el
     // contenido o dejandolo en un orden distinto del que se veia.
-    const g = await boot(baseSave([crate('p1', 'common'), crate('p2', 'epic'), collector('z')]));
+    const g = await boot(baseSave([crate('p1', 1), crate('p2', 6), collector('z')]));
     const r = moveItemTo(g, 'p2', 1, 'all', 'default');
     check('arrastre: soltar una pila sobre su propia celda no hace nada',
       r === false && wh(g).length === 3, ids(g).join(','));
@@ -375,7 +375,7 @@ async function main() {
     // el item acaba junto a el. Aqui es donde un indice de array en vez de un
     // indice de celda seequivoca.
     const g = await boot(baseSave([
-      collector('r1'), crate('c1', 'common'), collector('r2'), crate('c2', 'epic')
+      collector('r1'), crate('c1', 1), collector('r2'), crate('c2', 6)
     ]));
     // En el filtro "collector" las celdas son r1 y r2. Soltar r2 sobre r1
     // significa "pon r2 justo delante de r1".
@@ -445,7 +445,7 @@ async function main() {
     // Se usan cajas de distinto tipo para que cada una sea su propia celda: dos
     // del mismo tipo son una pila y se venden juntas de golpe.
     const g = await boot(baseSave([
-      crate('c1', 'common'), crate('c2', 'epic'), collector('r1'), collector('r2')
+      crate('c1', 1), crate('c2', 6), collector('r1'), collector('r2')
     ]));
     check('venta: antes hay 4 celdas', celdas(g, 'all').length === 4, celdas(g, 'all').join(','));
     g.sellItem('c1');
@@ -461,7 +461,7 @@ async function main() {
     // Y el caso de una pila que se vende ENTERA: una celda antes, cero despues.
     // Si la rejilla se quedara con la celda vacia, el arrastre siguiente contaria
     // una celda que ya no existe.
-    const g = await boot(baseSave([crate('p1', 'common', 4), collector('r1'), collector('r2')]));
+    const g = await boot(baseSave([crate('p1', 1, 4), collector('r1'), collector('r2')]));
     check('venta: una pila es una celda', celdas(g, 'all').length === 3, celdas(g, 'all').join(','));
     g.sellItem('p1');
     check('venta: vender la pila quita su celda entera', celdas(g, 'all').length === 2,

@@ -381,7 +381,7 @@ async function main() {
   {
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 50 }),
-      crate('c1', 'common', 4),
+      crate('c1', 1, 4),
       consumable('k1', 'afk', 3, { name: 'Tarjeta AFK' })
     ]));
     const antes = JSON.stringify({

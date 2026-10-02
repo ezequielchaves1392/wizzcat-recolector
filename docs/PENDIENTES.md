@@ -155,25 +155,29 @@ de venta del almacén o una sección aparte, porque "primer segundo" significa o
 cada caso. Es una línea de orden en el array de navegación, y no necesita banco: es
 posición en un array.
 
-### F26 · El cristal tiene que ser del mismo tier del item, estrictamente
+### F26 · El cristal tiene que ser del mismo tier del item, estrictamente — HECHO
 
 > Arreglarlo para que necesite cristales del mismo tier del item que estoy mejorando estrictamente, y que la progresión se mantenga como está ahora para que haya fallo.
 
-**DECIDIDO, y es mejor que la variante que yo había propuesto.** Tres razones: es **mucho
-menos invasivo** (no cambia la economía, el cristal sigue siendo lo que multiplica la
-probabilidad); **el fallo se conserva**, que es lo que salva a F32; y **hace legible la
-elección** — con la regla estricta no hay que hacer cuentas, el botón dice "necesitas
-Cristal T8".
+**HECHO, y no se podía hacer antes que F31.** El orden importa y es el que no vi al
+escribir esto: la regla estricta necesita cristales del 1 al 10, y la caja que los suelta
+no existía. Aplicarla sola habría convertido el T8 **en un muro**, no en contenido
+inalcanzable. Las dos van en el mismo commit porque el estado intermedio no era jugable.
 
-**Y tiene un efecto secundario que va justo a donde quieres con F31:** si un T8 **exige**
-cristal T8 y ese cristal sale de las cajas altas, **las cajas dejan de ser un adorno y
-pasan a ser obligatorias para progresar**.
+Ahora `upgradeEquippedCollector()` **no recibe el nivel del cristal**: lo deduce del tier
+del recolector. No es un valor por defecto ni un parámetro que la vista pueda mandar, así
+que la vista no puede proponer un cristal distinto del que se va a gastar (R3). El
+selector dejó de ser una lista con dos opciones: es **una fila**, la que tienes o la que
+te falta, y dice de qué caja sale.
 
-**El problema que destapa, y es el tercero del mismo tipo:** la regla estricta necesita
-cristales de nivel 1 a 10, y hoy hay **4 declarados y solo 2 obtenibles**. El 3 y el 4
-tienen nombre, multiplicador y probabilidad escritas, y **no los saca nadie**. Si el T8
-pide cristal T8 y ese cristal no sale de ninguna caja, el T8 no es contenido
-inalcanzable: **es un muro**. Resuelto en F31/F36: un nivel por tier, hasta 30.
+Lo que de verdad arregla no es la comodidad: es que **el cristal deja de ser un
+multiplicador suelto y pasa a ser la llave de la progresión**. Si el T8 exige cristal T8 y
+el cristal T8 sale de las cajas T8, abrir cajas deja de ser opcional.
+
+**Y un techo declarado en vez de una regla más blanda:** un T por encima del 10 no se
+puede sintonizar, y el juego lo dice ("necesita el Cristal T12, y el más alto que existe
+es el T10"). Es lo que produce la forja infinita, y degradar F26 para que un T30 se
+subiera con un cristal T1 sería deshacer la regla entera. Ver **F36** para cerrar eso.
 
 ### F28 · La ruleta va demasiado rápido en el navegador — RESUELTO (era el navegador)
 
@@ -232,39 +236,57 @@ son **cuatro números escritos a mano** y el criterio se repite en **tres** siti
 pueden discrepar. Lo que hay que hacer es **una función de apilado** que decida el tope, el
 desglose y el número pintado, y que las tres vistas llamen.
 
-### F31 · La tienda solo vende tier 0; los siguientes, por fusión o cajas
+### F31 · La tienda solo vende tier 0; los siguientes, por fusión o cajas — HECHO
 
 > Reestructuramos el sistema para que de la tienda solo se puedan comprar los tier 0 y mediante fusión o cajas se puedan comprar los siguientes tiers.
 
-**DECIDIDO: la tienda solo vende cajas tier 0, las básicas, "aún no empiezan los tiers
-ahí".** Y funciona por una razón que no era la que yo temía: **la puerta es la caja, no
-la llave**. Si la tienda vende la llave T9 pero no la caja T9, esa llave **no sirve para
-nada** hasta que una caja T9 salga de una T8. El jugador puede tener las diez llaves y
-seguir necesitando la caja. **Traducido: las llaves pueden venderse todas, y las cajas
-solo las básicas.**
+**HECHO: hay una caja por tier, y la tienda solo vende la T1.**
 
-**Lo que sí hay que quitar es lo más grande de la decisión:** las **veinte cartas de
-tier** (de 900 a 193.850). La tienda pasa de 20 cartas a 2. Es el mayor recorte de
-contenido del lote, y es correcto: mientras la carta T8 esté a la venta, las cajas no son
-necesarias.
+Lo que sale de la tienda: **la caja T1 y las diez llaves**. Lo que se va: **las veinte
+cartas de tier** (de 900 a 193.850) y las tres cajas altas. Es el mayor recorte de
+contenido del lote, y es correcto: mientras la carta del T8 esté a la venta, las cajas no
+son necesarias.
 
-**La variante que lo simplifica todo: una caja por tier.** Diez cajas en vez de cuatro,
-cada una con su llave, y **una sola pieza resuelve cuatro peticiones**:
+Y funciona por una razón que no era la que yo temía: **la puerta es la caja, no la
+llave**. Comprar la llave T9 sin tener la caja T9 no es tirar el dinero, es tenerla
+guardada — la T9 llega abriendo la T8. Por eso las diez llaves siguen a la venta.
 
-| Petición | Cómo la resuelve una caja por tier |
-|---|---|
-| **F26** cristal del mismo tier | La caja T8 suelta **cristal T8**. Hoy es un muro; aquí sale de la caja correcta por construcción. |
-| **F27** expansores por tipo | La caja T8 suelta el **Expansor T8**. Ya pediste que algunos fuesen solo de cajas. |
-| **F31** subir de tier | La caja T8 suelta la **llave y la caja T9**. Es la cadena. |
-| **D4** el patrón | Dejas de tener el problema: cada caja tiene su fila y cada fila suelta lo que debe. |
+**La caja T{n} suelta, por construcción:** el cristal T{n} (F26), su llave, un compañero
+T{n}, un recolector T{n} sobrecargado desde la T3, la caja T{n+1}, un salto a T{n+1}, un
+expansor, y las piedras desde la T6 y la nanopartícula desde la T8.
 
-**Y el efecto de columna vertebral es lo que lo justifica:** la tienda vende la caja T1 y
-la llave T1, y de ahí en adelante **se sube encadenando**. Un camino único y legible, y
-cada caja es a la vez un premio y una llave.
+**Y EL NÚMERO DE TABLAS ES UNO.** Antes había cuatro tablas de botín escritas a mano, que
+era exactamente la causa de B6: cuatro copias de "cada caja suelta su llave" que se
+separaron en el primer rebalanceo. Ahora hay **una función** (`botinDeCaja`) y diez cajas
+que la cumplen, así que añadir una undécima es tocar una línea y no escribir doscientas
+líneas buscindo por qué la T6 no suelta cristal T6.
+
+**Cosas que se encontraron al hacerlo y no estaban previstas:**
+
+- **Seis de las diez cajas anunciaban un cosmético que no existe.** El catálogo reparte
+  nueve cosméticos entre cuatro cajas, y la entrada `cosmetic` estaba en las diez: seis
+  ruletas pintaban una casilla que nunca salía. Con cuatro cajas no se notaba porque las
+  cuatro tinham catálogo. Ahora la entrada se pone sola donde hay catálogo, y `lootCheck`
+  ata las dos direcciones.
+- **La fila de llaves de la caja T9 salía menos de una vez cada 400 aperturas.** Compitía
+  por la rareza de la llave (Divina) en vez de por la de la caja, con un peso de autor de
+  10 dentro de una bolsa de 1/150. La cadena de cajas depends de que cada caja devuelva
+  su llave, así que un peso que la hace casi inalcanzable no era un desajuste de balance:
+  era la cadena rota por el otro lado. Lo mismo con los expansores y con las piedras.
+- **La caja T10 no tiene salto.** No hay peldaño por encima del final, así que su tabla no
+  incluye la entrada `up` — en vez de incluirla y devolver un T10 siempre, que es un
+  premio garantizado disfrazado de sorpresa. `saltoCheck` lo ata.
+- **`inferCrateType` devolvía `legendary` para cualquier nombre que no reconociera**, o
+  sea que un item de caja con el nombre corrupto se proponía como la mejor caja del juego.
+  Ahora devuelve `null`.
+- **La caja T1 baja de 500 a 450.** F31 quita veinte cartas y subirle el precio a quien
+  está en el primer minuto sería cobrarle el recorte. El par caja+llave pasa de 750 a 675.
+- **`src/components/crates.ts` se ha borrado.** Estaba muerto desde hacía tiempo (AGENTS.md
+  ya lo marcaba como vestigial) y usaba `state.crates.common`, así que con diez niveles
+  habría mostrado `undefined` en cuatro tarjetas si alguien lo hubiera importado.
 
 **Lo que sale bien, medido:** con 2 materiales por forja, un T10 por forja sale 2,4× la
-carta y un T25 cuesta 15 billones. **El final lo pone la aritmética, no un tope**, que es
-lo que hace que la forja infinita funcione.
+carta y un T25 cuesta 15 billones. **El final lo pone la aritmética, no un tope.**
 
 ### F32 · A partir del nivel 10, fallar puede restar 1 o 2 niveles
 
@@ -378,7 +400,7 @@ cuando el cristal T30 no existe.
 **Los dos topes tienen que ser coherentes entre sí.** Resuelto en F36: los dos en 30, así
 que **no hay ningún tier muerto**.
 
-### F36 · Los tres números que quedaban
+### F36 · Los tres números que quedaban — PARCIAL
 
 > Delegados ("sí"). Van aquí con la cuenta, para que se puedan cambiar sin volver a razonarlos.
 
@@ -398,6 +420,11 @@ que **no hay ningún tier muerto**.
    multiplicador, y **el multiplicador se queda en cuatro escalones** —si creciera sin
    límite, **el 75% de la forja se rompería en los tiers altos**, que es precisamente lo que
    se pidió.
+   **LO HECHO (con F26): hay un cristal por tier del 1 al 10, con nombre propio y sin
+   bandas**, y la caja T{n} suelta el cristal T{n}. **LO QUE FALTA: del 11 al 30.** Un
+   recolector por encima del T10 se puede forjar pero **no se puede sintonizar**, y el juego
+   lo dice en vez de degradar la regla. Es el hueco que deja la forja infinita, y es el
+   único sitio donde el juego admite un techo.
 3. **LA FORJA.** ~~Llega a T10 y no más~~ → **ANULADO por la decisión de forja infinita**
    (ver F34 y el commit `d5daee3`). El argumento era "si la forja llegara más lejos que la
    caja, dejaría de usarse", pero **la caja da el máximo ×1,25 y la forja da el máximo que
@@ -589,7 +616,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1379
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1649
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
@@ -683,6 +710,20 @@ pruebas**, todas en verde._
       balance que hizo falta: con la base en el mínimo del rango los **tiers se solapaban**
       (un T1 perfecto igualaba a un T2 normal), así que la base crece ×1,75 por tier y el
       peor de un tier supera al mejor del anterior. `stateCheck` +14, `saltoCheck` +6.
+- [x] **F31 · una caja por tier, y la tienda solo con la básica** (`aun sin commit`).
+      Diez cajas (`Caja T1`…`Caja T10`), diez llaves con nombre propio, y **fuera las veinte
+      cartas de tier** y las tres cajas altas. La caja T{n} suelta por construcción el
+      cristal T{n}, su llave, un compañero T{n}, un recolector sobrecargado desde la T3, la
+      caja T{n+1} y un salto. **Y las diez tablas de botín son una función**, no diez
+      listas: era la causa de B6. Precios y reventa salen de una curva de tiers; el par
+      caja+llave de la T1 baja de 750 a 675. Fuera `crates.ts`, que estaba muerto.
+- [x] **F26 · el cristal es del mismo tier del item, estrictamente** (`aun sin commit`).
+      `upgradeEquippedCollector()` **deja de recibir el nivel**: lo deduce del item, así que
+      la vista no puede ofrecer un cristal que el motor vaya a rechazar. El selector pasa
+      de una lista a **una fila**: la que tienes o la que te falta. Y el cristal deja de ser
+      un multiplicador suelto para ser **la llave de la progresión**: el T8 exige cristal T8,
+      y el cristal T8 sale de las cajas T8. Un T por encima del 10 se rechaza diciendo
+      cuál falta, en vez de degradar la regla.
 - [x] **F33 · el potencial decide el daño y la forja promedia los dos** (`58d5a4e`).
       `danioDeRango(tier, potencial)` con 1 en el mínimo y 5 en el máximo exacto;
       la tienda y las cajas lo tiran, la forja promedia los dos materiales. Se fue
@@ -813,11 +854,28 @@ un repo donde `git status` es la única red, un fichero ignorado no tiene red.
 
 _Cosas que estorban al trabajo más que al juego._
 
-- [x] **`AGENTS.md` decía "22 bancos = 1399 pruebas".** Corregido a **24 bancos y 1549**,
-      que es lo que da `npm run verify` hoy. También afirmaba que `v1.1.0` estaba
+- [x] **`AGENTS.md` decía "22 bancos = 1399 pruebas".** Corregido. La cifra viva es la que
+      da `npm run verify`: **25 bancos y 1649 pruebas**. También afirmaba que `v1.1.0` estaba
       "publicado en GitHub Pages", y **eso es falso**: Pages no está activado en el repo,
       `/pages` da 404 y la URL del juego da 404. Corregido: el tag existe, el juego vive en
       el repo, y **no se quiere publicar en Pages**.
+- [x] **`crates.common` salía en `state`, en el componente de cajas y en tres bancos.**
+      Con diez niveles de caja era un contador con cuatro claves que ya no cuadraba con
+      nada. Ahora `state.crates` es un `Record<CrateType, number>` y se construye con
+      `CRATE_TIERS`, así que **añadir una caja no puede olvidarse de tocar el contador**.
+      Y las partidas viejas se traducen al nivel donde vivía cada caja (común → T1, rara →
+      T3, épica → T6, legendaria → T8), que conserva la posición del jugador en la escalera.
+- [x] **`sellCheck` tenía sus propias fábricas de items**, con listas de nombres que no
+      eran las del juego, *además* de las de `kit.ts`. Dos copias que ya se habían separado:
+      la lista del banco tenía cuatro nombres y el juego tiene diez. Con F26 eso pasó de
+      cosmético a bug —un banco que fabrica un `Cristal Singular` que el juego no fabrica
+      mide un objeto que no existe—. Ahora las tres vienen de `kit.ts`, que las lee de
+      `KEY_DEFS`, `CRYSTAL_DEFS` y `CRATE_TYPES`.
+- [x] **`consumable()` tenía dos firmas distintas** en `kit.ts` y en `sellCheck`:
+      `(id, stack, over)` frente a `(id, buffId, stack, over)`. Al unificarlas sin querer,
+      `consumable('u1', 3)` pasó a significar "tres tarjetas AFK" y catorce bancos se
+      cayeron de golpe. Compilaba. Una firma distinta en dos sitios que se llaman igual es
+      peor que un nombre distinto.
 - [ ] **`.github/workflows/publicar.yml` se puede borrar.** Como no hay Pages y no se
       quiere, este workflow solo consigue que **todos los pushes salgan en rojo** en
       `configure-pages`. Los pasos que dependen del código (`tsc` y el que falla la

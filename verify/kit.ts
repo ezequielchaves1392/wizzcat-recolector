@@ -13,6 +13,8 @@
 
 import { createGameLoop } from '../src/gameLoop';
 import { countOccupiedSlots } from '../src/data/stacking';
+import { CRATE_TYPES, CRATE_TIERS, type CrateType } from '../src/data/store';
+import { KEY_DEFS, KEY_TIERS, CRYSTAL_DEFS, type KeyTier } from '../src/data/items';
 
 export type Row = { name: string; ok: boolean; detail: string };
 
@@ -164,11 +166,25 @@ export const ficha = (id: string, tier = 3, over: any = {}) => ({
   ...over
 });
 
-const CRATE_NAMES: Record<string, string> = {
-  common: 'Caja Común', rare: 'Caja Rara', epic: 'Caja Épica', legendary: 'Caja Legendaria'
-};
-export const crate = (id: string, tipo: 'common' | 'rare' | 'epic' | 'legendary' = 'common', stack = 1, over: any = {}) => ({
-  id, name: CRATE_NAMES[tipo], type: 'crate', details: 'x', rarity: 'Común',
+/**
+ * F31 · LAS FÁBRICAS DE ITEMS TOMAN EL NIVEL, NO UN NOMBRE.
+ *
+ * Antes `crate()` recibía `'common' | 'rare' | 'epic' | 'legendary'` y escribía
+ * el nombre con una tabla de cuatro; `key()` y `crystal()` tenían listas de
+ * nombres escritas aquí que **no eran las del juego**. Eso son tres copias de
+ * datos que el juego ya tiene en `data/items.ts`, y ya se habían separado: el
+ * nombre de un cristal en un banco no era el nombre de un cristal en el juego, y
+ * con la regla de F26 eso importa —porque un bank que fabrica un cristal que el
+ * juego norecognize mide el fallo equivocado.
+ *
+ * Ahora las tres leen `CRATE_TYPES`, `KEY_DEFS` y `CRYSTAL_DEFS`, y la caja
+ * escribe el mismo `Caja T{n}` que escribe el juego. Una fábrica que fabrica
+ * algo que el juego no fabrica produce bancos que pasan probando un objeto
+ * equivocado, y eso es peor que un banco que falla.
+ */
+export const crate = (id: string, tier = 1, stack = 1, over: any = {}) => ({
+  id, name: CRATE_TYPES[tier as CrateType].name, type: 'crate', details: 'x',
+  rarity: CRATE_TYPES[tier as CrateType].rarity,
   tier: 0, sellPrice: 125, stackable: true, stackCount: stack, ...over
 });
 
@@ -178,7 +194,7 @@ export const crate = (id: string, tipo: 'common' | 'rare' | 'epic' | 'legendary'
  * Desde `data/stacking` la capacidad se cuenta en RANURAS OCUPADAS, y dos items
  * apilables del mismo tipo y nombre se funden en una sola ranura al cargar
  * (`mergeStacks`). Una prueba que pone tres cajas iguales esperando tres ranuras
- *Distinct mide la fusion, no lo que queria. Para "N cosas que ocupan N ranuras"
+ * distintas mide la fusión, no lo que quería. Para "N cosas que ocupan N ranuras"
  * hay que usar items de nombres distintos: es lo que hace `distintos()`.
  */
 export const distintos = (n: number, tipo = 'collector') =>
@@ -187,16 +203,15 @@ export const distintos = (n: number, tipo = 'collector') =>
       ? collector(`r${i}`, 1, { name: `Recolector ${i}` })
       : collector(`r${i}`, 1, { name: `Cosa ${i}` }));
 
-const KEY_NAMES = ['Llave de Cifrado', 'Llave Reforzada', 'Llave Rúnica', 'Llave del Vacío'];
-export const key = (id: string, tier = 0, stack = 1, over: any = {}) => ({
-  id, name: KEY_NAMES[tier], type: 'key', details: 'x', rarity: 'Común',
+export const key = (id: string, tier = 1, stack = 1, over: any = {}) => ({
+  id, name: KEY_DEFS[tier as KeyTier].name, type: 'key', details: 'x',
+  rarity: KEY_DEFS[tier as KeyTier].rarity,
   tier, sellPrice: 480, stackable: true, stackCount: stack, ...over
 });
 
-const CRYSTAL_NAMES = ['Cristal de Mejora', 'Cristal de Fase', 'Cristal de Entropía', 'Cristal Singular'];
 export const crystal = (id: string, tier = 1, stack = 1, over: any = {}) => ({
-  id, name: CRYSTAL_NAMES[tier - 1] ?? 'Cristal de Mejora', type: 'crystal', details: 'x',
-  rarity: 'Común', tier, sellPrice: 180, stackable: true, stackCount: stack, ...over
+  id, name: CRYSTAL_DEFS[tier].name, type: 'crystal', details: 'x',
+  rarity: CRYSTAL_DEFS[tier].rarity, tier, sellPrice: 180, stackable: true, stackCount: stack, ...over
 });
 
 export const consumable = (id: string, buffId: string, stack = 1, over: any = {}) => ({
@@ -220,20 +235,25 @@ export const consumable = (id: string, buffId: string, stack = 1, over: any = {}
  * que los traiga descuadrados mide el recorte, no lo que quiere medir.
  */
 export function baseSave(items: any[], extra: any = {}) {
-  const crates = { common: 0, rare: 0, epic: 0, legendary: 0 };
-  const keysByTier: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  // F31 · Diez niveles de caja y diez de llave. Antes eran cuatro de cada uno, y
+  // la caja se adivinaba por el NOMBRE con una cadena de `includes` que era
+  // otra copia de la regla del motor. Ahora sale del número, igual que en el
+  // juego, así que un banco no puede probar una caja que el juego no recognises.
+  const crates: Record<number, number> = {};
+  for (const t of CRATE_TIERS) crates[t] = 0;
+  const keysByTier: Record<number, number> = {};
+  for (const t of KEY_TIERS) keysByTier[t] = 0;
   const crystalsByTier: Record<number, number> = {};
   let upgradeCrystals = 0;
   let afkCards = 0;
 
   for (const w of items) {
     if (w.type === 'crate') {
-      const t = w.name.includes('Legendaria') ? 'legendary'
-        : w.name.includes('Épica') ? 'epic'
-        : w.name.includes('Rara') ? 'rare' : 'common';
-      crates[t] += w.stackCount || 1;
+      const m = /caja t(\d+)/.exec((w.name || '').toLowerCase());
+      if (!m) continue;
+      crates[Number(m[1])] = (crates[Number(m[1])] ?? 0) + (w.stackCount || 1);
     } else if (w.type === 'key') {
-      keysByTier[w.tier ?? 0] += w.stackCount || 1;
+      keysByTier[w.tier ?? 1] = (keysByTier[w.tier ?? 1] ?? 0) + (w.stackCount || 1);
     } else if (w.type === 'crystal') {
       crystalsByTier[w.tier ?? 1] += w.stackCount || 1;
       if ((w.tier ?? 1) === 1) upgradeCrystals += w.stackCount || 1;
@@ -248,7 +268,7 @@ export function baseSave(items: any[], extra: any = {}) {
     totalNanitesProduced: 0,
     warehouse: items,
     crates,
-    keys: keysByTier[0] + keysByTier[1] + keysByTier[2] + keysByTier[3],
+    keys: KEY_TIERS.reduce((s, t) => s + (keysByTier[t] ?? 0), 0),
     keysByTier,
     crystalsByTier,
     upgradeCrystals,

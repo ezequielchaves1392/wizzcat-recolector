@@ -33,7 +33,19 @@ const glassBase = { border: '1px solid', borderRadius: '9999px' };
  * declaran aquí para que este archivo no dependa del game loop: el catálogo es
  * la capa de datos y no tiene que saber nada del bucle.
  */
-export type CrateCosmeticSource = 'common' | 'rare' | 'epic' | 'legendary';
+/**
+ * F31 · LA CAJA DE UN COSMÉTICO ES UN NÚMERO, QUE ES SU TIER.
+ *
+ * Antes este tipo era `'common' | 'rare' | 'epic' | 'legendary'`: una **quinta
+ * copia** de la lista de cajas, escrita aparte de `CRATE_TYPES` y sin ninguna
+ * comprobación de que las dos coincidieran. Con diez cajas serían diez nombres
+ * más que mantener, y el día que se añadiera la caja T5 nadie se habría acordado de
+ * añadirla también aquí.
+ *
+ * Ahora es el número, y el reparto de los cosméticos por caja es una decisión de
+ * balance en una línea por cosmético, no una lista de tipos que sincronizar.
+ */
+export type CrateCosmeticSource = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export const COSMETICS: Cosmetic[] = [
   // ---------------------------------------------------------------- TÍTULOS
@@ -121,34 +133,34 @@ export const COSMETICS: Cosmetic[] = [
   // consigue jugando) hacia abajo (lo que también se puede comprar).
 
   { id: 'title_scraplord', type: 'title', name: 'Señor de Chatarra', description: 'Recicló más chatarra que nadie en la base.',
-    rarity: 'Raro', unlock: { kind: 'crate', value: 'common' },
+    rarity: 'Raro', unlock: { kind: 'crate', value: 1 },
     style: { color: '#a3a3a3', font: 'mono' } },
   { id: 'frame_oxy', type: 'frame', name: 'Óxido', description: 'Borde corroído, del montón y sin pulir.',
-    rarity: 'Raro', unlock: { kind: 'crate', value: 'common' },
+    rarity: 'Raro', unlock: { kind: 'crate', value: 1 },
     style: { ...glassBase, borderColor: '#a16207', borderStyle: 'dashed' } },
 
   { id: 'title_burnout', type: 'title', name: 'Fundido', description: 'Se quedó sin refrigerante a mitad de una fusión.',
-    rarity: 'Épico', unlock: { kind: 'crate', value: 'rare' },
+    rarity: 'Épico', unlock: { kind: 'crate', value: 3 },
     style: { color: '#fb923c', font: 'display' } },
   { id: 'banner_foundry', type: 'banner', name: 'Fundición', description: 'El horno encendido, de noche.',
-    rarity: 'Épico', unlock: { kind: 'crate', value: 'rare' },
+    rarity: 'Épico', unlock: { kind: 'crate', value: 3 },
     style: { background: 'linear-gradient(160deg,#451a03,#ea580c 55%,#facc15)' } },
 
   { id: 'title_nightshift', type: 'title', name: 'Turno de Noche', description: 'La Cyber Base nunca está vacía.',
-    rarity: 'Legendario', unlock: { kind: 'crate', value: 'epic' },
+    rarity: 'Legendario', unlock: { kind: 'crate', value: 6 },
     style: { color: '#818cf8', font: 'display', glow: 'true' } },
   { id: 'banner_datastorm', type: 'banner', name: 'Tormenta de Datos', description: 'Caudal de telemetría sin filtrar.',
-    rarity: 'Épico', unlock: { kind: 'crate', value: 'epic' },
+    rarity: 'Épico', unlock: { kind: 'crate', value: 6 },
     style: { backgroundImage: 'repeating-linear-gradient(115deg,rgba(56,189,248,.28) 0 2px,transparent 2px 10px),linear-gradient(180deg,#082f49,#0c4a6e)' } },
 
   { id: 'frame_quantum', type: 'frame', name: 'Cuántico', description: 'Borde que solo está ahí cuando lo miras.',
-    rarity: 'Mítico', unlock: { kind: 'crate', value: 'legendary' },
+    rarity: 'Mítico', unlock: { kind: 'crate', value: 10 },
     style: { ...glassBase, borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, repeating-linear-gradient(90deg,#22d3ee 0 6px,transparent 6px 12px) border-box' } },
   { id: 'banner_aurora', type: 'banner', name: 'Aurora', description: 'El cielo de la Cyber Base visto desde el tejado.',
-    rarity: 'Legendario', unlock: { kind: 'crate', value: 'legendary' },
+    rarity: 'Legendario', unlock: { kind: 'crate', value: 10 },
     style: { background: 'linear-gradient(120deg,#4c1d95,#0e7490 45%,#10b981)' } },
   { id: 'title_signal', type: 'title', name: 'La Señal', description: 'El único cosmético Divino que no se gana en el ranking.',
-    rarity: 'Divino', unlock: { kind: 'crate', value: 'legendary' },
+    rarity: 'Divino', unlock: { kind: 'crate', value: 10 },
     style: { color: '#34d399', font: 'display', glow: 'true', gradient: 'linear-gradient(90deg,#34d399,#22d3ee,#a78bfa)' } }
 ];
 

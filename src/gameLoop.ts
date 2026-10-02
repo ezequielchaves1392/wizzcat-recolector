@@ -36,7 +36,8 @@ import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data
 //  hay ninguna decisión nueva que revisar — solo dónde vive cada cosa.
 // ==========================================================================
 import {
-  STORE_ITEMS, CRATE_TYPES, CONSUMABLES, COLLECTOR_BASE_COSTS,
+  STORE_ITEMS, CRATE_TYPES, CRATE_TIERS, MAX_CRATE_TIER, costeDeCaja,
+  CONSUMABLES, COLLECTOR_BASE_COSTS,
   COMPANION_SLOT_COSTS, RANURA_POR_CARTA, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP,
   expansorPorBuff, type CrateType
 } from './data/store';
@@ -86,6 +87,7 @@ export function previewUpgradeCost(level: number): number {
 // no lee nadie es la señal de que la regla se movió y nadie lo anotó.
 import {
   KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER, STORE_KEY_TIER,
+  MAX_CRYSTAL_TIER, crystalTierFromName,
   crystalSuccessChance, crystalPowerFromName, keyTierFromName, keyOpens,
   type KeyTier
 } from './data/items';
@@ -266,7 +268,6 @@ function inferBuffIdFromName(name: string): string | null {
 
 function createCrateItem(crateType: CrateType, quantity: number = 1) {
   const def = CRATE_TYPES[crateType];
-  const storeItem = (STORE_ITEMS as Record<string, { cost: number }>)[`${crateType}Crate`];
   return {
     id: `crate_${crateType}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     name: def.name,
@@ -274,10 +275,20 @@ function createCrateItem(crateType: CrateType, quantity: number = 1) {
     details: def.details,
     rarity: def.rarity,
     tier: 0,
-    sellPrice: Math.floor(storeItem.cost / 4),
+    // La reventa es la cuarta parte del valor, y el valor sale de `store.ts`. La
+    // carta de tienda ya no existe para las cajas altas (F31 quita las tres), así
+    // que antes el precio de una caja legendaria no lo tenía nadie: se leía de
+    // `STORE_ITEMS.legendaryCrate` para la tienda y de `CRATE_META` para la
+    // reventa, y eran dos números.
+    sellPrice: Math.floor(costeDeCaja(crateType) / 4),
     stackable: true,
     stackCount: quantity
   };
+}
+
+/** Un contador de cajas con los diez niveles a cero. Nunca diez líneas a mano. */
+export function contadorDeCajasVacio(): Record<CrateType, number> {
+  return Object.fromEntries(CRATE_TIERS.map(t => [t, 0])) as Record<CrateType, number>;
 }
 
 
@@ -371,12 +382,8 @@ export async function createGameLoop(
     warehouseGaps: [] as string[],
     afkCards: 0, // Tarjetas AFK acumuladas (máx 3)
     afkExpiresAt: 0, // Tiempo de expiración del buff AFK (10 min por tarjeta)
-    crates: {
-      common: 2,
-      rare: 0,
-      epic: 0,
-      legendary: 0
-    },
+    // F31 · Diez niveles, todos a cero menos el T1, que es la caja de arranque.
+    crates: { ...contadorDeCajasVacio(), 1: 2 },
     // Contadores DERIVADOS del almacén. Los calcula `syncMaterialCounters()`.
     // Se guardan porque el árbol de pasivas los lee y porque las partidas
     // viejas los traen; nunca son la fuente de verdad.
@@ -586,14 +593,12 @@ function previewStoreItem(itemKey: string): any {
     return { type: 'key', name: KEY_DEFS[STORE_KEY_TIER[itemKey]].name, stackable: true };
   }
   if (itemKey === 'upgradeCrystal') return { type: 'crystal', name: CRYSTAL_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
-  if (itemKey.endsWith('Crate') && CRATE_TYPES[itemKey.replace('Crate', '').toLowerCase() as CrateType]) {
-    const t = itemKey.replace('Crate', '').toLowerCase() as CrateType;
-    return { type: 'crate', name: CRATE_TYPES[t].name, stackable: true };
-  }
+  // F31 · Una sola carta de caja, `crateT1`. Antes el `if` era "cualquier cosa que
+  // acabe en Crate y cuyo nombre sea una caja conocida", lo que servía para cuatro
+  // cartas y con diez cajas habría servido para cuatro también, en silencio.
+  if (itemKey === 'crateT1') return { type: 'crate', name: CRATE_TYPES[1].name, stackable: true };
   const consumable = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
   if (consumable) return { type: 'consumable', name: consumable.name, stackable: true };
-  if (itemKey.startsWith('companionCardT')) return { type: 'companion' };
-  if (itemKey.startsWith('collectorCardT')) return { type: 'collector' };
   return null;
 }
 
@@ -773,7 +778,7 @@ function syncMaterialCounters() {
   // Rellena el campo `tier` de los items guardados antes de que existiera.
   state.warehouse.forEach((w: any) => {
     if (w.type === 'key' && typeof w.tier !== 'number') w.tier = keyTierFromName(w.name || '');
-    if (w.type === 'crystal' && typeof w.tier !== 'number') w.tier = crystalPowerFromName(w.name || '') === 1 ? 1 : 2;
+    if (w.type === 'crystal' && typeof w.tier !== 'number') w.tier = crystalTierFromName(w.name || '');
   });
 }
 
@@ -867,12 +872,29 @@ const AFK_THRESHOLD_MS = 60000;
       state.upgradeCrystals = data.upgradeCrystals ?? 5;
       state.warehouseCapacity = data.warehouseCapacity ?? 15;
       state.maxCompanionSlots = data.maxCompanionSlots ?? 1;
-      state.crates = {
-        common: data.crates?.common ?? 2,
-        rare: data.crates?.rare ?? 0,
-        epic: data.crates?.epic ?? 0,
-        legendary: data.crates?.legendary ?? 0
-      };
+      // F31 · EL CONTADOR DE CAJAS PASA DE CUATRO NOMBRES A DIEZ NIVELES.
+      //
+      // El guardado viejo trae `{ common: 5, rare: 2 }`, y esas cajas están
+      // también en el almacén como items. El contador es un residuo, pero se
+      // guarda y `materializePendingCrates` lo lee, así que no se tira: se
+      // **traduce** al nivel donde vivía cada caja —común → T1, rara → T3, épica
+      // → T6, legendaria → T8— y se suman al contador nuevo. Tirarlo sería
+      // desaparecer con cinco cajas que el jugador ya tenía, y esa traducción
+      // conserva su sitio en la escalera: el que tenía una legendaria tenía un
+      // T8, y sigue teniendo un T8.
+      //
+      // Y una partida que no trae el campo es una partida nueva, y recibe las dos
+      // cajas T1 de siempre.
+      const legacyCrates = (data.crates ?? null) as Record<string, number> | null;
+      state.crates = contadorDeCajasVacio();
+      if (legacyCrates && typeof legacyCrates === 'object') {
+        state.crates[1] += legacyCrates.common ?? 0;
+        state.crates[3] += legacyCrates.rare ?? 0;
+        state.crates[6] += legacyCrates.epic ?? 0;
+        state.crates[8] += legacyCrates.legendary ?? 0;
+      } else {
+        state.crates[1] = 2;
+      }
       state.equippedCollectorId = data.equippedCollectorId ?? null;
       state.companions = data.companions ?? [];
       state.activeCompanions = data.activeCompanions ?? [];
@@ -959,7 +981,7 @@ const AFK_THRESHOLD_MS = 60000;
         if ((w.type === 'key' || w.type === 'crystal') && typeof w.tier !== 'number') {
           w.tier = w.type === 'key'
             ? keyTierFromName(w.name || '')
-            : (crystalPowerFromName(w.name || '') === 1 ? 1 : 2);
+            : crystalTierFromName(w.name || '');
           warehouseNeedsMigration = true;
         }
       });
@@ -1006,7 +1028,7 @@ const AFK_THRESHOLD_MS = 60000;
           if (w.type !== kind) continue;
           const t = typeof w.tier === 'number'
             ? w.tier
-            : kind === 'key' ? keyTierFromName(w.name || '') : (crystalPowerFromName(w.name || '') === 1 ? 1 : 2);
+            : (kind === 'key' ? keyTierFromName(w.name || '') : crystalTierFromName(w.name || ''));
           if (t !== tier) continue;
           total += w.stackable ? (w.stackCount || 1) : 1;
         }
@@ -1414,13 +1436,35 @@ const AFK_THRESHOLD_MS = 60000;
     syncWarehouseGaps();
   }
 
-  // Detecta el tipo de caja a partir del nombre del item
+  /**
+   * F31 · EL TIPO DE CAJA SE LEE DEL NOMBRE, Y EL NOMBRE LLEVA EL NÚMERO.
+   *
+   * Antes eran cuatro palabras sueltas —común, rara, épica, legendaria— y
+   * `null` para todo lo demás. Con diez cajas eso no escala, así que la caja se
+   * llama `Caja T7` y aquí se lee el número. Tres cosas mejora de golpe: un item
+   * mal escrito deja de abrirse como la mejor caja del juego, añadir una caja
+   * no obliga a añadir una palabra, y el nombre que ve el jugador es el mismo
+   * número que decide el botín.
+   *
+   * **Y LAS CUATRO CAJAS VIEJAS SIGUEN SIENDO LEGIBLES.** Una partida guardada
+   * antes de F31 tiene 'Caja Común', 'Caja Rara', 'Caja Épica' y 'Caja Legendaria'
+   * en el almacén, y no hay item nuevo que las sustituya: perderlas sería quitarle
+   * al jugador algo que ya tenía. Se mapean a las cajas que eran —común a la T1,
+   * rara a la T3, épica a la T6, legendaria a la T8—, que es el tier donde cada
+   * una vivía, así que el jugador no pierde su posición en la escalera.
+   */
   function getCrateTypeFromName(name: string): CrateType | null {
-    const lower = name.toLowerCase();
-    if (lower.includes('común')) return 'common';
-    if (lower.includes('rara')) return 'rare';
-    if (lower.includes('épica')) return 'epic';
-    if (lower.includes('legendaria')) return 'legendary';
+    const n = (name || '').toLowerCase();
+    const moderna = n.match(/caja t(\d+)/);
+    if (moderna) {
+      const t = Number(moderna[1]);
+      return (t >= 1 && t <= MAX_CRATE_TIER) ? (t as CrateType) : null;
+    }
+    // Legacy: el tier donde vivía cada caja antes de que hubiera una por tier.
+    if (n.includes('común')) return 1;
+    if (n.includes('rara')) return 3;
+    if (n.includes('épica')) return 6;
+    if (n.includes('legendaria')) return 8;
     return null;
   }
 
@@ -1432,7 +1476,11 @@ const AFK_THRESHOLD_MS = 60000;
    * crear.
    */
   function countCratesInWarehouse(): Record<CrateType, number> {
-    const counts: Record<CrateType, number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
+    // F31 · Se construye vacía y se rellena en el bucle, con una línea por caja
+    // escrita a mano. Con diez cajas eran diez líneas que se olvidarían, y la que
+    // se olvidara daría `NaN` en el contador —que es un contador que se guarda y
+    // se resta.
+    const counts = Object.fromEntries(CRATE_TIERS.map(t => [t, 0])) as Record<CrateType, number>;
 
     state.warehouse.forEach((w: any) => {
       if (w.type !== 'crate') return;
@@ -1484,8 +1532,8 @@ const AFK_THRESHOLD_MS = 60000;
   function materializePendingCrates() {
     const counts = countCratesInWarehouse();
 
-    (Object.keys(CRATE_TYPES) as CrateType[]).forEach(crateType => {
-      const missing = (state.crates[crateType] || 0) - counts[crateType];
+    CRATE_TIERS.forEach(crateType => {
+      const missing = (state.crates[crateType] ?? 0) - counts[crateType];
       if (missing <= 0) return;
       // Materializar lo que falte, respetando la capacidad del almacén
       const free = effectiveWarehouseCapacity() - countOccupiedSlots(state.warehouse);
@@ -2729,12 +2777,49 @@ const AFK_THRESHOLD_MS = 60000;
      * vista (R1 y R2), y se rompería en cuanto el consumo dejara de ser una
      * línea recta.
      */
-    upgradeEquippedCollector: (crystalTier = 1) => {
+    upgradeEquippedCollector: () => {
       handleUserActivity();
       if (!state.equippedCollectorId) return { success: false, rolled: false, msg: 'No hay ningún recolector equipado.' };
       const item = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
       if (!item) return { success: false, rolled: false, msg: 'Recolector no encontrado.' };
       const level = item.level || 0;
+
+      // =====================================================================
+      //  F26 · EL CRISTAL ES EL DEL MISMO TIER, Y NO HAY EXCEPCIÓN.
+      // =====================================================================
+      //
+      // ANTES: el selector enviaba el nivel del cristal que el jugador elegía, y
+      // el motor se lo creationsaba. Eso convertía la sintonización en una
+      // pregunta de multiplicadores —"¿gasto el x1.75 o el x2.75?"— sobre un
+      // recolector que da igual en las dos: un T7 afinado con un cristal T1 era
+      // exactamente igual a un T1. Y el jugador tenía que hacer la cuenta para
+      // elegir, sin ningún sitio donde ver el resultado.
+      //
+      // AHORA: el nivel del cristal lo decide el tier del recolector. No es un
+      // valor por defecto ni un parámetro que la vista pueda mandar: **no llega
+      // como argumento.** La vista no puede pedir otro cristal porque no hay otro
+      // que pedir, así que la regla entera no se puede desincronizar con lo que
+      // el botón enseña (R3).
+      //
+      // LO QUE RESUELVE DE VERDAD, y no es la comodidad de la interfaz: es que
+      // las cajas altas dejan de ser un adorno. Si un T8 exige cristal T8 y el
+      // cristal T8 sale de las cajas T8, abrir cajas pasa a ser la única forma de
+      // seguir mejorando. Antes el T8 se mejoraba con el cristal de la tienda.
+      const tierItem = Math.max(1, Math.floor(Number((item as any).tier) || 1));
+      const crystalTier = tierItem;
+
+      // Un recolector por encima del último cristal no se puede sintonizar, y
+      // se dice. Pasa con lo que hace la forja infinita, que produce T11 y
+      // siguientes. Es un techo declarado, no un bug: la opción no es degradar
+      // la regla de F26 para que un T30 se pueda subir con un cristal T1, sino
+      // decirlo y que quede pendiente añadir el cristal que le falta.
+      if (crystalTier > MAX_CRYSTAL_TIER) {
+        return {
+          success: false,
+          rolled: false,
+          msg: `Hace falta el Cristal T${crystalTier}, y el más alto que existe es el T${MAX_CRYSTAL_TIER}. Un T${tierItem} todavía no se puede sintonizar.`
+        };
+      }
       // EL TOPE LO PONE EL RECOLECTOR, Y LO PONE LA MISMA REGLA QUE LO CREA.
       //
       // Antes se comparaba contra un `MAX_COLLECTOR_LEVEL = 20` fijo de este
@@ -2753,10 +2838,16 @@ const AFK_THRESHOLD_MS = 60000;
       if (level >= tope) return { success: false, rolled: false, msg: `Recolector al nivel máximo (+${tope * 10}%).` };
 
       // El cristal se busca por nivel en el almacén, no en un contador suelto.
-      // Un cristal de nivel 3 no se gasta por uno de nivel 1: por eso hay que
-      // encontrar el item exacto y consumirlo, en vez de restar una unidad.
+      // Un cristal T7 no se gasta por uno T1: por eso hay que encontrar el item
+      // exacto y consumirlo, en vez de restar una unidad.
+      //
+      // Y SI EL ITEM NO TIENE NIVEL, SE LEE POR SU NOMBRE. Antes el nivel por
+      // defecto era 1, lo que convertía cualquier cristal viejo o manipulado en
+      // un T1 —y con la regla de F26 eso es un T1 fantasma que el juego cree que
+      // tienes. `crystalTierFromName` es el mismo criterio que usa la migración,
+      // así que los dos caminos dicen lo mismo.
       const crystal = state.warehouse.find((w: any) =>
-        w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : 1) === crystalTier);
+        w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '')) === crystalTier);
       if (!crystal) {
         const nombre = CRYSTAL_DEFS[crystalTier]?.name ?? 'Cristal';
         return { success: false, rolled: false, msg: `No tienes ${nombre}.` };
@@ -2961,10 +3052,11 @@ const AFK_THRESHOLD_MS = 60000;
         onUpdate(state, isAfk);
         saveToFirebase();
         return item;
-      } else if (itemKey === 'commonCrate' || itemKey === 'rareCrate' || itemKey === 'epicCrate' || itemKey === 'legendaryCrate') {
-        // La caja es un item real del almacén: sin esto no se puede abrir
-        const crateType = itemKey.replace('Crate', '').toLowerCase() as CrateType;
-        const warehouseItem = createCrateItem(crateType, n);
+      } else if (itemKey === 'crateT1') {
+        // F31 · La caja es un item real del almacén: sin esto no se puede abrir.
+        // Y es la ÚNICA que se vende. Las otras nueve salen de las anteriores, que
+        // es lo que hace que abrir una caja sea progresar y no coleccionar.
+        const warehouseItem = createCrateItem(1, n);
         if (!addToWarehouse(warehouseItem as any)) { state.nanites += cost; return false; }
         syncCrateCounters();
         onUpdate(state, isAfk);
@@ -3251,7 +3343,7 @@ const AFK_THRESHOLD_MS = 60000;
         maxCompanionSlots: 1,
         afkCards: 0,
         afkExpiresAt: 0,
-        crates: { common: 2, rare: 0, epic: 0, legendary: 0 },
+        crates: { ...contadorDeCajasVacio(), 1: 2 },
         equippedCollectorId: null,
         companions: [baseCompanion],
         activeCompanions: [],

@@ -30,12 +30,22 @@ import {
   pickLoot, RARITY_RANK, rarezaDeTabla
 } from '../src/components/crateLoot';
 import { TIER_SYSTEM } from '../src/data/tiers';
-import { type CrateType } from '../src/data/store';
+import { CRATE_TYPES, type CrateType } from '../src/data/store';
 
-const CAJAS: CrateType[] = ['common', 'rare', 'epic', 'legendary'];
+/**
+ * F31 · LAS CAJAS SON NIVELES, Y LA T10 NO TIENE SALTO.
+ *
+ * `TIER_PROPIO` —que decía "a esta caja le toca el tier 1 / 3 / 6 / 8"— ha
+ * desaparecido: con una caja por tier, el tope de la caja es su propio número.
+ * Y la lista de cajas va del 1 al 9 porque **la T10 no tiene peldaño por encima
+ * del final**, así que su tabla no incluye la entrada `up`. Eso es una regla
+ * nueva, y por eso el banco no la da por buena: si alguien la añadiera igual, el
+ * salto de la T10 daría un T10 y sería un premio garantizado disfrazado.
+ */
+const CAJAS: CrateType[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-/** El tier que le toca a cada caja, según su tabla (no el `up`, sino lo normal). */
-const TIER_PROPIO: Record<CrateType, number> = { common: 1, rare: 3, epic: 6, legendary: 8 };
+/** La caja donde están los compañeros exclusivos. */
+const CAJA_EXCLUSIVA: CrateType = 9;
 
 /**
  * Todos los premios de una caja, con la entrada ya construida.
@@ -126,21 +136,18 @@ async function main() {
   {
     for (const c of CAJAS) {
       const entrada = CRATE_LOOT[c].find(e => e.id === 'up');
-      check(`salto: ${c} tiene entrada de salto en la tabla`,
+      check(`salto: T${c} tiene entrada de salto en la tabla`,
         entrada !== undefined, 'sin entrada');
 
-      // Un premio de la caja, con su tier. El tope de cada caja es su propio tier: el
-      // `up` sube UNO por encima de ese, y los premios propios no pasan de él.
-      //
-      // Los items que no llevan `tier` (llaves, cristales, cosméticos) se saltan:
-      // no tienen tier y no compiten con la regla.
-      const TOPE_PROPIO: Record<CrateType, number> = { common: 1, rare: 4, epic: 6, legendary: 8 };
+      // Un premio de la caja, con su tier. El tope de cada caja es SU PROPIO
+      // número —F31— y el `up` sube UNO por encima. Los items que no llevan
+      // `tier` (llaves, cristales, cosméticos) no compiten con la regla.
       const salto = CRATE_LOOT[c].find(e => e.id === 'up')!;
-      const esperados = new Set<number>([TOPE_PROPIO[c], TOPE_PROPIO[c] + 1]);
+      const esperados = new Set<number>([c, c + 1]);
       const p: any = salto.build({ ownedCosmetics: [] });
-      check(`salto: ${c} da T${TOPE_PROPIO[c] + 1}, nunca más`,
+      check(`salto: T${c} da T${c + 1}, nunca más`,
         esperados.has(p.tier),
-        `tier=${p.tier} en una caja cuyo tope propio es T${TOPE_PROPIO[c]}`);
+        `tier=${p.tier} en una caja cuyo tope propio es T${c}`);
 
       // Y el premio tiene que llevar un item del mismo tier que anuncia: el cartel
       // dice T8 y si el item fuera T5 el jugador cobraría por una cosa y tendría
@@ -150,17 +157,24 @@ async function main() {
         `anuncia T${p.tier} y el item es T${p.item?.tier}`);
     }
 
-    // Y el caso concreto que importa: la caja común sube UN tier y no más.
+    // Y el caso concreto que importa: la caja T1 sube UN tier y no más.
     {
-      const entrada = CRATE_LOOT.common.find(e => e.id === 'up')!;
+      const entrada = CRATE_LOOT[1].find(e => e.id === 'up')!;
       let maxTier = 0;
       for (let i = 0; i < 3000; i++) {
         const p: any = entrada.build({ ownedCosmetics: [] });
         if (p.tier > maxTier) maxTier = p.tier;
       }
-      check('salto: la caja comun sube a lo sumo a T2',
+      check('salto: la caja T1 sube a lo sumo a T2',
         maxTier === 2, `tier maximo=${maxTier}`);
     }
+
+    // Y LA T10 NO SALTA. Es lo único que no encaja en el patrón, y por eso es
+    // una comprobación y no una excepción: una caja final sin peldaño por encima
+    // no puede tener una entrada de salto que siempre devuelva lo mismo.
+    check('salto: la caja T10 no tiene entrada de salto',
+      CRATE_LOOT[10].find(e => e.id === 'up') === undefined,
+      `entradas=${CRATE_LOOT[10].map(e => e.id).join(',')}`);
   }
 
   // -----------------------------------------------------------------------
@@ -182,22 +196,22 @@ async function main() {
 
     // Y sale de alguna caja. Esta es la comprobación que habría parado el bug:
     // antes el índice 5 no lo usaba ninguna entrada.
-    const leyenda = CRATE_LOOT.legendary.map(e => ({ id: e.id, b: e.build({ ownedCosmetics: [] }) }));
+    const leyenda = CRATE_LOOT[CAJA_EXCLUSIVA].map(e => ({ id: e.id, b: e.build({ ownedCosmetics: [] }) }));
     const loUsa = leyenda.some(({ b }) => b.item?.name === fantasma.item.name);
-    check('D1: y sale de la caja legendaria',
+    check('D1: y sale de una caja alta',
       loUsa,
       `buscando "${fantasma.item.name}" entre ${leyenda.length} entradas`);
 
     // Y sale, pero no cada vez: un compañero exclusivo que saliera un 30% de las
     // legendarias dejaría de ser exclusivo.
-    const entrada = CRATE_LOOT.legendary.find(e =>
+    const entrada = CRATE_LOOT[CAJA_EXCLUSIVA].find(e =>
       e.build({ ownedCosmetics: [] }).item?.name === fantasma.item.name
     );
     // El peso que cuenta es el PONDERADO por rareza, que es el que usa el
     // sorteo. Con el de autor, la probabilidad medida aquí no era la real.
-    const totalLegendaria = sumarPesos('legendary');
-    const idxEspectro = CRATE_LOOT.legendary.indexOf(entrada!);
-    const peso = tablaDePesos('legendary')[idxEspectro] ?? 0;
+    const totalLegendaria = sumarPesos(CAJA_EXCLUSIVA);
+    const idxEspectro = CRATE_LOOT[CAJA_EXCLUSIVA].indexOf(entrada!);
+    const peso = tablaDePesos(CAJA_EXCLUSIVA)[idxEspectro] ?? 0;
     const prob = peso / totalLegendaria;
     // El banco mide la entrada suelta, que es lo que la ruleta enseña. Y mide el
     // PESO REAL (el de `tablaDePesos`, ya rareza y bolsa aplicadas) contra la
@@ -211,7 +225,7 @@ async function main() {
     // seguir recibiendo el mismo compañero.
     for (let i = 0; i < indiceDelFantasmaAzulado; i++) {
       const nombre = CRATE_ONLY_COMPANIONS[i].name;
-      const enTabla = CAJAS.some(c =>
+      const enTabla = [...CAJAS, 10].some(c =>
         CRATE_LOOT[c].some(e => e.build({ ownedCosmetics: [] }).item?.name === nombre)
       );
       check(`D1: el índice ${i} (${nombre}) sigue saliendo de alguna caja`,
@@ -273,7 +287,7 @@ async function main() {
 
     // Y que el poder que sale sea el del rango del tier, no uno suelto.
     {
-      const entrada = CRATE_LOOT.legendary.find(e => e.id === 'up')!;
+      const entrada = CRATE_LOOT[CAJA_EXCLUSIVA].find(e => e.id === 'up')!;
       for (let i = 0; i < 300; i++) {
         const p: any = entrada.build({ ownedCosmetics: [] });
         if (p.kind !== 'companion') continue;
@@ -357,11 +371,20 @@ async function main() {
     // ser altísima (el salto de una común es un Sobrecargado por diseño), pero
     // para el peso vale la de la caja: si no, la caja común tendría un Divino
     // compitiendo con su Raro y dejaría de parecer una común.
-    const TOPES: Record<string, number> = { common: 1, rare: 2, epic: 3, legendary: 4 };
-    for (const c of CAJAS) {
+    // F31 · EL TOPE DE CADA CAJA ES SU RAREZA, LEÍDA DE SU NOMBRE.
+    //
+    // Antes era un objeto de cuatro: `{ common: 1, rare: 2, epic: 3, legendary: 4 }`.
+    // Es decir, **el rango de rareza del botín estaba escrito dos veces** —aquí y
+    // en el nombre de la caja— y con diez cajas eran veinte números que nadie
+    // comparaba. Ahora sale de `RARITY_RANK[CRATE_TYPES[c].rarity]`, que es el
+    // mismo dato que pinta la carta y el mismo que usa `rarezaAcotada`. Si las
+    // dos copias se separaban, la caja empezaba a dar un Divino con más peso que
+    // su Raro y el banco de abajo lo canta.
+    for (const c of [...CAJAS, 10] as CrateType[]) {
+      const tope = RARITY_RANK[CRATE_TYPES[c].rarity] ?? 0;
       const rarezas = rarezaDeTabla(c);
-      const fuera = rarezas.filter(r => (RARITY_RANK[r] ?? 0) > TOPES[c]);
-      check(`rareza: en la caja ${c} ninguna entrada pesa por encima de su tope`,
+      const fuera = rarezas.filter(r => (RARITY_RANK[r] ?? 0) > tope);
+      check(`rareza: en la caja T${c} ninguna entrada pesa por encima de su tope`,
         fuera.length === 0,
         fuera.length ? `fuera de tope: ${[...new Set(fuera)].join(',')}` :
           [...new Set(rarezas)].join(','));

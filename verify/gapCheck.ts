@@ -160,8 +160,8 @@ async function main() {
   // =========================================================================
   {
     const items = [
-      collector('a'), collector('b'), crate('p1', 'common', 3), crate('p2', 'common', 2),
-      key('k1', 0, 7), companion('m1')
+      collector('a'), collector('b'), crate('p1', 1, 3), crate('p2', 1, 2),
+      key('k1', 1, 7), companion('m1')
     ];
     const g = await boot(baseSave(items));
     const original = new Set(ids(g));
@@ -195,7 +195,7 @@ async function main() {
     g.setWarehouseGaps(['c0', 'c5']);
     check('capacidad: los huecos no cuentan como ranura',
       wh(g).length === 10 && g.getCapacity() === 10, `${wh(g).length}/${g.getCapacity()}`);
-    const r = g.buyStoreItem('collectorCardT1');
+    const r = g.buyStoreItem('keyT1');
     check('capacidad: con el almacen lleno y huecos, la compra se rechaza igual',
       r === false, JSON.stringify(r));
   }
@@ -204,7 +204,7 @@ async function main() {
     const items = Array.from({ length: 9 }, (_, i) => collector('c' + i));
     const g = await boot(baseSave(items, { warehouseCapacity: 10, nanites: 5000 }));
     g.setWarehouseGaps(['c0']);
-    const r = g.buyStoreItem('collectorCardT1');
+    const r = g.buyStoreItem('keyT1');
     check('capacidad: y con hueco de sobra la compra SI entra', !!r && wh(g).length === 10,
       `${JSON.stringify(r)} ${wh(g).length}`);
   }
@@ -222,7 +222,7 @@ async function main() {
   }
   {
     const g = await boot(baseSave([
-      collector('a'), collector('b'), crate('p1', 'common', 2), collector('c')
+      collector('a'), collector('b'), crate('p1', 1, 2), collector('c')
     ]));
     g.setWarehouseGaps(['b', 'p1']);
     g.sellItem('p1');

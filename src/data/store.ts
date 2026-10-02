@@ -63,38 +63,58 @@ export const CONSUMABLES = {
 //  Definición de cada tipo de caja. La fuente de verdad es el item del almacén,
 //  `state.crates` se mantiene sincronizado como contador para las migraciones.
 //
-//  `details` dice qué trae y qué llave abre. Antes decía "contiene
-//  recompensas básicas", que no dice nada: el jugador no tenía forma de saber si
-//  le convenía ni de qué llave necesitaba.
-export const CRATE_TYPES = {
-  common: {
-    name: 'Caja Común',
-    rarity: 'Común',
-    // POR QUÉ AQUÍ NO DICE "Abre con una Llave de Cifrado". Lo decía, escrito a
-    // mano, y era una quinta copia de la regla de qué llave abre qué (B6): los
-    // cuatro textos de las llaves mentían, y este también. La llave que hace
-    // falta se enseña en la tarjeta del cofre, y sale de `KEY_DEFS` +
-    // `CRATE_KEY_TIER` —una sola vez—, así que aquí solo va lo que es botín.
-    details: 'Recompensas de partida temprana: nanitas, cristales, algún dron T1.'
-  },
-  rare: {
-    name: 'Caja Rara',
-    rarity: 'Raro',
-    details: 'Material de forja y compañeros T3, con algún recolector T4 sobrecargado.'
-  },
-  epic: {
-    name: 'Caja Épica',
-    rarity: 'Épico',
-    details: 'Compañeros T6 y recolectores T6, con piedras de calibración.'
-  },
-  legendary: {
-    name: 'Caja Legendaria',
-    rarity: 'Legendario',
-    details: 'Recolectores T8 y compañeros Divinos que no se compran. Sale la Nanopartícula de Estabilidad.'
-  }
-} as const;
+//  F31 · UNA CAJA POR TIER. Antes había cuatro cajas —común, rara, épica y
+//  legendaria— y ninguna se corresponded con un tier: la legendaria soltaba
+//  recolectores T8 y no había caja que diera un T9. El jugador tenía que
+//  comprarlos en la tienda, así que la caja alta era un adorno: se abría por
+//  gusto, no para progresar.
+//
+//  Ahora hay una caja por tier y el `CrateType` ES el tier. Eso no es una
+//  comodidad de código: es lo que hace que la regla "la caja N suelta el cristal
+//  N, el expansor N y la caja N+1" se pueda escribir **una vez** y valga para las
+//  diez. Con cuatro tablas escritas a mano, esas reglas eran cuatro copias que
+//  se separaron en el primer rebalanceo — que es literalmente B6—.
+//
+//  Y el nombre lo dice: `Caja T7` no promete una rareza que puede no ser la del
+//  botín, y `inferCrateType()` pasa a ser leer un número del texto en vez de
+//  adivinar por palabra suelta. Antes caía en "legendaria" con cualquier
+//  nombre que no reconociera, así que un item mal escrito se abría como el
+//  mejor cofre del juego.
+export const CRATE_TYPES: Record<CrateType, { name: string; rarity: string; details: string }> = {
+  1: { name: 'Caja T1', rarity: 'Común',     details: 'Nanitas, cristal T1, un compañero T1 y su llave.' },
+  2: { name: 'Caja T2', rarity: 'Común',     details: 'Nanitas, cristal T2, un compañero T2 y su llave.' },
+  3: { name: 'Caja T3', rarity: 'Raro',      details: 'Nanitas, cristal T3, un compañero T3, un recolector T3 y su llave.' },
+  4: { name: 'Caja T4', rarity: 'Raro',      details: 'Nanitas, cristal T4, material de T4, un recolector T4 y su llave.' },
+  5: { name: 'Caja T5', rarity: 'Épico',     details: 'Nanitas, cristal T5, material de T5, un recolector T5 y su llave.' },
+  6: { name: 'Caja T6', rarity: 'Épico',     details: 'Nanitas, cristal T6, piedras de calibración y un recolector T6.' },
+  7: { name: 'Caja T7', rarity: 'Legendario', details: 'Nanitas, cristal T7, un recolector T7 y la llave de la T8.' },
+  8: { name: 'Caja T8', rarity: 'Legendario', details: 'Nanitas, cristal T8, la Nanopartícula de Estabilidad y la llave de la T9.' },
+  9: { name: 'Caja T9', rarity: 'Mítico',    details: 'Nanitas, cristal T9, un recolector T9 y la llave de la T10.' },
+  10: { name: 'Caja T10', rarity: 'Divino',  details: 'Nanitas, cristal T10 y lo mejor de la caja: compañero y recolector T10.' }
+};
 
-export type CrateType = keyof typeof CRATE_TYPES;
+/**
+ * Los diez niveles de caja, de menor a mayor.
+ *
+ * Lo leen el Component, el almacén y el costeo, y sale de aquí para que no
+ * puedan discrepar sobre cuántas cajas hay. El tipo es el número, que es la
+ * decisión de F31: hace que "el tier de la caja" no sea un dato aparte del
+ * "nivel", y por eso no hay forma de que los dos se contradigan.
+ */
+export const CRATE_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+/** El nivel más alto de caja que existe. */
+export const MAX_CRATE_TIER = 10;
+
+/**
+ * El tipo de caja ES su nivel.
+ *
+ * Antes era `'common' | 'rare' | 'epic' | 'legendary'`, y el nivel del botín
+ * viajaba aparte en `TIER_PROPIO` (`crateLoot.ts`): una quinta copia de una
+ * regla que se puede deducir del propio tipo. Numerándolo, la regla del botín
+ * se escribe una vez y no puede quedar anticuada.
+ */
+export type CrateType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 // ==========================================================================
 //  Precios
@@ -106,6 +126,35 @@ export const COLLECTOR_BASE_COSTS = {
   plasmaCannon: 150,
   quantumDisruptor: 1200
 };
+
+/**
+ * F31 · LO QUE CUESTA UN TIER, Y LO USA TODO EL MUNDO.
+ *
+ * Antes esta curva estaba escrita tres veces: en `companionCardT1..T10`, en
+ * `collectorCardT1..T10` y en el precio de las cuatro cajas. Tres copias que
+ * además no coincidían —la caja común costaba 500 y el compañero T1 900, sin
+ * que nadie supiera cuál era el número bueno—.
+ *
+ * Ahora hay UNA tabla, y sale de ella:
+ *
+ *    · la carta de compañero T{n} y la de recolector T{n};
+ *    · el valor de la caja T{n} (`CRATE_COSTS`), que es lo que vale de reventa
+ *      y lo que paga la compensación si la caja no da nada countable;
+ *    · el precio de la llave T{n} (`KEY_COSTS`), que es la mitad, y por qué
+ *      está en `items.ts` con su comentario entero.
+ *
+ * Que las cajas valgan lo que un objeto de su tier es lo que hace que la ruleta
+ * pueda enseñar el coste de la caja sin que sea un número inventado: el
+ * jugador ya sabe cuánto cuesta un T7 porque lo ha visto en la tienda.
+ */
+export const COSTE_POR_TIER: readonly number[] = [
+  900, 1_700, 3_000, 5_500, 9_900, 18_000, 32_550, 59_050, 106_950, 193_850
+];
+
+/** El precio de la caja de un tier. Índice 0 = T1. */
+export function costeDeCaja(tier: number): number {
+  return CRATE_COSTS[Math.min(CRATE_COSTS.length, Math.max(1, Math.floor(tier))) - 1];
+}
 
 // ==========================================================================
 //  LA CURVA DE LAS CARTAS, que es donde vive el balance entero.
@@ -142,7 +191,65 @@ export const COLLECTOR_BASE_COSTS = {
 //  Y las cuatro son comprables porque la cadena de llaves era una escalera
 //  imposible (B6) y la tienda tiene que poder ser la red de seguridad de un
 //  jugador al que le faltan llaves.
-export const KEY_COSTS = [250, 900, 3_000, 11_000] as const;
+//
+//  F31 · AHORA HAY DIEZ Y LOS DOS PRECIOS SALEN DE LA CURVA DE TIERS.
+//
+//  La caja vale **la mitad** de un objeto de su tier y la llave **la mitad de
+//  la caja**, y las dos mitades son el número que importa. Si la llave costara
+//  más que la caja, comprar caja y llave sería tirar el dinero; si costara lo
+//  mismo, da igual. Con la mitad, comprar llave y caja sale siempre más caro que
+//  abrir cajas, así que la tienda nunca es el camino bueno — que es lo que hace
+//  que abrir un cofre siga siendo una decisión y no una tarea.
+//
+//  **LA CAJA T1 BAJA DE 500 A 450.** No es un redondeo: la caja común valía 500
+//  y su llave 250, y el par salía en 750. Con la curva son 450 y 225, o sea
+//  675. F31 quita veinte cartas de la tienda, y subirle el precio a quien está
+//  en el primer minuto sería cobrarle el recorte.
+//
+//  **Y LAS DIEZ LLAVES SE VENDEN, QUE ES LA DECISIÓN.** F31 quita las cajas
+//  altas de la tienda pero deja todas las llaves a la venta, y suena a
+//  contradicción: si compro la llave T9 y no tengo la caja T9, ¿qué hago? La
+//  respuesta es que no pierdo nada, porque la llave no es la puerta: **la puerta
+//  es la caja.** La T9 sale de abrir la T8, y la T8 sale de abrir la T7. Comprar
+//  la llave T9 es tenerla guardada para cuando llegue, que es lo que hace un
+//  jugador con una caja comprada. La alternativa —llaves altas solo de caja— es
+//  la que deja la tienda inservible para un jugador al que le faltan llaves, que
+//  es lo que B6 señalaba.
+export const CRATE_COSTS: readonly number[] = COSTE_POR_TIER.map(c => Math.round(c / 2));
+
+export const KEY_COSTS: readonly number[] = CRATE_COSTS.map(c => Math.round(c / 2));
+
+/**
+ * F31 · LOS NOMBRES DE LAS DIEZ LLAVES, Y POR QUÉ ESTÁN AQUÍ Y NO EN `items.ts`.
+ *
+ * `KEY_DEFS` —que vive en `items.ts`— es quien tiene el nombre de cada llave, y
+ * `STORE_ITEMS` —que vive aquí— es quien pinta la carta. Antes no había problema:
+ * la carta escribía el nombre a mano, cuatro veces, y un banco comprueba que
+ * nombre y nombre coincidan. Con diez llaves, escribir diez nombres en dos sitios
+ * es escribir veinte.
+ *
+ * **NO SE PUEDE ARREGLAR IMPORTANDO `KEY_DEFS` AQUÍ**, porque `items.ts` importa
+ * este fichero: sería un ciclo. Así que el nombre **se queda en la capa de
+ * abajo** y `items.ts` lo lee. Un solo sitio, ninguna flecha nueva y el banco
+ * sigue pudiendo comprobar que la carta y el item dicen lo mismo (B7).
+ */
+export const KEY_NAMES: readonly { name: string; namePlural: string; rarity: string }[] = [
+  { name: 'Llave de Cifrado', namePlural: 'Llaves de Cifrado', rarity: 'Común' },
+  { name: 'Llave Reforzada', namePlural: 'Llaves Reforzadas', rarity: 'Común' },
+  { name: 'Llave Rúnica', namePlural: 'Llaves Rúnicas', rarity: 'Raro' },
+  { name: 'Llave de Fase', namePlural: 'Llaves de Fase', rarity: 'Raro' },
+  { name: 'Llave Espectral', namePlural: 'Llaves Espectrales', rarity: 'Épico' },
+  { name: 'Llave Cuántica', namePlural: 'Llaves Cuánticas', rarity: 'Épico' },
+  { name: 'Llave Prismática', namePlural: 'Llaves Prismáticas', rarity: 'Legendario' },
+  { name: 'Llave del Vacío', namePlural: 'Llaves del Vacío', rarity: 'Legendario' },
+  { name: 'Llave de la Singularidad', namePlural: 'Llaves de la Singularidad', rarity: 'Mítico' },
+  { name: 'Llave Primordial', namePlural: 'Llaves Primordiales', rarity: 'Divino' }
+];
+
+/** El precio de la llave de una caja. Índice 0 = T1. */
+export function costeDeLlave(tier: number): number {
+  return KEY_COSTS[Math.min(KEY_COSTS.length, Math.max(1, Math.floor(tier))) - 1];
+}
 
 // ==========================================================================
 //  Expansores de almacén por tipo (F27)
@@ -282,16 +389,32 @@ export function defDeRanura(n: number): { cost: number; label: string } {
 export const RANURA_POR_CARTA: Record<string, { da: number; etiqueta: string }> =
   Object.fromEntries(COMPANION_SLOT_BUY.map((c, i) => [`companionSlot${i + 1}`, c]));
 
+/**
+ * F31 · LA TIENDA SOLO VENDE LA CAJA BÁSICA.
+ *
+ * Antes vendía cuatro cajas y veinte cartas de tier. Lo que se quita son las
+ * veinte cartas —`companionCardT*` y `collectorCardT*`— y las tres cajas
+ * altas, y el motivo es el mismo en los dos casos: **mientras el T8 esté a la
+ * venta, las cajas no son necesarias.** Se podía abrir una legendaria entera y
+ * seguir necesitando la tienda para el tier siguiente, así que la caja alta era
+ * un adorno y no una puerta.
+ *
+ * Lo que queda es lo que de verdad es el arranque: la caja T1 y las diez llaves.
+ * Las llaves siguen todas a la venta y hay que leer bien por qué — está en el
+ * comentario de `KEY_COSTS`, y es que la llave no es la puerta, la puerta es la
+ * caja. Comprar la llave T9 es tenerla guardada para cuando la T9 llegue, que
+ * llega por la T8.
+ *
+ * Los precios salen todos de `COSTE_POR_TIER` y de `defDeRanura()`, y ninguna
+ * carta escribe su número: si el precio cambia en un sitio, cambia en los tres
+ * (R3).
+ */
 export const STORE_ITEMS = {
-  keyT0: { cost: KEY_COSTS[0], label: 'Llave de Cifrado' },
-  keyT1: { cost: KEY_COSTS[1], label: 'Llave Reforzada' },
-  keyT2: { cost: KEY_COSTS[2], label: 'Llave Rúnica' },
-  keyT3: { cost: KEY_COSTS[3], label: 'Llave del Vacío' },
+  ...Object.fromEntries(
+    KEY_NAMES.map((k, i) => [`keyT${i + 1}`, { cost: KEY_COSTS[i], label: k.name }])
+  ) as Record<`keyT${number}`, { cost: number; label: string }>,
   upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
-  commonCrate: { cost: 500, label: 'Caja Común' },
-  rareCrate: { cost: 1500, label: 'Caja Rara' },
-  epicCrate: { cost: 5500, label: 'Caja Épica' },
-  legendaryCrate: { cost: 21000, label: 'Caja Legendaria' },
+  crateT1: { cost: CRATE_COSTS[0], label: CRATE_TYPES[1].name },
   // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).
   // Se han retirado de la tienda; ver el comentario en `CONSUMABLES` para el porqué
   // de que el efecto siga en el motor y solo desaparezca la compra.
@@ -312,37 +435,61 @@ export const STORE_ITEMS = {
   // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
   // una decisión, no algo que se compre en masa y se gaste sin pensar.
   calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },
-  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y un afijo extra)' },
-  companionCardT1: { cost: 900, label: 'Compañero Tier 1' },
-  companionCardT2: { cost: 1700, label: 'Compañero Tier 2' },
-  companionCardT3: { cost: 3000, label: 'Compañero Tier 3' },
-  companionCardT4: { cost: 5500, label: 'Compañero Tier 4' },
-  companionCardT5: { cost: 9900, label: 'Compañero Tier 5' },
-  companionCardT6: { cost: 18000, label: 'Compañero Tier 6' },
-  companionCardT7: { cost: 32550, label: 'Compañero Tier 7' },
-  companionCardT8: { cost: 59050, label: 'Compañero Tier 8' },
-  companionCardT9: { cost: 106950, label: 'Compañero Tier 9' },
-  companionCardT10: { cost: 193850, label: 'Compañero Tier 10' },
-  // Recolectores: la MISMA tabla que los compañeros.
-  //
-  // Comparten precio a propósito, y no por pereza: `generateCollectorByTier()` y
-  // `generateCompanionByTier()` sacan el poder del mismo `TIER_SYSTEM.ranges`, así
-  // que un T10 de uno y un T10 del otro dan exactamente el mismo poder. Que
-  // costaran distinto haría que el jugador pagara un sobreprecio invisible por un
-  // número que no existe.
-  //
-  // El precio sigue al DAÑO y sube con el tier. Antes escalaba 1.5x por tier
-  // mientras el poder iba 1.62x, con lo que el coste por punto bajaba y el T10
-  // acababa siendo 3x peor que el T1: una trampa invisible detrás de un número
-  // grande. Con la tabla de arriba el sobreprecio es al revés y a propósito.
-  collectorCardT1: { cost: 900, label: 'Recolector Tier 1' },
-  collectorCardT2: { cost: 1700, label: 'Recolector Tier 2' },
-  collectorCardT3: { cost: 3000, label: 'Recolector Tier 3' },
-  collectorCardT4: { cost: 5500, label: 'Recolector Tier 4' },
-  collectorCardT5: { cost: 9900, label: 'Recolector Tier 5' },
-  collectorCardT6: { cost: 18000, label: 'Recolector Tier 6' },
-  collectorCardT7: { cost: 32550, label: 'Recolector Tier 7' },
-  collectorCardT8: { cost: 59050, label: 'Recolector Tier 8' },
-  collectorCardT9: { cost: 106950, label: 'Recolector Tier 9' },
-  collectorCardT10: { cost: 193850, label: 'Recolector Tier 10' }
+  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y un afijo extra)' }
 };
+
+/**
+ * F31 · LAS CARTAS DE TIER SE GENERAN, NO SE ESCRIBEN.
+ *
+ * Existían veinte literales —diez de compañero y diez de recolector— con el
+ * precio repetido veinte veces, y eran veinte oportunidades de que dos no
+ * coincidieran. Ahora se derivan de `COSTE_POR_TIER` y de `TONE_CARD`, que es
+ * donde está la diferencia real entre comprar por puntos y comprar por daño.
+ *
+ * El precio es el del tier Y NO UN POCO MÁS, a propósito. La curva de la tienda
+ * es un sobreprecio deliberado: el coste por punto sube ~12% por tier, así que
+ * subir de tier da un número más grande y peor valor, y el T10 es un objeto de
+ * escaparate en vez de una mejora. Como ya no hay cartas de tier, ese sobreprecio
+ * vive ahora en la caja: la caja T{n} cuesta la mitad de un T{n} y da un T{n},
+ * así que el mismo criterio sigue aplicando, solo que por el camino largo.
+ */
+export const TIER_CARD_KIND: Record<`${'companion' | 'collector'}CardT${number}`, string> = {
+  companionCardT1: 'Compañero Tier 1', collectorCardT1: 'Recolector Tier 1',
+  companionCardT2: 'Compañero Tier 2', collectorCardT2: 'Recolector Tier 2',
+  companionCardT3: 'Compañero Tier 3', collectorCardT3: 'Recolector Tier 3',
+  companionCardT4: 'Compañero Tier 4', collectorCardT4: 'Recolector Tier 4',
+  companionCardT5: 'Compañero Tier 5', collectorCardT5: 'Recolector Tier 5',
+  companionCardT6: 'Compañero Tier 6', collectorCardT6: 'Recolector Tier 6',
+  companionCardT7: 'Compañero Tier 7', collectorCardT7: 'Recolector Tier 7',
+  companionCardT8: 'Compañero Tier 8', collectorCardT8: 'Recolector Tier 8',
+  companionCardT9: 'Compañero Tier 9', collectorCardT9: 'Recolector Tier 9',
+  companionCardT10: 'Compañero Tier 10', collectorCardT10: 'Recolector Tier 10'
+};
+
+export type TierCardKey = keyof typeof TIER_CARD_KIND;
+
+/**
+ * La carta de tier que se le puede comprar al jugador, con su precio.
+ *
+ * F31 · SIGUEN EXISTIENDO COMO DATOS PERO **NO SE VENDEN**: la tienda ya no las
+ * ofrece y `buyStoreItem()` las rechaza con un aviso que dice por qué. Se
+ * conservan por dos razones, y las dos son de datos y no de interfaz: la curva
+ * de tiers hay que poder medirla (`playthroughCheck`, `balanceCheck`) aunque no
+ * se venda, y `STORE_KEY_TIER`-style los bancos comparan precios entre sí. El
+ * precio y la etiqueta salen de `COSTE_POR_TIER`, o sea de la misma tabla que
+ * antes, así que un rebalance los mueve a los veinte a la vez.
+ */
+export const TIER_CARDS: Record<TierCardKey, { cost: number; label: string }> =
+  Object.fromEntries(
+    (Object.keys(TIER_CARD_KIND) as TierCardKey[]).map(k => {
+      const tier = parseInt(k.replace(/\D+/g, ''), 10);
+      return [k, { cost: COSTE_POR_TIER[tier - 1], label: TIER_CARD_KIND[k] }];
+    })
+  ) as Record<TierCardKey, { cost: number; label: string }>;
+
+/** La carta de tier de una carta de tienda, o `undefined` si no es de tier. */
+export function tierCardDe(itemKey: string): TierCardKey | undefined {
+  return (TIER_CARDS as Record<string, unknown>)[itemKey]
+    ? (itemKey as TierCardKey)
+    : undefined;
+}

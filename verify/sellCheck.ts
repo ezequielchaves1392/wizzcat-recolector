@@ -9,6 +9,7 @@
 // ==========================================================================
 
 import { createGameLoop } from '../src/gameLoop';
+import * as factories from './kit';
 
 type Row = { name: string; ok: boolean; detail: string };
 const rows: Row[] = [];
@@ -54,22 +55,25 @@ const companion = (id: string, tier = 3) => ({
   id, name: 'Compañero T' + tier, type: 'companion', details: 'Recolección por segundo: +10/s',
   rarity: 'Épico', tier, sellPrice: 2000
 });
-const crate = (id: string, tipo: 'common' | 'rare' | 'epic' | 'legendary' = 'common', stack = 1) => ({
-  id, name: { common: 'Caja Común', rare: 'Caja Rara', epic: 'Caja Épica', legendary: 'Caja Legendaria' }[tipo],
-  type: 'crate', details: 'x', rarity: 'Común', tier: 0, sellPrice: 125, stackable: true, stackCount: stack
-});
-const key = (id: string, tier = 0, stack = 1) => ({
-  id, name: { 0: 'Llave de Cifrado', 1: 'Llave Reforzada', 2: 'Llave Rúnica', 3: 'Llave del Vacío' }[tier],
-  type: 'key', details: 'x', rarity: 'Común', tier, sellPrice: 480, stackable: true, stackCount: stack
-});
-const crystal = (id: string, tier = 1, stack = 1) => ({
-  id, name: { 1: 'Cristal de Afino', 2: 'Cristal de Fase', 3: 'Cristal de Entropía', 4: 'Cristal Singular' }[tier],
-  type: 'crystal', details: 'x', rarity: 'Común', tier, sellPrice: 180, stackable: true, stackCount: stack
-});
-const consumable = (id: string, stack = 1, over: any = {}) => ({
-  id, name: 'Tarjeta AFK', type: 'consumable', details: 'x', rarity: 'Raro', tier: 0,
-  sellPrice: 2500, stackable: true, stackCount: stack, buffId: 'afk', ...over
-});
+// F31 · ESTE BANCO TENÍA SUS PROPIAS FÁBRICAS DE ITEM, Y NO DEBERÍA.
+//
+// `crate`, `key` y `crystal` estaban definidas aquí **además** de las de `kit.ts`,
+// con tablas de nombres propias. Y las dos copias ya se habían separado: las
+// listas de aquí tenían cuatro nombres y el juego tenía diez. Un banco que
+// fabrica un `Cristal Singular` que el juego no fabrica mide un objeto que no
+// existe, que es la forma más tranquila de tener un banco en verde y falso.
+const { crate, key, crystal } = factories;
+
+/**
+ * Y la de consumible, que aquí tenía OTRA FIRMA: `(id, stack, over)` en vez de
+ * `(id, buffId, stack, over)`. Al cambiar a la del kit sin querer, `consumable('u1', 3)`
+ * pasó a significar "tres tarjetas AFK" cuando quería decir "una pila de tres", y
+ * los catorce bancos de AFK de este fichero se cayeron de golpe. Una firma
+ * distinta en dos sitios que se llaman igual es peor que un nombre distinto:
+ * compila, y falla por el motivo equivocado.
+ */
+const consumable = (id: string, stack = 1, over: any = {}) =>
+  factories.consumable(id, 'afk', stack, { name: 'Tarjeta AFK', ...over });
 /** Un recolector como lo guardaba el juego ANTES del renombre a 'collector'. */
 const legacyWeapon = (id = 'weapon_blaster_001', over: any = {}) => ({
   id, name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5',
@@ -77,13 +81,15 @@ const legacyWeapon = (id = 'weapon_blaster_001', over: any = {}) => ({
 });
 /** Partida base con contadores ya en paz con el almacén. */
 function baseSave(warehouse: any[], extra: any = {}) {
-  const crates = { common: 0, rare: 0, epic: 0, legendary: 0 };
+  // F31 · Diez niveles, y el nivel se lee del número del nombre con la misma
+  // regla que usa el juego. Antes eran cuatro claves y una cadena de `includes`
+  // que adivinaba la rareza por el texto —otra copia de la regla del motor—.
+  const crates: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
   warehouse.forEach(w => {
-    if (w.type === 'crate') {
-      const t = w.name.includes('Legendaria') ? 'legendary' : w.name.includes('Épica') ? 'epic'
-        : w.name.includes('Rara') ? 'rare' : 'common';
-      crates[t] += w.stackCount || 1;
-    }
+    if (w.type !== 'crate') return;
+    const m = /caja t(\d+)/.exec(String(w.name || '').toLowerCase());
+    if (!m) return;
+    crates[Number(m[1])] += w.stackCount || 1;
   });
   return {
     saveVersion: 7, nanites: 1000, warehouse, crates,
@@ -106,7 +112,7 @@ async function main() {
     const s = g.getState();
     check('caja suelta: sellItem devuelve ok', r.ok, r.msg ?? '');
     check('caja suelta: el almacén se queda vacío', (s.warehouse as any[]).length === 0, ids(g).join(','));
-    check('caja suelta: contador de cajas a 0', s.crates.common === 0, 'crates.common=' + s.crates.common);
+    check('caja suelta: contador de cajas a 0', s.crates[1] === 0, 'crates[1]=' + s.crates[1]);
     check('caja suelta: paga el precio', r.gained === 125 && nanites(g) === antes + 125, 'ganado=' + r.gained);
 
     const g2 = await reload();
@@ -115,11 +121,11 @@ async function main() {
 
   // --- 2. Pila de cajas --------------------------------------------------
   {
-    const g = await boot(baseSave([crate('c1', 'common', 4)]));
+    const g = await boot(baseSave([crate('c1', 1, 4)]));
     const r = g.sellItem('c1');
     check('pila de 4 cajas: se vende entera', r.ok && deType(g, 'crate') === 0, ids(g).join(','));
     check('pila de 4 cajas: paga 4 x 125', r.gained === 500, 'ganado=' + r.gained);
-    check('pila de 4 cajas: contador a 0', g.getState().crates.common === 0, 'crates.common=' + g.getState().crates.common);
+    check('pila de 4 cajas: contador a 0', g.getState().crates[1] === 0, 'crates[1]=' + g.getState().crates[1]);
   }
 
   // --- 3. Dos cajas del mismo tipo, una a una ----------------------------
@@ -130,20 +136,20 @@ async function main() {
   //     entera. Para seguir comprobando la venta de uno en uno hace falta que sean
   //     cajas DISTINTAS, y ese caso es ahora el 3b.
   {
-    const g = await boot(baseSave([crate('c1', 'common'), crate('c2', 'epic')]));
+    const g = await boot(baseSave([crate('c1', 1), crate('c2', 6)]));
     const antes = nanites(g);
     g.sellItem('c1');
     check('dos cajas distintas: tras la primera queda 1',
-      deType(g, 'crate') === 1 && g.getState().crates.common === 0 && g.getState().crates.epic === 1,
-      'comunes=' + g.getState().crates.common + ' epicas=' + g.getState().crates.epic);
+      deType(g, 'crate') === 1 && g.getState().crates[1] === 0 && g.getState().crates[6] === 1,
+      'comunes=' + g.getState().crates[1] + ' epicas=' + g.getState().crates[6]);
     g.sellItem('c2');
     check('dos cajas distintas: tras la segunda no queda ninguna',
-      deType(g, 'crate') === 0 && g.getState().crates.common === 0 && g.getState().crates.epic === 0,
-      'comunes=' + g.getState().crates.common + ' epicas=' + g.getState().crates.epic);
+      deType(g, 'crate') === 0 && g.getState().crates[1] === 0 && g.getState().crates[6] === 0,
+      'comunes=' + g.getState().crates[1] + ' epicas=' + g.getState().crates[6]);
     check('dos cajas distintas: paga las dos', nanites(g) === antes + 125 + 125, 'nanites=' + nanites(g));
     const g2 = await reload();
     check('dos cajas distintas: no revive ninguna al recargar',
-      deType(g2, 'crate') === 0 && g2.getState().crates.epic === 0, 'ids=' + ids(g2).join(','));
+      deType(g2, 'crate') === 0 && g2.getState().crates[6] === 0, 'ids=' + ids(g2).join(','));
   }
   {
     // 3b. Dos cajas IGUALES son una pila: se venden enteras, se pagan las dos, y
@@ -154,21 +160,21 @@ async function main() {
     const antes = nanites(g);
     check('pila de cajas iguales: se funden en un solo item', deType(g, 'crate') === 1,
       'items=' + deType(g, 'crate'));
-    check('pila de cajas iguales: y el contador sigue diciendo 2', g.getState().crates.common === 2,
-      'crates.common=' + g.getState().crates.common);
+    check('pila de cajas iguales: y el contador sigue diciendo 2', g.getState().crates[1] === 2,
+      'crates[1]=' + g.getState().crates[1]);
     const r = g.sellItem('c1');
     check('pila de cajas iguales: vender una se lleva la pila entera',
       r.ok && deType(g, 'crate') === 0, 'quedan=' + deType(g, 'crate'));
     check('pila de cajas iguales: paga las dos unidades', nanites(g) === antes + 250, 'nanites=' + nanites(g));
-    check('pila de cajas iguales: y el contador queda a 0', g.getState().crates.common === 0,
-      'crates.common=' + g.getState().crates.common);
+    check('pila de cajas iguales: y el contador queda a 0', g.getState().crates[1] === 0,
+      'crates[1]=' + g.getState().crates[1]);
     const g2 = await reload();
     check('pila de cajas iguales: no revive al recargar', deType(g2, 'crate') === 0, 'ids=' + ids(g2).join(','));
   }
 
   // --- 4. Los otros cuatro tipos ----------------------------------------
   {
-    const g = await boot(baseSave([key('k1', 0, 3)]));
+    const g = await boot(baseSave([key('k1', 1, 3)]));
     const r = g.sellItem('k1');
     check('llave: desaparece', r.ok && deType(g, 'key') === 0, ids(g).join(','));
     check('llave: contador de llaves a 0', g.getState().keys === 0, 'keys=' + g.getState().keys);
@@ -230,41 +236,41 @@ async function main() {
 
   // --- 6. Abrir una caja: el otro camino que reutilizaba el contador ----
   {
-    const g = await boot(baseSave([crate('c1'), key('k1', 0)]));
+    const g = await boot(baseSave([crate('c1'), key('k1', 1)]));
     const r = g.openCrateBox('c1', 'k1');
     check('abrir caja: ok', r.ok, r.msg ?? '');
     check('abrir caja: la caja se consume', deType(g, 'crate') === 0, ids(g).join(','));
     // El botín es aleatorio y puede soltar llaves, así que se comprueba la
     // llave concreta gastada, no el recuento de llaves del almacén.
     check('abrir caja: la llave se consume', !find(g, 'k1'), ids(g).join(','));
-    check('abrir caja: contador a 0', g.getState().crates.common === 0, 'crates.common=' + g.getState().crates.common);
+    check('abrir caja: contador a 0', g.getState().crates[1] === 0, 'crates[1]=' + g.getState().crates[1]);
     const g2 = await reload();
-    check('abrir caja: no revive al recargar', g2.getState().crates.common === 0, 'crates.common=' + g2.getState().crates.common);
+    check('abrir caja: no revive al recargar', g2.getState().crates[1] === 0, 'crates[1]=' + g2.getState().crates[1]);
   }
 
   // --- 7. Migración: el contador sí puede crear cajas, pero solo al cargar
   {
     const g = await boot({ ...baseSave([]), crates: { common: 3, rare: 0, epic: 0, legendary: 0 }, keys: 0 });
-    check('migración: contador huérfano se materializa', g.getState().crates.common === 3,
-      'crates.common=' + g.getState().crates.common);
+    check('migración: contador huérfano se materializa', g.getState().crates[1] === 3,
+      'crates[1]=' + g.getState().crates[1]);
     const g2 = await reload();
-    check('migración: no duplica al cargar otra vez', g2.getState().crates.common === 3,
-      'crates.common=' + g2.getState().crates.common);
+    check('migración: no duplica al cargar otra vez', g2.getState().crates[1] === 3,
+      'crates[1]=' + g2.getState().crates[1]);
     // Y una vez migrado, vender funciona igual. Las 3 cajas huérfanas se
     // materializan en UNA sola pila, así que venderla las elimina todas.
     const primera = (g2.getState().warehouse as any[]).find(w => w.type === 'crate')!.id;
     g2.sellItem(primera);
     check('migración: tras vender, no queda ninguna',
-      g2.getState().crates.common === 0 && deType(g2, 'crate') === 0,
-      'crates.common=' + g2.getState().crates.common + ' items=' + deType(g2, 'crate'));
+      g2.getState().crates[1] === 0 && deType(g2, 'crate') === 0,
+      'crates[1]=' + g2.getState().crates[1] + ' items=' + deType(g2, 'crate'));
   }
 
   // --- 8. Partida nueva y prestigio: los dos Sites donde sí se crea ------
   {
     globalThis.__MEM_DB__ = {};
     const g = await createGameLoop(USER, () => {});
-    check('partida nueva: recibe 2 cajas comunes', g.getState().crates.common === 2,
-      'crates.common=' + g.getState().crates.common);
+    check('partida nueva: recibe 2 cajas comunes', g.getState().crates[1] === 2,
+      'crates[1]=' + g.getState().crates[1]);
     check('partida nueva: las cajas son items reales', deType(g, 'crate') === 1,
       'items de caja=' + deType(g, 'crate') + ' (las 2 en una sola pila)');
     check('partida nueva: y la pila lleva las 2 unidades',
@@ -272,18 +278,18 @@ async function main() {
       'stackCount=' + wh(g).find((w: any) => w.type === 'crate')?.stackCount);
   }
   {
-    const g = await boot(baseSave([crate('c1'), crate('c2'), collector('r1'), collector('r2'), key('k1', 0, 5)],
+    const g = await boot(baseSave([crate('c1'), crate('c2'), collector('r1'), collector('r2'), key('k1', 1, 5)],
       { totalNanitesProduced: 5_000_000, totalCores: 1 }));
         const r = g.prestige();
     check('prestigio: se concede', r.success, r.msg ?? '');
     check('prestigio: el almacén se vacía de lo reciclado', deType(g, 'crate') === 1 && deType(g, 'key') === 0,
       'cajas=' + deType(g, 'crate') + ' llaves=' + deType(g, 'key'));
     check('prestigio: las 2 cajas de partida nueva son reales',
-      g.getState().crates.common === 2 && deType(g, 'crate') === 1,
-      'contador=' + g.getState().crates.common + ' items=' + deType(g, 'crate'));
+      g.getState().crates[1] === 2 && deType(g, 'crate') === 1,
+      'contador=' + g.getState().crates[1] + ' items=' + deType(g, 'crate'));
     const g2 = await reload();
-    check('prestigio: las cajas no se duplican al recargar', g2.getState().crates.common === 2,
-      'contador=' + g2.getState().crates.common);
+    check('prestigio: las cajas no se duplican al recargar', g2.getState().crates[1] === 2,
+      'contador=' + g2.getState().crates[1]);
   }
 
   // --- 9. Contador de tarjetas AFK: unidades, no items --------------------
@@ -480,7 +486,7 @@ async function main() {
   // enseñan el botón y el modal, y tiene que ser el que entra en la cuenta.
   for (const [id, unidades] of [['c1', 4], ['k1', 19], ['x1', 7], ['u1', 3]] as Array<[string, number]>) {
     const g = await boot(baseSave([
-      crate('c1', 'common', unidades), key('k1', 0, unidades),
+      crate('c1', 1, unidades), key('k1', 1, unidades),
       crystal('x1', 1, unidades), consumable('u1', unidades),
       collector('r1'), collector('r2')
     ]));
@@ -523,7 +529,7 @@ async function main() {
   // consumo eso es una decisión equivocada por defecto.
   {
     // Una parte de una pila: qué queda, qué se cobra y qué se guarda.
-    const g = await boot(baseSave([key('k1', 0, 10)]));
+    const g = await boot(baseSave([key('k1', 1, 10)]));
     const antes = nanites(g);
     const r = g.sellItem('k1', 4);
     const pila = find(g, 'k1');
@@ -553,7 +559,7 @@ async function main() {
     // existe" en vez de "el número no cuadra". Cada cantidad necesita su partida.
     const desajustes: string[] = [];
     for (let n = 1; n <= 10; n++) {
-      const g = await boot(baseSave([key('k1', 0, 10)]));
+      const g = await boot(baseSave([key('k1', 1, 10)]));
       const esperado = g.getSellTotal('k1', n);
       const r = g.sellItem('k1', n);
       if (r.gained !== esperado) desajustes.push(`n=${n} cargo=${r.gained} anunciaba=${esperado}`);
@@ -566,7 +572,7 @@ async function main() {
     // Un recorte devuelve menos de lo anunciado, y el botón se lo pregunta a la
     // MISMA función, así que no puede haber discrepancia; lo que no puede pasar
     // es cobrar por unidades que no estaban.
-    const g = await boot(baseSave([key('k1', 0, 3)]));
+    const g = await boot(baseSave([key('k1', 1, 3)]));
     const antes = nanites(g);
     const r = g.sellItem('k1', 99);
     check('parcial: pedir 99 en una pila de 3 se recorta a 3', r.ok && r.sold === 3,
@@ -580,7 +586,7 @@ async function main() {
   {
     // Una cantidad que no es una cantidad NO es una intención de compra. Se
     // rechaza SIN cobrar: es el único caso que `sellItem` rechaza de verdad.
-    const g = await boot(baseSave([key('k1', 0, 5)]));
+    const g = await boot(baseSave([key('k1', 1, 5)]));
     const antes = nanites(g);
     const malos = [0, -3, NaN, Infinity];
     const acepto: string[] = [];
@@ -599,13 +605,13 @@ async function main() {
     // fraccionables, así que "vender 1,7" solo tiene una lectura posible y
     // quedarse con 1 es más útil que dejar el botón muerto. Y por debajo de 1 sí
     // es rechazo, porque ahí no queda ni una unidad entera.
-    const g3 = await boot(baseSave([key('k1', 0, 5)]));
+    const g3 = await boot(baseSave([key('k1', 1, 5)]));
     const a3 = nanites(g3);
     const rDecimal = g3.sellItem('k1', 1.7);
     check('parcial: un decimal se redondea ABAJO y se vende 1, no 2',
       rDecimal.ok && rDecimal.sold === 1 && nanites(g3) === a3 + 480,
       'sold=' + rDecimal.sold + ' ganado=' + rDecimal.gained);
-    const g4 = await boot(baseSave([key('k1', 0, 5)]));
+    const g4 = await boot(baseSave([key('k1', 1, 5)]));
     check('parcial: por debajo de 1 no queda ni una unidad y se rechaza',
       g4.sellItem('k1', 0.5).ok === false, 'vendido 0.5');
 
@@ -617,13 +623,13 @@ async function main() {
   }
   {
     // Vender la pila por partes tiene que sumar lo mismo que venderla de una vez.
-    const g1 = await boot(baseSave([key('k1', 0, 10)]));
+    const g1 = await boot(baseSave([key('k1', 1, 10)]));
     const a1 = nanites(g1);
     g1.sellItem('k1', 3);
     g1.sellItem('k1', 4);
     const r3 = g1.sellItem('k1', 3);
 
-    const g2 = await boot(baseSave([key('k2', 0, 10)]));
+    const g2 = await boot(baseSave([key('k2', 1, 10)]));
     const a2 = nanites(g2);
     const rTodo = g2.sellItem('k2');
 
@@ -637,13 +643,13 @@ async function main() {
   {
     // Una caja se puede vender a medias igual que una llave: son apilables por la
     // misma regla y el contador de cajas tiene que bajar en la misma proporción.
-    const g = await boot(baseSave([crate('c1', 'common', 8)]));
+    const g = await boot(baseSave([crate('c1', 1, 8)]));
     const r = g.sellItem('c1', 5);
     check('parcial: una pila de cajas también se vende a medias',
       r.ok && r.sold === 5 && find(g, 'c1')?.stackCount === 3,
       'sold=' + r.sold + ' quedan=' + find(g, 'c1')?.stackCount);
-    check('parcial: y el contador de cajas sigue a la pila', g.getState().crates.common === 3,
-      'crates.common=' + g.getState().crates.common);
+    check('parcial: y el contador de cajas sigue a la pila', g.getState().crates[1] === 3,
+      'crates[1]=' + g.getState().crates[1]);
     const g2 = await reload();
     check('parcial: las 3 cajas que sobran sobreviven', find(g2, 'c1')?.stackCount === 3,
       'quedan=' + find(g2, 'c1')?.stackCount);

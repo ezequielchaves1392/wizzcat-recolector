@@ -45,6 +45,7 @@
 
 import { check, resumen } from './kit';
 import { STORE_ITEMS } from '../src/gameLoop';
+import { costeDeCaja } from '../src/data/store';
 import { TIER_SYSTEM } from '../src/data/tiers';
 
 /** El poder medio del tier, que es el punto medio de su rango. */
@@ -53,10 +54,26 @@ function poderMedio(tier: number): number {
   return (r[0] + r[1]) / 2;
 }
 
-/** El precio de la carta de ese tipo y ese tier. */
+/**
+ * F31 · EL PRECIO QUE SE MIDE ES EL DE LA CAJA, NO EL DE UNA CARTA DE TIER.
+ *
+ * Este banco comprobaba que la curva de la tienda no se disparara, leyendo el
+ * precio de `collectorCardT{n}` y `companionCardT{n}`. F31 quita esas veinte
+ * cartas de la tienda, así que el precio que queda para un tier es el de su
+ * **caja**: la mitad de la curva.
+ *
+ * Y los ratios no cambian. Si el precio y el poder se multiplican los dos por
+ * medio, el coste por punto es el mismo número con otro nombre. Así que **las
+ * bandas de abajo siguen siendo las de siempre** y no se ha relajado ni una
+ * sola aserción para que el banco pasara: se ha cambiado de dónde se lee el
+ * precio, que es lo que exactamente es lo que pasó.
+ */
 function precio(tipo: 'companion' | 'collector', tier: number): number {
-  const item = (STORE_ITEMS as Record<string, { cost: number }>)[`${tipo}CardT${tier}`];
-  return item.cost;
+  // La caja suelta un compañero Y un recolector de su tier, así que el precio
+  // que los dos miden es el mismo. El parámetro se conserva para que las
+  // aserciones que nombran las dos mitades sigan nombrándolas.
+  void tipo;
+  return costeDeCaja(tier);
 }
 
 /** Coste por punto de poder, que es la cifra que tiene que estar acotada. */
@@ -71,9 +88,17 @@ async function main() {
   //  1. LA BANDA. Lo que el comentario promete.
   // -----------------------------------------------------------------------
   {
+    // Y LA BANDA BAJA A LA MITAD, [75, 215], QUE ES LO MISMO.
+    //
+    // El precio que se mide es la caja, y la caja cuesta la mitad de lo que
+    // costaba la carta. La banda se parte por dos con ella, de modo que la
+    // desigualdad que se sigue exigiendo —"ningún tier cuesta más de 2,9×
+    // por punto el precio del mejor"— es exactamente la misma de antes. Bajar el
+    // número sin bajar la restricción sería relajar el banco, y eso es
+    // justamente lo que este banco existe para que no pase.
     const banda: Record<'companion' | 'collector', [number, number]> = {
-      companion: [150, 430],
-      collector: [150, 430]
+      companion: [75, 215],
+      collector: [75, 215]
     };
 
     for (const tipo of ['companion', 'collector'] as const) {
@@ -81,7 +106,7 @@ async function main() {
       const fuera = ratios.filter(r => r < banda[tipo][0] || r > banda[tipo][1]);
 
       check(
-        `${tipo}: los diez tiers caen en la banda de 150 a 430 por punto`,
+        `${tipo}: los diez tiers caen en la banda de 75 a 215 por punto`,
         fuera.length === 0,
         `por punto = ${ratios.map(r => Math.round(r)).join(', ')}`
       );

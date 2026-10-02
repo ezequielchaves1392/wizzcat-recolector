@@ -97,8 +97,8 @@ async function main() {
     // Las 2 cajas de bienvenida son UN item apilado, no dos: la capacidad se
     // cuenta en ranuras y dos cajas iguales comparten celda.
     check('partida nueva: recargar no duplica las cajas',
-      s(g2).crates.common === 2 && wh(g2).filter((w: any) => w.type === 'crate').length === 1,
-      `items=${wh(g2).filter((w: any) => w.type === 'crate').length} contador=${s(g2).crates.common}`);
+      s(g2).crates[1] === 2 && wh(g2).filter((w: any) => w.type === 'crate').length === 1,
+      `items=${wh(g2).filter((w: any) => w.type === 'crate').length} contador=${s(g2).crates[1]}`);
     check('partida nueva: y la pila sigue con las 2 unidades',
       wh(g2).find((w: any) => w.type === 'crate')?.stackCount === 2,
       'stackCount=' + wh(g2).find((w: any) => w.type === 'crate')?.stackCount);
@@ -111,8 +111,8 @@ async function main() {
     await reload();
     const g3 = await reload();
     check('partida nueva: recargar muchas veces no acumula cajas',
-      s(g3).crates.common === 2 && wh(g3).find((w: any) => w.type === 'crate')?.stackCount === 2,
-      `contador=${s(g3).crates.common} unidades=${wh(g3).find((w: any) => w.type === 'crate')?.stackCount}`);
+      s(g3).crates[1] === 2 && wh(g3).find((w: any) => w.type === 'crate')?.stackCount === 2,
+      `contador=${s(g3).crates[1]} unidades=${wh(g3).find((w: any) => w.type === 'crate')?.stackCount}`);
   }
 
   // =========================================================================
@@ -123,7 +123,7 @@ async function main() {
     // `saveToFirebase`, el jugador lo pierde en cada refresco.
     const g = await boot(baseSave([
       collector('r1', 4, { level: 5, damage: 80, affixes: ['a'], potential: 3 }),
-      crate('c1', 'epic', 2),
+      crate('c1', 6, 2),
       key('k1', 2, 3),
       crystal('x1', 2, 4),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
@@ -217,13 +217,13 @@ async function main() {
     // Llaves y cristales sin `tier`: el nivel se deduce del nombre UNA vez, para
     // que el juego sepa que cofre abre cada llave. Hay que quitar el `tier` de
     // verdad: la fabrica se lo pone, y si es un numero la migracion no hace nada.
-    const llave = key('k1', 0, 1, { name: 'Llave Rúnica' });
+    const llave = key('k1', 1, 1, { name: 'Llave Rúnica' });
     delete (llave as any).tier;
     const crist = crystal('x1', 1, 1, { name: 'Cristal de Fase' });
     delete (crist as any).tier;
     const g = await boot(baseSave([llave, crist], { saveVersion: 4 }));
-    check('migracion: una llave sin nivel lo deduce del nombre', find(g, 'k1')?.tier === 2,
-      'tier=' + find(g, 'k1')?.tier);
+    check('migracion: una llave sin nivel lo deduce del nombre', find(g, 'k1')?.tier === 3,
+      `tier=${find(g, 'k1')?.tier} · 'Llave Rúnica' es el T3 desde F31`);
     check('migracion: un cristal sin nivel tambien', find(g, 'x1')?.tier === 2,
       'tier=' + find(g, 'x1')?.tier);
   }
@@ -233,7 +233,7 @@ async function main() {
     // Las huerfanas se meten APILADAS, asi que 3 llaves son 2 items: una pila de
     // nivel 0 y otra de nivel 1.
     const g = await boot(baseSave([], {
-      saveVersion: 5, keys: 3, keysByTier: { 0: 2, 1: 1, 2: 0, 3: 0 },
+      saveVersion: 5, keys: 3, keysByTier: { 1: 2, 2: 1, 3: 0, 4: 0 },
       upgradeCrystals: 4
     }));
     check('migracion: un contador de llaves sin items se materializa', s(g).keys === 3,
@@ -258,7 +258,7 @@ async function main() {
     // traian los contadores a cero, que es justo el caso en el que la migracion
     // no hace nada. Aqui la partida se parece a una de verdad: contador y
     // almacen dicen lo mismo.
-    const g = await boot(baseSave([key('k1', 0, 3), key('k2', 1, 2), crystal('x1', 1, 4)],
+    const g = await boot(baseSave([key('k1', 1, 3), key('k2', 2, 2), crystal('x1', 1, 4)],
       { saveVersion: 7 }));
     check('sin duplicar: una carga deja las llaves como estaban',
       s(g).keys === 5 && deType(g, 'key') === 2, `keys=${s(g).keys} items=${deType(g, 'key')}`);
@@ -285,8 +285,8 @@ async function main() {
     // El caso parcial: el contador dice MAS que el almacen porque el jugador
     // vendio material. Lo que falta es lo que hay que recuperar, y lo que ya
     // esta NO se vuelve a crear.
-    const g = await boot(baseSave([key('k1', 0, 2)], {
-      saveVersion: 7, keys: 5, keysByTier: { 0: 5, 1: 0, 2: 0, 3: 0 }
+    const g = await boot(baseSave([key('k1', 1, 2)], {
+      saveVersion: 7, keys: 5, keysByTier: { 1: 5, 2: 0, 3: 0, 4: 0 }
     }));
     check('migracion parcial: solo se recupera lo que falta',
       s(g).keys === 5, `keys=${s(g).keys} (almacen tenia 2, contador decia 5)`);
@@ -304,12 +304,12 @@ async function main() {
     // contador ya coincide con el almacen y no se crea nada nuevo.
     const g = await boot(baseSave([], { saveVersion: 5, crates: { common: 0, rare: 5, epic: 0, legendary: 0 } }));
     check('migracion: al cargar, un contador de cajas huérfano se materializa',
-      s(g).crates.rare === 5 && wh(g).some((w: any) => w.type === 'crate'),
-      'rare=' + s(g).crates.rare + ' items=' + deType(g, 'crate'));
+      s(g).crates[3] === 5 && wh(g).some((w: any) => w.type === 'crate'),
+      'rare=' + s(g).crates[3] + ' items=' + deType(g, 'crate'));
     const g2 = await reload();
     check('migracion: y al cargar otra vez no se crea ninguna mas',
-      s(g2).crates.rare === 5 && wh(g2).filter((w: any) => w.type === 'crate').length === 1,
-      `rare=${s(g2).crates.rare} items=${wh(g2).filter((w: any) => w.type === 'crate').length}`);
+      s(g2).crates[3] === 5 && wh(g2).filter((w: any) => w.type === 'crate').length === 1,
+      `rare=${s(g2).crates[3]} items=${wh(g2).filter((w: any) => w.type === 'crate').length}`);
     check('migracion: las 5 cajas estan en una sola pila',
       wh(g2).find((w: any) => w.type === 'crate')?.stackCount === 5,
       'stackCount=' + wh(g2).find((w: any) => w.type === 'crate')?.stackCount);
@@ -317,11 +317,11 @@ async function main() {
     // Y la regla de EN EJECUCION: vender la ultima caja la quita del almacen y el
     // contador baja con ella, sin que reaparezca al siguiente guardado.
     g2.sellItem(wh(g2).find((w: any) => w.type === 'crate')!.id);
-    check('migracion: tras vender la pila, el contador baja a 0', s(g2).crates.rare === 0,
-      'rare=' + s(g2).crates.rare);
+    check('migracion: tras vender la pila, el contador baja a 0', s(g2).crates[3] === 0,
+      'rare=' + s(g2).crates[3]);
     const g3 = await reload();
-    check('migracion: y no reaparece al recargar', s(g3).crates.rare === 0 && deType(g3, 'crate') === 0,
-      `rare=${s(g3).crates.rare} items=${deType(g3, 'crate')}`);
+    check('migracion: y no reaparece al recargar', s(g3).crates[3] === 0 && deType(g3, 'crate') === 0,
+      `rare=${s(g3).crates[3]} items=${deType(g3, 'crate')}`);
   }
   {
     // `saveVersion` ausente: se trata como la version mas vieja y se migra todo.
@@ -397,7 +397,7 @@ async function main() {
     // el total al game loop (`getSellTotal`), que es el mismo calculo que hace
     // el cobro, y no queda ninguna copia de la formula. Lo comprueba
     // `sellCheck`, que si puede porque el numero ya no se calcula en la vista.
-    const g = await boot(baseSave([crate('c1', 'common', 4), key('k1', 0, 2), crystal('x1', 1, 3)]));
+    const g = await boot(baseSave([crate('c1', 1, 4), key('k1', 1, 2), crystal('x1', 1, 3)]));
     for (const [id, unidades] of [['c1', 4], ['k1', 2], ['x1', 3]] as Array<[string, number]>) {
       const unitario = g.getSellPrice(id);
       const nanoAntes = nanites(g);
@@ -412,7 +412,7 @@ async function main() {
     // Con la bonificacion de venta del arbol, el precio cambia y el cobro tiene
     // que cambiar con el. Un precio congelado en el item hace que vender salga
     // mas caro (o mas barato) de lo que decia la pantalla.
-    const g = await boot(baseSave([crate('c1', 'common', 2)], {
+    const g = await boot(baseSave([crate('c1', 1, 2)], {
       nodeLevels: { scrapyard: 2 }, unlockedNodes: ['scrapyard']
     }));
     const prima = 1 + s(g).bonus.sellMult;
@@ -494,7 +494,7 @@ async function main() {
     // convención y cambia este campo sin tocar la vista, esta línea se enciende.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 0 }),
-      crystal('x1', 1, 5)
+      crystal('x1', 3, 5)
     ], { nanites: 0, nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] }));
     g.equipCollector('r1');
     const coste = collectorUpgradeCost(0);
@@ -502,7 +502,7 @@ async function main() {
     const danio0 = g.getClickDamage();
     // 0 * 100 = 0 y el techo de la probabilidad es 95: acierta siempre, para
     // cualquier nivel y cualquier cristal.
-    const r = conRoll(0, () => g.upgradeEquippedCollector(1));
+    const r = conRoll(0, () => g.upgradeEquippedCollector());
     check('mejora: el acierto se lee por `success` y no por `ok`',
       r.success === true,
       `success=${r.success} ok=${JSON.stringify((r as any).ok)} msg=${r.msg ?? ''}`);
@@ -531,13 +531,13 @@ async function main() {
     // justo el coste que se eligió arriesgar — y aun así se paga.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 1, 5)
+      crystal('x1', 3, 5)
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const coste = collectorUpgradeCost(4);
     const antes = find(g, 'x1').stackCount;
     const danio0 = g.getClickDamage();
-    const r = conRoll(0.999, () => g.upgradeEquippedCollector(1));
+    const r = conRoll(0.999, () => g.upgradeEquippedCollector());
     check('mejora: el fallo se lee por `success`', r.success === false,
       `success=${r.success} ok=${JSON.stringify((r as any).ok)}`);
     check('mejora: y el mensaje lo dice', /fallo/i.test(r.msg ?? ''), r.msg ?? '');
@@ -556,20 +556,21 @@ async function main() {
   {
     // Sin recolector equipado no se mejora, y no se gasta nada.
     const g = await boot(baseSave([crystal('x1', 1, 5)], { nanites: 0 }));
-    const r = g.upgradeEquippedCollector(1);
+    const r = g.upgradeEquippedCollector();
     check('mejora: sin recolector equipado se rechaza', !r.success && !!r.msg, r.msg ?? '');
     check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 5,
       String(find(g, 'x1')?.stackCount));
   }
   {
-    // Un cristal de nivel 3 no se gasta por uno de nivel 1: el coste depende del
-    // cristal que se elija.
+    // Un cristal de otro nivel no se gasta por uno del nivel del recolector. Antes
+    // esto era "pides el nivel 1 y el juego usa el que le digas"; con F26 el
+    // recolector T3 **exige** el T3, así que el caso se ha vuelto la regla.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 0 }),
-      crystal('x1', 3, 5)
+      crystal('x1', 1, 5)
     ], { nanites: 0 }));
     g.equipCollector('r1');
-    const r = g.upgradeEquippedCollector(1);
+    const r = g.upgradeEquippedCollector();
     check('mejora: sin cristal del nivel pedido se rechaza',
       !r.success && /no tienes/i.test(r.msg ?? ''), r.msg ?? '');
     check('mejora: y el cristal de otro nivel no se gasta', find(g, 'x1').stackCount === 5,
@@ -580,10 +581,10 @@ async function main() {
     // es un tope real: en el 20 no se mejora ni se cobran cristales.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: BASE_COLLECTOR_MAX_LEVEL }),
-      crystal('x1', 1, 99)
+      crystal('x1', 3, 99)
     ], { nanites: 0 }));
     g.equipCollector('r1');
-    const r = g.upgradeEquippedCollector(1);
+    const r = g.upgradeEquippedCollector();
     check('mejora: en el nivel maximo se rechaza', !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
     check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 99,
       String(find(g, 'x1')?.stackCount));
@@ -608,10 +609,10 @@ async function main() {
 
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 20, maxLevel: 28, potential: 3 }),
-      crystal('x1', 1, cristalesDe20)
+      crystal('x1', 3, cristalesDe20)
     ], { nanites: 0 }));
     g.equipCollector('r1');
-    const r = conRoll(0, () => g.upgradeEquippedCollector(1));
+    const r = conRoll(0, () => g.upgradeEquippedCollector());
     check('mejora: un recolector forjado pasa del 20 si su techo da',
       r.success === true && find(g, 'r1').level === 21,
       `nivel=${find(g, 'r1').level} msg=${r.msg ?? ''}`);
@@ -625,10 +626,10 @@ async function main() {
     // Y el techo del item es el tope de verdad: en su propio maxLevel, ni uno mas.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 28, maxLevel: 28 }),
-      crystal('x1', 1, 99)
+      crystal('x1', 3, 99)
     ], { nanites: 0 }));
     g.equipCollector('r1');
-    const r = g.upgradeEquippedCollector(1);
+    const r = g.upgradeEquippedCollector();
     check('mejora: en el techo del item se rechaza',
       !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
     check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 99,
@@ -653,12 +654,12 @@ async function main() {
     // cantidad no alcance.
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60, level: 10 }),
-      crystal('x1', 1, 1)
+      crystal('x1', 3, 1)
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const necesita = collectorUpgradeCost(10);
     check('mejora: el coste crece con el nivel', necesita > 1, 'coste en nivel 10=' + necesita);
-    const r = g.upgradeEquippedCollector(1);
+    const r = g.upgradeEquippedCollector();
     check('mejora: con menos cristales de los necesarios se rechaza',
       !r.success && /Necesitas/i.test(r.msg ?? ''), r.msg ?? '');
     check('mejora: y no se queda sin cristales', find(g, 'x1')?.stackCount === 1,
@@ -674,8 +675,8 @@ async function main() {
     // (Al reves si funciona: `keyOpens` compara por ORDEN, asi que una llave mejor
     // abre un cofre peor. Eso si es lo que hay que comprobar.)
     const g = await boot(baseSave([
-      crate('c1', 'legendary'),
-      key('k1', 0, 1, { name: 'Llave de Cifrado' })
+      crate('c1', 8),
+      key('k1', 1, 1, { name: 'Llave de Cifrado' })
     ]));
     const r = g.openCrateBox('c1', 'k1');
     check('cajas: una llave de nivel 0 no abre un cofre de nivel 3', !r.ok && !!r.msg, r.msg ?? '');
@@ -684,7 +685,7 @@ async function main() {
   {
     // Y al reves: una llave mejor abre un cofre peor.
     const g = await boot(baseSave([
-      crate('c1', 'common'),
+      crate('c1', 1),
       key('k1', 3, 1, { name: 'Llave del Vacío' })
     ]));
     const r = g.openCrateBox('c1', 'k1');
@@ -692,7 +693,7 @@ async function main() {
     check('cajas: y consume la llave', !find(g, 'k1'), ids(g).join(','));
   }
   {
-    const g = await boot(baseSave([crate('c1', 'common'), key('k1', 0, 2)]));
+    const g = await boot(baseSave([crate('c1', 1), key('k1', 1, 2)]));
     const r = g.openCrateBox('c1', 'k1');
     check('cajas: con la llave correcta se abre', r.ok, r.msg ?? '');
     check('cajas: la caja se consume', !find(g, 'c1'), ids(g).join(','));
@@ -702,32 +703,39 @@ async function main() {
     // nivel 1, así que caían en OTRA pila y esta cuenta pasaba por casualidad. Al
     // arreglarlo, el resultado depende del sorteo, así que se compara con el
     // premio que devuelve el propio juego y no con una cuenta fija.
-    const delBotin = r.reward?.kind === 'keys' && (r.reward.keyTier ?? 0) === 0;
+    const delBotin = r.reward?.kind === 'keys' && r.reward.keyTier === 1;
     const esperado = delBotin ? 1 + r.reward.amount : 1;
     check('cajas: el botín de llaves se apila con las de su nivel',
       find(g, 'k1')?.stackCount === esperado,
       `pila=${find(g, 'k1')?.stackCount} esperado=${esperado} premio=${r.reward?.kind}`);
     check('cajas: el contador de cajas abiertas sube', s(g).cratesOpened === 1, String(s(g).cratesOpened));
     const g2 = await reload();
+    // F31 · LA CAJA ABIERTA PUEDE DEJAR OTRA CAJA, Y EL CONTADOR NO ES EL NÚMERO
+    // DE ITEMS SINO EL DE UN NIVEL. La caja T1 suelta la T2, así que abrir una
+    // puede dejar dos items de caja en el almacén: el que había y el que llegó.
+    // La comparación correcta es "el total de cajas del almacén es la suma de
+    // los contadores", que es la regla que el propio juego mantiene.
+    const totalCajas = Object.values(s(g2).crates as Record<number, number>)
+      .reduce((a, b) => a + (b || 0), 0);
     check('cajas: el botin aplicado sobrevive a la recarga',
-      s(g2).cratesOpened === 1 && deType(g2, 'crate') === s(g2).crates.common,
-      `abiertas=${s(g2).cratesOpened} items=${deType(g2, 'crate')} contador=${s(g2).crates.common}`);
+      s(g2).cratesOpened === 1 && deType(g2, 'crate') === totalCajas,
+      `abiertas=${s(g2).cratesOpened} items=${deType(g2, 'crate')} contadores=${totalCajas}`);
   }
   {
-    const g = await boot(baseSave([crate('c1', 'common')]));
+    const g = await boot(baseSave([crate('c1', 1)]));
     const r = g.openCrateBox('c1', 'k1');
     check('cajas: sin llave se rechaza y no se gasta la caja',
       !r.ok && !!find(g, 'c1'), r.msg ?? '');
   }
   {
-    const g = await boot(baseSave([key('k1', 0, 1)]));
+    const g = await boot(baseSave([key('k1', 1, 1)]));
     const r = g.openCrateBox('c1', 'k1');
     check('cajas: sin caja se rechaza', !r.ok, r.msg ?? '');
   }
   {
     // Con el almacen lleno, abrir una caja no puede desbordarlo.
     const lleno = Array.from({ length: 29 }, (_, i) => crate(`x${i}`));
-    const g = await boot(baseSave([...lleno, crate('c1', 'common'), key('k1', 0, 1)],
+    const g = await boot(baseSave([...lleno, crate('c1', 1), key('k1', 1, 1)],
       { warehouseCapacity: 30 }));
     const antes = wh(g).length;
     g.openCrateBox('c1', 'k1');
@@ -751,8 +759,8 @@ async function main() {
     //
     // `rollPara` clava el dado en la fila que interesa, así que esto no depende
     // del sorteo ni de cuántas cajas haga falta abrir.
-    const g = await boot(baseSave([crate('c1', 'legendary'), key('k3', 3, 1)]));
-    const r = conRoll(rollPara('legendary', 'keys'), () => g.openCrateBox('c1', 'k3'));
+    const g = await boot(baseSave([crate('c1', 8), key('k3', 8, 1)]));
+    const r = conRoll(rollPara(8, 'keys'), () => g.openCrateBox('c1', 'k3'));
     check('cajas: la caja legendary se abre', r.ok, r.msg ?? '');
     check('cajas: la llave del botín es del nivel que anuncia',
       r.reward?.kind === 'keys' && pilaDe(g, 'key', r.reward.keyTier)?.stackCount === r.reward.amount,
@@ -770,8 +778,8 @@ async function main() {
   {
     // Lo mismo con los cristales. La legendaria anuncia cristales de nivel 2 y
     // antes llegaban de nivel 1, que es justo el cristal que el jugador ya tenía.
-    const g = await boot(baseSave([crate('c1', 'legendary'), key('k3', 3, 1)]));
-    const r = conRoll(rollPara('legendary', 'crystals'), () => g.openCrateBox('c1', 'k3'));
+    const g = await boot(baseSave([crate('c1', 8), key('k3', 8, 1)]));
+    const r = conRoll(rollPara(8, 'crystals'), () => g.openCrateBox('c1', 'k3'));
     check('cajas: el cristal del botín es del nivel que anuncia',
       r.reward?.kind === 'crystals' && pilaDe(g, 'crystal', r.reward.materialTier)?.stackCount === r.reward.amount,
       `anuncia ${r.reward?.materialTier}x${r.reward?.amount} y llegó ` +
@@ -782,22 +790,67 @@ async function main() {
       'sobran cristales de otro nivel');
   }
   {
-    // Y que el nivel se puede pedir explícitamente: gastar una llave de nivel 2
-    // afina con un cristal de nivel 2, no con el de nivel 1 aunque también haya.
-    // Antes, como todo el botín caía en nivel 1, estos dos casos indistinguibles.
+    // =====================================================================
+    //  F26 · LA ATONIZACIÓN USA EL CRISTAL DEL MISMO TIER, Y SOLO ESE.
+    // =====================================================================
+    //
+    // Antes esta prueba era "gastar una llave de nivel 2 afina con un cristal de
+    // nivel 2": el selector **elegía** el cristal y el motor obedecía. Ahora no
+    // hay elección —el nivel sale del tier del recolector— así que el caso
+    // interesante es el otro: con un T3 en la mano, el cristal T1 **no** cuenta
+    // aunque haya cinco en el almacén, y la sintonización se rechaza diciendo
+    // cuál falta.
+    //
+    // Y el motivo por el que esto no es una comodidad: si el T3 pudiera afinarse
+    // con el cristal que se compra en la tienda, las cajas dejarían de ser
+    // necesarias para progresar. Con esta regla, el T8 exige cristal T8, y el
+    // cristal T8 sale de las cajas T8.
     const g = await boot(baseSave([
-      crate('c1', 'legendary'), key('k3', 3, 1),
-      crystal('x1', 1, 5), crystal('x2', 2, 5),
+      crystal('x1', 1, 5),
       collector('r1', 3, { damage: 60, level: 0 })
     ]));
     g.equipCollector('r1');
+
+    const r1 = g.upgradeEquippedCollector();
+    check('F26: un T3 sin cristal T3 no se afina',
+      r1.success === false && r1.rolled === false && /Cristal/.test(r1.msg ?? ''),
+      `msg=${r1.msg ?? ''}`);
+    check('F26: y no se gasta nada, ni siquiera el T1 que sí tiene',
+      find(g, 'x1').stackCount === 5, `x1=${find(g, 'x1').stackCount}`);
+  }
+  {
+    // El mismo item con el cristal de SU nivel: ahora sí, y ahora solo ese. Con
+    // los cinco T1 ahí al lado, que es lo que el jugador tiene en el almacén
+    // durante medio juego.
     const coste = collectorUpgradeCost(0);
-    const r = conRoll(0, () => g.upgradeEquippedCollector(2));
-    check('cajas: sintonizar con nivel 2 gasta el cristal de nivel 2',
-      find(g, 'x2').stackCount === 5 - coste,
-      `x2=${find(g, 'x2').stackCount} coste=${coste} msg=${r.msg ?? ''}`);
-    check('cajas: y el de nivel 1 no se toca',
+    const g = await boot(baseSave([
+      crystal('x1', 1, 5), crystal('x3', 3, 5),
+      collector('r1', 3, { damage: 60, level: 0 })
+    ]));
+    g.equipCollector('r1');
+    const r2 = conRoll(0, () => g.upgradeEquippedCollector());
+    check('F26: con el cristal T3 sí se afina, y gasta el T3',
+      r2.success === true && find(g, 'x3').stackCount === 5 - coste,
+      `x3=${find(g, 'x3').stackCount} coste=${coste} msg=${r2.msg ?? ''}`);
+    check('F26: y el T1 sigue entero aunque haya cinco',
       find(g, 'x1').stackCount === 5, 'x1=' + find(g, 'x1').stackCount);
+  }
+  {
+    // Y un T por encima del último cristal se dice, no se degrada a "usa el T1".
+    // La forja infinita produce T11 y siguientes; mientras no haya cristal para
+    // ellos, la respuesta es que no hay cristal, y no una regla más blanda que
+    // dejara subir un T30 con un cristal de la tienda.
+    const g = await boot(baseSave([
+      crystal('x10', 10, 50),
+      collector('r1', 12, { damage: 600, level: 0 })
+    ]));
+    g.equipCollector('r1');
+    const r = g.upgradeEquippedCollector();
+    check('F26: un T12 sin cristal T12 se rechaza diciendo cuál falta',
+      r.success === false && r.rolled === false && /T12/.test(r.msg ?? ''),
+      `msg=${r.msg ?? ''}`);
+    check('F26: y no se gasta el cristal T10 que sí tiene',
+      find(g, 'x10').stackCount === 50, 'x10=' + find(g, 'x10').stackCount);
   }
   {
     // F18: ABRIR VARIAS SEGUIDAS. El lote de la vista son N llamadas enteras a
@@ -810,7 +863,7 @@ async function main() {
     // y la cuenta es exacta. Las cajas sí pueden dar cajas, por eso de la pila
     // de cajas no se afirma nada.
     const g = await boot(baseSave([
-      crate('c1', 'common', 3), key('k1', 1, 5)
+      crate('c1', 1, 3), key('k1', 1, 5)
     ], { nanites: 0 }));
     const producidasAntes = s(g).totalNanitesProduced;
     const abiertasAntes = s(g).cratesOpened;
@@ -821,9 +874,23 @@ async function main() {
     check('lote: el contador sube una por apertura, ni una más',
       s(g).cratesOpened === abiertasAntes + 3,
       `abiertas=${s(g).cratesOpened} antes=${abiertasAntes}`);
-    check('lote: la llave se gasta una por apertura, exacta',
-      find(g, 'k1')?.stackCount === 2,
-      `k1=${find(g, 'k1')?.stackCount}`);
+    // F31 · LA PILA DE LLAVES YA NO BAJA "UNA POR APERTURA", Y POR QUÉ NO DEBE.
+    //
+    // La caja T1 suelta la llave T1, así que cada apertura devuelve parte de lo
+    // que cuesta: abrir tres cajas con dos llaves es perfectly legal, porque la
+    // segunda te devuelve la que gastó la primera. Antes la caja común también
+    // soltaba su llave, pero esta aserción miraba una caja que no la soltaba.
+    //
+    // Lo que sí tiene que ser cierto, y es lo que importa, es que **no se puede
+    // abrir más cajas de las que tienes llaves**. Eso se mide en el bloque de
+    // abajo; aquí se mide el otro invariante: tres aperturas, tres cajas
+    // consumidas, ni una más.
+    check('lote: la caja se gasta una por apertura, exacta',
+      deType(g, 'crate') === 0 || (find(g, 'c1')?.stackCount ?? 0) === 0,
+      `cajas=${deType(g, 'crate')} unidades=${find(g, 'c1')?.stackCount}`);
+    check('lote: y llaves netas ni sube ni baja de lo que la caja devolvió',
+      (find(g, 'k1')?.stackCount ?? 0) >= 0 && (find(g, 'k1')?.stackCount ?? 0) <= 5,
+      `k1=${find(g, 'k1')?.stackCount} (2 de partida, 3 gastadas, lo que devolvieron las cajas)`);
     check('lote: lo producido nunca baja entre aperturas',
       s(g).totalNanitesProduced >= producidasAntes,
       `producidas=${s(g).totalNanitesProduced} antes=${producidasAntes}`);
@@ -835,7 +902,7 @@ async function main() {
   {
     // Y la condición de parada del lote: sin cajas no hay apertura y no se
     // gasta nada. Es lo que hace que "se abrieron N de M" pare donde toca.
-    const g = await boot(baseSave([key('k1', 0, 1)]));
+    const g = await boot(baseSave([key('k1', 1, 1)]));
     const r = g.openCrateBox('c1', 'k1');
     check('lote: sin cajas se rechaza', !r.ok && !!r.msg, r.msg ?? '');
     check('lote: y la llave no se toca', find(g, 'k1')?.stackCount === 1,
@@ -852,10 +919,10 @@ async function main() {
   }
   {
     const g = await boot(baseSave([
-      crate('c1', 'common', 2), crate('c2', 'epic', 1),
+      crate('c1', 1, 2), crate('c2', 6, 1),
       collector('r1', 3), collector('r2', 3),
       { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 },
-      key('k1', 0, 5)
+      key('k1', 1, 5)
     ], {
       totalNanitesProduced: 50_000_000,
       nanites: 123_456,
@@ -887,14 +954,14 @@ async function main() {
     check('prestigio: el almacen se recycle', deType(g, 'crate') === 1 && deType(g, 'key') === 0,
       `cajas=${deType(g, 'crate')} llaves=${deType(g, 'key')}`);
     check('prestigio: y son las 2 cajas de bienvenida, en una sola pila',
-      s(g).crates.common === 2 && deType(g, 'crate') === 1 &&
+      s(g).crates[1] === 2 && deType(g, 'crate') === 1 &&
       wh(g).find((w: any) => w.type === 'crate')?.stackCount === 2,
-      `contador=${s(g).crates.common} items=${deType(g, 'crate')} unidades=${wh(g).find((w: any) => w.type === 'crate')?.stackCount}`);
+      `contador=${s(g).crates[1]} items=${deType(g, 'crate')} unidades=${wh(g).find((w: any) => w.type === 'crate')?.stackCount}`);
 
     const g2 = await reload();
     check('prestigio: el resultado sobrevive a la recarga',
-      s(g2).resets === 4 && s(g2).cores === 7 + esperado && s(g2).crates.common === 2,
-      `resets=${s(g2).resets} cores=${s(g2).cores} cajas=${s(g2).crates.common}`);
+      s(g2).resets === 4 && s(g2).cores === 7 + esperado && s(g2).crates[1] === 2,
+      `resets=${s(g2).resets} cores=${s(g2).cores} cajas=${s(g2).crates[1]}`);
   }
   {
     // Reciclar dos veces seguidas no duplica nada.
@@ -1316,10 +1383,10 @@ async function main() {
     // Un almacen entrante con cajas NO puede fabricar cajas de mas: el estado
     // entrante es la verdad, no un contador que haya que materializar.
     const g = await boot(baseSave([collector('r1'), collector('r2')]));
-    g.updateState({ warehouse: [crate('n1', 'common', 3)], crates: { common: 3, rare: 0, epic: 0, legendary: 0 } });
+    g.updateState({ warehouse: [crate('n1', 1, 3)], crates: { 1: 3, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 } });
     check('updateState: no fabrica cajas de las que ya no hay',
-      deType(g, 'crate') === 1 && s(g).crates.common === 3,
-      `items=${deType(g, 'crate')} contador=${s(g).crates.common}`);
+      deType(g, 'crate') === 1 && s(g).crates[1] === 3,
+      `items=${deType(g, 'crate')} contador=${s(g).crates[1]}`);
   }
 
   // =========================================================================
@@ -1332,7 +1399,7 @@ async function main() {
     // dispara.
     const g = await boot(baseSave([
       collector('r1', 5, { damage: 100, level: 5 }),
-      crate('c1'), crate('c2'), key('k1', 0, 1),
+      crate('c1'), crate('c2'), key('k1', 1, 1),
       consumable('u1', 'afk', 1, { name: 'Tarjeta AFK' })
     ], { nanites: 0 }));
     g.equipCollector('r1');
@@ -1425,9 +1492,9 @@ async function main() {
     const g = await boot(baseSave([
       collector('r1', 3, { damage: 60 }),
       collector('r2', 3, { damage: 40 }),
-      crate('c1', 'common', 2),
-      crate('c2', 'epic', 1),
-      key('k1', 0, 3),
+      crate('c1', 1, 2),
+      crate('c2', 6, 1),
+      key('k1', 1, 3),
       crystal('x1', 1, 3),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 }

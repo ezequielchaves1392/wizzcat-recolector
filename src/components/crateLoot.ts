@@ -8,14 +8,14 @@
 //     lo muestra. Si se invirtiera, la ruleta estaría mintiendo sobre las probabilidades.
 
 import { TIER_SYSTEM } from '../data/tiers';
-import { EXPANSOR_TIERS, type ExpansorTier } from '../data/store';
+import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
 // `CRATE_KEY_TIER` y `KEY_DEFS` entran como VALOR porque la entrada de llaves de
 // cada caja se construye desde ellos. Antes iban escritos a mano y por eso la
 // llave del Vacío no salía de ninguna parte: la caja legendaria era imposible
 // de abrir (B6). Ver `buildKeyLoot`.
-import { CRATE_KEY_TIER, KEY_DEFS, type KeyTier } from '../data/items';
+import { CRATE_KEY_TIER, KEY_DEFS, CRYSTAL_DEFS, type KeyTier } from '../data/items';
 import { formatNumber } from '../utils/format';
 import type { WarehouseItem } from '../types';
 
@@ -124,12 +124,52 @@ export const RARITY_RANK: Record<string, number> = {
   'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3, 'Mítico': 4, 'Divino': 5, 'Sobrecargado': 6
 };
 
-export const CRATE_META: Record<CrateType, { name: string; icon: string; accent: string; cost: number }> = {
-  common:    { name: 'Caja Común',      icon: 'crate', accent: 'text-slate-300',  cost: 400 },
-  rare:      { name: 'Caja Rara',       icon: 'crate', accent: 'text-blue-400',   cost: 1200 },
-  epic:      { name: 'Caja Épica',      icon: 'crystal', accent: 'text-purple-400', cost: 4500 },
-  legendary: { name: 'Caja Legendaria', icon: 'trophy', accent: 'text-amber-400',  cost: 18000 }
+/**
+ * F31 · LA CARA DE LAS DIEZ CAJAS, GENERADA POR SU RAREZA.
+ *
+ * Antes eran cuatro líneas escritas a mano con el nombre, el icono, el color y
+ * el precio dentro —cuatro copias del mismo dato que ya estaba en `CRATE_TYPES`
+ * y en `STORE_ITEMS`—. Con diez cajas, diez líneas escritas a mano son diez
+ * oportunidades de que una se quede sin precio o con el color de la vecina.
+ *
+ * Ahora sale de la rareza, y la rareza sale de `CRATE_TYPES`. Un solo dato por
+ * caja, y lo que se pinta sale de él.
+ *
+ * EL ICONO Y EL COLOR SUBEN CON LA RAREZA, no con el tier: una caja T10 es Divina
+ * y tiene que leerse como tal en la carta, aunque su botín incluya al T10. Que
+ * la carta muestre el nivel y no la rareza es lo que hace que el jugador sepa si
+ * abrir le va a servir para algo antes de gastar la llave.
+ */
+const CRATE_ACCENT: Record<string, string> = {
+  'Común': 'text-slate-300',
+  'Raro': 'text-blue-400',
+  'Épico': 'text-purple-400',
+  'Legendario': 'text-amber-400',
+  'Mítico': 'text-fuchsia-400',
+  'Divino': 'text-rose-400'
 };
+
+const CRATE_ICON: Record<string, string> = {
+  'Común': 'crate',
+  'Raro': 'crate',
+  'Épico': 'crate',
+  'Legendario': 'crystal',
+  'Mítico': 'trophy',
+  'Divino': 'trophy'
+};
+
+export const CRATE_META: Record<CrateType, { name: string; icon: string; accent: string; cost: number }> =
+  Object.fromEntries(CRATE_TIERS.map(t => {
+    const rar = CRATE_TYPES[t].rarity;
+    return [t, {
+      name: CRATE_TYPES[t].name,
+      icon: CRATE_ICON[rar] ?? 'crate',
+      accent: CRATE_ACCENT[rar] ?? 'text-slate-300',
+      // El precio sale de `store.ts`, que es el fichero de los precios. Estaba
+      // duplicado aquí y en `STORE_ITEMS`, y eran dos números que nadie comparaba.
+      cost: costeDeCaja(t)
+    }];
+  })) as Record<CrateType, { name: string; icon: string; accent: string; cost: number }>;
 
 // Companiaexclusive de caja. No existe en la tienda: es el motivo por el que
 // la ruleta se siente como algo mas que unaanimacion.
@@ -246,10 +286,22 @@ export function pesoDeRareza(rank: number): number {
   return 1 / Math.pow(FALLO_POR_RAREZA, rank);
 }
 
-/** Hasta qué rareza llega cada caja. Es su identidad, no un detalle de la tabla. */
-const RARIDAD_TOPE_CAJA: Record<CrateType, number> = {
-  common: 1, rare: 2, epic: 3, legendary: 4
-};
+/**
+ * F31 · HASTA QUÉ RAREZA LLEGA CADA CAJA, Y SE SACA DE SU NOMBRE.
+ *
+ * Antes era un `Record<CrateType, number>` con cuatro números escritos a mano:
+ * `common: 1, rare: 2, epic: 3, legendary: 4`. Es decir, **el rango de rareza
+ * del botín estaba decidido dos veces** —aquí y en el nombre de la caja—, y con
+ * diez cajas serían veinte números que ningún banco comparaba. Cuando se movió el
+ * peso de una caja, esta tabla se quedó atrás y el reparto dejó de ser el que la
+ * ruleta prometía.
+ *
+ * Ahora sale de `RARITY_RANK[CRATE_TYPES[n].rarity]`, que es el mismo dato que
+ * pinta la carta. Una sola fuente por regla (R2).
+ */
+function rangoDeCaja(crateType: CrateType): number {
+  return RARITY_RANK[CRATE_TYPES[crateType].rarity] ?? 0;
+}
 
 /**
  * La rareza que DECIDE el peso de una entrada: la nominal **acotada a su caja**.
@@ -259,7 +311,7 @@ const RARIDAD_TOPE_CAJA: Record<CrateType, number> = {
  * más caro con el peso más bajo. Acotada, la caja se parece a lo que es.
  */
 function rarezaAcotada(crateType: CrateType, rarity: string): string {
-  const tope = RARIDAD_TOPE_CAJA[crateType];
+  const tope = rangoDeCaja(crateType);
   const r = RARITY_RANK[rarity] ?? 0;
   if (r <= tope) return rarity;
   for (const [nombre, rango] of Object.entries(RARITY_RANK)) {
@@ -295,7 +347,7 @@ export function rarezaDeTabla(crateType: CrateType): string[] {
     if (e.id === 'up') {
       // El salto no va en las bolsas de rareza (se reparte aparte, abajo) pero su
       // rareza es la de su caja, para que el banco lo pueda mostrar.
-      return Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === RARIDAD_TOPE_CAJA[crateType]) ?? 'Común';
+      return Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === rangoDeCaja(crateType)) ?? 'Común';
     }
     // Los exclusivos tampoco, por lo mismo que el salto (ver `PESO_EXCLUSIVO`).
     if (e.exclusivo) return BOLSA_EXCLUSIVO;
@@ -350,7 +402,7 @@ export function tablaDePesos(crateType: CrateType): number[] {
   });
   // La rareza con la que el salto COMPITE, que es su rareza nominal acotada.
   const rarezaDeSalto = (c: CrateType): string =>
-    Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === RARIDAD_TOPE_CAJA[c]) ?? 'Común';
+    Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === rangoDeCaja(c)) ?? 'Común';
 
   // El salto entra en el reparto de su rareza como cualquier otra entrada, con su
   // peso de autor, y por eso se queda en el 1-8% que siempre tuvo. Sacarlo de su
@@ -445,7 +497,7 @@ export function makeOverclockCollector(tier: number): { item: any; name: string;
       damage,
       potential: 5,
       overclock: true,
-      sellPrice: Math.round(CRATE_META.legendary.cost * 0.4)
+      sellPrice: Math.round(costeDeCaja(tier) * 0.5)
     }
   };
 }
@@ -609,6 +661,15 @@ function buildKeyLoot(crateType: CrateType): LootEntry {
   return {
     id: 'keys',
     weight: 10,
+    // `pesoComo` es la rareza de la CAJA, y el motivo es el mismo que en las
+    // piedras: la llave T9 es Divina porque es la novena, no porque el cofre la
+    // vuelva especial. Sin esto, la fila de llaves de la caja T9 competía en la
+    // bolsa Divina con un peso de autor de 10 sobre una bolsa de 1/150, y medido
+    // salía **menos de una vez cada 400 aperturas** — o sea, casi nunca. La
+    // cadena de cajas de F31 depende de que cada caja devuelva la llave que la
+    // abre, así que un peso que la hace casi inalcanzable no es un desajuste de
+    // balance: es la cadena rota por el otro lado.
+    pesoComo: CRATE_TYPES[crateType].rarity,
     // LA CANTIDAD SE TIRA AQUÍ DENTRO, y no al construir la tabla. `CRATE_LOOT`
     // se escribe una vez al cargar el módulo, así que un `rand()` al lado de
     // `def` la fijaría para toda la partida: se vería "+1 Llave de Cifrado" en las
@@ -643,12 +704,18 @@ function buildKeyLoot(crateType: CrateType): LootEntry {
  * reventa salen de `EXPANSOR_TIERS`: si se escribieran a mano aquí, la tabla
  * de la tienda y la del botín se separarían en el primer rebalanceo (D4).
  */
-function buildExpansorLoot(tier: 1 | 2 | 3): LootEntry {
+function buildExpansorLoot(tier: 1 | 2 | 3, rarezaDeCaja: string): LootEntry {
   const def = EXPANSOR_TIERS.find(t => t.tier === tier) as ExpansorTier;
   const rarity = tier === 1 ? 'Raro' : tier === 2 ? 'Épico' : 'Legendario';
   return {
     id: 'expansor',
     weight: 6,
+    // Mismo motivo que las llaves y las piedras: el expansor T3 es Legendario en
+    // cualquier caja que lo suelte, y con diez cajas eso lo metía en la bolsa
+    // Legendaria de la T4…T10 —donde el resto de la tabla está en la bolsa de la
+    // caja— y rompía la escalera de rarezas. Lo que decide cuánto sale es la
+    // caja, no el tipo de expansor.
+    pesoComo: rarezaDeCaja,
     build: () => ({
       kind: 'consumable', amount: 1, name: def.name, label: `+1 ${def.name}`,
       details: `Amplía el almacén +${def.slots} slots`, rarity, icon: 'plus',
@@ -699,14 +766,28 @@ function buildExpansorLoot(tier: 1 | 2 | 3): LootEntry {
 function buildUpLoot(crateType: CrateType): LootEntry {
   return {
     id: 'up',
-    weight: UP_WEIGHTS[crateType],
+    weight: upWeight(crateType),
     // sube UN peldaño (`subirNTier(crateType, 1)`), no "lo que salga"
     build: () => subirNTier(crateType, 1)
   };
 }
 
-/** Pesos del salto, por caja. Medidos, no redondeados. */
-const UP_WEIGHTS: Record<CrateType, number> = { common: 6, rare: 5, epic: 4, legendary: 3 };
+/**
+ * F31 · EL PESO DEL SALTO BAJA CON EL TIER DE LA CAJA.
+ *
+ * Antes eran cuatro números escritos a mano (6, 5, 4, 3) para cuatro cajas. Con
+ * diez, diez números escritos a mano serían diez sitios donde la caja T6 puede
+ * tener un salto más probable que la T5 sin que nadie lo note. Es una función
+ * monótona porque la regla que expresa es esa: **cuanto más alta la caja, más
+ * raro el salto**, porque el salto es un premio de sorpresa y no puede ser el
+ * premio más común de la caja T10.
+ *
+ * La probabilidad real no es este número: es `peso / suma de la tabla`, y eso lo
+ * mide `saltoCheck` caja por caja.
+ */
+function upWeight(tier: number): number {
+  return Math.max(2, Math.round(6 - (tier - 1) * 0.45));
+}
 
 /**
  * EL SALTO SE COMPRUEBA AL ABRIR, NO AL CONSTRUIR LA TABLA.
@@ -724,7 +805,7 @@ const UP_WEIGHTS: Record<CrateType, number> = { common: 6, rare: 5, epic: 4, leg
 export function probabilidadDeSalto(crateType: CrateType): number {
   const tabla = CRATE_LOOT[crateType];
   const total = tabla.reduce((s, e) => s + e.weight, 0);
-  return UP_WEIGHTS[crateType] / total;
+  return upWeight(crateType) / total;
 }
 
 /** Tirar el salto a mano. Solo para bancos; el juego usa la entrada de la tabla. */
@@ -733,12 +814,11 @@ export function tocaElSalto(crateType: CrateType): boolean {
 }
 
 /**
- * Un nombre del tier de arriba, elegido al azar entre los tres.
+ * Un nombre del tier pedido, elegido al azar entre los del catálogo.
  *
- * El `as Record<number, string[]>` está porque `companionNames` está tipado con las
- * claves literales 1..10 y aquí el índice llega como `number` (sale de
- * `TIER_PROPIO[c] + 1`, y `TIER_PROPIO` es un `Record<CrateType, number>`). El
- * índice es correcto: `Math.min(10, ...)` lo deja siempre en rango.
+ * El `as Record<number, string[]>` está porque `companionNames` está tipado con
+ * las claves literales 1..10 y aquí el índice llega como `number`. El índice es
+ * correcto: `Math.min(10, ...)` lo deja siempre en rango.
  */
 function nombreDeArriba(origen: 'companion' | 'collector', tier: number): string {
   const tablas = TIER_SYSTEM.companionNames as Record<number, string[]>;
@@ -749,16 +829,26 @@ function nombreDeArriba(origen: 'companion' | 'collector', tier: number): string
 }
 
 /**
- * El premio del salto: un tier por encima del que le tocaría a la caja.
+ * F31 · EL SALTO ES "UN TIER POR ENCIMA DE LA CAJA", Y ANTES NO PODÍA SER OTRA
+ * COSA.
  *
- * O sea: una caja común da un T2 (le tocaría T1), una rara da un T4, una épica da
- * un T8 y una legendaria da un T10. La razón de "+1" y no "+2" es que el salto se
- * note sin dejar de ser del mismo juego: un T4 dentro de una caja rara ya es
- * imposible por el precio (4.500 contra 1.500 de la caja) y ya es un premio.
+ * Antes `TIER_PROPIO` decía qué tier le tocaba a cada caja —común 1, rara 3, épica
+ * 6, legendaria 8— y el salto era `esos + 1`. O sea que el salto de la legendaria
+ * era un T9 y no un T10, porque a la legendaria "le tocaba" el 8. Cuatro números
+ * escritos a mano decidían el mejor premio del juego sin que nadie los
+ * comprobara, y el salto de la caja más alta no tenía sentido porque la caja más
+ * alta ya estaba en el 8 de un salto de diez.
+ *
+ * Ahora el tier de la caja **es** el tier, así que el salto es `n + 1` y no hay
+ * nada que decidir: la caja T7 salta a un T8. Y la T10 no salta a nada porque no
+ * hay peldaño por encima del final — y su tabla no incluye la entrada, en vez de
+ * incluirla y que salga siempre un T10 sin más.
+ *
+ * La razón de "+1" y no "+2" es la de siempre: el salto se nota sin dejar de ser
+ * del mismo juego. Un T2 dentro de una caja T1 ya es imposible por el precio.
  */
 function subirNTier(crateType: CrateType, pasos: number): any {
-  const propio = TIER_PROPIO[crateType];
-  const tier = Math.min(10, propio + pasos);
+  const tier = Math.min(MAX_CRATE_TIER, crateType + pasos);
 
   // Mitad y mitad, y el lado se tira con `Math.random`. Un compañero y un
   // recolector valen cosas distintas (la companion da ingreso, el recolector daño)
@@ -792,68 +882,249 @@ function subirNTier(crateType: CrateType, pasos: number): any {
 }
 
 /** El tier que le "toca" a cada caja, que es la referencia del salto de +1. */
-const TIER_PROPIO: Record<CrateType, number> = { common: 1, rare: 3, epic: 6, legendary: 8 };
-
-export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
-  common: [
-    { id: 'nanites', weight: 34, build: () => { const a = rand(250, 400); return { kind: 'nanites', amount: a, name: 'Nanitas', label: `+${a} Nanitas`, details: 'Materia prima básica', rarity: 'Común', icon: 'bolt' }; } },
-    { id: 'crystals', weight: 26, build: () => { const a = rand(2, 4); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Raro', icon: 'crystal', materialTier: 1 }; } },
-    { id: 'dron', weight: 22, build: () => ({ kind: 'companion', amount: 1, name: 'Dron Explorador', label: 'Dron Explorador', details: 'Recolección por segundo: +2/s', rarity: 'Común', icon: 'companion', tier: 1, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +2/s', rarity: 'Común', companionType: 'passive', power: 2, sellPrice: 100 } }) },
-    buildKeyLoot('common'),
-    buildUpLoot('common'),
-    buildExpansorLoot(1),
-    { id: 'cosmetic', weight: 5, pesoComo: 'Raro', build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
-  ],
-  rare: [
-    { id: 'crystals', weight: 26, build: () => { const a = rand(6, 10); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Épico', icon: 'crystal', materialTier: 1 }; } },
-    { id: 'companion_t3', weight: 24, build: () => { const t = TIER_SYSTEM.ranges[3]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Artillero Táctico', label: 'Artillero Táctico', details: `Recolección por segundo: +${p}/s`, rarity: 'Épico', icon: 'bolt', tier: 3, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Artillero Táctico', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Épico', tier: 3, companionType: 'passive', power: p, sellPrice: 400 } }; } },
-    { id: 'collector_t4', weight: 20, build: () => { const w = makeOverclockCollector(4); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 4, item: w.item }; } },
-    { id: 'epic_crate', weight: 16, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Épica', label: '+1 Caja Épica', details: 'Abre una caja de botín superior', rarity: 'Épico', icon: 'crystal', item: { id: `crate_epic_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0, sellPrice: 1125, stackable: true, stackCount: 1 } }) },
-    buildKeyLoot('rare'),
-    buildUpLoot('rare'),
-    buildExpansorLoot(2),
-    { id: 'cosmetic', weight: 5, pesoComo: 'Épico', build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
-  ],
-  epic: [
-    { id: 'crystals', weight: 22, build: () => { const a = rand(16, 24); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Legendario', icon: 'crystal', materialTier: 1 }; } },
-    { id: 'calibration_stone', weight: 18, build: () => { const a = rand(1, 2); return { kind: 'consumable', amount: a, name: 'Piedra de Calibración', label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', icon: 'flask', item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: a, sellPrice: 11250 } }; } },
-    { id: 'companion_t6', weight: 20, build: () => { const t = TIER_SYSTEM.ranges[6]; const p = rand(t[0], t[1]); return { kind: 'companion', amount: 1, name: 'Titán de Acero', label: 'Titán de Acero', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', icon: 'companion', tier: 6, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Titán de Acero', type: 'companion', details: `Recolección por segundo: +${p}/s`, rarity: 'Legendario', tier: 6, companionType: 'passive', power: p, sellPrice: 2500 } }; } },
-    { id: 'collector_oc6', weight: 16, build: () => { const w = makeOverclockCollector(6); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 6, item: w.item }; } },
-    { id: 'ghost', weight: 12, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[0]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
-    { id: 'phoenix', weight: 10, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[3]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'bolt', item: c.item, exclusive: true }; } },
-    { id: 'legendary_crate', weight: 10, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Legendaria', label: '+1 Caja Legendaria', details: 'Abre una caja de botín máximo', rarity: 'Legendario', icon: 'trophy', item: { id: `crate_legendary_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', tier: 0, sellPrice: 4500, stackable: true, stackCount: 1 } }) },
-    // Esta faltaba: la caja épica no soltaba NINGUNA llave, así que la Rúnica
-    // solo se conseguía abriendo una legendaria, que a su vez necesitaba una
-    // llave que no salía de ninguna parte. La escalera de B6 era de tres peldaños
-    // y faltaban los tres.
-    buildKeyLoot('epic'),
-    buildUpLoot('epic'),
-    buildExpansorLoot(3),
-    { id: 'cosmetic', weight: 6, pesoComo: 'Legendario', build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
-  ],
-  legendary: [
-    { id: 'crystals', weight: 20, build: () => { const a = rand(45, 65); return { kind: 'crystals', amount: a, name: 'Cristales de Mejora', label: `+${a} Cristales`, details: 'Sube el nivel del recolector', rarity: 'Mítico', icon: 'crystal', materialTier: 2 }; } },
-    { id: 'collector_oc8', weight: 18, build: () => { const w = makeOverclockCollector(8); return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier: 8, item: w.item }; } },
-    { id: 'stability_nano', weight: 14, build: () => ({ kind: 'consumable', amount: 1, name: 'Nanopartícula de Estabilidad', label: 'Nanopartícula de Estabilidad', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', icon: 'flask', item: { id: `crate_nano_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 1, sellPrice: 55000 } }) },
-    { id: 'avatar', weight: 16, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[2]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'globe', item: c.item, exclusive: true }; } },
-    { id: 'oracle', weight: 14, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[1]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'crystal', item: c.item, exclusive: true }; } },
-    { id: 'sentinel', weight: 12, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[4]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'shield', item: c.item, exclusive: true }; } },
-    // D1 · EL ESPECTRO AZULADO (índice 5) ESTABA DEFINIDO Y NO LO SACABA NADIE.
-    //
-    // Los seis compañeros exclusivos de caja: la tabla usaba 0 a 4 y el quinto se
-    // quedaba fuera, o sea que era un compañero que existía en el código y no se
-    // podía conseguir de ninguna manera. Va con peso 5, el más bajo de la tabla:
-    // es el más raro, y por eso mismo no debe desplazar a los que ya salían.
-    //
-    // El índice 5 NO lo usa nadie más, así que ningún guardado lo apunta y no hay
-    // migración que hacer. Si algún día hay que moverlo, esto es el sitio.
-    { id: 'espectro', weight: 3, exclusivo: true, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[5]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
-    buildKeyLoot('legendary'),
-    buildUpLoot('legendary'),
-    buildExpansorLoot(3),
-    { id: 'cosmetic', weight: 6, pesoComo: 'Mítico', build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
-  ]
+/**
+ * F31 · LOS COMPAÑEROS EXCLUSIVOS, REPARTIDOS POR CAJA.
+ *
+ * Antes los seis estaban entre cuatro tablas escrito uno a uno, y la legendaria
+ * usaba los índices 0 a 4: el **Espectro Azulado** (índice 5) estaba definido y
+ * no lo sacaba nadie — D1. Con diez cajas el reparto se escribe una vez, aquí, y
+ * las seis entradas existen todas por construcción: si alguien añade un séptimo
+ * exclusivo y no lo mete en esta tabla, el banco lo canta.
+ *
+ * EL REPARTO SIGUE LA RAREZA DEL COMPANIÓN, que es lo que el jugador perceives:
+ * el Avatar del Vacío es Divino y está en la caja T10, que también lo es; el
+ * Espectro Azulado es Épico y está en la T9. No importa para el sorteo —los
+ * exclusivos compiten entre ellos por su peso de autor— pero importa para que la
+ * caja no prometa una rareza que su mejor premio no tiene.
+ */
+const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
+  7: [0, 3],
+  8: [1, 4],
+  9: [5],
+  10: [2]
 };
+
+/** El expansor que suelta una caja: los tres primeros dan los tres tipos. */
+function expansorDeCaja(tier: number): 1 | 2 | 3 {
+  return (Math.min(3, tier) as 1 | 2 | 3);
+}
+
+/**
+ * F31 · LA TABLA DE UNA CAJA. UNA FUNCIÓN, DIEZ CAJAS.
+ *
+ * ANTES HABÍA CUATRO TABLAS ESCRITAS A MANO, y esa es la razón de que B6
+ * existiera: cuatro copias de las mismas reglas —"cada caja suelta su llave",
+ * "el expansor es de caja", "el salto es un tier por encima"— que se separaron
+ * en el primer rebalanceo. La épica no soltaba ninguna llave, y la del Vacío no
+ * salía de ninguna parte, así que la escalera tenía tres peldaños y faltaban
+ * los tres.
+ *
+ * Con diez cajas, diez tablas a mano serían diez veces el mismo problema y diez
+ * veces más difícil de ver: nadie lee doscientas líneas buscando por qué la
+ * caja T6 no suelta cristal T6. Aquí **la caja T{n} suelta, por construcción**:
+ *
+ *    · el cristal T{n}, que es lo que hace que F26 no sea un muro;
+ *    · la llave T{n}, la suya;
+ *    · un compañero T{n} y, desde la T3, un recolector T{n} sobrecargado;
+ *    · la caja T{n+1}, que es la cadena de F31;
+ *    · un salto a T{n+1}, que es la sorpresa de F6;
+ *    · un expansor, una piedra de calibración desde la T6 y la nanopartícula
+ *      desde la T8;
+ *    · cosméticos, y los exclusivos que le tocan.
+ *
+ * Los pesos son los que ya estaban medidos en las cuatro cajas: los mismos
+ * números, los mismos repartos dentro de cada caja. Lo que cambia es que ahora
+ * hay diez cajas que cumplen la misma fórmula, y que se puede añadir una
+ * undécima tocando una línea.
+ *
+ * **Y LA CANTIDAD DE CRISTALES CRECE CON EL TIER**, que es lo que hace que la
+ * regla estricta de F26 no sea una cuenta absurda: sintonizar un T10 cuesta
+ * `collectorUpgradeCost(nivel)` unidades y llega a unas 600 a lo largo de toda su
+ * vida, así que la caja T10 tiene que dar cristal T10 en cantidad o el T10 sería
+ * inalcanzable. La cantidad base es `3n` a `5n` y la rareza de la caja la
+ * multiplica después, en `resolveLootAmount`.
+ */
+function botinDeCaja(tier: CrateType): LootEntry[] {
+  const rareza = CRATE_TYPES[tier].rarity;
+  const esUltima = tier >= MAX_CRATE_TIER;
+  const tabla: LootEntry[] = [];
+
+  // Las nanitas NO tienen cantidad por tier: `resolveLootAmount` la multiplica
+  // por el precio de la caja, así que la caja vale lo que vale y esto es un
+  // número fijo. Un solo factor —el precio— en vez de dos que se contradigan.
+  tabla.push({
+    id: 'nanites', weight: 34,
+    build: () => { const a = rand(250, 400); return { kind: 'nanites', amount: a, name: 'Nanitas', label: `+${a} Nanitas`, details: 'Materia prima básica', rarity: 'Común', icon: 'bolt' }; }
+  });
+
+  // F26 · LA CAJA T{n} SUELTA EL CRISTAL T{n}. Una línea, y es la que convierte
+  // la regla estricta en algo alcanzable.
+  tabla.push({
+    id: 'crystals', weight: 26,
+    build: () => {
+      const a = rand(3 * tier, 5 * tier);
+      const def = CRYSTAL_DEFS[tier];
+      return {
+        kind: 'crystals', amount: a,
+        name: def.name, label: `+${a} ${def.name}`,
+        details: `Sube el nivel de un recolector T${tier}`,
+        rarity: def.rarity, icon: 'crystal', materialTier: tier
+      };
+    }
+  });
+
+  // El compañero del tier de la caja. El poder sale de `TIER_SYSTEM.ranges`, el
+  // mismo del que salen el de la tienda y el del salto, así que un T5 de la caja
+  // y un T5 comprado hacen exactamente lo mismo (R2).
+  tabla.push({
+    id: 'companion', weight: 22,
+    build: () => {
+      const r = TIER_SYSTEM.ranges[tier];
+      const p = rand(r[0], r[1]);
+      const nombre = nombreDeArriba('companion', tier);
+      return {
+        kind: 'companion', amount: 1, name: nombre, label: nombre,
+        details: `Recolección por segundo: +${p}/s`,
+        rarity: rareza, icon: 'companion', tier,
+        item: {
+          id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: nombre, type: 'companion', details: `Recolección por segundo: +${p}/s`,
+          rarity: rareza, tier, companionType: 'passive', power: p,
+          sellPrice: Math.floor(p * 62)
+        }
+      };
+    }
+  });
+
+  // El recolector sobrecargado entra en la T3. Antes la caja común solo daba un
+  // dron y su salto; a partir de la T3 hay dos objetos de tier en la tabla, que
+  // es cuando una caja empieza a merecer el nombre de caja de tier y no de caja
+  // de.material.
+  if (tier >= 3) {
+    tabla.push({
+      id: 'collector', weight: 20,
+      build: () => {
+        const w = makeOverclockCollector(tier);
+        return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier, item: w.item };
+      }
+    });
+  }
+
+  // La llave de la caja, la suya. Sale de `CRATE_KEY_TIER` y el nombre del
+  // `label` sale de `KEY_DEFS`, así que la ruleta no puede anunciar una llave que
+  // no sea la que entra.
+  tabla.push(buildKeyLoot(tier));
+
+  if (!esUltima) {
+    // LA CAJA SIGUIENTE. Esta entrada es la cadena de F31 entera: sin ella, la
+    // T2 no llega a la T3 y el jugador se queda en la T10 sin poder. Y no sale de
+    // la tienda: **la puerta es la caja**, no la llave.
+    tabla.push({
+      id: 'nextCrate', weight: 12,
+      build: () => {
+        const def = CRATE_TYPES[(tier + 1) as CrateType];
+        return {
+          kind: 'crate', amount: 1, name: def.name, label: `+1 ${def.name}`,
+          details: def.details, rarity: def.rarity, icon: CRATE_META[(tier + 1) as CrateType].icon,
+          item: {
+            id: `crate_${tier + 1}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: def.name, type: 'crate', details: def.details, rarity: def.rarity,
+            tier: 0, sellPrice: Math.floor(costeDeCaja(tier + 1) / 4),
+            stackable: true, stackCount: 1
+          }
+        };
+      }
+    });
+
+    // El salto de F6: un tier por encima de la caja. La T10 no lo tiene porque no
+    // hay peldaño por encima del final, y no porque su `build` devuelva un T10
+    // siempre — eso sería un premio garantizado disfrazado de sorpresa.
+    tabla.push(buildUpLoot(tier));
+  }
+
+  // El expansor. Sale de `EXPANSOR_TIERS` y el tipo decide la caja: la T1 da el
+  // expansor T1, la T2 el T2, y de la T3 en adelante el T3, que es el único que
+  // llega al tope de 600 y por eso es el que tiene que venir de las cajas altas.
+  tabla.push(buildExpansorLoot(expansorDeCaja(tier), rareza));
+
+  if (tier >= 8) {
+    tabla.push({
+      id: 'stabilityNano', weight: 6,
+      // `pesoComo` es la rareza de la CAJA, no la del item, y el motivo es
+      // concreto: la nanopartícula es Legendaria lo mismo en la T8 que en la T10.
+      // Compitiendo por su rareza propia, una entrada Legendaria suelta dentro de
+      // una bolsa Mítica rompe la escalera de rarezas de `saltoCheck` —que exige
+      // que más rareza sea menos probabilidad— y además haría que el mismo item
+      // pesara distinto según la caja. Su rareza describe el item; lo que decide
+      // cuánto sale es la caja.
+      pesoComo: rareza,
+      build: () => {
+        const def = CONSUMABLES.stabilityNano;
+        return {
+          kind: 'consumable', amount: 1, name: def.name, label: def.name, details: def.details,
+          rarity: def.rarity, icon: 'flask',
+          item: { id: `crate_nano_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: 1, sellPrice: 55000 }
+        };
+      }
+    });
+  } else if (tier >= 6) {
+    tabla.push({
+      id: 'calibrationStone', weight: 6,
+      // Como la nanopartícula: compite en la bolsa de la caja, no en la del item.
+      pesoComo: rareza,
+      build: () => {
+        const def = CONSUMABLES.calibrationStone;
+        const a = rand(1, 2);
+        return {
+          kind: 'consumable', amount: a, name: def.name,
+          label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: def.details,
+          rarity: def.rarity, icon: 'flask',
+          item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: a, sellPrice: 11250 }
+        };
+      }
+    });
+  }
+
+  // Los exclusivos de esta caja, si le tocan.
+  for (const idx of EXCLUSIVOS_POR_CAJA[tier] ?? []) {
+    const comp = CRATE_ONLY_COMPANIONS[idx];
+    tabla.push({
+      id: `exclusivo_${idx}`, weight: 3, exclusivo: true,
+      build: () => {
+        const c = makeCrateOnlyCompanion(comp);
+        return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: comp.icon, item: c.item, exclusive: true };
+      }
+    });
+  }
+
+  // El cosmético. Su rareza es la de la caja, y `rarezaAcotada` la recorta por si
+  // acaso: el peso lo decide la rareza, no la etiqueta que pone aquí.
+  //
+  // **Y SOLO EN LAS CAJAS QUE TIENEN CATÁLOGO.** El catálogo reparte nueve
+  // cosméticos entre las cajas 1, 3, 6 y 10; las otras seis no tienen ninguno. Con
+  // cuatro cajas la entrada estaba en las cuatro y no se notaba. Con diez, seis
+  // ruletas enseñaban una casilla de cosmético que nunca salía y el sorteo la
+  // compensaba en nanitas: una casilla que miente, que es lo que el propio
+  // `rollCrateCosmetic` documenta que no puede pasar.
+  if (crateCosmetics(tier).length > 0) {
+    tabla.push({
+      id: 'cosmetic', weight: 5, pesoComo: rareza,
+      build: (ctx: LootBuildContext) => rollCrateCosmetic(tier, ctx.ownedCosmetics)
+    });
+  }
+
+  return tabla;
+}
+
+/**
+ * Las diez tablas. Se construyen al cargar el módulo y no se tocan después, así
+ * que `rand()` dentro de un `build()` sigue tirando de verdad en cada caja: el
+ * orden es el de las entradas, y las cantidades se tiran al sortear, no al
+ * escribir la tabla.
+ */
+export const CRATE_LOOT: Record<CrateType, LootEntry[]> = Object.fromEntries(
+  CRATE_TIERS.map(t => [t, botinDeCaja(t)])
+) as Record<CrateType, LootEntry[]>;
 
 /** Compra una entrada por peso. */
 export function pickLoot(crateType: CrateType, weights?: number[]): LootEntry {
@@ -969,13 +1240,14 @@ export function rollCrateReward(crateType: CrateType, applier: LootApplier): Cra
       return reward;
     }
     case 'crystals': {
-      // El botín da el cristal del nivel que declara la entrada. Los
-      // superiores no se sortean: son premio de la caja legendaria.
+      // El botín da el cristal del nivel que declara la entrada, y F26 quiere que
+      // ese nivel sea SIEMPRE el de la caja. El `?? 1` es el suelo: una entrada
+      // sin `materialTier` es un dato corrupto, y el T1 siempre está a mano.
       applier.crystals(reward.amount, reward.materialTier ?? 1);
       return reward;
     }
     case 'keys': {
-      applier.keys(reward.amount, reward.keyTier ?? 0);
+      applier.keys(reward.amount, reward.keyTier ?? 1);
       return reward;
     }
     case 'cosmetic': {
