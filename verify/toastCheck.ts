@@ -111,9 +111,11 @@ function cabecera(borde: number) {
 //  Y eso no es poco, porque era justo lo que fallaba. Dos causas distintas, ambas
 //  reales, y ningunavisible mirando el cartel:
 //
-//    1. `buyStoreItem('warehouseSlot')` subía la capacidad y salía SIN llamar a
-//       `checkAchievements()`. Justo la acción que cumple "Almacén Masivo" era la
-//       única de las diez rutas que no evaluaba logros.
+//    1. La vía de ampliar no evaluaba logros: `buyStoreItem('warehouseSlot')`
+//       subía la capacidad y salía sin llamar a `checkAchievements()`. Justo la
+//       acción que cumple "Almacén Masivo" era la única de las diez rutas que no
+//       evaluaba logros. Con F27 ampliar es usar un expansor, y esa ruta sí
+//       evalúa: este banco ata que siga siendo así.
 //    2. El cartel se descartaba al no existir todavía `#achievement-stack`: el
 //       motor evalúa logros durante la carga, dentro del `await`, y el layout se
 //       pinta en el `requestAnimationFrame` siguiente.
@@ -394,12 +396,21 @@ async function main() {
   //  pero sí se comprueba la mitad que no estaba: **que el motor emita el logro**.
   // ---------------------------------------------------------------------
 
-  // 7a · La compra de ampliar el almacén, que es la acción que cumple
-  // "Almacén Masivo" y la que NO evaluaba logros. Subía la capacidad y salía.
+  // 7a · Usar un expansor, que es la acción que cumple "Almacén Masivo" por la
+  // vía de la tienda (F27: la compra mete el item y ampliar es usarlo). La
+  // emisión del logro vive en `useConsumable`, como en las demás rutas.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
-    g.buyStoreItem('warehouseSlot');
-
+    const e = g.buyStoreItem('expansorT1', 3) as any;
+    const id = e.id;
+    g.useConsumable(id);
+    check(
+      'logros: con 17 todavía no hay logro',
+      !g.getState().unlockedAchievements.includes('deep_pockets'),
+      'logros=' + JSON.stringify(g.getState().unlockedAchievements)
+    );
+    g.useConsumable(id);
+    g.useConsumable(id);
     check(
       'logros: ampliar el almacén hasta 20 desbloquea el logro',
       g.getState().unlockedAchievements.includes('deep_pockets'),
@@ -412,15 +423,19 @@ async function main() {
     );
   }
 
-  // 7b · Y que se anuncie UNA VEZ. Con la compra repetida, el logro ya está
+  // 7b · Y que se anuncie UNA VEZ. Con más usos, el logro ya está
   // desbloqueado y no debe volver a salir: un `×2` en el cartel sería el mismo
   // bug que el del `×5` de los avisos, y aquí no hay forma de verlo mirando.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
-    g.buyStoreItem('warehouseSlot');
+    const e = g.buyStoreItem('expansorT1', 3) as any;
+    g.useConsumable(e.id);
+    g.useConsumable(e.id);
+    g.useConsumable(e.id);
     const trasLaPrimera = vistos.length;
-    g.buyStoreItem('warehouseSlot');
-    g.buyStoreItem('warehouseSlot');
+    const e2 = g.buyStoreItem('expansorT1', 2) as any;
+    g.useConsumable(e2.id);
+    g.useConsumable(e2.id);
 
     check(
       'logros: ampliar más no vuelve a anunciar el mismo logro',

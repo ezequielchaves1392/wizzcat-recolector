@@ -282,15 +282,16 @@ async function main() {
     check('tienda: con el almacen vacio, todo se puede comprar', true);
   }
   {
-    // Ampliar y añadir huecos de companero son permisos: no son objetos, asi
-    // que se pueden comprar con el almacen lleno. `maxCompanionSlots: 1` porque
-    // con 3 huecos el de companero ya estaria comprado y la prueba mediria eso.
+    // F27 · Ampliar YA no es un permiso: el expansor es un item y con el
+    // almacén lleno y sin pila no entra. Los huecos de compañero sí siguen
+    // siendo permisos y entran igual. `maxCompanionSlots: 1` porque con 3 el
+    // de compañero ya estaría comprado y la prueba mediría eso.
     const lleno = Array.from({ length: 4 }, (_, i) => collector(`r${i}`));
     const g = await boot(baseSave([...lleno, crate('c1', 'common', 1), key('k1', 0, 1)],
       { warehouseCapacity: 6, maxCompanionSlots: 1, nanites: 10_000_000 }));
-    check('tienda: ampliar el almacen funciona con el almacen lleno',
-      g.canBuyStoreItem('warehouseSlot') === true && g.buyStoreItem('warehouseSlot') !== false);
-    check('tienda: y anadir un hueco de companero tambien',
+    check('tienda: ampliar el almacen con el almacen lleno se rechaza sin pila',
+      g.canBuyStoreItem('expansorT1') === false && g.buyStoreItem('expansorT1') === false);
+    check('tienda: y añadir un hueco de companero sigue entrando',
       g.canBuyStoreItem('companionSlot1') === true && g.buyStoreItem('companionSlot1') !== false);
   }
 

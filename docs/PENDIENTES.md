@@ -1217,7 +1217,7 @@ estrictamente, y que la progresión se mantenga como está ahora para que haya f
 >   jugador gasta 200 en cristal que no le sirve para nada.
 
 
-### F27 · El almacén necesita un tope y las ampliaciones deben escalarse por tipo
+### F27 · El almacén necesita un tope y las ampliaciones deben escalarse por tipo — HECHO
 
 El almacén es infinito aparentemente. Ponerle un cupo, hacer que el agrandar almacén sea
 un objeto y las mejoras requieran un tipo mayor de mejora de almacén a medida que más
@@ -1260,6 +1260,30 @@ cantidad tengo. Ej: Expansor T1, Expansor T2, etc.
 > almacén pasa a ser **un recurso que obliga a vender**. Si un jugador no puede crecer
 > porque está lleno y no le compensa vender, está atrapado. Hay que decidir cómo es la
 > salida —y `sellPrice` deja de ser decorativo—.
+>
+> > **Hecho. Tres tipos en `EXPANSOR_TIERS` (`data/store.ts`), que es donde está
+> > el número:** T1 +2 por 3.000 (vale hasta 120), T2 +5 por 18.000 (hasta 300)
+> > y T3 +10 solo de cajas épicas y legendarias (hasta el tope, 600). Solo techo
+> > por arriba y no bandas cerradas: un T3 en un almacén pequeño sirve, lo que
+> > no puede es un T1 barato donde toca un T2.
+> >
+> > - **Un solo camino:** se compra el expansor y se usa desde el almacén. La
+> >   carta `warehouseSlot` (+5 sin tope) desaparece, y con ella el segundo
+> >   producto sin reglas. El +1 viejo sigue usándose con el tope nuevo (stock
+> >   finito, no un cuarto tipo).
+> > - **El tope frena, no recorta:** quien pasó de 600 con la carta vieja
+> >   conserva cada ranura. La presión viene del precio y de las cajas.
+> > - **De paso, dos muertos:** `expandWarehouse()` (+5 por 500) y
+> >   `unlockCompanionSlot()` (tope 5, que contradecía el 6 de F11) no los
+> >   llamaba ninguna vista —solo los bancos— y se borran. Y `companionSlot3`
+> >   faltaba en `NO_OCUPA_RANURA`: la 3ª ranura pedía hueco con el almacén
+> >   lleno. También la cola de `buyStoreItem`, que cobraba sin entregar para
+> >   claves sin rama: ahora devuelve lo cobrado con `false`.
+> >
+> > Cubre `buyCheck` (+6), `stateCheck` (tipos, tope, legado),
+> > `consumableCheck` (+2), `toastCheck` (+1, el logro por la vía nueva) y
+> > `playthroughCheck` (un solo camino). La tanda queda en **24 bancos, 1542
+> > pruebas**. Con esto F31 deja de estar bloqueado por el almacén.
 
 ### F28 · La ruleta va demasiado rápido en el navegador y bien en el celular
 
@@ -2331,6 +2355,10 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       funde las N en la pila; `getBulkCost`/`getBulkMax`/`getStoreUnitCost` ponen
       el número único para diálogo, tope y tarjeta. `buyCheck` 140 → 154.
       La tanda queda en **24 bancos, 1442 pruebas**.
+- [x] **F27 · tope de almacén y expansores por tipo.** T1/T2 en tienda, T3 solo
+      de cajas, tope 600 que frena sin recortar. Fuera `warehouseSlot`,
+      `expandWarehouse` y `unlockCompanionSlot`. Bancos al día.
+      La tanda queda en **24 bancos, 1542 pruebas**.
 - [x] **F12-F13 · lo que te tocó y su lore.** Comprar tier abre un cartel con
       nombre, poder, rareza y lore (ya no un toast que manda al almacén). 67
       fichas en `data/tiers.ts`, visibles también en la ficha del almacén, con

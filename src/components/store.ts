@@ -34,7 +34,7 @@ import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
-import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY } from '../data/store';
+import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP } from '../data/store';
 // Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
 // nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
 import { STORE_KEY_TIER, KEY_DEFS, cratesOpenedBy } from '../data/items';
@@ -54,7 +54,7 @@ interface Category {
 const CATEGORIES: Category[] = [
   { id: 'llaves', label: 'Llaves', icon: 'key', items: ['keyT0', 'keyT1', 'keyT2', 'keyT3'] },
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate'] },
-  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'warehouseSlot', 'backpackExpander'] },
+  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'expansorT1', 'expansorT2'] },
   // F4 · Solo las tres tarjetas. `clickBuff` y `passiveBuff` se han retirado de la
   // lista: la categoría ya no puede nombrarlos porque no existen, y
   // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
@@ -73,7 +73,7 @@ const CATEGORIES: Category[] = [
 const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   commonCrate: {
     what: 'Caja básica con recursos de partida temprana.',
-    detail: 'Puede dar nanitas, cristales, llaves, drones T1 o una ranura de almacén. Es la única caja cuyo contenido medio cubre su precio.'
+    detail: 'Puede dar nanitas, cristales, llaves, drones T1 o un Expansor T1. Es la única caja cuyo contenido medio cubre su precio.'
   },
   rareCrate: {
     what: 'Caja de nivel medio: crystals, compañeros T3 y recolectores T4 sobrecargadas.',
@@ -103,13 +103,13 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     what: 'Cristal para subir el nivel del recolector equipado.',
     detail: 'El nivel multiplica el daño del recolector y sube hasta 20 en las de tienda, o 35 en las crafteadas. El coste en cristales crece por nivel y el éxito baja.'
   },
-  warehouseSlot: {
-    what: 'Añade 5 ranuras permanentes al almacén.',
-    detail: 'Las ranuras del árbol de pasivas se suman a estas. Ampliar es irreversible, pero es de las pocas compras que nunca sobran.'
+  expansorT1: {
+    what: 'Añade 2 ranuras permanentes al almacén.',
+    detail: 'Se usa desde el almacén. Vale hasta 120 de capacidad: al crecer hay que subir al T2. Las ranuras del árbol se suman a estas.'
   },
-  backpackExpander: {
-    what: 'Añade 1 ranura al almacén, de pago único.',
-    detail: 'Cuesta lo mismo por ranura que la ampliación grande pero permite comprar solo lo que falta.'
+  expansorT2: {
+    what: 'Añade 5 ranuras permanentes al almacén.',
+    detail: 'Se usa desde el almacén. Vale hasta 300 de capacidad. El T3, que llega al tope, solo sale de cajas altas.'
   },
 
   afkCard: {
@@ -192,7 +192,7 @@ function iconFor(itemKey: string): IconName {
   if (itemKey.startsWith('companionCardT')) return 'companion';
   const map: Record<string, IconName> = {
     keyT0: 'key', keyT1: 'key', keyT2: 'key', keyT3: 'key',
-    upgradeCrystal: 'crystal', warehouseSlot: 'warehouse', backpackExpander: 'warehouse',
+    upgradeCrystal: 'crystal', expansorT1: 'warehouse', expansorT2: 'warehouse',
     // F4 · `clickBuff` y `passiveBuff` ya no tienen carta, así que ya no hay icono que
 // inventarles. Si volvieran, volverían aquí.
 afkCard: 'clock', clickX2Card: 'bolt', clickX3Card: 'bolt',
@@ -215,7 +215,7 @@ function rarityOf(itemKey: string): string | null {
   if (itemKey.startsWith('companionCardT')) return tierRarity(parseInt(itemKey.slice(14)));
   if (itemKey.startsWith('collectorCardT')) return tierRarity(parseInt(itemKey.slice(11)));
   const map: Record<string, string> = {
-    upgradeCrystal: 'Raro', warehouseSlot: 'Raro', backpackExpander: 'Raro',
+    upgradeCrystal: 'Raro', expansorT1: 'Raro', expansorT2: 'Épico',
     // F4 · Sin `clickBuff` ni `passiveBuff`: no hay carta, no hay rareza.
 afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
@@ -252,7 +252,13 @@ function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; 
   // acordarse de los tres sitios; con la tabla es una fila.
   const ranura = RANURA_POR_CARTA[itemKey];
   if (ranura && effSlots >= ranura.da) return { disabled: true, reason: 'Comprado' };
-  if (itemKey === 'backpackExpander' && state.warehouseCapacity >= 50) return { disabled: true, reason: 'Al máximo' };
+  // F27 · Si el tipo ya no sirve para tu capacidad, la tarjeta lo dice antes de
+  // cobrar: el rechazo lo hará `useConsumable` al usarlo, y pagar por algo que
+  // no se puede usar es el bug que R3 prohíbe. El techo sale de la tabla.
+  const expansor = EXPANSOR_TIERS.find(t => `expansorT${t.tier}` === itemKey);
+  if (expansor && state.warehouseCapacity >= expansor.maxCap) {
+    return { disabled: true, reason: `Pide T${expansor.tier + 1}` };
+  }
   // "¿Cabe esta compra?" lo contesta el game loop, que es quien cobra. Preguntar
   // aquí solo por el fullness del almacén apagaba el botón de una caja que sí
   // cabía en la pila de cajas que ya había, y al revés: dejaba encendido lo
@@ -290,10 +296,9 @@ export function renderStoreTab(
 
     // Nota contextual: el número que cambia con la partida
     let note = '';
-    if (itemKey === 'backpackExpander') {
-      note = `Capacidad real: ${countOccupiedSlots(state.warehouse)}/${game.getCapacity?.() ?? state.warehouseCapacity}`;
-    } else if (itemKey === 'warehouseSlot') {
-      note = `Ranuras de tienda: ${state.warehouseCapacity}`;
+    const expansorNota = EXPANSOR_TIERS.find(t => `expansorT${t.tier}` === itemKey);
+    if (expansorNota) {
+      note = `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
     } else if (itemKey === 'afkCard') {
       note = `${Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000)} min cada una · acumulable ×3`;
     } else if (itemKey === 'key') {

@@ -8,6 +8,7 @@
 //     lo muestra. Si se invirtiera, la ruleta estaría mintiendo sobre las probabilidades.
 
 import { TIER_SYSTEM } from '../data/tiers';
+import { EXPANSOR_TIERS, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
 // `CRATE_KEY_TIER` y `KEY_DEFS` entran como VALOR porque la entrada de llaves de
@@ -351,6 +352,33 @@ function buildKeyLoot(crateType: CrateType): LootEntry {
 }
 
 /**
+ * EL EXPANSOR DE CADA CAJA (F27).
+ *
+ * La común suelta el T1, la rara el T2 y la épica y la legendaria el T3: la
+ * ampliación grande es recompensa de caja y no compra, que es lo que le da a
+ * las cajas el valor que F31 quiere darles. El nombre, las ranuras y la
+ * reventa salen de `EXPANSOR_TIERS`: si se escribieran a mano aquí, la tabla
+ * de la tienda y la del botín se separarían en el primer rebalanceo (D4).
+ */
+function buildExpansorLoot(tier: 1 | 2 | 3): LootEntry {
+  const def = EXPANSOR_TIERS.find(t => t.tier === tier) as ExpansorTier;
+  const rarity = tier === 1 ? 'Raro' : tier === 2 ? 'Épico' : 'Legendario';
+  return {
+    id: 'expansor',
+    weight: 6,
+    build: () => ({
+      kind: 'consumable', amount: 1, name: def.name, label: `+1 ${def.name}`,
+      details: `Amplía el almacén +${def.slots} slots`, rarity, icon: 'plus',
+      item: {
+        id: `crate_expansor_${Date.now()}`, name: def.name, type: 'consumable',
+        details: `Amplía el almacén +${def.slots} slots`, rarity,
+        buffId: def.buffId, stackable: true, stackCount: 1, sellPrice: def.resale
+      }
+    })
+  };
+}
+
+/**
  * LA PROBABILIDAD BAJA DE QUE UNA CAJA DÉ ALGO DE ARRIBA (F6).
  *
  * Cada caja tiene su tabla con lo que le corresponde, y en cada una hay una entrada
@@ -490,7 +518,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'dron', weight: 22, build: () => ({ kind: 'companion', amount: 1, name: 'Dron Explorador', label: 'Dron Explorador', details: 'Recolección por segundo: +2/s', rarity: 'Común', icon: 'companion', tier: 1, item: { id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +2/s', rarity: 'Común', companionType: 'passive', power: 2, sellPrice: 100 } }) },
     buildKeyLoot('common'),
     buildUpLoot('common'),
-    { id: 'expander', weight: 6, build: () => ({ kind: 'consumable', amount: 1, name: 'Ranura de Almacén', label: '+1 ranura de almacén', details: 'Amplía el almacén +1 slot', rarity: 'Raro', icon: 'plus', item: { id: `crate_slot_${Date.now()}`, name: 'Ranura de Almacén', type: 'consumable', details: 'Amplía el almacén +1 slot', rarity: 'Raro', buffId: 'warehouseExpander', stackable: true, stackCount: 1, sellPrice: 125 } }) },
+    buildExpansorLoot(1),
     { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('common', ctx.ownedCosmetics) }
   ],
   rare: [
@@ -500,6 +528,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'epic_crate', weight: 16, build: () => ({ kind: 'crate', amount: 1, name: 'Caja Épica', label: '+1 Caja Épica', details: 'Abre una caja de botín superior', rarity: 'Épico', icon: 'crystal', item: { id: `crate_epic_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: 'Caja Épica', type: 'crate', details: 'Contiene recompensas altas', rarity: 'Épico', tier: 0, sellPrice: 1125, stackable: true, stackCount: 1 } }) },
     buildKeyLoot('rare'),
     buildUpLoot('rare'),
+    buildExpansorLoot(2),
     { id: 'cosmetic', weight: 5, build: (ctx) => rollCrateCosmetic('rare', ctx.ownedCosmetics) }
   ],
   epic: [
@@ -516,6 +545,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     // y faltaban los tres.
     buildKeyLoot('epic'),
     buildUpLoot('epic'),
+    buildExpansorLoot(3),
     { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('epic', ctx.ownedCosmetics) }
   ],
   legendary: [
@@ -537,6 +567,7 @@ export const CRATE_LOOT: Record<CrateType, LootEntry[]> = {
     { id: 'espectro', weight: 5, build: () => { const c = makeCrateOnlyCompanion(CRATE_ONLY_COMPANIONS[5]); return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: 'sparkle', item: c.item, exclusive: true }; } },
     buildKeyLoot('legendary'),
     buildUpLoot('legendary'),
+    buildExpansorLoot(3),
     { id: 'cosmetic', weight: 6, build: (ctx) => rollCrateCosmetic('legendary', ctx.ownedCosmetics) }
   ]
 };

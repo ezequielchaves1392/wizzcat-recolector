@@ -37,7 +37,8 @@ import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data
 // ==========================================================================
 import {
   STORE_ITEMS, CRATE_TYPES, CONSUMABLES, COLLECTOR_BASE_COSTS,
-  COMPANION_SLOT_COSTS, RANURA_POR_CARTA, type CrateType
+  COMPANION_SLOT_COSTS, RANURA_POR_CARTA, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP,
+  expansorPorBuff, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
 import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
@@ -214,6 +215,11 @@ function reconcileEquippedCollector(
 // Se usa una sola vez, al migrar saves antiguos.
 function inferBuffIdFromName(name: string): string | null {
   const lower = name.toLowerCase();
+  // Los tipos van antes que el genérico: un "Expansor T1" sin `buffId` es un
+  // T1, no el +1 viejo. El genérico queda para el stock de antes de los tipos.
+  if (lower.includes('expansor t3')) return 'expansorT3';
+  if (lower.includes('expansor t2')) return 'expansorT2';
+  if (lower.includes('expansor t1')) return 'expansorT1';
   if (lower.includes('expansor')) return 'warehouseExpander';
   if (lower.includes('afk')) return 'afk';
   if (lower.includes('click x3')) return 'clickX3';
@@ -488,7 +494,7 @@ function cabeEnAlmacen(item: any): boolean {
  * no tiene por qué haber hueco. Lo que no está en esta lista SÍ es un objeto
  * físico y necesita su sitio: llaves y cristales incluidos.
  */
-const NO_OCUPA_RANURA = ['warehouseSlot', 'backpackExpander', 'companionSlot1', 'companionSlot2'];
+const NO_OCUPA_RANURA = ['companionSlot1', 'companionSlot2', 'companionSlot3'];
 
 /**
  * ¿Se puede comprar este producto sin que el almacén se desborde?
@@ -2534,9 +2540,31 @@ const AFK_THRESHOLD_MS = 60000;
       let nuevoItem = true;
 
       switch (buffId) {
+        case 'expansorT1':
+        case 'expansorT2':
+        case 'expansorT3': {
+          // F27 · Cada tipo vale hasta su techo: al crecer hay que subir de
+          // tipo. Lo que pide el siguiente lo dice el propio rechazo, para que
+          // el jugador no tenga que adivinar qué comprar.
+          const tipo = expansorPorBuff(buffId)!;
+          if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
+            return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };
+          }
+          if (state.warehouseCapacity >= tipo.maxCap) {
+            const siguiente = EXPANSOR_TIERS.find(t => t.tier === tipo.tier + 1 as 2 | 3);
+            return { ok: false, msg: `Tu almacén necesita un ${siguiente?.name ?? 'expansor mayor'}.` };
+          }
+          state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + tipo.slots);
+          break;
+        }
         case 'warehouseExpander':
-          if (state.warehouseCapacity >= 50) return { ok: false, msg: 'Almacén al máximo.' };
-          state.warehouseCapacity += 1;
+          // Stock de antes de los tipos (+1): sigue sirviendo con el tope
+          // nuevo. No es un cuarto tipo —no se vende ni sale de cajas— y por
+          // eso no está en la tabla.
+          if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
+            return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };
+          }
+          state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + 1);
           break;
         case 'afk': {
           const base = Math.max(ahora, state.afkExpiresAt || 0);
@@ -2698,36 +2726,12 @@ const AFK_THRESHOLD_MS = 60000;
         return { success: false, rolled: true, level, msg: `Fallo en el sintonizador. ${item.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)` };
       }
     },
-    expandWarehouse: () => {
-      handleUserActivity();
-      const cost = Math.floor(500 * (1 - state.bonus.costReduction));
-      // El tope es sobre la base guardada, no sobre el total efectivo: los
-      // slots del árbol no se "gastan" al comprar una expansión.
-      if (state.nanites >= cost && state.warehouseCapacity < 50) {
-        state.nanites -= cost;
-        state.warehouseCapacity += 5;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return true;
-      }
-      return false;
-    },
-    unlockCompanionSlot: () => {
-      handleUserActivity();
-      // Tope duro: 5 slots comprables en tienda. Los extra salen del árbol.
-      if (state.maxCompanionSlots >= 5) return false;
-      // Se cobra sobre el total efectivo (tienda + cuadrilla): si el árbol ya
-      // dio 2 slots, el siguiente de tienda cuesta el del escalón 4.
-      const cost = Math.floor(COMPANION_SLOT_COSTS[effectiveCompanionSlots()] ?? 9_000_000);
-      if (state.nanites >= cost) {
-        state.nanites -= cost;
-        state.maxCompanionSlots += 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return true;
-      }
-      return false;
-    },
+    // F27 · `expandWarehouse()` (+5 por 500, tope 50) y `unlockCompanionSlot()`
+    // (tope 5) estaban aquí sin que ninguna vista los llamara: eran un tercer
+    // y cuarto camino de ampliación con reglas distintas —y el tope 5
+    // contradecía el 6 de F11—. Solo los usaban los bancos. El único camino es
+    // comprar expansores por tipo y usarlos; estos dos se borran en vez de
+    // migrarse, porque migrar un camino muerto es conservarlo.
     /**
      * Alias de `equipCompanion`. Se conserva porque el guardado y el HTML
      * histórico lo nombran así, pero ya no tiene lógica propia: mantener dos
@@ -2886,17 +2890,6 @@ const AFK_THRESHOLD_MS = 60000;
         onUpdate(state, isAfk);
         saveToFirebase();
         return item;
-      } else if (itemKey === 'warehouseSlot') {
-        state.warehouseCapacity += 5;
-        // B3 · AQUÍ FALTAVA `checkAchievements()`, y es la razón de que el
-        // logro del almacén a 20 no saliera nunca: esta compra sube la capacidad
-        // y se iba. Justo la acción que cumple "Almacén Masivo" era la única de
-        // las diez rutas que no lo evaluaba. Las otras nueve sí lo llaman, y
-        // ahora esta también.
-        checkAchievements();
-        onUpdate(state, isAfk);
-        saveToFirebase();
-        return { id: `slot_${Date.now()}`, name: 'Espacio de Almacén', type: 'upgrade', details: '+5 espacios de almacén', rarity: 'Raro', tier: 0 };
       } else if (itemKey === 'commonCrate' || itemKey === 'rareCrate' || itemKey === 'epicCrate' || itemKey === 'legendaryCrate') {
         // La caja es un item real del almacén: sin esto no se puede abrir
         const crateType = itemKey.replace('Crate', '').toLowerCase() as CrateType;
@@ -2989,13 +2982,12 @@ const AFK_THRESHOLD_MS = 60000;
         return warehouseItem;
       }
 
-      // Aquí solo llegan Ampliaciones de almacén y Huecos de compañero: no son
-      // objetos que se guarden, son permisos, así que no hay item que devolver.
-      // La compra ya está cobrada y el efecto ya se aplicó más arriba.
-
-      onUpdate(state, isAfk);
-      saveToFirebase();
-      return true;
+      // Sin rama que lo entregue no hay compra: se devuelve el dinero. Antes se
+      // devolvía `true` habiendo cobrado, y una carta retirada de la tienda
+      // (o una clave inventada) cobraba sin dar nada. Un "no compres" que
+      // descuenta es peor que un bug visible.
+      state.nanites += cost;
+      return false;
     },
 
     /**

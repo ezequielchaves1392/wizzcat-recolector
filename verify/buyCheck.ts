@@ -70,7 +70,11 @@ async function main() {
     // (ver `tarjetaCheck`). El efecto sigue en el motor para las partidas viejas,
     // pero la tienda ya no los tiene, y una carta que no existe daría un error de
     // `undefined` al mirarla.
-    { k: 'backpackExpander', tipo: 'consumable', coste: 1400, nombre: 'Expansor' },
+    // F27 · `backpackExpander` (+1) estaba aquí. Ahora hay dos cartas por tipo
+    // (T1 y T2; el T3 solo sale de cajas), y el +1 viejo sigue usándose con el
+    // tope nuevo pero ya no se vende.
+    { k: 'expansorT1', tipo: 'consumable', coste: 3000, nombre: 'Expansor T1' },
+    { k: 'expansorT2', tipo: 'consumable', coste: 18000, nombre: 'Expansor T2' },
     { k: 'afkCard', tipo: 'consumable', coste: 10000, nombre: 'Tarjeta AFK' },
     { k: 'clickX2Card', tipo: 'consumable', coste: 5000, nombre: 'Click x2' },
     { k: 'clickX3Card', tipo: 'consumable', coste: 15000, nombre: 'Click x3' },
@@ -266,15 +270,30 @@ async function main() {
       'ranuras=' + ranuras(g));
   }
   {
-    // Los PERMISOS no son objetos: Ampliacion de almacen y Hueco de companero no
-    // ocupan ranura, precisamente para poder comprarlos con el almacen lleno.
+    // F27 · La ampliación YA no es un permiso: el expansor es un item y ocupa
+    // ranura (las ranuras de compañero sí siguen siendo permisos). Con el
+    // almacén lleno y sin pila a la que sumarse, se rechaza sin cobrar.
     const g = await boot(baseSave(distintos(30), { nanites: 200_000 }));
     const capAntes = s(g).warehouseCapacity;
-    const r = g.buyStoreItem('warehouseSlot');
-    check('capacidad: la ampliacion de almacen SI se compra con el almacen lleno', r !== false, String(r));
-    check('capacidad: y sube la capacidad 5', s(g).warehouseCapacity === capAntes + 5,
+    const antes = nanites(g);
+    const r = g.buyStoreItem('expansorT1');
+    check('capacidad: el expansor sin hueco ni pila se rechaza', r === false, String(r));
+    check('capacidad: y no se cobra', nanites(g) === antes, 'nanites=' + nanites(g));
+    check('capacidad: y la capacidad no se mueve', s(g).warehouseCapacity === capAntes,
       `${capAntes} -> ${s(g).warehouseCapacity}`);
-    check('capacidad: sin meter un item de mas', ranuras(g) === 30, 'ranuras=' + ranuras(g));
+  }
+  {
+    // ...pero con pila se funde con ella aunque esté lleno, como las cajas.
+    // La pila del expansor no existe aún: se crea la primera comprando con
+    // hueco, y el lote siguiente tiene que fundirse sin abrir ranura.
+    const g2 = await boot(baseSave([], { nanites: 200_000, warehouseCapacity: 30 }));
+    const e1 = g2.buyStoreItem('expansorT1') as any;
+    check('capacidad: el primer expansor abre su pila',
+      !!e1 && find(g2, e1.id)?.stackCount === 1, `pila=${e1 && find(g2, e1.id)?.stackCount}`);
+    const e2 = g2.buyStoreItem('expansorT1', 4) as any;
+    check('capacidad: el lote se suma a la pila, no abre otra',
+      !!e2 && find(g2, e1.id)?.stackCount === 5 && ranuras(g2) === 1,
+      `pila=${e1 && find(g2, e1.id)?.stackCount} ranuras=${ranuras(g2)}`);
   }
   {
     // Un item apilable puede NO necesitar ranura nueva: si ya hay una pila de su
@@ -514,7 +533,9 @@ async function main() {
       'keyT0', 'keyT1', 'keyT2', 'keyT3',
       'upgradeCrystal', 'commonCrate', 'rareCrate', 'epicCrate', 'legendaryCrate',
       // F4 · Fuera `clickBuff` y `passiveBuff`, que ya no son cartas de tienda.
-      'backpackExpander', 'afkCard', 'clickX2Card', 'clickX3Card',
+      // F27 · Fuera `backpackExpander` (+1): ahora son `expansorT1` y
+      // `expansorT2` (el T3 solo sale de cajas y no tiene carta que abusar).
+      'expansorT1', 'expansorT2', 'afkCard', 'clickX2Card', 'clickX3Card',
       'calibrationStone', 'stabilityNano',
       'companionCardT1', 'companionCardT5', 'companionCardT10',
       'collectorCardT1', 'collectorCardT5', 'collectorCardT10'

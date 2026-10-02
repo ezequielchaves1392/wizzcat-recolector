@@ -3,7 +3,7 @@
 //
 //  `useConsumable` es la operacion con mas condiciones de una sola vez: el item
 //  tiene que ser del tipo correcto, su `buffId` tiene que ser conocido, el
-//  efecto se aplica ANTES de gastar, y hay topes (capacidad 50, AFK 3 tarjetas,
+//  efecto se aplica ANTES de gastar, y hay topes (capacidad 600 por tipo, AFK 3 tarjetas,
 //  buffs con duracion maxima) que se calculan sobre lo que ya habia.
 //
 //  Los tres fallos que esto evita:
@@ -34,57 +34,68 @@ const BUFFS_ZERO = { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2Ex
 
 async function main() {
   // =========================================================================
-  //  1. Expansor de almacen: +1 ranura, y solo si no esta al maximo
+  //  1. Expansores por tipo: +N ranuras, cada uno hasta su techo
   // =========================================================================
   {
-    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })]));
+    // F27 · El T1 da +2 y se gasta la unidad. Lo que era "+1" es ahora el
+    // legado de abajo.
+    const g = await boot(baseSave([consumable('e1', 'expansorT1', 1, { name: 'Expansor T1' })]));
     const capAntes = s(g).warehouseCapacity;
     const r = g.useConsumable('e1');
 
     check('expansor: se aplica', r.ok, r.msg ?? '');
-    check('expansor: sube la capacidad 1', s(g).warehouseCapacity === capAntes + 1,
+    check('expansor: sube la capacidad 2', s(g).warehouseCapacity === capAntes + 2,
       `${capAntes} -> ${s(g).warehouseCapacity}`);
     check('expansor: y consume la unidad', wh(g).length === 0, ids(g).join(','));
   }
   {
-    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })],
-      { warehouseCapacity: 50 }));
+    const g = await boot(baseSave([consumable('e1', 'expansorT1', 1, { name: 'Expansor T1' })],
+      { warehouseCapacity: 600 }));
     const r = g.useConsumable('e1');
-    check('expansor: en el maximo (50) se rechaza', !r.ok && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
+    check('expansor: en el maximo (600) se rechaza', !r.ok && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
     check('expansor: y NO se gasta el item', wh(g).length === 1, ids(g).join(','));
   }
   {
     // El tope es sobre la base GUARDADA, no sobre el total efectivo: los slots
-    // del arbol no se "gastan" al usar un expansor. Con la base en 49 y +6 del
-    // arbol, el expansor entra y lleva la base a 50; con la base ya en 50 se
-    // rechaza aunque el total efectivo siga por debajo de 50 con menos slots.
-    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })], {
-      warehouseCapacity: 49,
+    // del arbol no se "gastan" al usar un expansor. Con la base en 599 y slots
+    // del árbol, el T3 entra y lleva la base a 600; con la base ya en 600 se
+    // rechaza.
+    const g = await boot(baseSave([consumable('e1', 'expansorT3', 1, { name: 'Expansor T3' })], {
+      warehouseCapacity: 599,
       nodeLevels: { storage_rack: 2, scrapyard: 1 },
       unlockedNodes: ['storage_rack', 'scrapyard']
     }));
     const r = g.useConsumable('e1');
-    check('expansor: con la base en 49 y slots del arbol se aplica', r.ok, r.msg ?? '');
-    check('expansor: y lleva la BASE a 50, no el total', s(g).warehouseCapacity === 50,
+    check('expansor: con la base en 599 y slots del arbol se aplica', r.ok, r.msg ?? '');
+    check('expansor: y lleva la BASE a 600, no el total', s(g).warehouseCapacity === 600,
       'base=' + s(g).warehouseCapacity);
   }
   {
     // Una pila de expansores: usar uno baja el contador, no borra la celda.
-    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 3, { name: 'Expansor de Almacén' })]));
+    const g = await boot(baseSave([consumable('e1', 'expansorT2', 3, { name: 'Expansor T2' })]));
     const antes = s(g).warehouseCapacity;
     const r = g.useConsumable('e1');
     check('expansor: una pila de 3 se queda en 2', r.ok && find(g, 'e1')?.stackCount === 2,
       `ok=${r.ok} stack=${find(g, 'e1')?.stackCount}`);
-    check('expansor: y la capacidad sube solo 1', s(g).warehouseCapacity === antes + 1,
+    check('expansor: y la capacidad sube 5', s(g).warehouseCapacity === antes + 5,
       `${antes} -> ${s(g).warehouseCapacity}`);
   }
   {
-    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 2, { name: 'Expansor de Almacén' })], {
-      warehouseCapacity: 50
+    const g = await boot(baseSave([consumable('e1', 'expansorT2', 2, { name: 'Expansor T2' })], {
+      warehouseCapacity: 600
     }));
     const r = g.useConsumable('e1');
     check('expansor: con el almacen al tope NO se gasta ni una unidad de la pila',
       !r.ok && find(g, 'e1')?.stackCount === 2, `stack=${find(g, 'e1')?.stackCount}`);
+  }
+  {
+    // El +1 de antes de los tipos sigue sirviendo, con el tope nuevo.
+    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })]));
+    const capAntes = s(g).warehouseCapacity;
+    const r = g.useConsumable('e1');
+    check('expansor: el +1 viejo se aplica', r.ok, r.msg ?? '');
+    check('expansor: y sube la capacidad 1', s(g).warehouseCapacity === capAntes + 1,
+      `${capAntes} -> ${s(g).warehouseCapacity}`);
   }
 
   // =========================================================================
@@ -335,9 +346,9 @@ async function main() {
     // El caso central: almacen al maximo de expansores. El efecto no cabe, asi
     // que no debe gastarse NINGUN item, ni el expansor ni otra cosa.
     const g = await boot(baseSave([
-      consumable('e1', 'warehouseExpander', 2, { name: 'Expansor de Almacén' }),
+      consumable('e1', 'expansorT1', 2, { name: 'Expansor T1' }),
       consumable('u1', 'afk', 1, { name: 'Tarjeta AFK' })
-    ], { warehouseCapacity: 50 }));
+    ], { warehouseCapacity: 600 }));
     const r = g.useConsumable('e1');
     check('gasto: un efecto rechazado no gasta el item',
       !r.ok && find(g, 'e1')?.stackCount === 2, `stack=${find(g, 'e1')?.stackCount}`);

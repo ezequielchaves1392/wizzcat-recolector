@@ -1166,50 +1166,68 @@ async function main() {
   }
 
   // =========================================================================
-  //  14. La tienda: los permisos no son objetos
+  //  14. La tienda: los expansores son objetos con tipo y tope
   // =========================================================================
   {
+    // F27 · Comprar mete el item y usarlo amplía. Nada es un permiso: la
+    // ranura de compañero tampoco (companionSlot1 deja el almacén igual
+    // porque es un permiso, y eso se comprueba en `ranuraCheck`).
     const g = await boot(baseSave([], {
       nanites: 500_000, warehouseCapacity: 30, maxCompanionSlots: 1
     }));
     const antes = wh(g).length;
-    g.buyStoreItem('warehouseSlot');
-    check('tienda: la ampliacion no ocupa ranura',
-      wh(g).length === antes && s(g).warehouseCapacity === 35, `items=${wh(g).length} cap=${s(g).warehouseCapacity}`);
-    g.buyStoreItem('companionSlot1');
-    check('tienda: el hueco de companero tampoco', wh(g).length === antes, 'items=' + wh(g).length);
+    const e1 = g.buyStoreItem('expansorT1') as any;
+    check('tienda: el expansor mete un item',
+      !!e1 && wh(g).length === antes + 1, `items=${wh(g).length}`);
+    const r = g.useConsumable(e1.id);
+    check('tienda: y al usarlo la capacidad sube 2',
+      r.ok === true && s(g).warehouseCapacity === 32,
+      `cap=${s(g).warehouseCapacity} msg=${r.msg ?? ''}`);
     const g2 = await reload();
-    check('tienda: y ambos permisos sobreviven a la recarga',
-      s(g2).warehouseCapacity === 35 && s(g2).maxCompanionSlots === 2,
-      `cap=${s(g2).warehouseCapacity} slots=${s(g2).maxCompanionSlots}`);
+    check('tienda: y la ampliación sobrevive a la recarga',
+      s(g2).warehouseCapacity === 32, `cap=${s(g2).warehouseCapacity}`);
   }
   {
-    // Ampliar el almacen desde la pantalla de mejoras es OTRO camino a la misma
-    // capacidad. Los dos tienen que respectar el mismo tope de 50.
-    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 50 }));
-    const r = g.expandWarehouse();
-    check('ampliar: en el tope de 50 se rechaza', r === false, String(r));
-    check('ampliar: y la capacidad no pasa de 50', s(g).warehouseCapacity === 50,
-      'cap=' + s(g).warehouseCapacity);
+    // Cada tipo vale hasta su techo: el T1 deja de servir a los 120 y lo dice.
+    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 119 }));
+    const e1 = g.buyStoreItem('expansorT1') as any;
+    check('tipos: el T1 sirve por debajo de 120', g.useConsumable(e1.id).ok === true,
+      `cap=${s(g).warehouseCapacity}`);
+    const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 120 }));
+    const e2 = gB.buyStoreItem('expansorT1') as any;
+    const r2 = gB.useConsumable(e2.id);
+    check('tipos: en 120 el T1 pide el T2 y no gasta',
+      r2.ok === false && /T2/.test(r2.msg ?? '') && s(gB).warehouseCapacity === 120,
+      `msg=${r2.msg ?? ''} cap=${s(gB).warehouseCapacity}`);
+    const gC = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 299 }));
+    const e3 = gC.buyStoreItem('expansorT2') as any;
+    check('tipos: el T2 sirve por debajo de 300 y da +5',
+      gC.useConsumable(e3.id).ok === true && s(gC).warehouseCapacity === 304,
+      `cap=${s(gC).warehouseCapacity}`);
   }
   {
-    // El coste de ampliar es 500, con descuento del arbol.
-    const g = await boot(baseSave([], { nanites: 10_000, warehouseCapacity: 10 }));
-    const antes = nanites(g);
-    const r = g.expandWarehouse();
-    check('ampliar: con nanitas suficientes se amplía', r === true, String(r));
-    check('ampliar: y cobra lo justo', nanites(g) === antes - 500, `cobrado=${antes - nanites(g)}`);
-    check('ampliar: +5 ranuras', s(g).warehouseCapacity === 15, 'cap=' + s(g).warehouseCapacity);
+    // El tope es 600 y frena, no recorta: lo comprado se conserva.
+    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 600 }));
+    const e = g.buyStoreItem('expansorT2') as any;
+    const r = g.useConsumable(e.id);
+    check('tope: en 600 no se usa nada más',
+      r.ok === false && s(g).warehouseCapacity === 600, `msg=${r.msg ?? ''} cap=${s(g).warehouseCapacity}`);
+    // Y quien ya pasó el tope con la carta vieja conserva cada ranura: la
+    // migración no quita nada.
+    const gV = await boot(baseSave([], { nanites: 0, warehouseCapacity: 650 }));
+    const gV2 = await reload();
+    check('tope: una partida vieja por encima conserva su capacidad',
+      s(gV2).warehouseCapacity === 650, `cap=${s(gV2).warehouseCapacity}`);
   }
   {
-    // Los slots de companero tienen un coste escalonado y un tope duro de 5.
-    const g = await boot(baseSave([], { nanites: 10_000_000, maxCompanionSlots: 1 }));
-    let Slots = 1;
-    for (let i = 0; i < 8; i++) g.unlockCompanionSlot();
-    check('ampliar: los slots de companero no pasan de 5', s(g).maxCompanionSlots === 5,
-      'slots=' + s(g).maxCompanionSlots);
-    check('ampliar: y se han comprado 4 huecos', s(g).maxCompanionSlots - Slots === 4,
-      `slots=${s(g).maxCompanionSlots}`);
+    // El +1 viejo sigue sirviendo con el tope nuevo, sin banda.
+    const g = await boot(baseSave(
+      [consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })],
+      { nanites: 0, warehouseCapacity: 599 }
+    ));
+    check('legado: el +1 viejo sube a 600',
+      g.useConsumable('e1').ok === true && s(g).warehouseCapacity === 600,
+      `cap=${s(g).warehouseCapacity}`);
   }
 
   // =========================================================================

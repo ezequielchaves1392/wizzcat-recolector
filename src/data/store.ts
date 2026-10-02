@@ -48,7 +48,8 @@
 // O sea: se retiran de la tienda y no se pueden comprar, pero no se toca el estado.
 // Es lo mismo que se hizo con las ampliaciones de huecos del almacén.
 export const CONSUMABLES = {
-  backpackExpander: { name: 'Expansor de Almacén', details: 'Aumenta el almacén +1 slot (máx 20)', rarity: 'Raro', buffId: 'warehouseExpander' },
+  expansorT1: { name: 'Expansor T1', details: 'Aumenta el almacén +2 slots. Vale hasta 120 de capacidad.', rarity: 'Raro', buffId: 'expansorT1' },
+  expansorT2: { name: 'Expansor T2', details: 'Aumenta el almacén +5 slots. Vale hasta 300 de capacidad.', rarity: 'Épico', buffId: 'expansorT2' },
   afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
   clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
@@ -144,6 +145,63 @@ export const COLLECTOR_BASE_COSTS = {
 export const KEY_COSTS = [250, 900, 3_000, 11_000] as const;
 
 // ==========================================================================
+//  Expansores de almacén por tipo (F27)
+// ==========================================================================
+//
+//  EL MODELO: tres tipos con más ranuras y más precio, y cada uno vale hasta
+//  una capacidad. Al crecer hay que subir de tipo: el T1 deja de servir a los
+//  120 y el T2 a los 300. El T3 no se vende —solo sale de cajas altas— y es
+//  el que llega al tope.
+//
+//  POR QUÉ SOLO TOPE POR ARRIBA Y NO BANDAS CERRADAS. Un T3 en un almacén
+//  pequeño tiene que servir: si solo valiera a partir de 300, sería botín
+//  muerto para quien no llega. Lo que no puede es un T1 barato donde toca un
+//  T2: por eso cada tipo tiene su techo y no su suelo.
+//
+//  EL TOPE SALE DE AQUÍ Y NO DE LA VISTA. Antes el "Al máximo" era un 50
+//  escrito en `store.ts` y otro 50 en `useConsumable`, dos números a mano
+//  para la misma regla. Ahora es `WAREHOUSE_MAX_CAP` y lo leen los dos.
+//
+//  LA MIGRACIÓN NO QUITA NADA. Quien ya pasó el tope (500+ con la carta vieja
+//  sin tope) conserva cada ranura: el tope frena lo nuevo, no recorta lo
+//  comprado. Y por eso el tope es alto (600) y la presión viene del precio y
+//  de las cajas, no de un muro.
+//
+//  LO VIEJO SIGUE SIRVIENDO. Los `warehouseExpander` (+1) que ya hay en
+//  almacenes y botines se usan con el tope nuevo: son stock finito de antes de
+//  los tipos, no un cuarto tipo encubierto.
+// ==========================================================================
+
+/** Tope de capacidad base del almacén. Los slots del árbol suman encima. */
+export const WAREHOUSE_MAX_CAP = 600;
+
+export interface ExpansorTier {
+  tier: 1 | 2 | 3;
+  /** Ranuras que da al usarse. */
+  slots: number;
+  /** Precio en tienda, o `null` si solo sale de cajas. */
+  cost: number | null;
+  /** Reventa unitaria: un cuarto del precio (R18), o directa si no se vende. */
+  resale: number;
+  /** Capacidad base hasta la que sirve. */
+  maxCap: number;
+  /** El `buffId` del consumible que lo aplica. */
+  buffId: string;
+  name: string;
+}
+
+export const EXPANSOR_TIERS: ExpansorTier[] = [
+  { tier: 1, slots: 2, cost: 3000, resale: 750, maxCap: 120, buffId: 'expansorT1', name: 'Expansor T1' },
+  { tier: 2, slots: 5, cost: 18000, resale: 4500, maxCap: 300, buffId: 'expansorT2', name: 'Expansor T2' },
+  { tier: 3, slots: 10, cost: null, resale: 9000, maxCap: WAREHOUSE_MAX_CAP, buffId: 'expansorT3', name: 'Expansor T3' }
+];
+
+/** El tipo de expansor de un `buffId`, o `undefined` si no es un expansor. */
+export function expansorPorBuff(buffId: string): ExpansorTier | undefined {
+  return EXPANSOR_TIERS.find(t => t.buffId === buffId);
+}
+
+// ==========================================================================
 //  Ranuras de compañero (F7 y F11)
 // ==========================================================================
 //
@@ -230,7 +288,6 @@ export const STORE_ITEMS = {
   keyT2: { cost: KEY_COSTS[2], label: 'Llave Rúnica' },
   keyT3: { cost: KEY_COSTS[3], label: 'Llave del Vacío' },
   upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
-  warehouseSlot: { cost: 6000, label: 'Ampliar Almacén (+5 slots)' },
   commonCrate: { cost: 500, label: 'Caja Común' },
   rareCrate: { cost: 1500, label: 'Caja Rara' },
   epicCrate: { cost: 5500, label: 'Caja Épica' },
@@ -238,8 +295,9 @@ export const STORE_ITEMS = {
   // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).
   // Se han retirado de la tienda; ver el comentario en `CONSUMABLES` para el porqué
   // de que el efecto siga en el motor y solo desaparezca la compra.
-  // Nuevos items
-  backpackExpander: { cost: 1400, label: 'Expansor de Almacén (+1 slot)' },
+  // Nuevos items: expansores por tipo (F27). El T3 no tiene carta: solo de cajas.
+  expansorT1: { cost: 3000, label: 'Expansor T1 (+2 slots)' },
+  expansorT2: { cost: 18000, label: 'Expansor T2 (+5 slots)' },
   // Las tres cartas de ranura salen de `defDeRanura()`, que es donde está el
   // número de ranuras que da cada una. La tarjeta no pone "+N" escrito: lo dice
   // la tabla, que es la misma que lee el motor (R3).

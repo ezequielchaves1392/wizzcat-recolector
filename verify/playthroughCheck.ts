@@ -208,40 +208,31 @@ async function main() {
     check('almacén: con sitio de sobra la compra cabe',
       g7.canBuyStoreItem('collectorCardT2') === true, 'no cabe con ' + ranuras + ' de 15');
 
-    // Ampliar el almacén tiene DOS caminos distintos, y confundirlos es fácil porque
-    // los dos se llaman "ampliar" en la carta: `warehouseSlot` amplía al
-    // comprarse y no mete ningún item, mientras que `backpackExpander` es un
-    // CONSUMIBLE que hay que usar después. El primero es un permiso y el segundo
-    // un objeto, y por eso solo el primero es gratis de ranura.
+    // Ampliar el almacén tiene UN camino: el expansor es un CONSUMIBLE que se
+    // compra y se usa después (F27). El permiso directo de antes ya no existe:
+    // comprar mete un item y usarlo amplía.
     const antesCap = g7.getCapacity();
     const antesSlots = wh(g7).length;
 
-    g7.updateState({ nanites: 6000 });
-    const permiso = g7.buyStoreItem('warehouseSlot');
-    check('almacén: se puede ampliar', Boolean(permiso), String(permiso));
-    check('almacén: ampliar NO mete un item',
-      wh(g7).length === antesSlots, `${antesSlots} -> ${wh(g7).length}`);
-    check('almacén: y la capacidad sube 5', g7.getCapacity() === antesCap + 5,
-      `${antesCap} -> ${g7.getCapacity()}`);
-
-    // El expansor comprable: da un item, y el item es el que amplía.
-    g7.updateState({ nanites: 1400 });
-    const expansor = g7.buyStoreItem('backpackExpander');
+    g7.updateState({ nanites: 3000 });
+    const expansor = g7.buyStoreItem('expansorT1');
     check('almacén: el expansor SÍ es un item',
       Boolean(expansor) && deType(g7, 'consumable') === 1, 'consumibles=' + deType(g7, 'consumable'));
     const capTrasComprar = g7.getCapacity();
     check('almacén: pero comprarlo NO amplía todavía',
-      capTrasComprar === antesCap + 5, 'cap=' + capTrasComprar);
+      capTrasComprar === antesCap, 'cap=' + capTrasComprar);
+    check('almacén: y mete un item',
+      wh(g7).length === antesSlots + 1, `${antesSlots} -> ${wh(g7).length}`);
     const usado = g7.useConsumable((expansor as any).id);
     check('almacén: ampliar es usarlo', usado.ok === true, usado.msg ?? '');
-    // OJO: el expansor da +1 ranura, no +5. El +5 es del permiso `warehouseSlot`.
-    check('almacén: y al usarlo sube 1 ranura',
-      g7.getCapacity() === capTrasComprar + 1,
+    // OJO: el T1 da +2 ranuras, no +5. El +5 era del permiso que ya no existe.
+    check('almacén: y al usarlo suben 2 ranuras',
+      g7.getCapacity() === capTrasComprar + 2,
       `${capTrasComprar} -> ${g7.getCapacity()}`);
 
     const g8 = await reload();
-    check('almacén: las dos ampliaciones sobreviven a la recarga',
-      g8.getCapacity() === antesCap + 6, 'cap=' + g8.getCapacity());
+    check('almacén: la ampliación sobrevive a la recarga',
+      g8.getCapacity() === antesCap + 2, 'cap=' + g8.getCapacity());
 
     // Y ahora la parte que más se ha roto: con el almacén lleno, lo que no cabe
     // no se compra, y lo que sí cabe en una pila sí se compra.
