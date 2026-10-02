@@ -99,7 +99,7 @@ export const BOARDS: BoardDef[] = [
     // optimiza la PUNTUACIÓN en vez de la partida — y en cuanto F19 permita
     // regalar logros, un logro de 250.000 deja de ser un detalle y pasa a ser lo
     // más rentable que un jugador puede hacerle a otro.
-    hint: 'La combinación de potencia, tiempo, exploración y Ascensión. Solo cuenta para comparar; el reparto es interno.',
+    hint: 'La combinación de potencia, tiempo, exploración y Ascensión.',
     icon: 'trophy'
   },
   {

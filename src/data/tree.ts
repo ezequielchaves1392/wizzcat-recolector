@@ -202,3 +202,36 @@ export function nextCost(node: TreeNode, level: number): number | null {
   if (level >= node.maxLevel) return null;
   return nodeCost(node, level);
 }
+
+/**
+ * Cuántos núcleos se han GASTADO en el árbol, nivel a nivel.
+ *
+ * Es la contraparte exacta de la cartera: **todo núcleo que el jugador ha ganado
+ * está en un sitio u otro**, así que `cartera + gastado` es el histórico
+ * completo. Y es lo que permite reconstruir el `totalCores` de las partidas
+ * viejas, que no lo guardaban.
+ *
+ * Por qué tiene que ser EXACTO y no una estimación: `nextCores` resta el
+ * histórico de lo que daría la producción. Si el histórico se pasa, al jugador
+ * se le.apagan las Ascensiones **para siempre** —no es que salga un número raro,
+ * es que el Ascenso queda en 0 y no vuelve a salir. Si se queda corto, el
+ * siguiente Ascenso lo corrige solo. Un error de un núcleo en este número decide
+ * si un jugador veteran puede seguir jugando.
+ *
+ * El coste de cada nivel sale de `nodeCost`, la misma función que usa la tienda
+ * de pasivas para cobrar, así que lo gastado y lo cobrado no pueden separarse.
+ */
+export function coresGastadosEnArbol(nodeLevels: Record<string, number> | undefined): number {
+  if (!nodeLevels) return 0;
+  let total = 0;
+  for (const nodo of TREE_NODES) {
+    const nivel = Math.floor(Number(nodeLevels[nodo.id]) || 0);
+    if (nivel <= 0) continue;
+    // Los niveles que existen de verdad, no los que diga el save: un guardado
+    // manipulado con 99 niveles de un nodo que llega a 5 no puede costar 99
+    // niveles, porque nunca se pudieron pagar.
+    const comprados = Math.min(nivel, nodo.maxLevel);
+    for (let i = 0; i < comprados; i++) total += nodeCost(nodo, i);
+  }
+  return total;
+}

@@ -22,6 +22,7 @@
 import { check, resumen, boot, baseSave, reload, s } from './kit';
 import { miniIdentity } from '../src/ui/identity';
 import { BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT } from '../src/services/rankingService';
+import { coresGastadosEnArbol } from '../src/data/tree';
 
 const RANK_DOC = 'rankings/test';
 
@@ -174,6 +175,53 @@ async function main() {
     check('F29: y el peso no depende de si el núcleo está gastado',
       computeScore({ cores: 10 }) === computeScore({ cores: 10, resets: 99 }),
       'ascender más veces no sube el definitivo por sí solo');
+  }
+  {
+    // F29 · EL HISTÓRICO DE LAS PARTIDAS VIEJAS. Solo se ve con una partida que
+    // ascendió antes de que existiera el campo, y **dejaba al jugador atascado**.
+    //
+    // La reconstrucción usaba `pendingCores(producido)`, que responde a "cuántos
+    // núcleos daría si empezaras desde cero". Pero una partida vieja YA GASTÓ
+    // producción en sus propias ascensiones, así que salía enorme —con 412 M y 12
+    // reinicios daba 296— y como `nextCores` resta el histórico, el siguiente
+    // Ascenso pedía 0 más. Se podía ver la pantalla, pero no se podía ascender.
+    const gastado = coresGastadosEnArbol({ core_sink: 3, click_power: 4 });
+    check('F29: se puede sumar lo gastado en el árbol',
+      gastado > 0 && Number.isFinite(gastado), 'gastado=' + gastado);
+    check('F29: el gasto en el árbol sale de la función que cobra',
+      coresGastadosEnArbol({ core_sink: 1 }) === 1,
+      'un nivel = su coste, no un estimado');
+
+    // El caso real del jugador: ascendió, gastó casi todo y el campo no existe.
+    const g = await boot(baseSave([], {
+      totalNanitesProduced: 120_000_000, resets: 6, cores: 3, totalCores: 0,
+      nodeLevels: { core_sink: 3, click_power: 4, forge_luck: 2 }
+    }));
+    const st = s(g);
+    check('F29: el histórico viejo se reconstruye con cartera + gastado',
+      st.totalCores === 3 + coresGastadosEnArbol({ core_sink: 3, click_power: 4, forge_luck: 2 }),
+      `totalCores=${st.totalCores} (cartera 3 + gastado ${coresGastadosEnArbol({ core_sink: 3, click_power: 4, forge_luck: 2 })})`);
+    check('F29: y sobre todo: puede volver a ascender',
+      g.getPrestigeInfo().pending > 0,
+      `pending=${g.getPrestigeInfo().pending} — la estimación vieja lo dejaba en 0`);
+
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const docViejo = (globalThis as any).__MEM_DB__?.[RANK_DOC] ?? {};
+    check('F29: y el número reconstruido llega al documento del ranking',
+      docViejo.cores === st.totalCores,
+      `ranking=${docViejo.cores} estado=${st.totalCores}`);
+
+    // Y una partida que YA tiene el campo no se toca: es el caso normal después
+    // de migrar una vez, y una migración que lo pisara haría perder núcleos cada
+    // vez que se abriera el juego.
+    const g2 = await boot(baseSave([], {
+      totalNanitesProduced: 120_000_000, resets: 6, cores: 3, totalCores: 120,
+      nodeLevels: { core_sink: 3 }
+    }));
+    check('F29: una partida con el campo guardado no se toca',
+      s(g2).totalCores === 120, 'totalCores=' + s(g2).totalCores);
 
     // F29, la otra mitad, y es la que no parece un cambio: **el juego ya no
     // enseña los pesos**. El texto de debajo del Definitivo decía que un logro

@@ -175,23 +175,20 @@ tienen nombre, multiplicador y probabilidad escritas, y **no los saca nadie**. S
 pide cristal T8 y ese cristal no sale de ninguna caja, el T8 no es contenido
 inalcanzable: **es un muro**. Resuelto en F31/F36: un nivel por tier, hasta 30.
 
-### F28 · La ruleta va demasiado rápido en el navegador y bien en el celular
+### F28 · La ruleta va demasiado rápido en el navegador — RESUELTO (era el navegador)
 
 > En el navegador la ruleta se ejecuta muy rápido, en celular anda bien. A lo mejor con un delta time.
 
-**Tu hipótesis es la correcta, y hay un sitio donde ya está escrito por qué debería
-funcionar — por eso es raro que no funcione.** El diseño ya cuenta **ventanas de tiempo
-visibles**, no vueltas, y `rouletteCheck` lo comprueba. Si en el navegador va más rápido,
-es que algo por debajo cuenta otra cosa.
+**No era el juego.** Las dos ruletas usan **CSS con duración fija** (`transform 5200ms` y
+`forgeSpin 1.9s`), no cuentan frames, así que el frame rate no puede hacerlas más
+rápidas: un monitor de 144 Hz no cambia nada. El diagnóstico que estaba aquí era falso y
+se queda escrito porque es justo el error que se iba a implementar sin medir.
 
-**La causa más probable es exactamente la que dices:** si la animación avanza contando
-**frames**, un monitor de 144 Hz hace la misma animación en la mitad de tiempo real que
-uno de 60 Hz. En el móvil el navegador baja a 60, así que **allá va "bien" por
-accidente**. El síntoma —"rápido justo donde hay más potencia"— encaja con esto mejor que
-con ninguna otra explicación. Y sí: **delta time**.
-
-**Ningún banco lo cubre:** `rouletteCheck` mide la matemática de la curva, no cuánto
-tarda en pantalla. Es caso de `ruleta-preview.html` con un reloj al lado.
+**Lo que sí se encontró mirando:** con `prefers-reduced-motion: reduce` activo —que es un
+ajuste del sistema o una extensión— la transición se anula entera (`transition: none` y
+duración `1e-05s`), que se ve como una ruleta que "va demasiado rápido" porque salta de
+golpe. Es la misma cuenta que ya hace `spinTrack` a propósito, por R20. Si vuelve a pasar,
+es mirar ese ajuste antes que el código.
 
 ### F29 · Los núcleos van al ranking como pestaña nueva, y no como puntos
 
@@ -592,7 +589,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **24 bancos, 1471
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1379
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
@@ -677,6 +674,15 @@ pruebas**, todas en verde._
 - [x] **F24 · deduplicar la forja y el quitar** (paso 1 del plan). La vista no sube
       ids repetidos y el motor rechaza antes de cobrar consumibles. `stateCheck`
       232 → 235. La tanda queda en **24 bancos, 1552 pruebas**.
+- [x] **El potencial decide el daño, la rareza pesa menos y ningún afijo rompe items**
+      (`e2d1025`). Daño = `base(tier) × (1 + 0,2 × potencial)`, con el ★5 siendo el doble
+      de la base. Los **cuatro afijos planos** (`+60` de daño y compañía) se volvieron
+      porcentajes: en un T1, que tiene base 5, un "+60" más que triplicaba el item. La
+      rareza da los afijos mínimos (tope 6) y la forja hereda primero los de los dos
+      materiales. Más rareza = menos probabilidad, repartida por bolsas. Y un arreglo de
+      balance que hizo falta: con la base en el mínimo del rango los **tiers se solapaban**
+      (un T1 perfecto igualaba a un T2 normal), así que la base crece ×1,75 por tier y el
+      peor de un tier supera al mejor del anterior. `stateCheck` +14, `saltoCheck` +6.
 - [x] **F33 · el potencial decide el daño y la forja promedia los dos** (`58d5a4e`).
       `danioDeRango(tier, potencial)` con 1 en el mínimo y 5 en el máximo exacto;
       la tienda y las cajas lo tiran, la forja promedia los dos materiales. Se fue
@@ -686,6 +692,30 @@ pruebas**, todas en verde._
       devolución: el precio sigue en 2ⁿ, y con devolución el coste neto caía a 1.
       Los items viejos lo reciben deducido de su propio daño (`saveVersion` 8), así
       que ninguna partida guardada cambia de estadísticas. `stateCheck` 232 → 241.
+- [x] **F28 · la ruleta va demasiado rápido** — **era el navegador, no el juego.** Las dos
+      ruletas usan CSS con duración fija, así que el frame rate no puede afectarlas. Lo
+      que sí se vio: con `prefers-reduced-motion` activo la transición se anula entera y
+      se ve como una ruleta que salta. Sin cambios en el código.
+- [x] **F29 · los núcleos al ranking, y el juego deja de enseñar los pesos** (`e04556d`).
+      Pestaña propia con los núcleos **ganados** (`totalCores`, no el saldo), que puntúan
+      con peso de 5.000. Y fuera los pesos de la pista y de la nota del Definitivo: con la
+      receta a la vista, quien la lee sabe qué parte de su puntuación es mashable. **Y un
+      bug de verdad que salió al medir**: el histórico de las partidas viejas se estimaba
+      con `pendingCores(producido)`, que da "cuántos núcleos daría empezando de cero" — con
+      412 M y 12 reinicios salía 296, y como `nextCores` resta el histórico el siguiente
+      Ascenso pedía **0**: la partida se quedaba **atascada para siempre**. Ahora se
+      reconstruye con `cartera + gastado en el árbol`, que es la cuenta exacta y sale de la
+      misma función que cobra la tienda de pasivas. `identidadCheck` 14 → 32.
+- [x] **F25 · el mercado va segundo, antes que el almacén** (`32e5339`). Una línea de orden
+      en `ROUTES`; el título ya decía "Mercado".
+- [x] **F30 · el tope de pintado no recorta lo que hay** (`6c0bb01`). La rejilla hacía
+      `Math.min(count, tope)`, así que 150 llaves se pintaban como 99 y el `data-count` que
+      leen el arrastre y la selección llegaba recortado. Ahora el número entero y un `+`
+      cuando no cabe. `stackCheck` +8, `filterCheck` +2.
+- [x] **F23 · una sola sesión por jugador** (`a05849b`). Latido de 45 s en
+      `users/{uid}/sesion`: dos dispositivos no se pisan la partida, que era lo grave porque
+      la Ascensión borra nanitas y paga con núcleos. El id va en `sessionStorage` para que
+      **dos pestañas** también se detecten. Banco nuevo `sessionCheck` (13).
 - [x] **Forja infinita, corte 1 · fórmulas 11+ y sin techo** (`d5daee3`). `rangoDePoder()`,
       `rarezaDeTier()` y `valorBaseTier()`; T10→T11 y T11→T12 comprobados.
       `stateCheck` 225 → 232. **Sin curva de probabilidad: esa sigue esperando tu sí.**

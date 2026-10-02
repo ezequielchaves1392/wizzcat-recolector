@@ -12,7 +12,7 @@ import { SECRET_ACHIEVEMENTS } from './data/achievements';
 export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
-import { TREE_BY_ID, nodeCost } from './data/tree';
+import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
@@ -1096,12 +1096,31 @@ const AFK_THRESHOLD_MS = 60000;
       // 1 M de producción, no daba ni un núcleo: el juego pedía 3,17 M y ninguna
       // pantalla decía por qué.
       //
-      // Con `resets > 0` el valor es una estimación y no un hecho, porque las
-      // partidas viejas no dejaron el dato. Se acepta el riesgo: perder el
-      // histórico sería peor que estimarlo, y en cuanto el jugador recicle una
-      // vez más el contador ya es real.
+      // **Y NO SE PUEDE ESTIMAR CON `pendingCores`, QUE ES LO QUE HACÍA ANTES.**
+      // `pendingCores(producido)` responde a "cuántos núcleos daría si empezara
+      // desde cero con esta producción", pero una partida vieja YA GASTÓ
+      // producción en sus propias ascensiones. Medido con 412 M y 12 reinicios:
+      // la estimación daba 296 núcleos, y como `nextCores` resta el histórico,
+      // el siguiente Ascenso pedía **0 más**: el jugador se quedaba **atascado
+      // para siempre**, sin Ascensión posible y sin ningún aviso en pantalla.
+      //
+      // **LO QUE SE USA ES UN DATO EXACTO, Y LA IDEA FUE DEL JUGADOR:** todo
+      // núcleo ganado está en un sitio u otro, así que el histórico es
+      // `cartera + gastados en el árbol`. Los gastados se pueden sumar nivel a
+      // nivel con la MISMA función que cobra la tienda de pasivas, así que no es
+      // una estimación sino la cuenta real de lo que se pagó.
+      //
+      // Y es la única reconstrucción que no puede romper una partida: si el
+      // número sale alto, al siguiente Ascenso `nextCores` da 0 y no se rompe
+      // nada; y al Ascender, `totalCores` se recalcula con el dato bueno y deja
+      // de depender de esto para siempre.
       if (!data.totalCores && (data.resets ?? 0) > 0) {
-        state.totalCores = pendingCores(state.totalNanitesProduced);
+        const enArbol = coresGastadosEnArbol(data.nodeLevels);
+        state.totalCores = (data.cores ?? 0) + enArbol;
+        console.info(
+          `[migracion] Historico de nucleos reconstruido: ${state.totalCores}`,
+          `(cartera ${data.cores ?? 0}, arbol ${enArbol})`
+        );
       }
       state.buffs = {
         clickBoostExpiresAt: data.buffs?.clickBoostExpiresAt ?? 0,

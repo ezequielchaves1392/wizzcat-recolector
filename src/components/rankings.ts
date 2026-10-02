@@ -1,7 +1,7 @@
 // ==========================================================================
 //  Ranking global
 //
-//  Cuatro tablas en pestañas: la compuesta y los tres criterios por separado.
+//  Cinco tablas en pestañas: la compuesta y los cuatro criterios por separado.
 //
 //  Por qué cuatro y no una: la pregunta "¿quién es el mejor?" no tiene una
 //  sola respuesta, y obligar al jugador a aceptar la del juego comunicaba que
@@ -50,7 +50,7 @@ export function renderRankings(
 
   const root = mountInto(container, pageShell({
     title: 'Ranking global',
-    subtitle: 'La tabla general y los tres criterios por separado',
+    subtitle: 'La tabla general y los cuatro criterios por separado',
     icon: 'trophy',
     onBack
   }, `
@@ -192,9 +192,7 @@ function nota(kind: BoardKind): string {
   return `
     <p class="text-[9px] text-[var(--text-muted)] text-center mt-3 leading-relaxed px-2">
       Esta tabla resume lo que has juntado: potencia, tiempo jugado, lo que has
-      explorado y cuántos núcleos has sacado ascendiendo. El reparto es interno
-      y cambia con el juego, así que no se enseña: la partida se juega por jugar,
-      no por encajar en una columna.
+      explorado y cuántos núcleos has sacado ascendiendo.
     </p>
   `;
 }
