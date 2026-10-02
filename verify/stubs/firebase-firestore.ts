@@ -75,6 +75,21 @@ export const DELETE_FIELD = Symbol('deleteField');
 export const deleteField = () => DELETE_FIELD;
 
 /**
+ * Los tres verbos de consulta que el ranking importa.
+ *
+ * No hacen nada: el ranking se prueba con `fallbackData` y no llega a la base de
+ * datos. Pero exportarlos sin implementar es lo que hace que el módulo se pueda
+ * importar en un banco, que es lo que permite comprobar sus funciones puras —
+ * `boardValue`, `computeScore`— contra los datos de verdad del juego en vez de
+ * contra una copia.
+ */
+export const collection = (_db: any, path: string) => ({ path });
+export const query = (...args: any[]) => ({ args });
+export const orderBy = (campo: string) => ({ campo });
+export const limit = (n: number) => ({ limite: n });
+export const getDocs = async (_q: any) => ({ docs: [] as any[], empty: true });
+
+/**
  * `updateDoc` con el sentinel de borrado.
  *
  * Se implementa en lugar de no exportarlo porque el borrado condicional es lo

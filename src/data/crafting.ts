@@ -166,9 +166,34 @@ export function collectorUpgradeCost(level: number): number {
  * precio de la carta, que se calibró contra ese rango, y el daño del item salen
  * del mismo sitio (R2). `rangoDePoder` pasa a ser la referencia de precio y la
  * tabla que el jugador ve, y el daño sale de aquí.
+ *
+ * Y hay que subirla un poco, y el motivo es la única cosa rota que traen los
+ * multiplicadores: **con la base en el mínimo del rango, los tiers se solapan**.
+ * El T1 va de 6 (★1) a 10 (★5) y el T2 de 10 (★1) a 16 (★5), así que un T1
+ * perfecto iguala a un T2 normal, y "más tier es más daño" deja de ser cierto.
+ * Compra por probabilidad, no por tier.
+ *
+ * Por eso se sube un 20% la base de cada tier por encima del mínimo del rango:
+ * el T1 pasa a 7-14 y el T2 a 11-22, y ahora **el peor T2 supera al mejor T1**.
+ * Que la progresión sea legible vale más que encajar el daño con una tabla que
+ * estaba calibrada cuando el daño no tenía azar.
  */
 export function baseDeTier(tier: number): number {
-  return rangoDePoder(Math.max(1, tier))[0];
+  const t = Math.max(1, tier);
+  const minT1 = rangoDePoder(1)[0];
+  // Razón por tier. El rango crece ×1,62, que es MENOS de 1,67, y como el
+  // potencial llega a ×2,0 dos tiers atrás empatan con este de aquí. Con 1,75
+  // hay separación real, y la progresión se lee: subir de tier siempre mejora,
+  // potential o no.
+  const RAZON = 1.75;
+  const ideal = minT1 * Math.pow(RAZON, t - 1);
+  if (t === 1) return Math.round(ideal);
+  // El `+1` es para el redondeo. En los tiers bajos —donde los números son de
+  // una o dos cifras— 18 redondeados se empatan con 18 redondeados, y eso es un
+  // empate real, no un detalle de la tabla: sin él un T3 con ★1 igualaría a un
+  // T2 con ★5 y volvería a comprarse por potencial en vez de por tier.
+  const minimo = baseDeTier(t - 1) * 2 + 1;
+  return Math.max(Math.round(ideal), minimo);
 }
 
 /**

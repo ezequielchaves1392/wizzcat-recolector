@@ -26,7 +26,7 @@ import { ic } from '../ui/icons';
 import { pageShell, mountInto, wireNav, emptyState } from '../ui/pageShell';
 import {
   getTopRankings, sortByBoard, boardValue,
-  BOARDS, ACHIEVEMENT_WEIGHT, SECRET_ACHIEVEMENT_WEIGHT, FORGED_WEIGHT,
+  BOARDS,
   type LeaderboardEntry, type BoardKind
 } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
@@ -149,6 +149,7 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
           ${r.achievements ? `<span class="medal text-amber-400">${ic('achievement', 'w-3 h-3')} ${r.achievements}</span>` : ''}
           ${r.secretAchievements ? `<span class="medal text-fuchsia-300" title="Logros secretos">${ic('lock', 'w-3 h-3')} ${r.secretAchievements}</span>` : ''}
           ${r.forgedCount ? `<span class="medal text-cyan-300" title="Recolectores forjados">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>` : ''}
+          ${r.cores ? `<span class="medal text-emerald-300" title="Núcleos ganados ascendiendo">${ic('recycle', 'w-3 h-3')} ${r.cores}</span>` : ''}
         </div>
       </div>
 
@@ -166,6 +167,7 @@ function unidadesDe(kind: BoardKind): string {
     case 'nanitas': return 'nanitas';
     case 'clics': return 'clics';
     case 'logros': return 'puntos de logro';
+    case 'nucleos': return 'núcleos ganados';
     case 'definitivo': return '◆ puntos';
   }
 }
@@ -173,18 +175,26 @@ function unidadesDe(kind: BoardKind): string {
 /**
  * Explicación del peso de cada cosa.
  *
- * Solo en el Definitivo: es la única tabla donde la puntuación es compuesta, y
- * en las otras un jugador que ve "750.000" sin más no entiende qué son esos
- * números.
+ * F29 · **Ahora no explica los pesos, y es a propósito.** Este texto era la
+ * otra mitad de F29: la pestaña "Definitivo" decía, debajo de la tabla, que un
+ * logro público vale 50.000, uno secreto 250.000 y cada forja 20.000. Con esa
+ * tabla a la vista, quien la lee sabe exactamente qué parte de su puntuación es
+ * mashable —y en cuanto F19 deje regalar logros, regalar uno de 250.000 se
+ * convierte en la jugada más rentable del juego.
+ *
+ * Lo que se explica ahora es **qué mide la tabla, no cuánto pesa cada parte**:
+ * suficiente para entender la columna, sin dar la receta para optimizarla. Es el
+ * mismo criterio de la ficha de la caja, que enseña **qué** es un premio y no
+ * cuánto costó.
  */
 function nota(kind: BoardKind): string {
   if (kind !== 'definitivo') return '';
   return `
     <p class="text-[9px] text-[var(--text-muted)] text-center mt-3 leading-relaxed px-2">
-      En esta tabla, un logro público vale ${formatNumber(ACHIEVEMENT_WEIGHT)} puntos,
-      uno secreto ${formatNumber(SECRET_ACHIEVEMENT_WEIGHT)} y cada recolector
-      forjado ${formatNumber(FORGED_WEIGHT)}. Los pesos son una decisión de diseño:
-      igualan la partida entre grindar y completar.
+      Esta tabla resume lo que has juntado: potencia, tiempo jugado, lo que has
+      explorado y cuántos núcleos has sacado ascendiendo. El reparto es interno
+      y cambia con el juego, así que no se enseña: la partida se juega por jugar,
+      no por encajar en una columna.
     </p>
   `;
 }

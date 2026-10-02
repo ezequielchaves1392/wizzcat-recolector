@@ -19,8 +19,9 @@
 //  el `avatar-stack` de verdad y es `preview.html` con viewport real.
 // ==========================================================================
 
-import { check, resumen, boot, baseSave, reload } from './kit';
+import { check, resumen, boot, baseSave, reload, s } from './kit';
 import { miniIdentity } from '../src/ui/identity';
+import { BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT } from '../src/services/rankingService';
 
 const RANK_DOC = 'rankings/test';
 
@@ -118,6 +119,74 @@ async function main() {
     });
     check('identidad: un id desconocido no rompe el HTML',
       roto.includes('>AB<') && !roto.includes('undefined'), 'roto=' + roto.slice(0, 80));
+  }
+
+  // -----------------------------------------------------------------------
+  //  4. F29 · LOS NÚCLEOS AL RANKING, Y LOS PESOS A LA OCULTA.
+  //
+  //     Lo que cuenta es `totalCores` —los núcleos GANADOS al ascender— y no
+  //     `cores`, que es el saldo que queda después de gastar en el árbol. Es la
+  //     diferencia entre "cuánto has Ascendido en total" y "cuánto te queda en
+  //     el bolsillo", y para un ranking la segunda es la que no dice nada: un
+  //     jugador que lo invirtió todo saldría con menos que uno que nunca ha
+  //     Ascendido.
+  //
+  //     Y no cuenta el número de ascensiones, que es `resets`: se puede haber
+  //     ascendido tres veces y haber sacado doce núcleos.
+  // -----------------------------------------------------------------------
+  {
+    // `baseSave` con la forma que espera el juego: un array de ITEMS, no un
+    // objeto de estado. Pasarle `{ cores: 4 }` a pelo no ponía nada y el test
+    // miraba un documento que no tenía esos campos —que es como un banco pasa
+    // en verde mientras comprueba nada.
+    const g = await boot(baseSave([], { cores: 4, totalCores: 17, resets: 3 }));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const doc = (globalThis as any).__MEM_DB__?.[RANK_DOC] ?? {};
+
+    check('F29: el guardado de prueba tiene los tres números distintos',
+      s(g).totalCores === 17 && s(g).cores === 4 && s(g).resets === 3,
+      `saldo=${s(g).cores} histórico=${s(g).totalCores} ascensiones=${s(g).resets}`);
+    check('F29: al documento van los núcleos GANADOS, no el saldo',
+      doc.cores === 17, `cores=${doc.cores} y el saldo era ${s(g).cores}`);
+    check('F29: y no el número de ascensiones',
+      doc.cores === 17 && doc.cores !== s(g).resets,
+      `rees=${s(g).resets} y en el documento=${doc.cores}`);
+  }
+  {
+    // La pestaña existe y mide lo que dice medir.
+    check('F29: hay una pestaña de núcleos',
+      BOARD_KINDS.includes('nucleos') && BOARDS.some(b => b.id === 'nucleos'),
+      BOARD_KINDS.join(','));
+    check('F29: la pestaña cuenta los núcleos, no las ascensiones',
+      boardValue({ cores: 12 }, 'nucleos') === 12, 'cores=12');
+    check('F29: y sin el campo no rompe: 0, no undefined',
+      boardValue({}, 'nucleos') === 0, String(boardValue({}, 'nucleos')));
+
+    // Y los núcleos CUENTAN en el definitivo, que es la otra mitad de la
+    // decisión: puntúan y además se ven.
+    const sinNucleos = computeScore({ score: 1000 });
+    const conNucleos = computeScore({ score: 1000, cores: 10 });
+    check('F29: los núcleos suman en el definitivo',
+      conNucleos - sinNucleos === 10 * CORE_WEIGHT,
+      `${conNucleos - sinNucleos} puntos con 10 núcleos (peso ${CORE_WEIGHT})`);
+    check('F29: y el peso no depende de si el núcleo está gastado',
+      computeScore({ cores: 10 }) === computeScore({ cores: 10, resets: 99 }),
+      'ascender más veces no sube el definitivo por sí solo');
+
+    // F29, la otra mitad, y es la que no parece un cambio: **el juego ya no
+    // enseña los pesos**. El texto de debajo del Definitivo decía que un logro
+    // vale 50.000 y uno secreto 250.000, que es exactamente la receta para
+    // optimizar la puntuación en vez de la partida — y en cuanto F19 deje
+    // regalar logros, es la forma más rentable de jugarle a otro.
+    const pistaDefinitivo = BOARDS.find(b => b.id === 'definitivo')!.hint;
+    check('F29: la pista ya NO dice cuánto pesa un logro',
+      !pistaDefinitivo.includes('50.000') && !pistaDefinitivo.includes('250.000'),
+      pistaDefinitivo.slice(0, 90));
+    check('F29: y explica qué mide sin dar la receta',
+      pistaDefinitivo.includes('resumen') || pistaDefinitivo.includes('combina'),
+      pistaDefinitivo.slice(0, 90));
   }
 
   resumen('identidad: lo equipado llega al ranking');

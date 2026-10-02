@@ -987,6 +987,20 @@ async function main() {
         [1, 2, 3, 4, 5].every((p, i, a) => i === 0 || danioDeRango(5, p) > danioDeRango(5, a[i - 1])) &&
         danioDeRango(5, 1) > base5,
         [1, 2, 3, 4, 5].map(p => danioDeRango(5, p)).join(','));
+      // La condición que hace que la progresión se LEA: **el peor item de un tier
+      // tiene que superar al mejor del tier anterior**. Con la base en el mínimo
+      // del rango no pasaba: el T1 iba de 6 a 10 y el T2 de 10 a 16, así que un T1
+      // perfecto igualaba a un T2 normal y el jugador compraba por potencial en
+      // vez de por tier. `playthroughCheck` mide esto comprando, y falló.
+      const cruces: string[] = [];
+      for (let t = 2; t <= 10; t++) {
+        if (danioDeRango(t, 1) <= danioDeRango(t - 1, 5)) {
+          cruces.push(`T${t}★1=${danioDeRango(t, 1)} <= T${t - 1}★5=${danioDeRango(t - 1, 5)}`);
+        }
+      }
+      check('potencial: el peor de un tier supera al mejor del anterior',
+        cruces.length === 0,
+        cruces.join(' | ') || `T1=${danioDeRango(1, 5)} -> T2=${danioDeRango(2, 1)}`);
       // F33 · Los afijos: la rareza da el MÍNIMO y el tope es 6. Antes el número
       // venía del potencial, así que un Divino podía salir con 1 afijo y un Común
       // con 3. Y en la forja se heredan los de los dos materiales primero, que es

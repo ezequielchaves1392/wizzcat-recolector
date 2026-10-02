@@ -1883,6 +1883,11 @@ const AFK_THRESHOLD_MS = 60000;
         achievements: state.unlockedAchievements.filter(id => !SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
         secretAchievements: state.unlockedAchievements.filter(id => SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
         forgedCount: state.forgedCount,
+        // F29 · Los núcleos van al documento PÚBLICO del ranking. No hay decisión
+        // de privacidad: un número de núcleos es "cuántas veces has reiniciado", no
+        // el saldo ni el inventario. Y `totalCores`, no `cores`: los núcleos que
+        // gastas en el árbol no son menos Ascensión hecha.
+        cores: state.totalCores,
         title: state.cosmetics.title,
         frame: state.cosmetics.frame ?? 'frame_none',
         banner: state.cosmetics.banner ?? 'banner_none',
