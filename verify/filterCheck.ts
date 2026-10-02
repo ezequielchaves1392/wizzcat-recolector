@@ -22,6 +22,7 @@
 // ==========================================================================
 
 import { visibleStacksFor, moveItemTo, matchesFilter } from '../src/components/warehouse';
+import { textoDeCantidad } from '../src/data/stacking';
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave,
   collector, companion, crate, key, crystal, consumable
@@ -125,20 +126,27 @@ async function main() {
       'stackCount=' + celda.item.stackCount);
   }
   {
-    // El tope por tipo: no se puede prometer mas de lo que cabe en una celda.
-    // Llave y cristal admiten 99; caja y consumible, 20.
+    // F30 · El tope de PINTADO no recorta el contador. Antes la rejilla hacía
+    // `Math.min(count, tope)` y con 25 cajas pintaba 20, que es lo que el jugador
+    // reportaba como "tengo 25 y me sale 20" (R3). El tope decide el ancho del número,
+    // no su valor: el texto de la esquina es "20+".
     const g = await boot(baseSave([crate('c1', 'common', 25)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
-    check('pilas: el contador se recorta al tope del tipo (caja=20)', celda.count === 20, 'count=' + celda.count);
-    check('pilas: pero el item sigue con sus unidades reales', celda.item.stackCount === 25,
+    check('pilas: el contador ya NO se recorta al tope (caja=20, hay 25)', celda.count === 25, 'count=' + celda.count);
+    check('pilas: y el item sigue con sus unidades reales', celda.item.stackCount === 25,
       'stackCount=' + celda.item.stackCount);
+    check('pilas: la esquina dice "20+" y no "20"', textoDeCantidad(celda.count, 20) === '20+',
+      textoDeCantidad(celda.count, 20));
   }
   {
-    // El tope de llaves es 99, no 20: si la tabla se mezclara, el jugador con
-    // muchas llaves veria un numero recortado que no corresponde con lo que tiene.
+    // El tope de llaves es 99, no 20. Con el tope metido en la función
+    // `textoDeCantidad`, una tabla mezclada se ve: 120 llaves se pintarían "20+"
+    // como si fueran cajas.
     const g = await boot(baseSave([key('k1', 0, 120)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
-    check('pilas: el tope de llaves es 99, no 20', celda.count === 99, 'count=' + celda.count);
+    check('pilas: 120 llaves tampoco se recortan', celda.count === 120, 'count=' + celda.count);
+    check('pilas: y con el tope de llave la esquina es "99+", no "20+"',
+      textoDeCantidad(celda.count, 99) === '99+', textoDeCantidad(celda.count, 99));
   }
   {
     // Un tipo que NO es apilable nunca se agrupa, por muchas unidades que tenga:

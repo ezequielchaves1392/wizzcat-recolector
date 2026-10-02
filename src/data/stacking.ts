@@ -47,6 +47,25 @@ export const MAX_STACK: Record<string, number> = {
   consumable: 20, crate: 20, key: 99, crystal: 99
 };
 
+/**
+ * Cómo se pinta una cantidad en la esquina de una celda.
+ *
+ * El jugador compró más de 99 llaves y la esquina decía "99": no se perdían
+ * llaves, pero **lo que se ve no era lo que había** (R3). Aquí se decide el texto
+ * en un solo sitio, porque el número se pinta en tres —la rejilla, el detalle y la
+ * venta— y si cada uno compusiera su regla volvieran a discrepar.
+ *
+ * **"150+" y no el número entero**, por una razón práctica: el 99 cabe en la
+ * esquina y el 150 no. Y **el "+" dice la verdad sin mentir**: el jugador sabe que
+ * hay más de lo que ve, que era el problema. El detalle sí enseña la cifra
+ * exacta, que es donde cabe.
+ */
+export function textoDeCantidad(unidades: number, tope: number): string {
+  const n = Math.max(0, Math.floor(unidades) || 0);
+  if (n <= tope) return String(n);
+  return `${tope}+`;
+}
+
 /** Un item se agrupa solo si lo dice Y si su tipo lo permite. */
 export function isStackable(item: any): boolean {
   return !!item && !!item.stackable && (STACKABLE_TYPES as readonly string[]).includes(item.type);

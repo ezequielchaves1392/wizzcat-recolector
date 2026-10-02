@@ -76,7 +76,7 @@ const UNIDAD_SINGULAR: Record<string, string> = {
 // La regla de apilado vive en `data/stacking` porque el game loop necesita la
 // MISMA para saber si un item cabe. Con una copia aquí, el contador de ranuras y
 // la rejilla acaban contando cosas distintas otra vez.
-import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits } from '../data/stacking';
+import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits, textoDeCantidad } from '../data/stacking';
 import { lorePara, lineaTipoCompanion } from '../data/tiers';
 
 // Estado de la pantalla. Sobrevive a los re-render.
@@ -136,6 +136,11 @@ function draw(
     const isSel = w.id === ui.selectedId;
     const isEquipped = esEquipado(w, state);
     const count = g.count;
+    // F30 · La esquina pinta el tope con un "+" cuando hay más, no un 99 pelado.
+    // `data-count` sigue siendo el número REAL porque lo leen la arrastre y la
+    // selección, y recortarlo ahí ya fue un bug.
+    const tope = MAX_STACK[w.type] ?? 20;
+    const texto = count > 0 ? textoDeCantidad(count, tope) : '';
     return `
       <button class="inv-cell ${isSel ? 'is-selected' : ''} ${count > 0 ? 'is-stackable' : ''}"
               data-cell="${i}" data-id="${w.id}" data-count="${count}"
@@ -152,6 +157,7 @@ function draw(
           ${w.tier ? `T${w.tier}` : (w.rarity ?? '')}
           ${w.potential ? ` ${'★'.repeat(w.potential)}` : ''}
         </span>
+        ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-panel)] rounded px-0.5">${texto}</span>` : ''}
         ${isEquipped ? `<span class="absolute bottom-0.5 left-1 text-[9px] font-mono text-amber-400">EQ</span>` : ''}
       </button>
     `;
@@ -446,8 +452,10 @@ function detailContent(item: any, state: any, game: any): string {
           <div class="mb-2.5">
             <div class="label-caps mb-1">Cantidad</div>
             <div class="flex items-baseline gap-1.5">
-              <span class="font-['Orbitron'] font-bold text-base accent-text tabular">${item.stackCount || 1}</span>
-              <span class="text-[10px] font-mono text-[var(--text-muted)]">/ ${maxStack}</span>
+              <span class="font-['Orbitron'] font-bold text-base accent-text tabular">${stackUnits(item)}</span>
+              <span class="text-[10px] font-mono text-[var(--text-muted)]">
+                ${stackUnits(item) > maxStack ? `+ (tope de pintado ${maxStack})` : `/ ${maxStack}`}
+              </span>
             </div>
           </div>
         ` : ''}
@@ -937,17 +945,19 @@ export function visibleStacksFor(
   for (const w of items) {
     if (isStackable(w)) {
       const clave = `${w.type}_${w.name}`;
-      const tope = MAX_STACK[w.type] ?? 20;
       const previa = celdaDe.get(clave);
 
       if (previa !== undefined) {
         grupos[previa].ids.push(w.id);
-        grupos[previa].count = Math.min(grupos[previa].count + (w.stackCount || 1), tope);
+        // F30 · Se suman las unidades REALES, sin `Math.min(..., tope)`: el tope es
+        // de PINTADO, y recortar aquí hacía que 150 llaves se Teachan "99" con el
+        // jugador detrás de la pantalla. El texto es cosa de `textoDeCantidad`.
+        grupos[previa].count += w.stackCount || 1;
         continue;
       }
 
       celdaDe.set(clave, grupos.length);
-      grupos.push({ item: w, ids: [w.id], count: Math.min(w.stackCount || 1, tope) });
+      grupos.push({ item: w, ids: [w.id], count: w.stackCount || 1 });
       continue;
     }
 

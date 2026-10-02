@@ -17,10 +17,11 @@
 //    4. Un almacén lleno admite más unidades de lo que ya tiene, y no admite
 //       un item que sí ocuparía ranura.
 //    5. Vender y gastar una pila sigue funcionando después de fusionarla.
+//    6. F30 · El tope de pintado NO recorta lo que hay, y lo dice con un "+".
 // ==========================================================================
 
 import { visibleStacksFor } from '../src/components/warehouse';
-import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from '../src/data/stacking';
+import { countOccupiedSlots, isStackable, mergeStacks, stackUnits, textoDeCantidad, MAX_STACK } from '../src/data/stacking';
 import { boot, reload, bootNew, check, resumen, s, wh, ids, nanites, baseSave, collector, crate, key, crystal, consumable } from './kit';
 
 /** Cuántas celdas pinta la rejilla, que es lo que el jugador ve. */
@@ -60,6 +61,48 @@ async function main() {
     // poder elegir con cuál abre el cofre.
     const r = mergeStacks([key('k1', 0, 3), key('k2', 1, 3)]);
     check('apilado: dos llaves de distinto nivel NO se funden', r.items.length === 2, String(r.items.length));
+  }
+
+  // =========================================================================
+  //  6. F30 · EL TOPE DE PINTADO NO RECORTA LO QUE HAY
+  // =========================================================================
+  {
+    // Lo que el jugador compró y vio: "compré más de 99 llaves y me sale 99".
+    // Las llaves NO se perdían, pero lo que se veía no era lo que había, que es
+    // la regla R3 del proyecto. Aquí se comprueba las dos mitades.
+    const tope = MAX_STACK.key;
+    check('F30: 150 llaves se pintan como "99+", no como 99',
+      textoDeCantidad(150, tope) === `${tope}+`,
+      `texto="${textoDeCantidad(150, tope)}" con 150 y tope ${tope}`);
+    check('F30: por debajo del tope se ve el número entero',
+      textoDeCantidad(7, tope) === '7' && textoDeCantidad(99, tope) === '99',
+      `7→"${textoDeCantidad(7, tope)}" 99→"${textoDeCantidad(99, tope)}"`);
+    check('F30: el "+" solo aparece cuando hay más de lo que cabe',
+      textoDeCantidad(tope, tope) === String(tope) &&
+      textoDeCantidad(tope + 1, tope).endsWith('+'),
+      `exactamente el tope="${textoDeCantidad(tope, tope)}" uno más="${textoDeCantidad(tope + 1, tope)}"`);
+
+    // Y lo importante: la rejilla NO recorta el número. Antes hacía
+    // `Math.min(count, tope)`, así que el `data-count` que leen el arrastre y la
+    // selección llegaba ya recortado y no había forma de saber cuántas había.
+    const conMuchas = key('k1', 0, 150);
+    const g = await boot(baseSave([conMuchas]));
+    const celda = celdas(g).find((c: any) => c.count > 0);
+    check('F30: la rejilla NO recorta la cantidad real',
+      celda?.count === 150, `count=${celda?.count}`);
+    check('F30: y las unidades sobreviven al guardado',
+      unidades(g, 'key') === 150, 'unidades=' + unidades(g, 'key'));
+    const g2 = await reload();
+    check('F30: y a la recarga',
+      unidades(g2, 'key') === 150, 'unidades=' + unidades(g2, 'key'));
+    check('F30: 150 llaves siguen siendo UNA ranura',
+      countOccupiedSlots(wh(g2)) === 1, 'ranuras=' + countOccupiedSlots(wh(g2)));
+
+    // Y el "+" no es decorativo: el número de verdad está detrás y el motor lo lee
+    // entero, así que el jugador puede gastar las 150 aunque la esquina solo
+    // enseñe "99+".
+    check('F30: el motor lee la pila entera, no la recortada',
+      stackUnits(wh(g2)[0]) === 150, 'stackCount=' + stackUnits(wh(g2)[0]));
   }
   {
     // Dos recolectores son dos cosas distintas aunque se llamen igual. Si se
