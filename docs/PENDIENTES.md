@@ -13,10 +13,11 @@
 > **Una idea está pendiente mientras siga en estos apartados.** Cuando se termine se
 > mueve a **Hecho**, y si se decide que no, a **Descartado** con el motivo en una línea.
 >
-> **El detalle largo vive en [`PENDIENTES-ARCHIVO.md`](./PENDIENTES-ARCHIVO.md).** Este
-> fichero es el resumen corto: qué falta, en qué orden, y por qué. El archivo tiene el
-> mismo contenido con la cuenta a la vista, los `file:line` y el historial de cada
-> decisión. **Cuando se tome una decisión, se actualizan los dos.**
+> **Este fichero es la lista entera, corta a propósito.** Cuando hace falta recuperar el
+> porqué a fondo de una decisión —la cuenta, los `file:line`, el diagnóstico completo— está
+> en el historial de git, en el commit que lo rationaleó. No se borra al decidir algo: se
+> mueve a **Hecho** y se deja escrito el motivo, que es lo que impide que la idea vuelva a
+> aparecer.
 
 ---
 
@@ -61,7 +62,7 @@ fracaso. Está razonado en el archivo y en F36.
 |---|---|---|
 | **1** | ~~**F24** · Quitar material de la forja~~ **HECHO** | Era el atajo del id triplicado + el quitar, que ya existía. `stateCheck` +3. |
 | **2** | **F26 + F31** · Cristal del mismo tier + tienda solo en cajas básicas | **La pieza grande.** Una caja por tier resuelve F26 (el cristal sale de la caja correcta), F27 (el expansor alto sale de caja) y F31 (la llave y la caja del siguiente) de una sola vez, y mata el patrón de D4 por construcción. |
-| **3** | **F33** · Forja de 2 materiales que hereda el stat | Necesita tu respuesta nº1 (la curva). **Con 2 materiales un T10 sale 2,4× la carta; con 3 sale 91× y nadie lo usa.** El instinto era correcto y el motivo es aritmética. |
+| **3** | **F33** · Forja de 2 materiales que hereda el stat | **No espera ninguna respuesta tuya**: toca la cantidad de materiales y de dónde sale el stat, no la probabilidad. **Con 2 materiales un T10 sale 2,4× la carta; con 3 salen 91× y nadie lo usa.** El instinto era correcto y el motivo es aritmética. La curva de 60/68/75 es **otra cosa** (F34) y es independiente de esta. |
 | **4** | **F23** · Una sesión por dispositivo | Decidido: **negarse a entrar, no expulsar al otro**. Con reloj de expiración corto (30-60 s) para que cerrar la pestaña libere la cuenta. |
 | **5** | **F29** · Núcleos en el ranking + **no enseñar la fórmula de puntos** | Solo justo después de F23. Y lo de esconder la fórmula va en serio: con los pesos a la vista, regalar un logro de 250.000 puntos pasa a ser lo más rentable del juego —y te lo haría a ti. |
 | **6** | **F30, F28, F25** · Sueltos y pequeños | No dependen de nada. F30 es un R3 (se ve 99 y hay 150), F28 es delta time, F25 es una línea en un array. |
@@ -564,8 +565,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 ## Hecho
 
 _Lo terminado, una línea y el commit. La cifra viva del proyecto: **24 bancos, 1552
-pruebas**, todas en verde. El detalle de cada uno está en
-[`PENDIENTES-ARCHIVO.md`](./PENDIENTES-ARCHIVO.md)._
+pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
 

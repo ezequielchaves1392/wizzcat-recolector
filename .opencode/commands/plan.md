@@ -9,8 +9,8 @@ dice cuál sigue, y entonces se ejecuta ese con `/feature`, `/bug` o lo que toqu
 
 ## Qué hacer
 
-1. Lee `docs/PENDIENTES.md` — el corto. `docs/PENDIENTES-ARCHIVO.md` es el
-   historial largo y **no hace falta para listar**.
+1. Lee `docs/PENDIENTES.md`. Es la lista entera, corta a propósito; si hace falta el
+   porqué a fondo de una decisión, está en el historial de git.
 
 2. Presenta el listado **con estas cuatro cosas delante**, que es lo que hace falta
    para decidir:

@@ -49,9 +49,8 @@ El working tree es la referencia, **no el último commit**. Rama `main`.
 **Estado a 2 de octubre de 2026:** `v1.1.0` está **taggeado en GitHub**, y después hay
 un lote grande de trabajo ya commitado: la forja infinita sin techo (`d5daee3`), el tope de
 almacén y expansores por tipo (`3b9048a`), el lote de compras, identidad y cajas de lote
-de `35acadb` a `0f0968a`, y la reescritura de `docs/PENDIENTES.md` en versión corta con
-`docs/PENDIENTES-ARCHIVO.md` como detalle largo. Es la fase 11 de
-`docs/CAMBIOS-MACRO.md`: el contenido inalcanzable (llaves, cristales, Espectro
+de `35acadb` a `0f0968a`, y la reescritura de `docs/PENDIENTES.md` en versión corta. Es la
+fase 11 de `docs/CAMBIOS-MACRO.md`: el contenido inalcanzable (llaves, cristales, Espectro
 Azulado), el AFK automático, el cartel de logro, la valoración a la vista y el
 rebalanceo de la fase 10. La lista de lo implementado está en el apartado **Hecho** de
 `docs/PENDIENTES.md`.
