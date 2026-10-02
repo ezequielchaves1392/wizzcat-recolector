@@ -33,7 +33,7 @@
 // ==========================================================================
 
 import type { Affix, Rarity, CollectorItem } from '../types/domain';
-import { TIER_SYSTEM } from './tiers';
+import { rangoDePoder, rarezaDeTier } from './tiers';
 
 // --------------------------------------------------------------------------
 // Atributos
@@ -145,7 +145,10 @@ export function collectorUpgradeCost(level: number): number {
 
 /** Probabilidad base de éxito de una fusión de tier T → T+1. */
 export function baseSuccessChance(fromTier: number): number {
-  // T1 78% → T10 33%. Con `craftLuck` de las pasivas y piedras, sube.
+  // T1 78% → T10 33%. Del T11 en adelante pisa el suelo del 30%: la curva
+  // creciente de F34 (60/68/75) está propuesta pero sin visto bueno, así que
+  // no se toca el signo hasta que lo haya. El suelo evita el absurdo de una
+  // probabilidad negativa en tiers altos.
   return Math.max(0.30, 0.78 - (fromTier - 1) * 0.05);
 }
 
@@ -246,7 +249,7 @@ export function attemptForge(
     maxTier?: number;
   }
 ): ForgeResult {
-  const maxTier = options.maxTier ?? 11; // T11 = Divino, techo de forja
+  const maxTier = options.maxTier ?? Infinity; // Forja infinita: el precio frena solo
 
   if (materials.length !== 3) {
     return { success: false, error: 'Se necesitan 3 recolectores del mismo tier.' };
@@ -279,7 +282,7 @@ export function attemptForge(
   const name = forgeCollectorName(potential, newTier);
 
   // Herencia: daño base del siguiente tier + bonificación por afijos y potencial
-  const baseRange = (TIER_SYSTEM.ranges as Record<number, [number, number]>)[Math.min(newTier, 10)] ?? [1, 5];
+  const baseRange = rangoDePoder(newTier);
   const baseDamage = Math.round((baseRange[0] + baseRange[1]) / 2);
 
   // Cuántos afijos hereda según potencial. La nanopartícula sube el tope a 4:
@@ -319,8 +322,7 @@ export function attemptForge(
 }
 
 function collectorRarity(tier: number, potential: number): Rarity {
-  const clamped = Math.max(1, Math.min(tier, 10));
-  const base = (TIER_SYSTEM.rarityByTier as Record<number, string>)[clamped] as Rarity ?? 'Común';
+  const base = rarezaDeTier(tier) as Rarity ?? 'Común';
   if (potential >= 5 && tier >= 9) return 'Divino';
   if (potential >= 4 && tier >= 7) return 'Mítico';
   if (potential >= 3 && tier >= 5) return 'Legendario';

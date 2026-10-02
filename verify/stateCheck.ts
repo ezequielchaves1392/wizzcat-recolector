@@ -24,8 +24,9 @@
 import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel } from '../src/data/crafting';
+import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
 import { CRATE_LOOT } from '../src/components/crateLoot';
-import { collectorValue, fusionImprovesDensity } from '../src/data/valuation';
+import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
   baseSave, collector, companion, ficha, crate, key, crystal, consumable, conRoll
@@ -930,12 +931,60 @@ async function main() {
     check('forja: los 3 tienen que ser del mismo tier',
       !g2.forgeCollector(['a', 'b', 'c']).success);
 
-    // El techo de tier.
+    // Sin techo de tier (forja infinita): el T11 se fusiona y da T12. El precio
+    // (2^n materiales) es lo que frena, no un rechazo.
     const g3 = await boot(baseSave([
       collector('a', 11), collector('b', 11), collector('c', 11)
     ], conBlueprint));
-    check('forja: T11 es el techo y no se fusiona',
-      !g3.forgeCollector(['a', 'b', 'c']).success);
+    const r12 = conRoll(0, () => g3.forgeCollector(['a', 'b', 'c']));
+    check('forja: el T11 se fusiona y da T12',
+      r12.success === true && (r12.collector as any)?.tier === 12,
+      `success=${r12.success} tier=${(r12.collector as any)?.tier} msg=${r12.msg ?? ''}`);
+
+    {
+      // Las fórmulas de más allá del 10 son continuas con la tabla: el T11 no es
+      // un salto ni un recorte, y el valor sigue al poder en vez de quedarse
+      // plano. Sin esto, un T11 forjado tendría daño de T1 y precio de T11.
+      const tabla = (TIER_SYSTEM.ranges as Record<number, [number, number]>);
+      check('infinito: el rango 1-10 es la tabla literal, sin tocar',
+        Object.keys(tabla).every(k => {
+          const r = rangoDePoder(Number(k));
+          return r[0] === tabla[Number(k)][0] && r[1] === tabla[Number(k)][1];
+        }), 'tiers=1..10');
+      const [min10, max10] = tabla[10];
+      const [min11, max11] = rangoDePoder(11);
+      check('infinito: el T11 crece ×1,62 sobre el T10, no un salto',
+        Math.abs(min11 / min10 - 1.62) < 0.05 && Math.abs(max11 / max10 - 1.62) < 0.05,
+        `T10=[${min10},${max10}] T11=[${min11},${max11}]`);
+      check('infinito: la rareza de arriba es Divino, no un recorte ni un invento',
+        rarezaDeTier(3) === 'Raro' && rarezaDeTier(15) === 'Divino' && rarezaDeTier(30) === 'Divino',
+        `T3=${rarezaDeTier(3)} T15=${rarezaDeTier(15)}`);
+      check('infinito: el valor base sigue subiendo del 11 al 15',
+        valorBaseTier(11) < valorBaseTier(12) && valorBaseTier(12) < valorBaseTier(15),
+        `11=${valorBaseTier(11)} 12=${valorBaseTier(12)} 15=${valorBaseTier(15)}`);
+    }
+    {
+      // El T10 se fusiona y da un T11 de verdad: nombre de forja (con su
+      // sufijo, no un `undefined`), daño dentro del rango nuevo y rareza
+      // definida. El dado se clava para que el acierto sea determinista.
+      const conBlueprint = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
+      const g = await boot(baseSave([
+        collector('a', 10), collector('b', 10), collector('c', 10)
+      ], conBlueprint));
+      const r = conRoll(0, () => g.forgeCollector(['a', 'b', 'c']));
+      const item = (r.collector as any);
+      const [min11b] = rangoDePoder(11);
+      check('forja: el T10 da un T11 con daño de T11, no de T1',
+        r.success === true && item?.tier === 11 && item?.damage >= min11b,
+        `success=${r.success} tier=${item?.tier} daño=${item?.damage} suelo=${min11b}`);
+      check('forja: y con nombre de forja, no un undefined',
+        typeof item?.name === 'string' && item.name.includes('PRIMIGENIA'),
+        `nombre=${item?.name}`);
+      const g2 = await reload();
+      check('forja: el T11 sobrevive a la recarga con su daño',
+        wh(g2).some((w: any) => w.tier === 11 && w.damage === item?.damage),
+        ids(g2).join(','));
+    }
 
     // El equipado no se puede fusionar: perderlo seria un castigo doble.
     //

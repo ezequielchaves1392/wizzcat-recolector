@@ -79,6 +79,36 @@ export const TIER_SYSTEM = {
   }
 };
 
+/**
+ * Rango de poder de un tier, con fórmula más allá del 10 (forja infinita).
+ *
+ * 1-10: la tabla literal, que es el balance medido y no se toca. 11+: ×1,62
+ * por tier desde el T10, la misma razón a la que crece el poder del 1 al 10.
+ * Sin esta fórmula, un T11 forjado no tendría rango y caería en el `[1, 5]`
+ * de reserva: un T11 con daño de T1.
+ */
+export function rangoDePoder(tier: number): [number, number] {
+  const t = Math.max(1, Math.floor(tier) || 1);
+  const literal = (TIER_SYSTEM.ranges as Record<number, [number, number]>)[t];
+  if (literal) return literal;
+  const RAZON = 1.62;
+  const [min10, max10] = TIER_SYSTEM.ranges[10];
+  const k = Math.pow(RAZON, t - 10);
+  return [Math.max(1, Math.round(min10 * k)), Math.max(2, Math.round(max10 * k))];
+}
+
+/**
+ * Rareza de un tier: la tabla hasta el 10, Divino de ahí en adelante.
+ *
+ * Antes se recortaba con `Math.min(tier, 10)` en cada sitio que la leía, y
+ * cada recorte era una copia de la misma regla. La rareza máxima sigue siendo
+ * la máxima: un T15 es Divino, no una rareza nueva que nadie enseña.
+ */
+export function rarezaDeTier(tier: number): string {
+  const t = Math.max(1, Math.floor(tier) || 1);
+  return (TIER_SYSTEM.rarityByTier as Record<number, string>)[t] ?? 'Divino';
+}
+
 // ==========================================================================
 // Lore · una línea por nombre
 //

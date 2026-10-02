@@ -24,6 +24,19 @@ const TIER_BASE_VALUE: Record<number, number> = {
 };
 
 /**
+ * Valor base de un tier, con fórmula más allá del 11 (forja infinita).
+ *
+ * 1-11: la tabla, que es el balance medido. 12+: ×2,05 por tier, la razón a
+ * la que crece la propia tabla. Sin esto, un T15 forjado valdría lo mismo
+ * que un T11 mientras pega ×1,62^4 más: venderlo sería regalarlo.
+ */
+export function valorBaseTier(tier: number): number {
+  const t = Math.max(1, Math.floor(tier) || 1);
+  if (TIER_BASE_VALUE[t] !== undefined) return TIER_BASE_VALUE[t];
+  return Math.round(330000 * Math.pow(2.05, t - 11));
+}
+
+/**
  * Multiplicador de valor por rareza.
  *
  * Calibrado contra la forja: si la rareza multiplica demasiado, la fusión pasa
@@ -114,7 +127,7 @@ export interface ValuationOptions {
 }
 
 export function collectorValue(collector: CollectorItem, opts: ValuationOptions = {}): number {
-  const base = TIER_BASE_VALUE[Math.max(1, Math.min(collector.tier, 11))] ?? 200;
+  const base = valorBaseTier(Math.max(1, collector.tier)) ?? 200;
   const levelMult = levelValueMult(collector.level || 0, collectorMaxLevel(collector.maxLevel));
   const rarityMult = RARITY_VALUE_MULT[collector.rarity] ?? 1;
   const potMult = potentialValueMult(collector.potential ?? 0);
@@ -190,7 +203,7 @@ export function fusionImprovesDensity(
 /** Resumen legible para la tarjeta del item. */
 export function valuationBreakdown(collector: CollectorItem, opts: ValuationOptions = {}): string[] {
   const out: string[] = [];
-  const base = TIER_BASE_VALUE[Math.max(1, Math.min(collector.tier, 11))] ?? 200;
+  const base = valorBaseTier(Math.max(1, collector.tier)) ?? 200;
   out.push(`Base T${collector.tier}: ${fmt(base)}`);
   if (collector.level) out.push(`Nivel ${collector.level}: ×${levelValueMult(collector.level, collectorMaxLevel(collector.maxLevel)).toFixed(2)}`);
   out.push(`Rareza ${collector.rarity}: ×${(RARITY_VALUE_MULT[collector.rarity] ?? 1).toFixed(2)}`);

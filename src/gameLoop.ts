@@ -3261,11 +3261,11 @@ const AFK_THRESHOLD_MS = 60000;
         return { success: false, msg: 'Las 3 recolectores deben ser del mismo tier.' };
       }
       // El recolector equipado no se puede consumir: perderla sería un castigo doble
+      // Forja infinita: sin techo de tier (el `tier >= 11` se fue). El precio
+      // (2^n materiales) frena solo, y las fórmulas de poder, rareza y valor
+      // ya llegan donde llegue.
       if (materials.some((m: any) => m.equipped || m.id === state.equippedCollectorId)) {
         return { success: false, msg: 'No puedes fusionar el recolector equipado. Desequípala primero.' };
-      }
-      if (tier >= 11) {
-        return { success: false, msg: 'T11 es el techo de la forja.' };
       }
 
       // Consumir piedras

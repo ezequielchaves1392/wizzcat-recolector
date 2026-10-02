@@ -1772,6 +1772,17 @@ Delegados ("sí"). Van aquí con la cuenta, para que se puedan cambiar sin volve
 >
 > **DECIDIDO: a partir del tier 20, 75% fijo. Solo sube el coste. delegated a mi.**
 >
+> > **CORTE 1 HECHO (forja infinita, sin curva).** Decidido "forja infinita": el
+> > precio 2^n frena solo. Este corte quita el techo (`tier >= 11` fuera del
+> > motor, `maxTier` por defecto a infinito) y pone las fórmulas para que un
+> > T11+ salga con poder, rareza, nombre y valor de verdad: `rangoDePoder()`
+> > (tabla 1-10 intacta, ×1,62 desde el T10), `rarezaDeTier()` (Divino arriba)
+> > y `valorBaseTier()` (×2,05 desde el T11). La curva de probabilidad NO se
+> > toca: 60/68/75 sigue sin visto bueno y el suelo del 30% evita el absurdo.
+> > Cubre `stateCheck` (+8: T10→T11 y T11→T12 de verdad, continuidad de las
+> > tres fórmulas). Queda: curva, 2 materiales + herencia (F33), tienda y
+> > cajas (F31), cristales estrictos (F26).
+>
 > **Y es la decisión correcta por una razón que sale de los números del propio juego, no
 > de una preferencia:** el techo de niveles de un recolector es `20 + potencial × 3`, o
 > sea **20 sin estrellas y 35 con 5**. El **20 del tope de probabilidad es exactamente el
@@ -2355,6 +2366,10 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       funde las N en la pila; `getBulkCost`/`getBulkMax`/`getStoreUnitCost` ponen
       el número único para diálogo, tope y tarjeta. `buyCheck` 140 → 154.
       La tanda queda en **24 bancos, 1442 pruebas**.
+- [x] **Forja infinita, corte 1: fórmulas 11+ y sin techo.** `rangoDePoder()`,
+      `rarezaDeTier()`, `valorBaseTier()`; T10→T11 y T11→T12 comprobados.
+      `stateCheck` 225 → 232. Sin curva (pendiente de visto bueno).
+      La tanda queda en **24 bancos, 1549 pruebas**.
 - [x] **F27 · tope de almacén y expansores por tipo.** T1/T2 en tienda, T3 solo
       de cajas, tope 600 que frena sin recortar. Fuera `warehouseSlot`,
       `expandWarehouse` y `unlockCompanionSlot`. Bancos al día.
