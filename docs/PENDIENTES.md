@@ -817,7 +817,7 @@ antes visto… la tierra se quiebra a su paso…* (mejóralo, y ponle uno a cada
 > > sobra (las dos mitades de D4), el SOBRECARGADO hereda el de su base y la
 > > línea de tipo dice lo que se cobra.
 
-### F14 · Comprar por cantidad en el almacén
+### F14 · Comprar por cantidad en el almacén — HECHO
 
 Comprar por cantidad en el almacén, siempre y cuando haya lugar y nanitas.
 
@@ -830,6 +830,23 @@ Comprar por cantidad en el almacén, siempre y cuando haya lugar y nanitas.
 > de escuadrón **no** se apilan: 5 compañeros son 5 ranuras, y ahí sí tiene que
 > bloquearse en cuanto no quepan. El número que se puede comprar sale de las dos
 > cosas, y por eso tiene que salir del motor (R1/R3) y no de la vista.
+>
+> > **Hecho. La mitad del trabajo no existía:** como una pila es una ranura, las
+> > unidades no piden sitio nuevo —si cabe una caben N— y la pregunta de espacio
+> > es la misma de siempre (`cabeLaCompra`). Lo que faltaba era el precio del
+> > lote y su tope, y los dos salen del motor:
+> >
+> > - `buyStoreItem(key, n)` cobra N veces el unitario (lo mismo que N compras
+> >   de una) y entrega las N fundidas en la pila que haya. Sin saldo para el
+> >   total no hay compra parcial: o las N o ninguna, sin cobrar. Solo lo
+> >   apilable acepta N; lo demás siempre vale una, y un 0/negativo/NaN se
+> >   rechaza sin cobrar.
+> > - `getBulkCost` (el total que pinta el diálogo) y `getBulkMax` (el tope: lo
+> >   que alcanza con el saldo) hacen la misma cuenta que el cobro. Y de paso la
+> >   tarjeta dejó de calcularse el precio a mano: lo pide con `getStoreUnitCost`.
+> >
+> > En la vista, el diálogo de cantidad es el de la venta con `verbo: 'comprar'`.
+> > Cubre `buyCheck` (+14). El diálogo en pantalla se mira en `preview.html`.
 
 ### F15 · En el perfil, cuántos Títulos, Marcos y Banners tienes
 
@@ -2265,6 +2282,10 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F14 · comprar por cantidad.** `buyStoreItem(key, n)` cobra N unitarios y
+      funde las N en la pila; `getBulkCost`/`getBulkMax`/`getStoreUnitCost` ponen
+      el número único para diálogo, tope y tarjeta. `buyCheck` 140 → 154.
+      La tanda queda en **24 bancos, 1442 pruebas**.
 - [x] **F12-F13 · lo que te tocó y su lore.** Comprar tier abre un cartel con
       nombre, poder, rareza y lore (ya no un toast que manda al almacén). 67
       fichas en `data/tiers.ts`, visibles también en la ficha del almacén, con

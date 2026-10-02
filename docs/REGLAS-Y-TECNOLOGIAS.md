@@ -159,7 +159,7 @@ en producción.
 |---|---|---|
 | `sellCheck` | `sellItem` borra de verdad y no resucita al re-sincronizar ni al recargar. Cajas, llaves, cristales, consumibles, compañeros, recolectores, migraciones de contadores, renombre `weapon`→`collector`, que **el total que enseña el botón sea el que entra en la cuenta**, y la **venta por unidades**: qué queda en la pila, qué sobrevive a la recarga, que pedir más de lo que hay se recorta en vez de fabricar dinero, y que 0, negativos, `NaN` e `Infinity` se rechazan sin cobrar. | 121 |
 | `equipCheck` | Equipar/desequipar, y que **un click llega al manejador exactamente una vez** por muchos renders. Nodo falso con `addEventListener`/`click()` reales para contar acumulación. | 24 |
-| `buyCheck` | `buyStoreItem` y `buyNode`: **lo que se cobra es lo que se muestra**, lo que se paga llega, y lo que no cabe no se compra. Sobrevive a la recarga. | 140 |
+| `buyCheck` | `buyStoreItem` y `buyNode`: **lo que se cobra es lo que se muestra**, lo que se paga llega, y lo que no cabe no se compra. Sobrevive a la recarga. Y el lote de F14: N veces el unitario cobrado de una vez, fundido en la pila que haya, sin compra parcial sin saldo, y el 0/negativo/NaN rechazado sin cobrar. | 154 |
 | `filterCheck` | `matchesFilter`, `visibleStacksFor` y `moveItemTo` **juntas**, porque la rejilla que ve el jugador y la que usa el arrastre tienen que ser la misma. Los 5 órdenes. | 67 |
 | `moveCheck` | `moveItems` **reordena, nunca edita**: ni número de items, ni nanitas, ni contadores. El destino imposible se rechaza en vez de corromper. | 54 |
 | `stackCheck` | Una pila es una ranura. Comprar y abrir van a la pila existente. La migración colapsa saves viejos sin perder unidades. Que el botón de la tienda y el cobro pregunten lo mismo. **Las cuatro cartas de llave por separado**, una partida por carta: que dos unidades del mismo nivel caigan en una pila vale para las cuatro, y medirlas todas en una partida compartida mide cuatro llaves de tres niveles distintos. | 71 |
@@ -710,7 +710,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **24 bancos** dan **1428 pruebas**, todas en verde.
+   tocar nada. Los **24 bancos** dan **1442 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

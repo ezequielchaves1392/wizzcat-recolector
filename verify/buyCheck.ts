@@ -574,6 +574,78 @@ async function main() {
     check('tienda: y el almacen queda como estaba',
       wh(g).length === 0, 'quedan=' + wh(g).length + ' ids=' + ids(g).join(','));
   }
+  {
+    // F14: COMPRAR POR CANTIDAD. El lote cobra N veces el unitario —lo mismo
+    // que N compras de una— y entrega las N de una vez, en la pila que haya.
+    //
+    // La llave T0 vale 250: con 10.000 dan 40 justas. Sin resto no hay
+    // redondeo que discutir, y la cuenta es exacta a propósito.
+    const g = await boot(baseSave([], { nanites: 10_000 }));
+    const r = g.buyStoreItem('keyT0', 10);
+    check('lote: comprar 10 cobra 10 veces el unitario',
+      r !== false && nanites(g) === 10_000 - 250 * 10,
+      `nanites=${nanites(g)}`);
+    check('lote: y llegan las 10 a una sola pila',
+      !!r && find(g, (r as any).id)?.stackCount === 10,
+      `pila=${!!r && find(g, (r as any).id)?.stackCount}`);
+    check('lote: y ocupan una sola ranura',
+      ranuras(g) === 1, 'ranuras=' + ranuras(g));
+    check('lote: el total que enseña el diálogo es el que se cobra',
+      g.getBulkCost('keyT0', 10) === 250 * 10,
+      `bulk=${g.getBulkCost('keyT0', 10)}`);
+    const g2 = await reload();
+    check('lote: el lote sobrevive a la recarga',
+      nanites(g2) === 10_000 - 250 * 10,
+      `nanites=${nanites(g2)}`);
+  }
+  {
+    // Con pila previa se funde con ella: 3 que había + 7 que llegan.
+    const g = await boot(baseSave([], { nanites: 10_000 }));
+    g.buyStoreItem('keyT0', 3);
+    const pila = wh(g).find((w: any) => w.type === 'key');
+    g.buyStoreItem('keyT0', 7);
+    check('lote: el segundo lote se suma a la pila, no abre otra',
+      pila && find(g, pila.id)?.stackCount === 10 && ranuras(g) === 1,
+      `pila=${pila && find(g, pila.id)?.stackCount} ranuras=${ranuras(g)}`);
+    check('lote: y se cobraron las 10 en total',
+      nanites(g) === 10_000 - 250 * 10, `nanites=${nanites(g)}`);
+  }
+  {
+    // Sin nanitas para el total no hay compra parcial: o las N o ninguna, y
+    // sin cobrar. Un lote a medias sería una pila pagada sin precio cerrado.
+    const g = await boot(baseSave([], { nanites: 1_000 }));
+    const r = g.buyStoreItem('keyT0', 10);
+    check('lote: sin saldo para el total se rechaza entero',
+      r === false && nanites(g) === 1_000 && wh(g).length === 0,
+      `ok=${r} nanites=${nanites(g)} items=${wh(g).length}`);
+  }
+  {
+    // Cantidad no válida: 0, negativos y NaN no cobran nada. Y en lo no
+    // apilable el número ni se mira: una carta de tier siempre es una.
+    const g = await boot(baseSave([], { nanites: 10_000 }));
+    const antes = nanites(g);
+    check('lote: 0 se rechaza sin cobrar',
+      g.buyStoreItem('keyT0', 0) === false && nanites(g) === antes,
+      `nanites=${nanites(g)}`);
+    check('lote: un negativo se rechaza sin cobrar',
+      g.buyStoreItem('keyT0', -5) === false && nanites(g) === antes,
+      `nanites=${nanites(g)}`);
+    check('lote: NaN se rechaza sin cobrar',
+      g.buyStoreItem('keyT0', NaN) === false && nanites(g) === antes,
+      `nanites=${nanites(g)}`);
+    const t = g.buyStoreItem('collectorCardT1', 10);
+    check('lote: una carta de tier con 10 sigue siendo una sola compra',
+      t !== false && nanites(g) === antes - g.getStoreUnitCost('collectorCardT1'),
+      `nanites=${nanites(g)} unitario=${g.getStoreUnitCost('collectorCardT1')}`);
+  }
+  {
+    // El tope del diálogo sale del motor: lo que alcanza con el saldo.
+    const g = await boot(baseSave([], { nanites: 1_000 }));
+    check('lote: el tope es lo que alcanza (1000/250 = 4)',
+      g.getBulkMax('keyT0') === 4, `max=${g.getBulkMax('keyT0')}`);
+    check('lote: lo no apilable no tiene tope que preguntar',
+      g.getBulkMax('collectorCardT1') === 1, `max=${g.getBulkMax('collectorCardT1')}`);
+  }
 
   resumen('compra');
 }

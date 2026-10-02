@@ -40,6 +40,7 @@ import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY } from '
 import { STORE_KEY_TIER, KEY_DEFS, cratesOpenedBy } from '../data/items';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
+import { showConfirmModal } from '../utils/modal';
 import { rarityClass, raritySlug, RARITY_TEXT } from './crateLoot';
 import { countOccupiedSlots } from '../data/stacking';
 
@@ -275,7 +276,9 @@ export function renderStoreTab(
   const card = (itemKey: string) => {
     const item = (STORE_ITEMS as Record<string, any>)[itemKey];
     if (!item) return '';
-    const price = cost(item.cost);
+    // El precio sale del motor (R3): es el mismo número que cobra
+    // `buyStoreItem`. La cuenta local queda de reserva.
+    const price = game.getStoreUnitCost?.(itemKey) ?? cost(item.cost);
     const canAfford = state.nanites >= price;
     const { disabled, reason } = statusOf(itemKey, state, game);
     // Bloqueado = no se puede comprar por ESTADO, no por falta de dinero.
@@ -466,24 +469,7 @@ export function renderStoreTab(
         showToast(st.reason ?? 'No te alcanza', 'info');
         return;
       }
-      const bought = game.buyStoreItem(key as any);
-      if (bought === false) {
-        sfx.error();
-        showToast('No se pudo completar la compra.', 'error');
-        return;
-      }
-      sfx.buy();
-      // F12: lo que se sorteó al comprar se enseña, no se esconde en el
-      // almacén. Las cartas de tier sortean nombre, poder y rareza, y pagar
-      // por una sorpresa que hay que ir a buscar es pagar a ciegas dos veces.
-      // El resto de cartas sigue con su aviso de siempre.
-      if (typeof bought === 'object' && bought !== null &&
-          ((bought as any).type === 'companion' || (bought as any).type === 'collector')) {
-        showPurchaseModal(game, bought as any, () => renderStoreTab(container, game, onBack, go));
-        return;
-      }
-      showToast('Comprado', 'success');
-      renderStoreTab(container, game, onBack, go);
+      comprarFlujo(game, key, container, onBack, go);
       return;
     }
 
@@ -503,6 +489,62 @@ export function renderStoreTab(
   });
 
   startAffordabilityWatch(root, game);
+}
+
+/**
+ * Compra una carta, preguntando cuántas si hay lote (F14 + F12).
+ *
+ * Con una sola unidad asequible no hay nada que decidir y compra directo, que
+ * es el camino de siempre. Si dan las nanitas para más, el diálogo pregunta
+ * con el tope honesto (lo que alcanza, del motor) y el total en vivo (también
+ * del motor). Al cerrar, lo sorteado se enseña con su modal (F12) y el resto
+ * con su aviso.
+ */
+function comprarFlujo(game: any, itemKey: string, container: HTMLElement, onBack: () => void, go?: (r: any) => void) {
+  const cerrar = (bought: any, units?: number) => {
+    if (bought === false) {
+      sfx.error();
+      showToast('No se pudo completar la compra.', 'error');
+      return;
+    }
+    sfx.buy();
+    if (typeof bought === 'object' && bought !== null &&
+        (bought.type === 'companion' || bought.type === 'collector')) {
+      showPurchaseModal(game, bought, () => renderStoreTab(container, game, onBack, go));
+      return;
+    }
+    showToast(units && units > 1 ? `Comprado ×${units}` : 'Comprado', 'success');
+    renderStoreTab(container, game, onBack, go);
+  };
+
+  const max = game.getBulkMax?.(itemKey) ?? 1;
+  if (max <= 1) {
+    cerrar(game.buyStoreItem(itemKey as any));
+    return;
+  }
+  const label = (STORE_ITEMS as Record<string, any>)[itemKey]?.label ?? itemKey;
+  const unitName = itemKey.startsWith('keyT') ? 'llave'
+    : itemKey === 'upgradeCrystal' ? 'cristal'
+    : itemKey.endsWith('Crate') ? 'caja' : 'unidad';
+  showConfirmModal(
+    `Te alcanza para ${max}. Elige cuántas comprar.`,
+    (units) => {
+      const n = units ?? max;
+      cerrar(game.buyStoreItem(itemKey as any, n), n);
+    },
+    {
+      sublabel: label,
+      confirmText: 'Comprar',
+      quantity: {
+        max,
+        itemName: label,
+        unitName,
+        amount: (n) => formatNumber(game.getBulkCost?.(itemKey, n) ?? 0),
+        verbo: 'comprar',
+        sufijoImporte: ' ◆'
+      }
+    }
+  );
 }
 
 /**

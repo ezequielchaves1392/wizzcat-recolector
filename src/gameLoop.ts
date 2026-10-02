@@ -396,6 +396,42 @@ function unidadesVendibles(item: any, pedidas?: number): number {
 }
 
 /**
+ * Precio unitario de una carta de tienda, con el descuento del árbol.
+ *
+ * Vive junto al estado y no en la vista porque lo necesitan tres: la tarjeta
+ * (lo pinta), el diálogo de cantidad (el total) y `buyStoreItem` (lo cobra).
+ * Con la fórmula en un solo sitio, el número pintado y el cobrado no pueden
+ * separarse (R3). La tarjeta la calculaba a mano con la misma cuenta; ahora la
+ * pide aquí.
+ */
+function precioUnitarioTienda(itemKey: string): number {
+  const item = (STORE_ITEMS as Record<string, { cost: number }>)[itemKey];
+  if (!item) return 0;
+  return Math.floor(item.cost * (1 - state.bonus.costReduction));
+}
+
+/**
+ * Cuántas unidades se compran, ya recortadas a lo válido.
+ *
+ * Solo lo apilable se compra en lote (llaves, cristales, cajas y
+ * consumibles): una carta de tier o una ranura son únicas y siempre valen
+ * una, pida lo que pida la vista. Un 0, un negativo o un NaN es "cantidad no
+ * válida" y vale 0, que `buyStoreItem` rechaza sin cobrar —igual que
+ * `unidadesVendibles` en la venta—.
+ */
+function unidadesCompra(itemKey: string, pedidas?: number): number {
+  const apilable = STORE_KEY_TIER[itemKey] !== undefined
+    || itemKey === 'upgradeCrystal'
+    || !!CONSUMABLES[itemKey as keyof typeof CONSUMABLES]
+    || (itemKey.endsWith('Crate') && !!(CRATE_TYPES as Record<string, unknown>)[itemKey.replace('Crate', '').toLowerCase()]);
+  if (!apilable) return 1;
+  if (pedidas === undefined || pedidas === null) return 1;
+  const n = Math.floor(Number(pedidas));
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return n;
+}
+
+/**
  * Mete un item en el almacén, sumándolo a la pila que ya hubiera.
  *
  * Es la ÚNICA forma de añadir un item al almacén, y el motivo de que exista es
@@ -2775,15 +2811,23 @@ const AFK_THRESHOLD_MS = 60000;
       saveToFirebase();
       return true;
     },
-    buyStoreItem: (itemKey: keyof typeof STORE_ITEMS) => {
+    buyStoreItem: (itemKey: keyof typeof STORE_ITEMS, units?: number) => {
       handleUserActivity();
       const item = STORE_ITEMS[itemKey];
       if (!item) return false;
 
+      // F14 · CUÁNTAS. Solo lo apilable se compra en lote; el resto vale una.
+      // Un 0 o un texto es cantidad no válida y se rechaza sin cobrar.
+      const n = unidadesCompra(itemKey as string, units);
+      if (n < 1) return false;
+
       // El árbol de pasivas abarata la tienda. El descuento se aplica al
       // cobrar, no al mostrar: así el precio de la carta y el cobrado salen
-      // siempre del mismo número.
-      const cost = Math.floor(item.cost * (1 - state.bonus.costReduction));
+      // siempre del mismo número. En lote es N veces el unitario —lo mismo
+      // que N compras de una—, y ese total lo enseña el diálogo con
+      // `getBulkCost`, que hace esta misma cuenta.
+      const unit = precioUnitarioTienda(itemKey as string);
+      const cost = unit * n;
       if (state.nanites < cost) return false;
 
       // Validar antes de cobrar: los slots son únicos y no se pueden repetir.
@@ -2833,6 +2877,10 @@ const AFK_THRESHOLD_MS = 60000;
         const esLlave = STORE_KEY_TIER[itemKey] !== undefined;
         const tier = esLlave ? STORE_KEY_TIER[itemKey] : STORE_MATERIAL_TIER;
         const item = createMaterialItem(esLlave ? 'key' : 'crystal', tier);
+        // F14 · el lote entra de una vez: `addToWarehouse` lo funde con la
+        // pila que haya. Las unidades no piden ranura nueva (una pila es una
+        // ranura), así que la pregunta de espacio de arriba sigue valiendo.
+        item.stackCount = n;
         if (!addToWarehouse(item)) { state.nanites += cost; return false; }
         syncMaterialCounters();
         onUpdate(state, isAfk);
@@ -2852,7 +2900,7 @@ const AFK_THRESHOLD_MS = 60000;
       } else if (itemKey === 'commonCrate' || itemKey === 'rareCrate' || itemKey === 'epicCrate' || itemKey === 'legendaryCrate') {
         // La caja es un item real del almacén: sin esto no se puede abrir
         const crateType = itemKey.replace('Crate', '').toLowerCase() as CrateType;
-        const warehouseItem = createCrateItem(crateType);
+        const warehouseItem = createCrateItem(crateType, n);
         if (!addToWarehouse(warehouseItem as any)) { state.nanites += cost; return false; }
         syncCrateCounters();
         onUpdate(state, isAfk);
@@ -2869,7 +2917,7 @@ const AFK_THRESHOLD_MS = 60000;
           tier: 0,
           sellPrice: Math.floor(item.cost / 4),
           stackable: true,
-          stackCount: 1,
+          stackCount: n,
           // Identificador estable: el almacén decide el efecto por este campo,
           // no por el nombre (los nombres ya han cambiado varias veces)
           buffId: def.buffId
@@ -3360,6 +3408,41 @@ const AFK_THRESHOLD_MS = 60000;
       if (!item) return 0;
       const vender = unidadesVendibles(item, units);
       return vender > 0 ? Math.floor(getSellPriceFor(item) * vender) : 0;
+    },
+
+    /**
+     * Lo que cobra `buyStoreItem` por esta carta y estas unidades (F14).
+     *
+     * El gemelo de `getSellTotal` en la dirección contraria: el diálogo de
+     * cantidad lo pinta en vivo y la compra lo cobra, con la misma expresión.
+     * Es N veces el unitario —lo mismo que N compras de una—, y una cantidad
+     * no válida vale 0, que es lo que `buyStoreItem` rechaza sin cobrar.
+     */
+    getBulkCost: (itemKey: string, units?: number): number => {
+      const n = unidadesCompra(itemKey, units);
+      if (n < 1) return 0;
+      return precioUnitarioTienda(itemKey) * n;
+    },
+
+    /** El unitario de la carta, con descuento: lo pinta la tarjeta (R3). */
+    getStoreUnitCost: (itemKey: string): number => precioUnitarioTienda(itemKey),
+
+    /**
+     * Cuántas unidades se pueden comprar de golpe, ahora mismo (F14).
+     *
+     * Lo no apilable vale 1: la vista compra directo sin preguntar. Lo
+     * apilable vale lo que alcanza con el saldo, porque el espacio no limita
+     * cantidades —una pila es una ranura, así que si cabe una caben N— y la
+     * única pregunta binaria (¿cabe?) ya la responde `cabeLaCompra`. Si no cabe
+     * ni una, vale 0 y la vista ni pregunta: deja el camino de siempre para
+     * que el motor rechace con su mensaje.
+     */
+    getBulkMax: (itemKey: string): number => {
+      if (unidadesCompra(itemKey, 2) !== 2) return 1;
+      if (!cabeLaCompra(itemKey)) return 0;
+      const unit = precioUnitarioTienda(itemKey);
+      if (unit <= 0) return 1;
+      return Math.max(1, Math.floor(state.nanites / unit));
     },
 
     getCollectorValue: (itemId: string) => {
