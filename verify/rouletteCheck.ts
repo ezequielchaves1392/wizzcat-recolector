@@ -28,6 +28,7 @@
 
 import { FRENADO, VUELTAS, avance, instante, geometria, crucesDeCasilla } from '../src/components/rouletteSpin';
 import { tuningRoll } from '../src/components/tuningRoulette';
+import { getSkipRoulette, setSkipRoulette } from '../src/roulettePrefs';
 import { collectorUpgradeCost } from '../src/gameLoop';
 import { check, resumen, boot, reload, conRoll, baseSave, collector, crystal, find } from './kit';
 
@@ -429,6 +430,37 @@ async function main() {
     check('contrato: el motor devuelve el nivel con el que se queda',
       ok.level === 5 && mal.level === 5,
       `acierto=${ok.level} fallo=${mal.level}: el fallo no retrocede, asi que los dos suben`);
+  }
+  {
+    // F17: el check de saltar la ruleta. Es una preferencia de vista por
+    // dispositivo (`localStorage`, como el tema), no progreso: el premio ya
+    // está decidido y aplicado antes de montar nada, así que saltar no puede
+    // cambiar la economía. Lo que se ata aquí es que la preferencia exista,
+    // persista y coaccione: un valor raro es "no saltar", nunca un trompo
+    // a medias. El cartel directo se mira en `ruleta-preview.html`, porque
+    // necesita medir que sin cinta no queda una cinta quieta a la vista.
+    const anterior = getSkipRoulette();
+    try {
+      setSkipRoulette(false);
+      check('salto: por defecto no se salta nada',
+        getSkipRoulette() === false,
+        `skip=${getSkipRoulette()}`);
+      setSkipRoulette(true);
+      check('salto: el check persiste al releer',
+        getSkipRoulette() === true,
+        `skip=${getSkipRoulette()}`);
+      localStorage.setItem('cyberforge_skip_roulette', 'cualquier cosa');
+      check('salto: un valor raro es no saltar, no un estado roto',
+        getSkipRoulette() === false,
+        `skip=${getSkipRoulette()}`);
+      setSkipRoulette(true);
+      await reload();
+      check('salto: sobrevive a la recarga, como el tema',
+        getSkipRoulette() === true,
+        `skip=${getSkipRoulette()}`);
+    } finally {
+      setSkipRoulette(anterior);
+    }
   }
 
   resumen('giro de la ruleta');

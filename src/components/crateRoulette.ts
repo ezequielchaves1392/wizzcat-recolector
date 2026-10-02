@@ -18,6 +18,7 @@ import {
   type CrateReward
 } from './crateLoot';
 import { mountStrip, spinTrack } from './rouletteStrip';
+import { getSkipRoulette } from '../roulettePrefs';
 import type { CrateType } from '../data/store';
 
 /**
@@ -124,27 +125,35 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
     </button>`;
   overlay.appendChild(result);
 
-  // La cinta se mide antes de pintarse, porque cuántas casillas hacen falta
-  // depende de cuántas caben en la ventana. Eso lo decide `geometria()`.
-  const mount = mountStrip(overlay.querySelector('[data-role="strip"]') as HTMLElement, (giro) => {
-    const { tiles } = buildRouletteStrip(crateType, giro.casillas);
-    // Insertamos el premio en su posicion. La casilla usa el mismo constructor
-    // que las distracciones: si la ganadora se escribiera a mano, cualquier
-    // cambio en cómo se enseña una cifra (el "+", el separador de millares)
-    // llegaría a una casilla y no a la otra, y el jugador vería dos verdades
-    // distintas en la misma pantalla.
-    tiles[giro.winIndex] = makeRouletteTile(reward);
-    return tiles;
-  });
-
   const finished = { value: false };
-  spinTrack(mount, SPIN_MS, () => {
+  const revelarCartel = () => {
     finished.value = true;
     if (isJackpot) sfx.jackpot(); else sfx.reward((RARITY_RANK[reward.rarity] ?? 0) >= 2);
-
     result.classList.remove('opacity-0');
     result.classList.add('opacity-100');
-  });
+  };
+
+  // F17: saltar es ir directo al cartel, sin montar la cinta. El premio ya
+  // está decidido y aplicado, así que no hay transición que "terminar": el
+  // final del trompo ES el cartel. Cada premio sigue teniendo su propio
+  // overlay y su CONTINUAR, así que saltar uno no se come los de debajo.
+  if (getSkipRoulette()) {
+    revelarCartel();
+  } else {
+    // La cinta se mide antes de pintarse, porque cuántas casillas hacen falta
+    // depende de cuántas caben en la ventana. Eso lo decide `geometria()`.
+    const mount = mountStrip(overlay.querySelector('[data-role="strip"]') as HTMLElement, (giro) => {
+      const { tiles } = buildRouletteStrip(crateType, giro.casillas);
+      // Insertamos el premio en su posicion. La casilla usa el mismo constructor
+      // que las distracciones: si la ganadora se escribiera a mano, cualquier
+      // cambio en cómo se enseña una cifra (el "+", el separador de millares)
+      // llegaría a una casilla y no a la otra, y el jugador vería dos verdades
+      // distintas en la misma pantalla.
+      tiles[giro.winIndex] = makeRouletteTile(reward);
+      return tiles;
+    });
+    spinTrack(mount, SPIN_MS, revelarCartel);
+  }
 
   const finish = () => {
     document.removeEventListener('keydown', onKey);

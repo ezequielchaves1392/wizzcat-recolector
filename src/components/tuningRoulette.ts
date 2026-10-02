@@ -27,6 +27,7 @@ import { sfx } from '../utils/audio';
 import { ic } from '../ui/icons';
 import type { RouletteTile } from './crateLoot';
 import { mountStrip, spinTrack } from './rouletteStrip';
+import { getSkipRoulette } from '../roulettePrefs';
 
 /** Vueltas que da el trompo. Las de la caja son 3; aquí basta con 2. */
 const VUELTAS = 2;
@@ -137,27 +138,6 @@ export function showTuningRoulette(roll: TuningRoll, onClose: () => void) {
   `;
   document.body.appendChild(overlay);
 
-  // POR QUÉ LAS CASILLAS ALTERNAN Y NO SORTEAN. Hay dos desenlaces posibles y
-  // la tira los alterna sin azar. Con `Math.random` dos sintonizaciones del
-  // mismo nivel se verían distintas sin que nada hubiera cambiado, y al
-  // comparar dos capturas no se sabría si se ve otra cosa o es la misma.
-  //
-  // Y por qué la casilla que gana la pone este fichero y no el que la pinta: es
-  // el resultado, y el resultado lo decidió el motor. Si saliera de un dado de
-  // aquí, la ruleta estaría mintiendo sobre el que el motor aplicó de verdad, y
-  // el motor ya cobró el cristal.
-  const mount = mountStrip(overlay, (giro) => {
-    const tiles: RouletteTile[] = Array.from({ length: giro.casillas }, (_, i) => (
-      i % 2 === 0
-        ? { label: 'MEJORA', sub: `NIVEL ${roll.levelBefore + 1}`, rarity: 'Legendario', icon: 'sparkle', tone: 'good' }
-        : { label: 'FALLO', sub: `NIVEL ${roll.levelBefore}`, rarity: 'Común', icon: 'close', tone: 'bad' }
-    ));
-    tiles[giro.winIndex] = gano
-      ? { label: 'MEJORA', sub: `NIVEL ${roll.levelAfter}`, rarity: 'Legendario', icon: 'sparkle', tone: 'good' }
-      : { label: 'FALLO', sub: `NIVEL ${roll.levelAfter}`, rarity: 'Común', icon: 'close', tone: 'bad' };
-    return tiles;
-  }, VUELTAS);
-
   const result = document.createElement('div');
   result.dataset.role = 'result';
   result.className = 'opacity-0 transition-opacity duration-300 flex flex-col items-center gap-3 flex-shrink-0 pb-2';
@@ -176,12 +156,43 @@ export function showTuningRoulette(roll: TuningRoll, onClose: () => void) {
   overlay.appendChild(result);
 
   const finished = { value: false };
-  spinTrack(mount, SPIN_MS, () => {
+  const revelarCartel = () => {
     finished.value = true;
     if (gano) sfx.levelUp(); else sfx.error();
     result.classList.remove('opacity-0');
     result.classList.add('opacity-100');
-  });
+  };
+
+  // F17, igual que en la de las cajas: con el check puesto no hay cinta, solo
+  // el cartel con el "Nivel 4 → 5" y el mensaje del motor. El cristal ya se
+  // gastó y el nivel ya se movió antes de montar nada. La cinta ni se monta:
+  // `mountStrip` la cuelga del overlay al medir, y una cinta quieta encima
+  // del cartel se leería como un trompo roto.
+  if (getSkipRoulette()) {
+    revelarCartel();
+  } else {
+    // POR QUÉ LAS CASILLAS ALTERNAN Y NO SORTEAN. Hay dos desenlaces posibles
+    // y la tira los alterna sin azar. Con `Math.random` dos sintonizaciones
+    // del mismo nivel se verían distintas sin que nada hubiera cambiado, y al
+    // comparar dos capturas no se sabría si se ve otra cosa o es la misma.
+    //
+    // Y por qué la casilla que gana la pone este fichero y no el que la pinta:
+    // es el resultado, y el resultado lo decidió el motor. Si saliera de un
+    // dado de aquí, la ruleta estaría mintiendo sobre el que el motor aplicó
+    // de verdad, y el motor ya cobró el cristal.
+    const mount = mountStrip(overlay, (giro) => {
+      const tiles: RouletteTile[] = Array.from({ length: giro.casillas }, (_, i) => (
+        i % 2 === 0
+          ? { label: 'MEJORA', sub: `NIVEL ${roll.levelBefore + 1}`, rarity: 'Legendario', icon: 'sparkle', tone: 'good' }
+          : { label: 'FALLO', sub: `NIVEL ${roll.levelBefore}`, rarity: 'Común', icon: 'close', tone: 'bad' }
+      ));
+      tiles[giro.winIndex] = gano
+        ? { label: 'MEJORA', sub: `NIVEL ${roll.levelAfter}`, rarity: 'Legendario', icon: 'sparkle', tone: 'good' }
+        : { label: 'FALLO', sub: `NIVEL ${roll.levelAfter}`, rarity: 'Común', icon: 'close', tone: 'bad' };
+      return tiles;
+    }, VUELTAS);
+    spinTrack(mount, SPIN_MS, revelarCartel);
+  }
 
   const finish = () => {
     document.removeEventListener('keydown', onKey);

@@ -846,7 +846,7 @@ arriba a la izquierda en el menú principal.
 > superior izquierda como pides, o el panel principal. Arriba a la izquierda es el sitio
 > que más se ve, pero también el que más se solapa con el contenido en móvil.
 
-### F17 · Saltarse la animación de la ruleta
+### F17 · Saltarse la animación de la ruleta — HECHO
 
 Poder skipear la animación de la ruleta con un check.
 
@@ -863,6 +863,25 @@ Poder skipear la animación de la ruleta con un check.
 > El interruptor tiene que ser persistente (un `check`, como pides) y su sitio natural
 > es el perfil o un panel de ajustes, no el modal de la ruleta: un control dentro de
 > algo que se puede saltar no se alcanza nunca.
+>
+> > **Hecho. Saltar es ir directo al cartel, sin montar la cinta.** El premio ya
+> > está decidido y aplicado antes del trompo (F10), así que no hay transición
+> > que "terminar": el final del trompo ES el cartel, con su sonido de
+> > confirmación. Cada premio sigue teniendo su propio overlay y su CONTINUAR,
+> > así que saltar uno no se come los de debajo (el riesgo del doble clic).
+> >
+> > **Dos decisiones que no estaban en la petición:**
+> > - El check vive en **Perfil → Ajustes**, no en el panel de tema: ese panel es
+> >   solo móvil y el check tiene que existir en las dos versiones. Es un `input`
+> >   real con `label` y 44 px de zona táctil.
+> > - La preferencia va en **`localStorage`, como el tema**, no en Firestore: es
+> >   vista por dispositivo, no progreso. Y que sea por dispositivo es lo
+> >   correcto con F28 (el trompo no va igual en todos). `roulettePrefs.ts` con
+> >   coacción: cualquier valor raro es "no saltar".
+> >
+> > Cubre `rouletteCheck` (+4: defecto, persistencia, coacción y recarga). El
+> > cartel sin cinta se mira en `ruleta-preview.html`, porque el banco no puede
+> > ver una cinta quieta que no debería estar.
 
 ### F18 · Abrir varias cajas de golpe
 
@@ -2206,6 +2225,10 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F17 · saltar la ruleta con un check.** Las dos ruletas van directo al
+      cartel sin montar la cinta, con su sonido. Check en Perfil → Ajustes,
+      preferencia en `localStorage` como el tema. `rouletteCheck` 59 → 63.
+      La tanda queda en **23 bancos, 1410 pruebas**.
 - [x] **F8-B2 · el ranking enseña marco y banner, no solo el título.** El
       documento `rankings/{uid}` escribía solo `title` y el tipo
       `LeaderboardEntry.cosmetics` prometía tres cosas sin rellenar ninguna.

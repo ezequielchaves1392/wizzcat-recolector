@@ -15,6 +15,7 @@
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShell';
 import { COSMETICS, COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
+import { getSkipRoulette, setSkipRoulette } from '../roulettePrefs';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -303,6 +304,25 @@ export function renderProfilePage(
         </p>
       ` : ''}
     </section>
+
+    <!-- Ajustes: vive aquí y no dentro de la ruleta, porque un control dentro
+         de algo que se puede saltar no se alcanza nunca. Y en el Perfil y no
+         en el panel de tema, porque ese panel es solo móvil: el
+         check tiene que existir en las dos versiones. -->
+    <section class="card-glass rounded-2xl p-3 md:p-4 mt-3">
+      ${sectionHead('Ajustes', 'gear', '')}
+      <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
+        <input type="checkbox" data-setting="skip-roulette" class="w-5 h-5 flex-shrink-0 accent-[var(--accent)]"
+               ${getSkipRoulette() ? 'checked' : ''}
+               aria-describedby="skip-roulette-hint">
+        <span class="min-w-0">
+          <span class="block text-[12px] font-bold text-[var(--text-main)]">Saltar la animación de la ruleta</span>
+          <span id="skip-roulette-hint" class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
+            Va directo al cartel del premio, en cajas y sintonizador. El premio no cambia: ya estaba decidido.
+          </span>
+        </span>
+      </label>
+    </section>
   `;
 
   const root = mountInto(container, pageShell({
@@ -321,6 +341,14 @@ export function renderProfilePage(
   // --- Eventos ---
   wireNav(root, { back: onBack, go });
   root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
+  // El check es un `input` real: su estado lo lleva el propio navegador y la
+  // preferencia vive en `localStorage`, así que no hay que re-pintar nada al
+  // cambiarlo. Se lee de la misma fuente al montar, y por eso sobrevive al
+  // re-render igual que sobrevive a la recarga.
+  root.querySelector<HTMLInputElement>('[data-setting="skip-roulette"]')?.addEventListener('change', (e) => {
+    sfx.nav();
+    setSkipRoulette((e.target as HTMLInputElement).checked);
+  });
 
   root.querySelectorAll<HTMLElement>('[data-cos-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
