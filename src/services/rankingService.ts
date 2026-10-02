@@ -49,6 +49,8 @@ export interface LeaderboardEntry {
   secretAchievements?: number;
   forgedCount?: number;
   title?: string;
+  frame?: string;
+  banner?: string;
   cosmetics?: { title: string; frame: string; banner: string };
   updatedAt: number;
 }
@@ -155,6 +157,9 @@ export async function savePlayerScore(
     secretAchievements?: number;
     forgedCount?: number;
     title?: string;
+    frame?: string;
+    banner?: string;
+    cosmetics?: { title: string; frame: string; banner: string };
   } = {}
 ) {
   try {

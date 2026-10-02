@@ -30,7 +30,7 @@ import {
   type LeaderboardEntry, type BoardKind
 } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
-import { COSMETICS_BY_ID } from '../data/cosmetics';
+import { COSMETICS_BY_ID, cosmeticStyle } from '../data/cosmetics';
 import { rarityClass } from './crateLoot';
 
 /**
@@ -131,12 +131,26 @@ function cablearPestanas(body: HTMLElement, repintar: () => void) {
 function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = 'definitivo'): string {
   const isMe = r.uid === meId;
   const title = r.title ? COSMETICS_BY_ID[r.title] : null;
+  // El marco y el banner viajan en el documento `rankings/{uid}` (planos) y,
+  // por compatibilidad, dentro de `cosmetics`. Los planos mandan: son los que
+  // escribe el guardado actual; `cosmetics` queda como lectura de reserva.
+  const frameId = r.frame ?? r.cosmetics?.frame;
+  const bannerId = r.banner ?? r.cosmetics?.banner;
+  const frame = frameId ? COSMETICS_BY_ID[frameId] : null;
+  const banner = bannerId ? COSMETICS_BY_ID[bannerId] : null;
+  const initials = (r.username || '?').trim().slice(0, 2).toUpperCase();
   const valor = boardValue(r, kind);
   const unidades = unidadesDe(kind);
 
   return `
     <div class="rank-row ${isMe ? 'is-me' : ''}">
       <div class="rank-pos" data-tier="${i + 1 <= 3 ? i + 1 : ''}">${i + 1}</div>
+
+      <div class="avatar-stack w-8 h-8 flex-shrink-0" aria-hidden="true">
+        ${banner && banner.id !== 'banner_none' ? `<span class="avatar-frame w-full h-full rounded-full" style="transform:scale(1.9);opacity:.5;${cosmeticStyle(banner)}"></span>` : ''}
+        <span class="avatar-core w-[78%] h-[78%] text-[11px]">${initials}</span>
+        ${frame && frame.id !== 'frame_none' ? `<span class="avatar-frame w-full h-full rounded-full" style="${cosmeticStyle(frame)}"></span>` : ''}
+      </div>
 
       <div class="min-w-0">
         <div class="flex items-center gap-1.5 min-w-0">
@@ -193,6 +207,7 @@ function skeleton(): string {
   return Array.from({ length: 6 }).map((_, i) => `
     <div class="rank-row" style="opacity:${0.7 - i * 0.1}">
       <div class="rank-pos">·</div>
+      <div class="w-8 h-8 rounded-full bg-[var(--border-color)]"></div>
       <div class="min-w-0">
         <div class="h-3 rounded bg-[var(--border-color)] w-2/3"></div>
         <div class="h-2 rounded bg-[var(--border-color)] w-1/3 mt-1.5"></div>

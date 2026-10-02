@@ -121,9 +121,30 @@ dar +3. Balancear el precio.
 > (1 → 2 → 4 → 6), ninguna de +3, y el precio por ranura ya no da un salto.
 > `ranuraCheck` (34 pruebas).
 
-### F8 · En el ranking sale el título, pero no el marco ni el banner
+### F8 · En el ranking sale el título, pero no el marco ni el banner — HECHO
 
 Ver el ranking solo se esta mostrando un tipo de ribbon.
+
+> **Hecho. Eran las dos mitades a la vez, como decía el diagnóstico.**
+>
+> - Al **guardar** (`gameLoop.ts`): el documento `rankings/{uid}` ahora escribe
+>   `frame` y `banner` en plano, más el objeto `cosmetics` con los tres juntos.
+>   Los planos mandan y `cosmetics` queda como lectura de reserva, porque el tipo
+>   `LeaderboardEntry.cosmetics` lo declaraba desde que se escribió y nadie lo
+>   rellenaba (B2 se cierra solo con esto).
+> - Al **pintar** (`rankings.ts`): la fila lleva el avatar de 32 px con su marco
+>   al lado del nombre —la capa que ya existía montada en `profilePage.ts` como
+>   `identityCard()`— y el banner como halo tenue detrás del avatar. En una fila
+>   de 40 px no cabe un fondo de banner entero, así que el banner vive en el
+>   avatar y no en la fila.
+>
+> **Decisión tomada (era la reservada al jugador):** avatar con marco + halo del
+> banner. La rejilla pasa de 3 a 4 columnas (`2.25rem auto 1fr auto`) y el
+> esqueleto de carga pinta el círculo fantasma para no descuadrar.
+>
+> Cubre `identidadCheck` (8 pruebas), nuevo: lo equipado por la API llega al
+> documento y sobrevive a la recarga. El pintado queda fuera del banco a
+> propósito y es `preview.html`.
 
 > **Por qué solo uno:** por los dos lados a la vez, que es lo que hace que esto no
 > sea un arreglo de una línea.
@@ -235,6 +256,10 @@ se la monta él mismo.
 >
 > **Es la misma cosa que F8 vista desde los dos lados:** B2 es el defecto y F8 la
 > decisión de qué tiene que verse en la fila. Si se arregla F8, B2 se cierra solo.
+>
+> **CERRADO con F8.** El guardado escribe `frame`, `banner` y el objeto
+> `cosmetics`; la fila los lee (planos primero, `cosmetics` como reserva) y el
+> tipo ya no miente.
 
 ### B3 · El logro del almacén a 20 no da cartel — HECHO
 
@@ -2026,7 +2051,9 @@ contenido, F9-F10-F21-F22 son decisiones.
    líneas y **ningún fichero de `data/` importa del motor**: eso era R29 sin
    cumplir, y `data/items.ts` llegaba a hacer `import type { CrateType } from
    '../gameLoop'`.
-4. **F1-F8**, que ya tocan menos sitio.
+4. ~~**F1-F8**, que ya tocan menos sitio.~~ **HECHO.** F1-F3 (valoración y
+    desglose), F4 (tarjetas), F5 (llaves de tienda), F6 (salto), F7 (ranuras) y
+    F8 (marco y banner en el ranking) están todos implementados y con banco.
 
 ### Lo que cambió con el lote del 20 de octubre
 
@@ -2179,6 +2206,12 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F8-B2 · el ranking enseña marco y banner, no solo el título.** El
+      documento `rankings/{uid}` escribía solo `title` y el tipo
+      `LeaderboardEntry.cosmetics` prometía tres cosas sin rellenar ninguna.
+      Ahora viajan `frame`, `banner` y el objeto `cosmetics`, y la fila pinta el
+      avatar de 32 px con marco + halo del banner. `identidadCheck` (8), nuevo.
+      La tanda queda en **23 bancos, 1406 pruebas**.
 - [x] **B5 · el trompo ya no explica cómo está hecho por dentro** (`839595b`). Los
       dos textos que lo hacían —la tarjeta de la llave en la tienda y el modal de
       confirmar abrir caja— contaban una frase interna, y el jugador dedujo de un

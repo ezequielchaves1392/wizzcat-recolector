@@ -1795,6 +1795,13 @@ const AFK_THRESHOLD_MS = 60000;
         secretAchievements: state.unlockedAchievements.filter(id => SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
         forgedCount: state.forgedCount,
         title: state.cosmetics.title,
+        frame: state.cosmetics.frame ?? 'frame_none',
+        banner: state.cosmetics.banner ?? 'banner_none',
+        cosmetics: {
+          title: state.cosmetics.title,
+          frame: state.cosmetics.frame ?? 'frame_none',
+          banner: state.cosmetics.banner ?? 'banner_none',
+        },
         updatedAt: new Date()
       }, { merge: true });
 
