@@ -14,7 +14,7 @@
 
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShell';
-import { COSMETICS, COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
+import { COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
 import { getSkipRoulette, setSkipRoulette } from '../roulettePrefs';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { formatNumber } from '../utils/format';
@@ -116,6 +116,18 @@ export function renderProfilePage(
     .reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
 
   const unlockedCosmetics = state.cosmetics.unlocked as string[];
+
+  // F15 · Cuántos de cada tipo, no un total mezclado. El encabezado decía
+  // "12/34" sin distinguir título de marco, y con los secretos dentro de la
+  // misma lista no se sabía qué era cada cosa. Sale de `COSMETICS_BY_TYPE`,
+  // que ya está importado: la cuenta y el catálogo no pueden separarse.
+  const cuentaTipo = (type: Cosmetic['type']) => {
+    const todos = COSMETICS_BY_TYPE(type);
+    const tienes = todos.filter(c => unlockedCosmetics.includes(c.id)).length;
+    return `${tienes}/${todos.length}`;
+  };
+  const desgloseCosmeticos =
+    `Títulos ${cuentaTipo('title')} · Marcos ${cuentaTipo('frame')} · Banners ${cuentaTipo('banner')}`;
 
   // La pestaña activa vive a nivel de módulo, no como variable local de esta
   // función. Antes estaba aquí, y cada re-render la reiniciaba a 'title': al
@@ -268,7 +280,7 @@ export function renderProfilePage(
     <!-- Cosméticos -->
     <section class="card-glass rounded-2xl p-3 md:p-4 mb-3">
       ${sectionHead('Cosméticos', 'crown', `
-        <span class="text-[10px] font-mono text-[var(--text-muted)]">${unlockedCosmetics.length}/${COSMETICS.length}</span>
+        <span class="text-[10px] font-mono text-[var(--text-muted)] text-right leading-snug">${desgloseCosmeticos}</span>
       `)}
 
       <div class="flex gap-1 mb-3">

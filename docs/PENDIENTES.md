@@ -848,7 +848,7 @@ Comprar por cantidad en el almacén, siempre y cuando haya lugar y nanitas.
 > > En la vista, el diálogo de cantidad es el de la venta con `verbo: 'comprar'`.
 > > Cubre `buyCheck` (+14). El diálogo en pantalla se mira en `preview.html`.
 
-### F15 · En el perfil, cuántos Títulos, Marcos y Banners tienes
+### F15 · En el perfil, cuántos Títulos, Marcos y Banners tienes — HECHO
 
 En el perfil me tiene que decir la cantidad de Títulos, Marcos y Banners poseídos.
 
@@ -861,6 +861,11 @@ En el perfil me tiene que decir la cantidad de Títulos, Marcos y Banners poseí
 > Sale casi gratis de `COSMETICS_BY_TYPE()`, que ya está importado. Y de paso resuelve
 > media F16: si el número está desglosado, se puede enseñar en la tarjeta de
 > identidad sin obligar al jugador a entrar al perfil.
+>
+> > **Hecho. El encabezado dice `Títulos 7/14 · Marcos 4/9 · Banners 2/11`** en
+> > vez del total mezclado, contado desde `COSMETICS_BY_TYPE()`. Sin banco: es
+> > pintado puro sobre datos que ya viajan, y lo que hay que mirar es que no
+> > rompa a 390 px (`preview.html`).
 
 ### F16 · El desbloqueo se ve en el perfil, en el ranking y arriba a la izquierda
 
@@ -2282,6 +2287,8 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F15 · desglose de cosméticos en el perfil.** El encabezado dice cuántos
+      de cada tipo en vez del total mezclado. Solo vista, sin banco.
 - [x] **F14 · comprar por cantidad.** `buyStoreItem(key, n)` cobra N unitarios y
       funde las N en la pila; `getBulkCost`/`getBulkMax`/`getStoreUnitCost` ponen
       el número único para diálogo, tope y tarjeta. `buyCheck` 140 → 154.
