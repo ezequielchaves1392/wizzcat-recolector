@@ -46,12 +46,20 @@ tocarla, para que no viva solo en una conversación.
 
 El working tree es la referencia, **no el último commit**. Rama `main`.
 
-**Estado a 1 de octubre de 2026:** `v1.1.0` está **publicado** —tag en GitHub y
-juego en GitHub Pages con `.github/workflows/publicar.yml`—. Es la fase 11 de
+**Estado a 2 de octubre de 2026:** `v1.1.0` está **taggeado en GitHub**, y después hay
+un lote grande de trabajo ya commitado: la forja infinita sin techo (`d5daee3`), el tope de
+almacén y expansores por tipo (`3b9048a`), el lote de compras, identidad y cajas de lote
+de `35acadb` a `0f0968a`, y la reescritura de `docs/PENDIENTES.md` en versión corta con
+`docs/PENDIENTES-ARCHIVO.md` como detalle largo. Es la fase 11 de
 `docs/CAMBIOS-MACRO.md`: el contenido inalcanzable (llaves, cristales, Espectro
 Azulado), el AFK automático, el cartel de logro, la valoración a la vista y el
-rebalanceo de la fase 10. La lista de lo implementado está en el apartado
-**v1.1.0** de `docs/PENDIENTES.md`.
+rebalanceo de la fase 10. La lista de lo implementado está en el apartado **Hecho** de
+`docs/PENDIENTES.md`.
+
+**Y una corrección que hace tiempo que estaba mal: el juego NO está en GitHub Pages.**
+El tag existe, pero Pages no está activado en el repo y `.github/workflows/publicar.yml`
+falla en `configure-pages` en todos los pushes. **No se quiere publicar en Pages**, así que
+lo pendiente es borrar ese workflow, no activar nada.
 
 Aun así, **comprueba `git status` antes de dar por buena cualquier afirmación
 sobre el estado del repo**: el árbol puede ir por delante del último commit, y
@@ -79,7 +87,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 22 bancos = 1399 pruebas (el total varía ±1: una prueba es condicional)
+npm run verify    # 24 bancos = 1549 pruebas (el total varía ±1: una prueba es condicional)
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
@@ -109,7 +117,7 @@ El resto está en `docs/REGLAS-Y-TECNOLOGIAS.md`.
 ```bash
 npm run dev       # servidor de desarrollo
 npm run build     # tsc && vite build — el type-check es puerta de entrada
-npm run verify    # banco de pruebas propio: 22 bancos sobre el game loop real
+npm run verify    # banco de pruebas propio: 24 bancos sobre el game loop real
 ```
 
 Para un banco suelto:
