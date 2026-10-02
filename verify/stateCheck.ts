@@ -931,6 +931,22 @@ async function main() {
     check('forja: los 3 tienen que ser del mismo tier',
       !g2.forgeCollector(['a', 'b', 'c']).success);
 
+    // F24 · El mismo id tres veces no son tres materiales: se rechaza, no se
+    // consume nada y no se gastan piedras (el rechazo va antes del cobro).
+    const rDup = g.forgeCollector(['a', 'a', 'a']);
+    check('forja: el mismo id tres veces se rechaza',
+      !rDup.success && /distintos/i.test(rDup.msg ?? ''), rDup.msg ?? '');
+    check('forja: y no se consume ningún material',
+      deType(g, 'collector') === 3, ids(g).join(','));
+    const gP = await boot(baseSave([
+      collector('a', 2), collector('b', 2), collector('c', 2),
+      consumable('p1', 'calibrationStone', 2, { name: 'Piedra de Calibración' })
+    ], conBlueprint));
+    const rP = gP.forgeCollector(['a', 'a', 'a'], 2, 0);
+    check('forja: el rechazo por duplicados no gasta piedras',
+      !rP.success && find(gP, 'p1')?.stackCount === 2,
+      `ok=${rP.success} piedras=${find(gP, 'p1')?.stackCount}`);
+
     // Sin techo de tier (forja infinita): el T11 se fusiona y da T12. El precio
     // (2^n materiales) es lo que frena, no un rechazo.
     const g3 = await boot(baseSave([

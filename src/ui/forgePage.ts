@@ -355,6 +355,14 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
         const { collectors, selected } = context();
         const picked = collectors.find(w => w.id === btn.dataset.id);
         if (!picked) return;
+        // F24 · Un id por material. Sin esto, tocar el mismo tres veces llena
+        // el yunque con el mismo item en las tres casillas ("enseña 3 y metí
+        // 1") y el motor lo aceptaba, regalando dos materiales.
+        if (selected.includes(picked.id)) {
+          sfx.error();
+          showToast('Ese recolector ya está en el yunque. Toca su casilla para quitarlo.', 'info');
+          return;
+        }
         if (selected.length && picked.tier !== selected[0].tier) {
           sfx.error();
           showToast(`Ya hay un T${selected[0].tier} en el yunque. La fusión exige 3 del mismo tier.`, 'info');

@@ -1130,6 +1130,12 @@ items. No puedo desequipar material que ingresé en la forja.
 >
 > **Para cerrarlo hacía falta un dato tuyo, y ya llegó:** "enseña 3 y metí 1".
 >
+> > **HECHO.** Deduplicado en los dos sitios: la vista no sube un id repetido al
+> > yunque (y su aviso dice dónde está el quitar), y el motor rechaza
+> > `new Set(ids).size !== 3` **antes** de gastar piedras. `stateCheck` (+3).
+> > El quitar por casilla (`data-act="clear"`) ya existía: la selección nunca
+> > sale del almacén, así que quitar es desmarcar.
+>
 > **2 · "No puedo desequipar material".** Esto es independiente y no necesita
 > diagnóstico: **si el material está en un estado aparte del almacén y no hay salida,
 > cada intento fallido es una pérdida permanente.** Metes un item que no te vale, lo

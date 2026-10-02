@@ -3260,6 +3260,12 @@ const AFK_THRESHOLD_MS = 60000;
       if (materials.some((m: any) => (m.tier || 1) !== tier)) {
         return { success: false, msg: 'Las 3 recolectores deben ser del mismo tier.' };
       }
+      // F24 · Va ANTES de gastar piedras y nanopartículas: un rechazo después
+      // del cobro se llevaría los consumibles sin forjar nada. La vista ya no
+      // manda duplicados, pero la API no puede fiarse de la vista (R1).
+      if (new Set(materialIds).size !== 3) {
+        return { success: false, msg: 'Selecciona 3 recolectores distintos.' };
+      }
       // El recolector equipado no se puede consumir: perderla sería un castigo doble
       // Forja infinita: sin techo de tier (el `tier >= 11` se fue). El precio
       // (2^n materiales) frena solo, y las fórmulas de poder, rareza y valor

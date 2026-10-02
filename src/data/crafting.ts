@@ -254,6 +254,12 @@ export function attemptForge(
   if (materials.length !== 3) {
     return { success: false, error: 'Se necesitan 3 recolectores del mismo tier.' };
   }
+  // F24 · Tres POSICIONES no son tres MATERIALES. Sin esto, mandar el mismo id
+  // tres veces cuenta como tres: se "fusiona" un solo recolector y salen dos,
+  // ahorrándose dos materiales. El que cuenta es el motor, no la vista.
+  if (new Set(materials.map(m => m.id)).size !== 3) {
+    return { success: false, error: 'Selecciona 3 recolectores distintos.' };
+  }
   if (tier < 1 || tier >= maxTier) {
     return { success: false, error: `No se pueden forjar recolectores de tier ${tier + 1}.` };
   }

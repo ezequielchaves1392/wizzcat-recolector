@@ -59,7 +59,7 @@ fracaso. Está razonado en el archivo y en F36.
 
 | Orden | Qué | Por qué aquí |
 |---|---|---|
-| **1** | **F24** · Quitar material de la forja | Chico, y sin él lo siguiente deja gente atrapada. La otra mitad (el "me toma los 3") **ya está diagnosticada: es la vista mintiendo**, no un dato perdido. |
+| **1** | ~~**F24** · Quitar material de la forja~~ **HECHO** | Era el atajo del id triplicado + el quitar, que ya existía. `stateCheck` +3. |
 | **2** | **F26 + F31** · Cristal del mismo tier + tienda solo en cajas básicas | **La pieza grande.** Una caja por tier resuelve F26 (el cristal sale de la caja correcta), F27 (el expansor alto sale de caja) y F31 (la llave y la caja del siguiente) de una sola vez, y mata el patrón de D4 por construcción. |
 | **3** | **F33** · Forja de 2 materiales que hereda el stat | Necesita tu respuesta nº1 (la curva). **Con 2 materiales un T10 sale 2,4× la carta; con 3 sale 91× y nadie lo usa.** El instinto era correcto y el motivo es aritmética. |
 | **4** | **F23** · Una sesión por dispositivo | Decidido: **negarse a entrar, no expulsar al otro**. Con reloj de expiración corto (30-60 s) para que cerrar la pestaña libere la cuenta. |
@@ -129,25 +129,21 @@ pestañas en el mismo dispositivo** —que es el raro pero el que más gente se 
 encontrar— se resuelve con `sessionStorage` en vez de `localStorage`: cada pestaña tiene
 su id y no hay que tratarlo aparte.
 
-### F24 · La forja: quitar material y poder desequiparlo
+### F24 · La forja: quitar material y poder desequiparlo — HECHO
 
 > Al tocar un item me toma como si cargué los 3. No puedo desequipar material que ingresé en la forja.
 
-Son **dos cosas distintas**, y una ya está resuelta:
+**1 · "Me toma los 3": era la vista mintiendo, y el motor lo aceptaba.** Tocar el
+mismo item tres veces lo ponía en las tres casillas, y el motor contaba posiciones, no
+materiales: se "fusionaba" uno solo y salían dos, ahorrándose dos materiales. **Arreglado
+en los dos sitios:** la vista no deja subir un id repetido al yunque, y el motor rechaza
+`new Set(ids).size !== 3` **antes** de gastar piedras —un rechazo después del cobro se
+llevaría los consumibles sin forjar nada. `stateCheck` (+3).
 
-**1 · "Me toma los 3" — es la vista mintiendo**, no un dato perdido. El motor exige tres
-posiciones y **no deduplica**, así que si la vista manda el mismo id tres veces lo acepta.
-Y eso no es un número mal pintado: **es un atajo que ahorra dos materiales**. Por eso el
-arreglo no puede ser solo de la vista — hay que arreglar los dos sitios.
-
-**2 · "No puedo desequipar" — no existe, y por eso es el paso 1 del plan.** El arreglo
-barato es un botón de **quitar** por casilla que devuelva el item al almacén. Con la
-tienda cerrada a un solo tier, un intento fallido sin salida es una **pérdida
-permanente**, y eso es lo que hace que la forja dé miedo de usar.
-
-Una decisión de fondo: si al quitar se queda sin material, ¿se cancela el intento entero o
-se queda a medias? Lo natural es cancelarlo entero, y además evita el estado raro de
-"intento a medias guardado en el save".
+**2 · "No puedo desequipar": ya existía.** Cada casilla del yunque es un botón de quitar
+(`data-act="clear"`, con su "Quitar X" para el lector de pantalla), y la selección nunca
+sale del almacén: quitar es desmarcar, no devolver nada. El aviso del duplicado además
+dice dónde está el quitar. La parte visual se mira en `preview.html`.
 
 ### F25 · El mercado va primero, porque siempre lo confundo
 
@@ -567,7 +563,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **24 bancos, 1549
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **24 bancos, 1552
 pruebas**, todas en verde. El detalle de cada uno está en
 [`PENDIENTES-ARCHIVO.md`](./PENDIENTES-ARCHIVO.md)._
 
@@ -650,6 +646,9 @@ pruebas**, todas en verde. El detalle de cada uno está en
 - [x] **F18 · abrir varias cajas de golpe** (`0a55082`). Selector con tope cajas+llaves, N
       `openCrateBox` enteras con carteles en orden. El modal aprendió `verbo` para no
       prometer `◆` al abrir. `stateCheck` 219 → 226.
+- [x] **F24 · deduplicar la forja y el quitar** (paso 1 del plan). La vista no sube
+      ids repetidos y el motor rechaza antes de cobrar consumibles. `stateCheck`
+      232 → 235. La tanda queda en **24 bancos, 1552 pruebas**.
 - [x] **Forja infinita, corte 1 · fórmulas 11+ y sin techo** (`d5daee3`). `rangoDePoder()`,
       `rarezaDeTier()` y `valorBaseTier()`; T10→T11 y T11→T12 comprobados.
       `stateCheck` 225 → 232. **Sin curva de probabilidad: esa sigue esperando tu sí.**
