@@ -153,7 +153,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 23 bancos
+### Los 24 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -183,6 +183,7 @@ en producción.
 | `saltoCheck` | **La probabilidad baja de botín de arriba (F6) y el compañero que faltaba (D1).** Que el salto esté **en la tabla de botín con su peso** y no en un `if` al abrir, por la primera regla del fichero: la ruleta tiene que poder pintar lo que entra, y un salto hecho con un `if` sería un premio que la cinta no puede mostrar. Y por eso el banco mide la probabilidad **real** (`peso / suma`) y **por tiradas de verdad**, no el número de la tabla: las sumas son distintas en las cuatro cajas, así que el mismo peso da cuatro porcentajes distintos, y un banco que mirase el peso estaría midiendo un número que el jugador nunca ve. Los límites están justificados: 8% por arriba porque a partir de ahí la caja común es una legendaria con más pasos, y 1% por abajo porque es decorativo. Que suba **un solo peldaño** y que el anuncio y el item sean del mismo tier (si el cartel dice T8 y el item es T5, el jugador cobra por una cosa y tiene otra). Y D1: que el **Espectro Azulado** (índice 5 de `CRATE_ONLY_COMPANIONS`) salga de la legendaria, salga poco para seguir siendo exclusivo, y **que los índices 0 a 4 no se hayan movido**, que es lo que rompe un guardado antiguo. | 42 |
 | `llaveCheck` | **Que el sistema de llaves cerrara.** Tres mitades que fallaban a la vez: la **cadena** (la del Vacío no salía de ninguna parte y la caja legendaria era imposible de abrir; la Rúnica solo salía de la legendaria; la épica no soltaba llave ninguna — tres peldaños y faltaban los tres), el **texto** (los cuatro `details` mentían) y la **tienda** (una carta que entregaba otra llave, con el precio en un tercer sitio). Comprueba que cada caja suelte la llave que la abre, por **las dos vías**: botín y tienda, porque una llave que solo existe en la tienda y una que solo sale de cajas dejan de ser el mismo sistema. Que el texto no prometa ninguna caja que la llave no abra, en las dos direcciones. Que cada carta entregue la llave que dice. Y que el botín no anuncie una llave que no entrega, con el **plural entero**: una versión anterior miraba `includes('Llaves')` y daba por buena una etiqueta que decía "+2 Llaves Rúnica". | 92 |
 | `identidadCheck` | **Que lo equipado llegue al ranking.** El documento `rankings/{uid}` solo escribía `title`: el marco y el banner se quedaban en `users/{uid}` y la fila no los veía nunca, aunque `LeaderboardEntry.cosmetics` declaraba los tres. Comprueba que equipar marco y banner por la API del motor llegue al documento (planos + objeto `cosmetics`), que el título siga viajando como antes y que todo sobreviva a la recarga. El pintado de la fila (avatar de 32 px con marco y halo del banner) queda fuera a propósito: necesita DOM de verdad y es `preview.html`. | 8 |
+| `loreCheck` | **Que cada nombre tenga su lore y ninguno sobre (F12-F13).** Las dos mitades de D4 sobre el contenido: los 60 nombres de tier, los 6 exclusivos de caja y el Artillero Táctico tienen lore, y ningún lore es de un nombre que no existe. Que el SOBRECARGADO herede el de su base y que la línea de tipo diga lo que se cobra (el `multiplier` enseña su ×, no un +N). El pintado del modal y la ficha queda fuera: es `preview.html`. | 11 |
 
 Además, fuera del runner automático: `reproStack.ts` (repro manual del bug de las
 19 llaves apiladas, con DOM real vía `domStub.ts`).
@@ -686,7 +687,7 @@ src/
 
 verify/                         El banco de pruebas. No está en tsconfig.
   vite.config.ts / run.mjs / one.mjs / entorno.mjs / kit.ts / domStub.ts / stubs/
-  <subject>Check.ts              23 bancos.
+  <subject>Check.ts              24 bancos.
 docs/                           Este directorio.
 ```
 
@@ -709,7 +710,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **23 bancos** dan **1417 pruebas**, todas en verde.
+   tocar nada. Los **24 bancos** dan **1428 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

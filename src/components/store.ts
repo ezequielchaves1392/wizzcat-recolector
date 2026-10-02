@@ -33,14 +33,14 @@
 import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
-import { TIER_SYSTEM } from '../data/tiers';
+import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
 import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY } from '../data/store';
 // Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
 // nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
 import { STORE_KEY_TIER, KEY_DEFS, cratesOpenedBy } from '../data/items';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
-import { rarityClass, raritySlug } from './crateLoot';
+import { rarityClass, raritySlug, RARITY_TEXT } from './crateLoot';
 import { countOccupiedSlots } from '../data/stacking';
 
 interface Category {
@@ -473,6 +473,15 @@ export function renderStoreTab(
         return;
       }
       sfx.buy();
+      // F12: lo que se sorteó al comprar se enseña, no se esconde en el
+      // almacén. Las cartas de tier sortean nombre, poder y rareza, y pagar
+      // por una sorpresa que hay que ir a buscar es pagar a ciegas dos veces.
+      // El resto de cartas sigue con su aviso de siempre.
+      if (typeof bought === 'object' && bought !== null &&
+          ((bought as any).type === 'companion' || (bought as any).type === 'collector')) {
+        showPurchaseModal(game, bought as any, () => renderStoreTab(container, game, onBack, go));
+        return;
+      }
       showToast('Comprado', 'success');
       renderStoreTab(container, game, onBack, go);
       return;
@@ -496,8 +505,66 @@ export function renderStoreTab(
   startAffordabilityWatch(root, game);
 }
 
-/** Mueve la píldora de la pestaña activa hasta su botón. */
-function positionPill(root: HTMLElement, activeId: string) {  const pill = root.querySelector('#cat-pill') as HTMLElement | null;
+/**
+ * Lo que te tocó al comprar una carta de tier: nombre, poder, rareza y lore.
+ *
+ * F12. La tarjeta avisa de que "el nombre, el poder exacto y la rareza se
+ * sortean al comprarlo", pero al cobrar no pasaba nada visible y la sorpresa
+ * había que ir a buscarla al almacén. El modal enseña lo sorteado con la
+ * cifra que cobra (el poder del item, no el rango de la tarjeta) y el lore
+ * (F13), con la línea de tipo al lado para los compañeros: lo que hace falta
+ * para decidir si se equipa.
+ *
+ * Es un overlay propio y no `showConfirmModal` porque no hay nada que
+ * confirmar: es un veredicto, como el cartel de la ruleta, con su CONTINUAR.
+ */
+function showPurchaseModal(game: any, item: any, onClose: () => void) {
+  const esCompanero = item.type === 'companion';
+  const ficha = esCompanero
+    ? (game.getState().companions as any[]).find((c: any) => c.id === item.id)
+    : null;
+  const tipo = ficha?.type ?? item.companionType ?? 'click';
+  const poder = ficha?.power ?? item.power ?? item.damage ?? 0;
+  const lineaPoder = esCompanero
+    ? lineaTipoCompanion(tipo, poder)
+    : `Hace +${item.damage ?? poder} de daño por click`;
+  const lore = lorePara(item.name);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'fixed inset-0 z-[60] flex items-center justify-center p-4 app-bg overflow-y-auto';
+  overlay.innerHTML = `
+    <div class="card-glass-elevated border ${rarityClass(item.rarity)} rounded-2xl px-6 py-5 flex flex-col items-center gap-2 max-w-sm text-center">
+      <div class="mb-1 [&>span>svg]:w-12 [&>span>svg]:h-12 ${RARITY_TEXT[item.rarity] || ''}">${ic(esCompanero ? 'companion' : 'collector')}</div>
+      <div class="text-[9px] font-mono uppercase tracking-[0.2em]" style="color: var(--text-muted)">
+        ${esCompanero ? 'Nuevo compañero' : 'Nuevo recolector'}
+      </div>
+      <div class="font-['Orbitron'] font-bold text-base ${RARITY_TEXT[item.rarity] || ''}">${item.name}</div>
+      <div class="text-[11px] font-mono tabular accent-text">${lineaPoder}</div>
+      <div class="text-[10px] font-mono uppercase tracking-wider ${RARITY_TEXT[item.rarity] || ''} opacity-80">
+        ${item.rarity}${item.tier ? ` · Tier ${item.tier}` : ''}
+      </div>
+      ${lore ? `<div class="text-xs italic mt-1" style="color: var(--text-main)">“${lore}”</div>` : ''}
+      <div class="text-[10px] font-mono mt-1" style="color: var(--text-muted)">✓ Guardado en el almacén</div>
+    </div>`;
+  const btn = document.createElement('button');
+  btn.textContent = 'CONTINUAR';
+  btn.className = 'px-6 py-2.5 mt-4 accent-bg text-slate-950 font-[\'Orbitron\'] font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer';
+  overlay.firstElementChild?.appendChild(btn);
+  document.body.appendChild(overlay);
+
+  const finish = () => {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+    onClose();
+  };
+  btn.addEventListener('click', finish);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') finish();
+  };
+  document.addEventListener('keydown', onKey);
+}
+
+/** Mueve la píldora de la pestaña activa hasta su botón. */function positionPill(root: HTMLElement, activeId: string) {  const pill = root.querySelector('#cat-pill') as HTMLElement | null;
   const btn = root.querySelector(`[data-cat="${activeId}"]`) as HTMLElement | null;
   if (!pill || !btn) return;
   // Se mide en el siguiente frame, cuando el navegador ya calculó el layout.

@@ -749,7 +749,7 @@ Aumentar el máximo del escuadrón a 6 y verificar las mejoras de aumento de slo
 > botón encendido y el `buyStoreItem` la rechazaba en silencio. Botón que no hace
 > nada. Ahora las cartas de ranura preguntan también "¿ya lo tienes?".
 
-### F12 · Ver qué compañero o recolector te ha tocado al comprarlo
+### F12 · Ver qué compañero o recolector te ha tocado al comprarlo — HECHO
 
 Al comprar un compañero se debe mostrar un modal con el compañero que se generó. Al
 comprar un recolector, una tarjeta con el recolector que se generó. Esto es porque
@@ -777,8 +777,14 @@ almacén.
 > tier) no se describen a mano, se generan con `tierDescription()`
 > (`store.ts:147-160`). El lore de F13 y este modal tocarán el mismo sitio, así que
 > van juntos.
+>
+> > **Hecho, junto con F13.** Al comprar sale un cartel con nombre, poder, rareza
+> > y lore: es un veredicto como el de la ruleta (nada que confirmar, solo
+> > CONTINUAR), y por eso es un overlay propio y no `showConfirmModal`. La cifra
+> > es la del item sorteado, no el rango de la tarjeta. El resto de cartas sigue
+> > con su aviso de siempre.
 
-### F13 · Que los compañeros y recolectores tengan lore
+### F13 · Que los compañeros y recolectores tengan lore — HECHO
 
 Poner descripciones en los recolectores y compañeros para darle lore. Ejemplo tuyo:
 *Forjador de Mundos, un compañero Legendario, su poder de extracción es uno nunca
@@ -797,6 +803,19 @@ antes visto… la tierra se quiebra a su paso…* (mejóralo, y ponle uno a cada
 > el tipo de compañero** (`passive`, `click` o `multiplier`), que es lo que el jugador
 > tiene que entender para decidir si lo equipa. Un texto sobre "la tierra se quiebra" no
 > dice si produce mientras no estás o solo al clickear.
+>
+> > **Hecho. 67 fichas** (`LORE` en `data/tiers.ts`): los 60 nombres de tier, los
+> > 6 exclusivos de caja y el Artillero Táctico, que solo sale de la rara. Se
+> > enseña en el modal de compra (F12) y en la ficha del almacén.
+> >
+> > **El tipo va AL LADO y no dentro** (`lineaTipoCompanion`): el lore es sabor y
+> > la línea de tipo lleva la cifra que se cobra —el `multiplier` enseña su × y
+> > no un +N que nadie cobra—. Un texto de sabor que cargue con la mecánica se
+> > desactualiza con ella; separados, cada uno cambia por su lado.
+> >
+> > Cubre `loreCheck` (11 pruebas), nuevo: todo nombre tiene lore, ningún lore
+> > sobra (las dos mitades de D4), el SOBRECARGADO hereda el de su base y la
+> > línea de tipo dice lo que se cobra.
 
 ### F14 · Comprar por cantidad en el almacén
 
@@ -2246,6 +2265,11 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F12-F13 · lo que te tocó y su lore.** Comprar tier abre un cartel con
+      nombre, poder, rareza y lore (ya no un toast que manda al almacén). 67
+      fichas en `data/tiers.ts`, visibles también en la ficha del almacén, con
+      la línea de tipo al lado. `loreCheck` (11), nuevo.
+      La tanda queda en **24 bancos, 1428 pruebas**.
 - [x] **F18 · abrir varias cajas de golpe.** Selector de cantidad con tope
       cajas+llaves, N `openCrateBox` enteras con carteles en orden, parada con
       aviso si una falla. El modal aprendió `verbo`/`sufijoImporte` para no

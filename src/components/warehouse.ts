@@ -77,6 +77,7 @@ const UNIDAD_SINGULAR: Record<string, string> = {
 // MISMA para saber si un item cabe. Con una copia aquí, el contador de ranuras y
 // la rejilla acaban contando cosas distintas otra vez.
 import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits } from '../data/stacking';
+import { lorePara, lineaTipoCompanion } from '../data/tiers';
 
 // Estado de la pantalla. Sobrevive a los re-render.
 const ui = {
@@ -329,8 +330,37 @@ function detailSheet(item: any, state: any, game: any): string {
   `;
 }
 
-/** Panel de detalle fijo en la columna derecha, solo en escritorio. */
-function detailPanel(item: any, state: any, game: any): string {
+/**
+ * Lore y tipo del item, para compañeros y recolectores (F13).
+ *
+ * El lore sale del nombre (`lorePara`): cada nombre que puede llegar al
+ * almacén tiene el suyo. Y el tipo del compañero sale de su ficha, con la
+ * cifra que cobra (`lineaTipoCompanion`): el lore es sabor y esto es lo que
+ * decide si se equipa. Sin ficha se asume `click`, que es lo que vende la
+ * tienda; los `passive` y `multiplier` solo salen de cajas y siempre traen
+ * ficha con su tipo.
+ */
+function loreLine(item: any, state: any): string {
+  const lore = lorePara(item.name);
+  const tipo = item.type === 'companion'
+    ? `<div class="text-[10px] font-mono accent-text mt-1">${lineaTipoCompanion(
+        (state.companions as any[]).find((c: any) => c.id === item.id)?.type
+          ?? item.companionType ?? 'click',
+        (state.companions as any[]).find((c: any) => c.id === item.id)?.power
+          ?? item.power ?? 0
+      )}</div>`
+    : '';
+  if (!lore && !tipo) return '';
+  return `
+    <div class="rounded-lg px-2.5 py-1.5 mb-2.5"
+         style="background: color-mix(in srgb, var(--accent) 7%, transparent);
+                border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent)">
+      ${lore ? `<p class="text-[11px] italic leading-relaxed" style="color: var(--text-main)">“${lore}”</p>` : ''}
+      ${tipo}
+    </div>`;
+}
+
+/** Panel de detalle fijo en la columna derecha, solo en escritorio. */function detailPanel(item: any, state: any, game: any): string {
   return `
     <div class="card-glass border rounded-2xl p-4 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain">
       ${detailContent(item, state, game)}
@@ -409,6 +439,8 @@ function detailContent(item: any, state: any, game: any): string {
         <p class="text-[11px] text-[var(--text-main)] leading-relaxed mb-2.5">
           ${item.details || 'Sin descripción'}
         </p>
+
+        ${isCollector || isCompanion ? loreLine(item, state) : ''}
 
         ${item.stackable ? `
           <div class="mb-2.5">

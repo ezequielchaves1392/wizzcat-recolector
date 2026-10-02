@@ -54,7 +54,8 @@ export default defineConfig({
         ranuraCheck: resolve(here, 'ranuraCheck.ts'),
         tarjetaCheck: resolve(here, 'tarjetaCheck.ts'),
         saltoCheck: resolve(here, 'saltoCheck.ts'),
-        identidadCheck: resolve(here, 'identidadCheck.ts')
+        identidadCheck: resolve(here, 'identidadCheck.ts'),
+        loreCheck: resolve(here, 'loreCheck.ts')
       },
       formats: ['es']
     }

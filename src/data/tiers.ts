@@ -78,3 +78,137 @@ export const TIER_SYSTEM = {
     10: 'Divino'
   }
 };
+
+// ==========================================================================
+// Lore · una línea por nombre
+//
+// F13. Cada nombre de compañero y de recolector tiene su descripción, con la
+// misma clave exacta que las tablas de arriba. Los exclusivos de caja y el
+// Artillero Táctico (que solo sale de la caja rara) también tienen la suya:
+// si un nombre puede llegar al almacén, tiene que tener lore (D4).
+//
+// El TIPO del compañero no va en el texto: lo pone la ficha al lado, con la
+// cifra que cobra (`lineaTipoCompanion`). Un texto sobre "la tierra se
+// quiebra" no dice si produce sin mirar o solo al clickear, y eso es lo que
+// el jugador necesita para decidir si lo equipa.
+// ==========================================================================
+
+export const LORE: Record<string, string> = {
+  // ---------------------------------------------------------- COMPAÑEROS T1
+  'Dron Explorador': 'Cartografía cada rincón de la base antes de que amanezca.',
+  'Dron Centinela': 'No parpadea. No duerme. Vigila tu producción.',
+  'Dron Mensajero': 'Lleva tus nanitas de un nodo a otro sin perder ni una.',
+  // ---------------------------------------------------------- COMPAÑEROS T2
+  'Cazador Nocturno': 'Caza vetas de nanitas dormidas bajo la Cyber Base.',
+  'Rastreador Fantasma': 'Sigue rastros de energía que nadie más puede ver.',
+  'Explorador Estelar': 'Trae polvo de estrellas para fundir en tu reserva.',
+  // ---------------------------------------------------------- COMPAÑEROS T3
+  'Guerrero Mecánico': 'Un veterano de cien batallas de chatarra.',
+  'Titán de Acero': 'Su sola presencia ordena la línea de extracción.',
+  'Coloso de Batalla': 'Donde pisa, la tierra entrega lo que esconde.',
+  'Artillero Táctico': 'Calcula cada salva para no desperdiciar ni un gramo.',
+  // ---------------------------------------------------------- COMPAÑEROS T4
+  'Señor de la Guerra': 'Conquistó tres sectores y los puso a producir.',
+  'Destruyente Imperial': 'Desmonta defensas rivales y se queda el botín.',
+  'Aniquilador Prime': 'El primero de su serie. Los demás son copias.',
+  // ---------------------------------------------------------- COMPAÑEROS T5
+  'Avatar del Caos': 'Siembra desorden y cosecha lo que cae al suelo.',
+  'Heraldo del Vacío': 'Anuncia la nada, y la nada paga bien.',
+  'Portador del Trueno': 'Cada tormenta deja un reguero de nanitas.',
+  // ---------------------------------------------------------- COMPAÑEROS T6
+  'Supremo Estratega': 'Gana la partida antes de que empiece el turno.',
+  'Maestro de Batallas': 'Convierte cada escaramuza en materia prima.',
+  'General Supremo': 'Sus tropas extraen incluso dormidas.',
+  // ---------------------------------------------------------- COMPAÑEROS T7
+  'Forjador de Mundos': 'Su poder de extracción no se había visto nunca: la tierra se quiebra a su paso.',
+  'Creador de Imperios': 'Levanta fundiciones donde otros ven desierto.',
+  'Arquitecto Cósmico': 'Dibuja la base en las estrellas y la base obedece.',
+  // ---------------------------------------------------------- COMPAÑEROS T8
+  'Devorador de Estrellas': 'Se alimenta de soles y devuelve nanitas.',
+  'Señor del Tiempo': 'Recoge hoy lo que producirás mañana.',
+  'Amo del Espacio': 'Dobla la distancia entre la veta y tu almacén.',
+  // ---------------------------------------------------------- COMPAÑEROS T9
+  'Entidad Primordial': 'Existía antes que la primera nanita.',
+  'Ser Trascendente': 'Opera en un plano donde todo ya es tuyo.',
+  'Conciencia Universal': 'Piensa en tu producción y la producción ocurre.',
+  // ---------------------------------------------------------- COMPAÑEROS T10
+  'Dios de la Guerra': 'La batalla es su culto y el botín su ofrenda.',
+  'El Omnipotente': 'No necesita razones. Solo resultados.',
+  'El Infinito': 'Su turno no termina nunca. Tu ingreso tampoco.',
+  // --------------------------------------------------------- RECOLECTORES T1
+  'Blaster Láser': 'El primer clic de todo operativo.',
+  'Pistola de Plasma': 'Calienta la veta antes de partirla.',
+  'Rifle de Pulso': 'Dispara al ritmo de tu dedo.',
+  // --------------------------------------------------------- RECOLECTORES T2
+  'Cañón de Partículas': 'Acelera lo pequeño hasta romper lo grande.',
+  'Lanzador de Energía': 'Cada descarga abre una grieta nueva.',
+  'Desintegrador Táctico': 'Desarma la materia pieza por pieza.',
+  // --------------------------------------------------------- RECOLECTORES T3
+  'Aniquilador Cuántico': 'Borra la distancia entre tu mano y la veta.',
+  'Devorador de Materia': 'Mastica roca y escupe nanitas.',
+  'Coloso de Fuego': 'Funde la montaña y recoge lo que brilla.',
+  // --------------------------------------------------------- RECOLECTORES T4
+  'Guadaña del Vacío': 'Siega lo que el vacío deja atrás.',
+  'Maldición Estelar': 'Una estrella apagada con rencor productivo.',
+  'Juicio Final': 'Dicta sentencia sobre cada veta.',
+  // --------------------------------------------------------- RECOLECTORES T5
+  'Apocalipsis': 'El fin del mundo, en tu mano.',
+  'Armagedón': 'La última batalla se libra en cada clic.',
+  'Ragnarök': 'Los dioses cayeron. Sus restos rinden.',
+  // --------------------------------------------------------- RECOLECTORES T6
+  'Excalibur': 'Solo un digno la empuña. Eres tú.',
+  'Mjolnir': 'El trueno obedece a quien la levanta.',
+  'Gungnir': 'Nunca falla. Literalmente.',
+  // --------------------------------------------------------- RECOLECTORES T7
+  'Lanza del Destino': 'Apunta al futuro y el futuro paga.',
+  'Espada del Crepúsculo': 'Corta entre el día y la noche de la veta.',
+  'Hacha del Caos': 'El desorden, bien dirigido, produce.',
+  // --------------------------------------------------------- RECOLECTORES T8
+  'Corte del Tiempo': 'Extrae del ayer para gastar hoy.',
+  'Filo del Infinito': 'No tiene borde. Tiene propósito.',
+  'Navaja Cósmica': 'Afeita nebulosas enteras.',
+  // --------------------------------------------------------- RECOLECTORES T9
+  'Recolector del Apocalipsis': 'Cosecha el fin de los tiempos.',
+  'Instrumento de la Muerte': 'Toca la melodía que abre la roca.',
+  'Herencia de los Dioses': 'Lo que dejaron atrás, ahora es tuyo.',
+  // -------------------------------------------------------- RECOLECTORES T10
+  'El Principio y El Fin': 'Todo empieza y termina en tu clic.',
+  'La Última Palabra': 'Después de ella no hay más veta.',
+  'El Todo y La Nada': 'Extrae del todo. Guarda la nada.',
+  // ------------------------------------------------- EXCLUSIVOS DE CAJA
+  'Fantasma Cuántico': 'Existe y no existe, y en ambos estados multiplica.',
+  'Oráculo Tribal': 'Los ancianos predijeron tu riqueza.',
+  'Avatar del Vacío': 'El mayor ingreso individual del juego: la nada, trabajando.',
+  'Fénix de Datos': 'Renace de cada reinicio con más hambre.',
+  'Centinela Eterno': 'Juró guardar tu base hasta el fin de los ciclos.',
+  'Espectro Azulado': 'Solo sale de la legendaria. Por eso brilla.',
+};
+
+/**
+ * El lore de un nombre, o `null` si no tiene.
+ *
+ * Conoce al "SOBRECARGADO" de la forja de cajas: un item sobrecargado lleva
+ * el nombre de base más el sufijo, y su historia es la de su nombre original.
+ * Cualquier otro nombre sin entrada no tiene lore, y eso es lo que el banco
+ * `loreCheck` vigila: un nombre sin lore es contenido a medias (D4).
+ */
+export function lorePara(nombre: string): string | null {
+  if (!nombre) return null;
+  return LORE[nombre] ?? LORE[nombre.replace(/ SOBRECARGADO$/, '')] ?? null;
+}
+
+/**
+ * Lo que hace un compañero, en una línea con su cifra.
+ *
+ * Va AL LADO del lore y no dentro: el lore es sabor y esto es la decisión de
+ * equiparlo. Un `multiplier` no tiene cifra propia —multiplica a los demás—,
+ * así que enseña su × en vez de un +N que nadie cobra.
+ */
+export function lineaTipoCompanion(tipo: string, power: number): string {
+  if (tipo === 'multiplier') {
+    const mult = Math.round((1 + power) * 100) / 100;
+    return `Multiplica el ingreso ×${mult}`;
+  }
+  if (tipo === 'passive') return `Produce +${power}/s en pasivo`;
+  return `Aporta +${power}/s al clickear`;
+}
