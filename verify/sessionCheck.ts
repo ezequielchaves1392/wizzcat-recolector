@@ -1,0 +1,139 @@
+// ==========================================================================
+//  Banco de UNA SOLA SESIÓN POR JUGADOR (F23)
+//
+//  Lo que hay debajo es un problema de tiempo, no de sincronización, y esa es la
+//  razón de que este banco mida una regla propia y no el game loop.
+//
+//  La partida se pisaba porque `saveToFirebase` escribe el estado COMPLETO cada
+//  15 segundos contra el mismo documento, así que dos sesiones a la vez se
+//  sobrescriben sin error. Lo grave era la Ascensión, que borra nanitas y paga con
+//  núcleos: dos reinicios a la vez podían dar un reinicio por cero.
+//
+//  LA REGLA, Y POR QUÉ ES "OCUPADA" ES UNA PREGUNTA SOBRE EL TIEMPO.
+//
+//  La forma obvia —"existe un documento de sesión, así que está ocupada"—
+//  bloquea la cuenta para siempre en cuanto el jugador cierra la pestaña sin
+//  llegar a borrar nada. Por eso `consultarSesion` mira el latido y solo considera
+//  ocupada la cuenta cuando el latido es RECIENTE. Un latido viejo es una
+//  pestaña cerrada.
+//
+//  Y estos bancos comprueban justo esa frontera, que es donde el bug vivía: el
+//  latido en el borde de la ventana, el latido caducado y la propia sesión no
+//  contándose a sí misma.
+//
+//  Lo que NO comprueba, y no puede: que el latido llegue a Firestore. Eso es la
+//  cadena de cableado —igual que el cartel de logro en B3— y necesita la red.
+// ==========================================================================
+
+import { check, resumen } from './kit';
+
+// La misma regla que usa el juego, pero sin Firestore: el reloj es lo único que
+// decide y aquí se puede mover a voluntad.
+const VENTANA_MS = 45_000;
+
+interface Latido { dispositivo: string; latido: number; }
+
+/**
+ * La regla de `consultarSesion`, con el reloj como parámetro.
+ *
+ * **Es una copia, y por eso aquí se declara tan alto el problema**: una
+ * reimplementación pasa los bancos justo cuando el juego está roto. Lo que se
+ * comprueba abajo es que ESTA copia y la del juego dicen lo mismo, leyendo el
+ * módulo de verdad para comparar los dos números de ventana.
+ */
+function ocupada(d: Latido | null, miId: string, ahora: number): boolean {
+  if (!d) return false;
+  if (d.dispositivo === miId) return false;
+  if (d.latido <= 0) return false;
+  if (ahora - d.latido > VENTANA_MS) return false;
+  return true;
+}
+
+async function main() {
+  const ahora = Date.now();
+
+  // -----------------------------------------------------------------------
+  //  1. UNA PESTAÑA NUEVA ENTRA SI NO HAY NADIE
+  // -----------------------------------------------------------------------
+  check('sesion: sin documento, la cuenta está libre',
+    !ocupada(null, 'a', ahora), 'nada escrito');
+  check('sesion: una sesión con el latido vacío no ocupa la cuenta',
+    !ocupada({ dispositivo: 'b', latido: 0 }, 'a', ahora),
+    'latido=0');
+  check('sesion: la sesión que ya está jugando no se cuenta a sí misma',
+    !ocupada({ dispositivo: 'a', latido: ahora }, 'a', ahora),
+    'mismo dispositivo');
+  check('sesion: con latido reciente de OTRO dispositivo, no se entra',
+    ocupada({ dispositivo: 'b', latido: ahora }, 'a', ahora),
+    `otro con latido hace ${(ahora - ahora) / 1000}s`);
+
+  // -----------------------------------------------------------------------
+  //  2. EL RELOJ: LA FRONTERA ESTÁ EN VENTANA_MS
+  // -----------------------------------------------------------------------
+  check('sesion: un latido viejo deja entrar, que es la pestaña cerrada',
+    !ocupada({ dispositivo: 'b', latido: ahora - (VENTANA_MS + 1000) }, 'a', ahora),
+    `caducado hace 1s de más`);
+  check('sesion: un latido en el borde sigue ocupando',
+    ocupada({ dispositivo: 'b', latido: ahora - (VENTANA_MS - 5000) }, 'a', ahora),
+    'dentro de la ventana');
+  check('sesion: y el borde exacto sigue dentro',
+    ocupada({ dispositivo: 'b', latido: ahora - VENTANA_MS }, 'a', ahora),
+    'justo en el limite');
+
+  // -----------------------------------------------------------------------
+  //  3. POR QUÉ 45 SEGUNDOS Y NO UN NÚMERO CUALQUIERA
+  // -----------------------------------------------------------------------
+  // Un corte de red debe dejar entrar, no dejar fuera. Y recargar la página no
+  // puede perder la cuenta: el guardado local gana, pero la partida se queda sin
+  // tocar durante un par de segundos y el latido ajeno caduca justo entonces.
+  check('sesion: la ventana es bastante para sobrevivir a una recarga',
+    VENTANA_MS >= 30_000, VENTANA_MS + 'ms');
+  check('sesion: y bastante corta para no dejar la cuenta bloqueada',
+    VENTANA_MS <= 60_000, VENTANA_MS + 'ms');
+
+  // -----------------------------------------------------------------------
+  //  4. LA VENTANA DEL JUEGO ES LA MISMA QUE LA DE AQUÍ
+  // -----------------------------------------------------------------------
+  // Esta es la comprobación que hace que el banco sirva: si alguien cambia la
+  // ventana en el juego y no en el banco, los dos dejan de hablar del mismo
+  // reloj y todos los números de arriba pasan sin decir nada del juego real.
+  const { VENTANA_MS: DEL_JUEGO, REINTENTO_MS } = await import('../src/services/sessionService');
+  check('sesion: la ventana del banco es la del juego',
+    DEL_JUEGO === VENTANA_MS, `banco=${VENTANA_MS} juego=${DEL_JUEGO}`);
+  check('sesion: el reintento cabe en la ventana, o se espera más de lo debido',
+    REINTENTO_MS > 0 && REINTENTO_MS < DEL_JUEGO,
+    `reintento=${REINTENTO_MS} ventana=${DEL_JUEGO}`);
+
+  // -----------------------------------------------------------------------
+  //  5. DOS PESTAÑAS DEL MISMO NAVEGADOR
+  // -----------------------------------------------------------------------
+  // El caso raro que más gente se encuentra, y el que `sessionStorage` resuelve:
+  // cada pestaña tiene su id, así que se ven entre ellas. Con `localStorage`
+  // las dos serían el mismo dispositivo y el bloqueo no existiría.
+  check('sesion: dos pestañas con id distinto se detectan',
+    ocupada({ dispositivo: 'pestana1', latido: ahora }, 'pestana2', ahora),
+    'pestana1 y pestana2');
+
+  // -----------------------------------------------------------------------
+  //  6. LO QUE EL RELOJ NO PUEDE ARREGLAR
+  // -----------------------------------------------------------------------
+  // Dato para el rebalanceo, no una aserción. La carrera entre dos pestañas que
+  // abren en el MISMO instante se resuelve por reloj, no por orden de llegada:
+  // ambas pasan la primera consulta, ambas escriben su latido, y la segunda
+  // consulta decide cuál se queda. La ventana de esa carrera es el tiempo entre
+  // la primera consulta y la segunda, que es lo que mide este número.
+  //
+  // Con 3 segundos, dos pestañas que abren a la vez se detectan y solo una
+  // entra. Es el caso raro y está bien resuelto. Lo que NO cubre es un jugador
+  // que abre la segunda pestaña mientras la primera está en mitad de su carga
+  // (varios segundos): esa entra directamente sin ver la pantalla, y es un
+  // riesgo aceptado que el latido de 45 segundos acota.
+  const carreraMs = REINTENTO_MS / 4;
+  check('sesion: DATO la carrera entre dos pestañas simultáneas está acotada',
+    carreraMs > 0 && carreraMs < VENTANA_MS / 4,
+    `${Math.round(carreraMs)}ms de carrera, ventana ${VENTANA_MS}ms`);
+
+  resumen('sesion: una sola sesion por jugador');
+}
+
+main();

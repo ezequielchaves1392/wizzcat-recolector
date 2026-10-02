@@ -62,3 +62,38 @@ export const setDoc = async (ref: any, data: any, options?: { merge?: boolean })
   const previo = options?.merge ? db[ref.id] : undefined;
   db[ref.id] = clonar(previo ? { ...previo, ...data } : data);
 };
+
+/**
+ * La marca de "borra este campo", igual que en Firestore.
+ *
+ * El sentinel es un símbolo, no una cadena como la de Firestore, y por eso el
+ * borrado se resuelve en `updateDoc`. Un stub que lo hiciera con `"__DELETE__"`
+ * se rompería en cuanto un jugador guardara ese texto en un campo, que es
+ * exactamente el tipo de colisión que los stubs bien hechos evitan.
+ */
+export const DELETE_FIELD = Symbol('deleteField');
+export const deleteField = () => DELETE_FIELD;
+
+/**
+ * `updateDoc` con el sentinel de borrado.
+ *
+ * Se implementa en lugar de no exportarlo porque el borrado condicional es lo
+ * que hace que soltar la sesión no se lleve por delante el latido de la otra
+ * pestaña: dos pestañas abiertas en el mismo navegador, una cierra y la otra se
+ * queda sin sesión al volver a mirar. Sin esto, esa parte no se puede comprobar
+ * en un banco.
+ */
+export const updateDoc = async (ref: any, data: any) => {
+  if (globalThis.__MEM_DB__?.fallar) {
+    throw new Error('FirestoreError: unavailable: Sin conexión (simulado)');
+  }
+  const db = globalThis.__MEM_DB__;
+  const previo = db[ref.id];
+  if (!previo) return;
+  const salida: any = { ...previo };
+  for (const [k, v] of Object.entries(data)) {
+    if (v === DELETE_FIELD) delete salida[k];
+    else salida[k] = clonar(v);
+  }
+  db[ref.id] = clonar(salida);
+};

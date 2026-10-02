@@ -6,7 +6,11 @@ import './style.modules.css';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
-import { renderBloqueado } from './components/blocked';
+import { renderBloqueado, renderSesionOcupada } from './components/blocked';
+import {
+  anotarLatido, consultarSesion, idDeSesion, soltarSesion,
+  REINTENTO_MS, VENTANA_MS
+} from './services/sessionService';
 import { consultarBloqueo } from './services/bloqueoService';
 import { createGameLoop } from './gameLoop';
 import type { BuffKey } from './data/buffs';
@@ -326,6 +330,150 @@ async function comprobarBloqueo(uid: string, nombre: string): Promise<boolean> {
 }
 
 /**
+ * F23 · RECLAMAR LA SESIÓN, O EXPLICAR POR QUÉ NO SE PUEDE.
+ *
+ * Tres cosas, en este orden, y el orden es lo que evita los dos fallos
+ * contrarios:
+ *
+ *  1. **Pregunta** si hay otra sesión con un latido reciente. Si no la hay, la
+ *     cuenta está libre y no hay nada que explicar.
+ *  2. **Reclama** escribiendo el latido de esta pestaña. Se hace DESPUÉS de la
+ *     pregunta y no antes a propósito: si se anotara primero, una pestaña nueva
+ *     taparía el latido de la que está jugando y el bloqueo no se detectaría
+ *     nunca —que es el fallo que un "escribir y ya" trae consigo.
+ *  3. **Vuelve a preguntar** para confirmar que el latido ahora es el nuestro.
+ *     Con dos pestañas que abren en el mismo instante las dos pueden pasar el
+ *     punto 1, y esta segunda pregunta es la que resuelve cuál se queda con la
+ *     cuenta. Es la parte que hace que la promesa "una sola sesión" sea verdad y
+ *     no "casi siempre".
+ *
+ * Cuando está ocupada se pinta la pantalla y se **queda mirando sola**: no se
+ * deja al jugador recargando a mano, porque la otra sesión se libera en menos de
+ * un minuto y recargar es exactamente lo que le pediríamos que hiciera.
+ *
+ * `bloqueadoEnCurso` es el mismo guard que usa la suspensión de cuentas: si la
+ * cuenta está bloqueada, esta pantalla no tiene que taparla.
+ */
+async function ocuparSesion(uid: string, nombre: string): Promise<boolean> {
+  if (bloqueadoEnCurso) return false;
+
+  const miId = idDeSesion();
+
+  const antes = await consultarSesion(uid, miId);
+  if (antes.ocupada) return esperarSesion(uid, nombre, miId, antes.latido);
+
+  await anotarLatido(uid, miId);
+
+  const despues = await consultarSesion(uid, miId);
+  if (despues.ocupada) {
+    // Perdimos la carrera contra otra pestaña. Se suelta el latido que acabamos
+    // de escribir para no dejar dos latidos-patrón, y se espera a que la otra
+    // sesión seLibere.
+    await soltarSesion(uid, miId);
+    return esperarSesion(uid, nombre, miId, despues.latido);
+  }
+
+  mantenerLatido(uid, miId);
+  return true;
+}
+
+/**
+ * La sesión está ocupada: se enseña por qué y se reintenta solo.
+ *
+ * El temporizador no es un detalle de conveniencia: es lo que convierte "no
+ * puedes entrar ahora" en "espera medio minuto y entra". Y el tiempo que se
+ * enseña se calcula sobre el reloj que realmente decide —cuánto queda para que
+ * expire el latido ajeno—, no sobre uno inventado.
+ */
+function esperarSesion(uid: string, nombre: string, miId: string, latidoAjeno: number): Promise<boolean> {
+  const queda = Math.max(0, VENTANA_MS - (Date.now() - latidoAjeno));
+
+  return new Promise<boolean>((resolve) => {
+    let intentos = 0;
+    console.info('[sesion] La partida esta abierta en otro sitio; esperando.');
+
+    const probar = async () => {
+      const estado = await consultarSesion(uid, miId);
+      if (!estado.ocupada) {
+        await anotarLatido(uid, miId);
+        limpiarPantallaOcupada();
+        mantenerLatido(uid, miId);
+        console.info('[sesion] La otra sesion se ha liberado; entrando.');
+        resolve(true);
+        return;
+      }
+      // Cada consulta acorta el reloj del enemigo: se le ve el pulso.
+      pintarSesionOcupada(uid, nombre, miId, estado.latido);
+      intentos++;
+      if (intentos > 40) {
+        // Se ha esperado más de ocho minutos. Se entra igualmente: es preferible
+        // el riesgo de una carrera a dejar al jugador fuera sin salida.
+        console.warn('[sesion] Se haesperado demasiado; se entra igualmente.');
+        limpiarPantallaOcupada();
+        resolve(true);
+      }
+    };
+
+    const espera = Math.max(1500, Math.min(REINTENTO_MS, queda));
+    setTimeout(probar, espera);
+    setTimeout(() => { void probar(); }, REINTENTO_MS);
+    const id = setInterval(() => { void probar(); }, REINTENTO_MS);
+    // El intervalo se para en cuanto se resuelve, para no dejar un temporizador
+    // vivo detrás de la pantalla.
+    const parar = () => clearInterval(id);
+    const observador = new MutationObserver(() => {
+      if (document.querySelector('#reintentar-sesion')) return;
+      parar();
+      observador.disconnect();
+    });
+    observador.observe(document.body, { childList: true, subtree: true });
+    pintarSesionOcupada(uid, nombre, miId, latidoAjeno);
+  });
+}
+
+function pintarSesionOcupada(uid: string, nombre: string, miId: string, latidoAjeno: number) {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const queda = Math.max(0, VENTANA_MS - (Date.now() - latidoAjeno));
+  renderSesionOcupada(app, { nombre, alLiberarMs: queda }, () => {
+    // El botón reintenta YA, sin esperar al temporizador: si el jugador ha
+    // cerrado la otra ventana, quiere entrar en este momento.
+    void consultarSesion(uid, miId).then(async (e) => {
+      if (e.ocupada) return;
+      await anotarLatido(uid, miId);
+      limpiarPantallaOcupada();
+      mantenerLatido(uid, miId);
+      if (activeUser) await initGame(activeUser, resolvedUsername || undefined);
+    });
+  });
+}
+
+function limpiarPantallaOcupada() {
+  // No se borra el contenido a pelo: `initGame` se encarga de pintar el juego.
+  // Lo único que se quita es la pantalla para que no quede detrás del layout.
+  document.querySelector('#reintentar-sesion')?.closest('.auth-scene')?.remove();
+}
+
+/**
+ * Mantiene vivo el latido mientras esta pestaña juega.
+ *
+ * Se refresca a MENOS de la mitad de la ventana de expiración, para que un
+ * `setTimeout` que se retrase —una pestaña en segundo plano, un móvil que
+ * congela JavaScript— no llegue a dejar el latido caducado y a perder la
+ * cuenta. Y al descargar la página se suelta, para no esperar a que expire.
+ */
+function mantenerLatido(uid: string, miId: string) {
+  const refresco = setInterval(() => { void anotarLatido(uid, miId); }, Math.floor(VENTANA_MS / 3));
+
+  const soltar = () => {
+    clearInterval(refresco);
+    void soltarSesion(uid, miId);
+  };
+  window.addEventListener('pagehide', soltar);
+  window.addEventListener('beforeunload', soltar);
+}
+
+/**
  * Al volver a la pestaña.
  *
  * Solo si hay partida viva: sin juego no hay nada que cortar, y el arranque ya
@@ -366,6 +514,13 @@ onAuthStateChanged(auth, async (user) => {
   // Antes de arrancar nada. Si la cuenta está suspendida, el juego no llega a
   // crearse: ni bucle, ni guardado, ni pantalla de juego un solo instante.
   if (await comprobarBloqueo(user.uid, nombre)) return;
+
+  // F23 · Y lo mismo con la sesión: si la partida ya está abierta en otro
+  // dispositivo u otra pestaña, los dos se pisan la partida. Se comprueba ANTES
+  // de `initGame` por la misma razón que el bloqueo —no hay ni un frame de juego
+  // con dos sesiones—, y también ANTES de anotar el latido, que si no
+  // sobreescribiría el de la sesión que ya está jugando.
+  if (!(await ocuparSesion(user.uid, nombre))) return;
 
   await initGame(user, nombre);
 });

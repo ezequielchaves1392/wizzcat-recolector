@@ -28,6 +28,7 @@ for (const banco of [
   'gapCheck',
   'lootCheck',
   'queueCheck',
+  'sessionCheck',
   'playthroughCheck',
   'toastCheck',
   'rouletteCheck',
