@@ -867,7 +867,7 @@ En el perfil me tiene que decir la cantidad de Títulos, Marcos y Banners poseí
 > > pintado puro sobre datos que ya viajan, y lo que hay que mirar es que no
 > > rompa a 390 px (`preview.html`).
 
-### F16 · El desbloqueo se ve en el perfil, en el ranking y arriba a la izquierda
+### F16 · El desbloqueo se ve en el perfil, en el ranking y arriba a la izquierda — HECHO
 
 El desbloqueado se tiene que mostrar tanto en el perfil, como en el ranking, como
 arriba a la izquierda en el menú principal.
@@ -886,6 +886,22 @@ arriba a la izquierda en el menú principal.
 > `#achievement-stack` que ya existe (`layout.ts:353`, abajo al centro), la esquina
 > superior izquierda como pides, o el panel principal. Arriba a la izquierda es el sitio
 > que más se ve, pero también el que más se solapa con el contenido en móvil.
+>
+> > **Hecho. La cabecera enseña avatar con marco + nombre + título** (`#nav-identity`).
+> > El perfil ya lo tenía y el ranking lo tiene desde F8; faltaba la tercera.
+> >
+> > **Una sola fuente para no repetir F8:** `miniIdentity()` en `ui/identity.ts`
+> > la usan la cabecera y las filas del ranking, y el estilo del título
+> > (`titleStyleFor`) lo reutiliza la tarjeta del Perfil. Tres tamaños, una regla.
+> >
+> > **Se parchea en caliente al equipar**, sin reconstruir la cabecera —equipar
+> > desde el Perfil no navega— y solo si algo cambió (marca por nombre + tres
+> > cosméticos), para no reescribir DOM en cada tick. El "Sin título" por
+> > defecto no sale en la cabecera; en el ranking sale lo equipado tal cual.
+> >
+> > Cubre `identidadCheck` (+6: el helper pinta iniciales, título, marco y halo,
+> > esconde el defecto y aguanta ids desconocidos). La cabecera a 390 px se mira
+> > en `preview.html`.
 
 ### F17 · Saltarse la animación de la ruleta — HECHO
 
@@ -2287,6 +2303,10 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F16 · identidad arriba a la izquierda.** `#nav-identity` con avatar,
+      nombre y título, parcheada en caliente al equipar. `miniIdentity()`
+      compartida con el ranking. `identidadCheck` 8 → 14.
+      La tanda queda en **24 bancos, 1448 pruebas**.
 - [x] **F15 · desglose de cosméticos en el perfil.** El encabezado dice cuántos
       de cada tipo en vez del total mezclado. Solo vista, sin banco.
 - [x] **F14 · comprar por cantidad.** `buyStoreItem(key, n)` cobra N unitarios y

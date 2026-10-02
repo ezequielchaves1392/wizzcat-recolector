@@ -20,6 +20,7 @@
 // ==========================================================================
 
 import { check, resumen, boot, baseSave, reload } from './kit';
+import { miniIdentity } from '../src/ui/identity';
 
 const RANK_DOC = 'rankings/test';
 
@@ -85,6 +86,38 @@ async function main() {
     check('tras recargar el banner sigue equipado',
       st.cosmetics.banner === 'banner_abyss',
       `banner=${st.cosmetics.banner}`);
+  }
+
+  // -----------------------------------------------------------------------
+  //  3. EL HELPER PINTA LO QUE VIAJA.
+  //
+  //     `miniIdentity` es puro (cadena entra, cadena sale), así que se puede
+  //     mirar sin navegador: la cabecera y la fila del ranking comparten este
+  //     HTML, y si divergiera volvería el bug de F8 por la puerta de atrás.
+  // -----------------------------------------------------------------------
+  {
+    const html = miniIdentity('Ab', {
+      title: 'title_champion', frame: 'frame_neon', banner: 'banner_abyss',
+    }, { hideDefaultTitle: true });
+    check('identidad: pinta las iniciales del nombre',
+      html.includes('>AB<'), 'sin AB');
+    check('identidad: pinta el título equipado',
+      html.includes('Campeón'), 'sin Campeón');
+    check('identidad: el marco viaja en el estilo del avatar',
+      html.includes('var(--accent)'), 'sin el borde de Neón');
+    check('identidad: el banner va de halo, no de fondo entero',
+      html.includes('scale(1.9)'), 'sin halo');
+    const defecto = miniIdentity('Ab', {
+      title: 'title_default', frame: 'frame_none', banner: 'banner_none',
+    }, { hideDefaultTitle: true });
+    check('identidad: el título por defecto no hace ruido en la cabecera',
+      !defecto.includes('Sin título') && !defecto.includes('avatar-frame'),
+      defecto.slice(0, 120));
+    const roto = miniIdentity('Ab', {
+      title: 'no_existe', frame: 'no_existe', banner: 'no_existe',
+    });
+    check('identidad: un id desconocido no rompe el HTML',
+      roto.includes('>AB<') && !roto.includes('undefined'), 'roto=' + roto.slice(0, 80));
   }
 
   resumen('identidad: lo equipado llega al ranking');

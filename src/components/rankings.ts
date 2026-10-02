@@ -30,8 +30,7 @@ import {
   type LeaderboardEntry, type BoardKind
 } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
-import { COSMETICS_BY_ID, cosmeticStyle } from '../data/cosmetics';
-import { rarityClass } from './crateLoot';
+import { miniIdentity } from '../ui/identity';
 
 /**
  * Pestaña activa.
@@ -130,15 +129,11 @@ function cablearPestanas(body: HTMLElement, repintar: () => void) {
 
 function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = 'definitivo'): string {
   const isMe = r.uid === meId;
-  const title = r.title ? COSMETICS_BY_ID[r.title] : null;
   // El marco y el banner viajan en el documento `rankings/{uid}` (planos) y,
   // por compatibilidad, dentro de `cosmetics`. Los planos mandan: son los que
   // escribe el guardado actual; `cosmetics` queda como lectura de reserva.
   const frameId = r.frame ?? r.cosmetics?.frame;
   const bannerId = r.banner ?? r.cosmetics?.banner;
-  const frame = frameId ? COSMETICS_BY_ID[frameId] : null;
-  const banner = bannerId ? COSMETICS_BY_ID[bannerId] : null;
-  const initials = (r.username || '?').trim().slice(0, 2).toUpperCase();
   const valor = boardValue(r, kind);
   const unidades = unidadesDe(kind);
 
@@ -146,19 +141,11 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
     <div class="rank-row ${isMe ? 'is-me' : ''}">
       <div class="rank-pos" data-tier="${i + 1 <= 3 ? i + 1 : ''}">${i + 1}</div>
 
-      <div class="avatar-stack w-8 h-8 flex-shrink-0" aria-hidden="true">
-        ${banner && banner.id !== 'banner_none' ? `<span class="avatar-frame w-full h-full rounded-full" style="transform:scale(1.9);opacity:.5;${cosmeticStyle(banner)}"></span>` : ''}
-        <span class="avatar-core w-[78%] h-[78%] text-[11px]">${initials}</span>
-        ${frame && frame.id !== 'frame_none' ? `<span class="avatar-frame w-full h-full rounded-full" style="${cosmeticStyle(frame)}"></span>` : ''}
-      </div>
+      ${miniIdentity(r.username, { title: r.title, frame: frameId, banner: bannerId })}
 
       <div class="min-w-0">
-        <div class="flex items-center gap-1.5 min-w-0">
-          <span class="text-[12px] font-bold text-[var(--text-main)] truncate">${r.username}</span>
-          ${isMe ? `<span class="medal accent-text flex-shrink-0">TÚ</span>` : ''}
-        </div>
         <div class="flex items-center gap-1.5 flex-wrap mt-1">
-          ${title ? `<span class="text-[9px] title-display ${rarityClass(title.rarity)}">${title.name}</span>` : ''}
+          ${isMe ? `<span class="medal accent-text flex-shrink-0">TÚ</span>` : ''}
           ${r.achievements ? `<span class="medal text-amber-400">${ic('achievement', 'w-3 h-3')} ${r.achievements}</span>` : ''}
           ${r.secretAchievements ? `<span class="medal text-fuchsia-300" title="Logros secretos">${ic('lock', 'w-3 h-3')} ${r.secretAchievements}</span>` : ''}
           ${r.forgedCount ? `<span class="medal text-cyan-300" title="Recolectores forjados">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>` : ''}

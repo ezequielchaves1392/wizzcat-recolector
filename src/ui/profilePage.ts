@@ -15,6 +15,7 @@
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShell';
 import { COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
+import { titleStyleFor } from './identity';
 import { getSkipRoulette, setSkipRoulette } from '../roulettePrefs';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { formatNumber } from '../utils/format';
@@ -58,11 +59,7 @@ export function identityCard(opts: {
   const frame = COSMETICS_BY_ID[opts.cosmetics.frame];
   const banner = COSMETICS_BY_ID[opts.cosmetics.banner];
 
-  const titleStyle = [
-    cosmeticStyle(title),
-    title?.style.gradient ? 'background-clip:text;-webkit-background-clip:text;color:transparent' : '',
-    title?.style.glow === 'true' ? 'text-shadow:0 0 16px currentColor' : ''
-  ].filter(Boolean).join(';');
+  const titleStyle = titleStyleFor(title);
 
   return `
     <div class="flex items-center gap-3 min-w-0">

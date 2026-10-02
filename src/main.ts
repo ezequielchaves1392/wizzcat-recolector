@@ -26,12 +26,20 @@ import {
   setAudioSuspended, installAudioUnlock, onAudioStateChange
 } from './utils/audio';
 import { renderLayoutHTML } from './ui/layout';
+import { miniIdentity } from './ui/identity';
 import { ic, icSafe } from './ui/icons';
 
 const app = document.querySelector('#app') as HTMLElement;
 let activeGameInstance: any = null;
 let activeUser: any = null;
-const router = new Router();
+/**
+ * Marca de la identidad parcheada en la cabecera (`#nav-identity`).
+ *
+ * Vive a nivel de módulo y no en `updateUI` porque tiene que sobrevivir a sus
+ * propias llamadas: si fuera local, cada tick la vería vacía y reescribiría
+ * el HTML dos veces por segundo. Se invalida al reconstruir la cabecera.
+ */
+let lastIdentityKey = '';const router = new Router();
 
 /**
  * Suscriptores de audio vivos de la vista actual.
@@ -479,7 +487,12 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
     onToggleMute: () => toggleMute(),
     onToggleMusic: () => toggleMusic(),
     onThemeChange: (theme) => setTheme(theme as ThemeName)
+  }, {
+    name: activeGameInstance?.getDisplayName?.() ?? user.displayName ?? 'Operativo',
+    cosmetics: activeGameInstance?.getState?.()?.cosmetics
   });
+  // La cabecera se reconstruye: la marca de la identidad parcheada ya no vale.
+  lastIdentityKey = '';
 
   // --- Navegación y controles: delegación en el contenedor, no por botón ---
   // Con un solo listener en `app` todos los botones `data-nav` funcionan sin
@@ -760,6 +773,25 @@ function updateUI(state: any, isAfk: boolean = false) {
   }
 
   renderBuffHud(state, now);
+
+  // La identidad de la cabecera (F16): avatar con marco + título equipado. Se
+  // parchea en caliente al cambiar, sin reconstruir la cabecera —equipar desde
+  // el Perfil no navega, así que sin esto el marco nuevo saldría al cambiar
+  // de vista—. Solo se toca si algo cambió: reescribir el HTML en cada tick
+  // recrearía el DOM dos veces por segundo para nada (R7).
+  const navIdentity = document.querySelector('#nav-identity');
+  if (navIdentity && activeGameInstance) {
+    const nombre = activeGameInstance.getDisplayName?.() ?? state.displayName ?? 'Operativo';
+    const cos = state.cosmetics ?? {};
+    const clave = [activeUser?.uid ?? '', nombre, cos.title ?? '', cos.frame ?? '', cos.banner ?? ''].join('|');
+    if (clave !== lastIdentityKey) {
+      lastIdentityKey = clave;
+      navIdentity.innerHTML = miniIdentity(nombre, cos, {
+        hideDefaultTitle: true,
+        nameClass: 'font-[\'Orbitron\'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight mt-0.5'
+      });
+    }
+  }
 
   // El panel del jugador solo se pinta en la vista principal: en las demás no
   // existe el DOM y renderizarlo sería trabajo tirado a la basura.

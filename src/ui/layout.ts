@@ -33,6 +33,7 @@ import { ic, type IconName } from './icons';
 import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
 import { THEMES } from '../theme';
 import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
+import { miniIdentity, type IdentityCosmetics } from './identity';
 
 export interface LayoutCallbacks {
   onNavigate: (route: Route) => void;
@@ -42,13 +43,20 @@ export interface LayoutCallbacks {
   onThemeChange: (theme: string) => void;
 }
 
+/** Quién eres en la cabecera: nombre para pintar y cosméticos equipados. */
+export interface NavIdentity {
+  name: string;
+  cosmetics?: IdentityCosmetics;
+}
+
 
 
 export function renderLayoutHTML(
   user: any,
   savedTheme: string,
   activeRoute: Route,
-  cb: LayoutCallbacks
+  cb: LayoutCallbacks,
+  identity?: NavIdentity
 ): string {
   const options = THEMES.map(t =>
     `<option value="${t.value}" ${t.value === savedTheme ? 'selected' : ''}>${t.label}</option>`
@@ -84,21 +92,17 @@ export function renderLayoutHTML(
         style="padding-top: max(0.625rem, env(safe-area-inset-top))">
 
         <div class="flex items-center justify-between gap-3">
-          <!-- Identidad -->
+          <!-- Identidad: avatar con marco + nombre + título (F16). Se repinta
+               en caliente al equipar, sin reconstruir la
+               cabecera: por eso lleva id propio y ningún listener dentro. -->
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
-            <div class="relative flex-shrink-0">
-              <span class="block w-8 h-8 rounded-lg accent-bg flex items-center justify-center"
-                    style="box-shadow: 0 0 18px -4px color-mix(in srgb, var(--accent) 70%, transparent)">
-                ${ic('chip', 'w-[18px] h-[18px] text-slate-900')}
-              </span>
-              <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full accent-bg border-2 animate-core-pulse"
-                    style="border-color: var(--bg-app)"></span>
-            </div>
             <div class="min-w-0">
               <div class="label-caps leading-none" id="page-title">${routeTitle(activeRoute)}</div>
-              <div id="nav-username"
-                   class="font-['Orbitron'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight mt-0.5">
-                ${user.displayName || 'Operativo'}
+              <div id="nav-identity" class="mt-0.5">
+                ${miniIdentity(identity?.name ?? user.displayName ?? 'Operativo', identity?.cosmetics, {
+                  hideDefaultTitle: true,
+                  nameClass: 'font-[\'Orbitron\'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight mt-0.5'
+                })}
               </div>
             </div>
           </div>
