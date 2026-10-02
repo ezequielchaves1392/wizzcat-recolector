@@ -883,7 +883,7 @@ Poder skipear la animación de la ruleta con un check.
 > > cartel sin cinta se mira en `ruleta-preview.html`, porque el banco no puede
 > > ver una cinta quieta que no debería estar.
 
-### F18 · Abrir varias cajas de golpe
+### F18 · Abrir varias cajas de golpe — HECHO
 
 Poder abrir cajas simultáneamente si el espacio del almacén me da.
 
@@ -901,6 +901,27 @@ Poder abrir cajas simultáneamente si el espacio del almacén me da.
 > **Y ojo con el trompo**: abrir cinco cajas son cinco trompos de 5,2 segundos, que son
 > 26 segundos de espera. F17 es la condición para que esto sea usable: sin poder saltar
 > el trompo, abrir cajas en lote es un castigo.
+>
+> > **Hecho, por la opción 1: abrir las que quepan y decir cuántas sobraron.** Sin
+> > pila no hay selector (igual que la venta: con una sola unidad no hay nada que
+> > decidir). Con pila, el diálogo pregunta cuántas con el tope honesto —cajas Y
+> > llaves, lo menor— y el importe enseña `N × llave` en vez de nanitas (el `◆`
+> > del modal mentiría: aquí no se cobra nada).
+> >
+> > **El lote son N llamadas enteras a `openCrateBox`**, no una operación con
+> > multiplicador: cada una consume, sortea y aplica. Si una falla a mitad, se
+> > para y se dice `Se abrieron N de M: motivo`. Cada premio conserva su overlay
+> > y su CONTINUAR en orden —con F17 son N carteles seguidos sin espera— y por
+> > eso no hay doble clic que se coma carteles.
+> >
+> > **De paso, el modal de cantidad aprendió verbo:** sus textos eran todos de
+> > venta ("a vender", el `◆`). Ahora `quantity` lleva `verbo` y `sufijoImporte`
+> > opcionales (`vender` + ` ◆` por defecto, así que la venta no cambia).
+> >
+> > Cubre `stateCheck` (+7: tres seguidas ok, contador +3, llave exacta,
+> > producido que no baja, recarga, y la condición de parada sin cajas).
+> > El encadenado de carteles se mira en `preview.html`, porque el banco no
+> > monta overlays.
 
 ### F19 · Los logros de las cajas son un item que hay que usar
 
@@ -2225,6 +2246,11 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **F18 · abrir varias cajas de golpe.** Selector de cantidad con tope
+      cajas+llaves, N `openCrateBox` enteras con carteles en orden, parada con
+      aviso si una falla. El modal aprendió `verbo`/`sufijoImporte` para no
+      prometer `◆` al abrir. `stateCheck` 219 → 226.
+      La tanda queda en **23 bancos, 1417 pruebas**.
 - [x] **F17 · saltar la ruleta con un check.** Las dos ruletas van directo al
       cartel sin montar la cinta, con su sonido. Check en Perfil → Ajustes,
       preferencia en `localStorage` como el tema. `rouletteCheck` 59 → 63.

@@ -164,7 +164,7 @@ en producción.
 | `moveCheck` | `moveItems` **reordena, nunca edita**: ni número de items, ni nanitas, ni contadores. El destino imposible se rechaza en vez de corromper. | 54 |
 | `stackCheck` | Una pila es una ranura. Comprar y abrir van a la pila existente. La migración colapsa saves viejos sin perder unidades. Que el botón de la tienda y el cobro pregunten lo mismo. **Las cuatro cartas de llave por separado**, una partida por carta: que dos unidades del mismo nivel caigan en una pila vale para las cuatro, y medirlas todas en una partida compartida mide cuatro llaves de tres niveles distintos. | 71 |
 | `consumableCheck` | `useConsumable`, la operación más condicional. Tres fallos con nombre: gastar sin aplicar, aplicar sin gastar, romper el tope. | 88 |
-| `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, **sintonización del recolector** (el acierto, el fallo que no retrocede, y los tres rechazos), prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** | 219 |
+| `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, **sintonización del recolector** (el acierto, el fallo que no retrocede, y los tres rechazos), prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** Y el lote de F18: tres aperturas seguidas consumen lo suyo, el contador sube 3 y todo sobrevive a la recarga. | 226 |
 | `gapCheck` | Los huecos del almacén. El ancla es el **id del item**, nunca un índice de celda. Reimplementa el criterio del pintor a propósito, para que el test no sea tautológico. | 65 |
 | `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
 | `tickCheck` | El ritmo del ingreso pasivo: entra **entero y de una vez**, una vez por segundo, aunque el tick sea de 500 ms. Con ingreso impar (7/s daba +3 y +4). Todos los orígenes, incluido el compañero de tipo `click`. Nada sin mirar. Y sobre todo que **el ingreso por segundo no cambia**: diez ticks son cinco cobros. |
@@ -709,7 +709,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **23 bancos** dan **1410 pruebas**, todas en verde.
+   tocar nada. Los **23 bancos** dan **1417 pruebas**, todas en verde.
 
    Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
    `check()` dentro de un `if` que depende de qué botín salió de la caja, así que

@@ -790,6 +790,48 @@ async function main() {
       find(g, 'x1').stackCount === 5, 'x1=' + find(g, 'x1').stackCount);
   }
   {
+    // F18: ABRIR VARIAS SEGUIDAS. El lote de la vista son N llamadas enteras a
+    // `openCrateBox`, así que lo que el banco ata es que N seguidas se
+    // comporten: cada una consume lo suyo, el contador sube N y todo
+    // sobrevive a la recarga.
+    //
+    // La llave es de nivel 1 a propósito: la común solo suelta llaves de nivel
+    // 0, así que esa pila solo puede bajar —ningún botín la rellena por detrás
+    // y la cuenta es exacta. Las cajas sí pueden dar cajas, por eso de la pila
+    // de cajas no se afirma nada.
+    const g = await boot(baseSave([
+      crate('c1', 'common', 3), key('k1', 1, 5)
+    ], { nanites: 0 }));
+    const producidasAntes = s(g).totalNanitesProduced;
+    const abiertasAntes = s(g).cratesOpened;
+    const resultados = [g.openCrateBox('c1', 'k1'), g.openCrateBox('c1', 'k1'), g.openCrateBox('c1', 'k1')];
+    check('lote: las tres aperturas salen ok con premio',
+      resultados.every(r => r.ok && !!r.reward),
+      resultados.map(r => `${r.ok}:${r.reward?.kind}`).join(','));
+    check('lote: el contador sube una por apertura, ni una más',
+      s(g).cratesOpened === abiertasAntes + 3,
+      `abiertas=${s(g).cratesOpened} antes=${abiertasAntes}`);
+    check('lote: la llave se gasta una por apertura, exacta',
+      find(g, 'k1')?.stackCount === 2,
+      `k1=${find(g, 'k1')?.stackCount}`);
+    check('lote: lo producido nunca baja entre aperturas',
+      s(g).totalNanitesProduced >= producidasAntes,
+      `producidas=${s(g).totalNanitesProduced} antes=${producidasAntes}`);
+    const g2 = await reload();
+    check('lote: el lote sobrevive a la recarga',
+      s(g2).cratesOpened === abiertasAntes + 3 && s(g2).totalNanitesProduced >= producidasAntes,
+      `abiertas=${s(g2).cratesOpened} producidas=${s(g2).totalNanitesProduced}`);
+  }
+  {
+    // Y la condición de parada del lote: sin cajas no hay apertura y no se
+    // gasta nada. Es lo que hace que "se abrieron N de M" pare donde toca.
+    const g = await boot(baseSave([key('k1', 0, 1)]));
+    const r = g.openCrateBox('c1', 'k1');
+    check('lote: sin cajas se rechaza', !r.ok && !!r.msg, r.msg ?? '');
+    check('lote: y la llave no se toca', find(g, 'k1')?.stackCount === 1,
+      `k1=${find(g, 'k1')?.stackCount}`);
+  }
+  {
     // Por debajo del umbral no se puede reciclar.
     const g = await boot(baseSave([crate('c1'), collector('r1'), collector('r2')],
       { totalNanitesProduced: 10 }));

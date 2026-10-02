@@ -1254,20 +1254,84 @@ function openCrate(game: any, item: any, redraw: () => void) {
 function confirmarYabrir(
   game: any, item: any, crateType: any, llave: any, redraw: () => void
 ) {
+  // F18: con pila se pregunta cuántas, con el mismo selector de la venta. El
+  // tope es lo que de verdad se puede abrir: cajas Y llaves, lo menor de los
+  // dos. Sin pila (o con una sola llave) no hay nada que decidir y va el
+  // diálogo de antes, tal cual.
+  const max = Math.min(stackUnits(item), stackUnits(llave));
+  if (max <= 1) {
+    showConfirmModal(
+      mensajeAbrirCaja(llave.name),
+      () => abrirCajas(game, item, crateType, llave, 1, redraw),
+      { sublabel: item.name, confirmText: 'Abrir' }
+    );
+    return;
+  }
+
   showConfirmModal(
     mensajeAbrirCaja(llave.name),
-    () => {
-      const res = game.openCrateBox(item.id, llave.id);
-      if (!res.ok) {
-        sfx.error();
-        showToast(res.msg || 'No se pudo abrir la caja.', 'error');
-        return;
+    (units) => abrirCajas(game, item, crateType, llave, units ?? max, redraw),
+    {
+      sublabel: item.name,
+      confirmText: 'Abrir',
+      quantity: {
+        max,
+        itemName: item.name,
+        unitName: 'caja',
+        amount: (n) => `${n} × ${llave.name}`,
+        verbo: 'abrir',
+        sufijoImporte: '',
       }
-      ui.selectedId = null;
-      showCrateRoulette(res.reward, res.crateType ?? crateType, redraw);
-    },
-    { sublabel: item.name, confirmText: 'Abrir' }
+    }
   );
+}
+
+/**
+ * Abre N cajas seguidas con la misma llave y encadena sus carteles.
+ *
+ * Cada apertura es una llamada entera a `openCrateBox`: el motor consume,
+ * sortea y aplica de una en una, así que un lote es N operaciones honestas y
+ * no una operación con multiplicador. Si una falla a mitad (la pila se acabó
+ * por un botín que... no: el tope ya descuenta lo que hay; el fallo real es
+ * que el item desapareciera entre el diálogo y el cobro), se para y se dice
+ * cuántas se abrieron y por qué no siguieron: abrir las que quepan y contar
+ * las que sobraron, que es la opción elegida de F18.
+ *
+ * Cada premio conserva su overlay y su CONTINUAR —saltar la ruleta (F17)
+ * quita la espera, no la confirmación— y por eso no hay doble clic que se
+ * coma carteles: los carteles se enseñan de uno en uno, en orden.
+ */
+function abrirCajas(
+  game: any, item: any, crateType: any, llave: any, n: number, redraw: () => void
+) {
+  const premios: Array<{ reward: any; crateType: any }> = [];
+  let motivo = '';
+  for (let i = 0; i < n; i++) {
+    const res = game.openCrateBox(item.id, llave.id);
+    if (!res.ok || !res.reward) {
+      motivo = res.msg || 'No se pudo abrir la caja.';
+      break;
+    }
+    premios.push({ reward: res.reward, crateType: res.crateType ?? crateType });
+  }
+
+  ui.selectedId = null;
+  if (premios.length === 0) {
+    sfx.error();
+    showToast(motivo, 'error');
+    redraw();
+    return;
+  }
+
+  const mostrar = (idx: number): void => {
+    if (idx >= premios.length) {
+      if (premios.length < n) showToast(`Se abrieron ${premios.length} de ${n}: ${motivo}`, 'info');
+      redraw();
+      return;
+    }
+    showCrateRoulette(premios[idx].reward, premios[idx].crateType, () => mostrar(idx + 1));
+  };
+  mostrar(0);
 }
 
 /**

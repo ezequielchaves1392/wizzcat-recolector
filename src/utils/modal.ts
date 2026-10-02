@@ -48,6 +48,18 @@ export interface QuantityPrompt {
    * "Vender" una vez: pintaba el unitario y cobraba el total).
    */
   amount: (units: number) => string;
+  /**
+   * Qué se hace con las unidades, en infinitivo minúsculas ("vender").
+   *
+   * El selector nació para la venta y sus textos lo decían por todas partes
+   * ("a vender", "Vender una unidad más", el `◆` del importe). Al abrir cajas
+   * en lote el mismo selector sirve, pero "Abrir · 3 × Llave Rúnica ◆"
+   * cobraría nanitas que nadie cobra. El verbo pone cada texto en su sitio y
+   * el sufijo deja de prometer moneda donde no la hay.
+   */
+  verbo?: string;
+  /** Lo que sigue al importe (" ◆" en la venta, "" al abrir cajas). */
+  sufijoImporte?: string;
 }
 
 export interface ConfirmOptions {
@@ -131,16 +143,22 @@ export function showConfirmModal(
    */
   function fijar(n: number, repintarCampo = true) {
     const q = quantity!;
+    const sufijo = q.sufijoImporte ?? ' ◆';
     unidades = Math.min(q.max, Math.max(1, Math.floor(n) || 1));
     if (repintarCampo && input) input.value = String(unidades);
     const importe = q.amount(unidades);
-    if (totalEl) totalEl.textContent = `${unidades} × ${q.unitName} · ${importe} ◆`;
-    confirmBtn.textContent = `${confirmText} · ${importe} ◆`;
+    if (totalEl) totalEl.textContent = `${unidades} × ${q.unitName} · ${importe}${sufijo}`;
+    confirmBtn.textContent = `${confirmText} · ${importe}${sufijo}`;
   }
 
   if (quantity) {
     const wrap = document.createElement('div');
     wrap.className = 'flex flex-col gap-2.5 mt-1';
+    // El verbo en mayúscula para los textos que empiezan frase ("Vender una
+    // unidad más"). Solo la primera letra: el resto ya viene en minúsculas
+    // del llamante, y un `toUpperCase()` entero gritaría el verbo.
+    const verbo = quantity.verbo ?? 'vender';
+    const Verbo = verbo.charAt(0).toUpperCase() + verbo.slice(1);
 
     // --- Stepper: menos, campo, más ---
     const stepper = document.createElement('div');
@@ -162,13 +180,13 @@ export function showConfirmModal(
     input.step = '1';
     input.inputMode = 'numeric';
     input.value = String(quantity.max);
-    input.setAttribute('aria-label', `Unidades de ${quantity.itemName} a vender`);
+    input.setAttribute('aria-label', `Unidades de ${quantity.itemName} a ${verbo}`);
     input.className = 'flex-1 min-w-0 h-11 app-bg border border-[var(--border-color)] rounded-xl px-3 ' +
       'text-center font-mono text-[14px] font-bold tabular text-[var(--text-main)]';
 
-    stepper.appendChild(mkStep('−', -1, 'Vender una unidad menos'));
+    stepper.appendChild(mkStep('−', -1, `${Verbo} una unidad menos`));
     stepper.appendChild(input);
-    stepper.appendChild(mkStep('+', 1, 'Vender una unidad más'));
+    stepper.appendChild(mkStep('+', 1, `${Verbo} una unidad más`));
     wrap.appendChild(stepper);
 
     // --- Atajo "Todo" y el total en vivo ---
