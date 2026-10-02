@@ -514,7 +514,7 @@ DOM de verdad.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado, el botín y el ritmo del cobro**,
-no el pintado ni la navegación. **24 bancos, 1542 pruebas.** El total varía en ±1
+no el pintado ni la navegación. **24 bancos, 1549 pruebas.** El total varía en ±1
 según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que
 depende del botín. Queda fuera a propósito:
 
