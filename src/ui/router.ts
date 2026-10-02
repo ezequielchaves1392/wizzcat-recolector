@@ -38,9 +38,14 @@ export interface RouteDef {
 
 export const ROUTES: RouteDef[] = [
   { id: 'base', label: 'Base', icon: 'chip', inBottomBar: true, inHeader: true, title: 'Panel Principal' },
+  // F25 · El mercado va segundo, antes que el almacén. El jugador lo confundía
+  // con la venta del almacén y lo busca "al principio"; Base se queda primero
+  // porque es la vista de partida, pero el mercado —que es donde se gastan las
+  // nanitas— sube a la segunda posición. Un lugar más que otro, no un sitio
+  // nuevo: la ruta es la misma, solo cambia su orden en la barra y en la cabecera.
+  { id: 'tienda', label: 'Mercado', icon: 'store', inBottomBar: true, inHeader: true, title: 'Mercado' },
   { id: 'almacen', label: 'Almacén', icon: 'warehouse', inBottomBar: true, inHeader: true, title: 'Almacén' },
   { id: 'forja', label: 'Forja', icon: 'anvil', inBottomBar: true, inHeader: true, title: 'Forja de Recolectores' },
-  { id: 'tienda', label: 'Mercado', icon: 'store', inBottomBar: true, inHeader: true, title: 'Mercado' },
   { id: 'perfil', label: 'Perfil', icon: 'user', inBottomBar: true, inHeader: true, title: 'Perfil y Logros' },
   { id: 'ranking', label: 'Ranking', icon: 'trophy', inBottomBar: false, inHeader: true, title: 'Ranking Global' },
   { id: 'prestigio', label: 'Prestigio', icon: 'recycle', inBottomBar: false, inHeader: false, title: 'Ascensión' }
