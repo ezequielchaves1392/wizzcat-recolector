@@ -3,9 +3,12 @@
 > **Para el jugador:** esta es tu lista. Escribe en el apartado que toque, con tus
 > palabras. No hace falta que sea técnico ni marcar casillas.
 >
-> **Cómo se elige por dónde empezar:** hay un **Plan de trabajo** más abajo con el orden
-> y el porqué. Se empieza por lo que desbloquea lo demás, no por lo que toca primero en
-> el fichero. Si algo cambia de sitio, se actualiza.
+> **Cómo se elige por dónde empezar:** hay un **Plan de trabajo** más abajo con el orden y
+> el porqué. Ese orden va por **dependencias**, no por urgencia: está para no hacer una
+> feature que deja el juego en un estado raro. **Pero quien elige eres tú**: si dices
+> "sigamos con pendientes", lo que sale es **la lista**, y se ejecuta la que elijas. El plan
+> avisa de si algo depende de otra cosa, no quita la decisión. Si algo cambia de sitio, se
+> actualiza.
 >
 > **Una idea está pendiente mientras siga en estos apartados.** Cuando se termine se
 > mueve a **Hecho**, y si se decide que no, a **Descartado** con el motivo en una línea.

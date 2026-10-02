@@ -29,7 +29,7 @@ procedimiento completo, así que no hace falta acordarlo otra vez:
 | Comando | Qué hace |
 |---|---|
 | `/idea <lo que sea>` | Apunta una idea nueva en la lista, ya clasificada. Guarda tus palabras textuales. |
-| `/plan` | Sigue el **Plan de trabajo**: un paso, en el orden que dice el plan. |
+| `/plan` | **Lista los pendientes y para. El jugador elige.** No hace trabajo. Separa lo bloqueado por una decisión suya de lo que se puede empezar ya, con qué desbloquea cada cosa y qué lo bloquea. |
 | `/feature` | Una feature del apartado **Features**, con las reglas de R2 y R3 dentro. |
 | `/bug` | Un bug del apartado **Bugs**: reproducir antes de arreglar, causa raíz en el mensaje. |
 
