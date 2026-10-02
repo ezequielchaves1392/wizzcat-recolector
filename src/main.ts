@@ -737,6 +737,23 @@ function updateUI(state: any, isAfk: boolean = false) {
   const passiveBuffRemaining = Math.max(0, state.buffs.passiveBoostExpiresAt - now);
   const hasPassiveBuff = passiveBuffRemaining > 0;
 
+  // B10 · La pausa se ve y el botón se para, con la MISMA expresión que deja
+  // el contador en +0/s (más abajo). Si el cartel usara otra cuenta, habría
+  // dos verdades: cartel diciendo "en pausa" con el número cobrando, o número
+  // a cero sin cartel. Así cartel, botón y número van siempre juntos.
+  const parado = isAfk && !hasPassiveBuff;
+  const afkBanner = document.querySelector('#afk-banner');
+  if (afkBanner) {
+    afkBanner.classList.toggle('hidden', !parado);
+    afkBanner.classList.toggle('flex', parado);
+  }
+  // El atributo va en el contenedor y no en el botón: el CSS para la
+  // animación con una regla (`#app[data-afk] #click-btn`), y en las vistas
+  // sin botón no pasa nada porque la regla no encuentra a quién aplicarse.
+  // Sin `toggle` con segundo argumento no hay forma de que se quede
+  // desincronizado: el atributo siempre dice lo mismo que el cartel.
+  app.dataset.afk = parado ? 'true' : 'false';
+
   const isPresent = typeof activeGameInstance?.isPresent === 'function'
     ? activeGameInstance.isPresent()
     : true;

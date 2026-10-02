@@ -237,6 +237,24 @@ export function renderLayoutHTML(
               +0 /s
             </div>
             <!--
+              Cartel de pausa por inactividad (B10).
+
+              Cuando el AFK salta solo, lo único que cambiaba era el "+0 /s" de
+              arriba: el jugador volvía a la pantalla y no sabía por qué no
+              entraba nada. El cartel lo dice y dice qué hacer (pulsar), que es
+              justo lo que saca del AFK. Lo enciende el repintado con la misma
+              expresión que deja el contador en +0/s, así que cartel y número
+              no pueden contradecirse.
+            -->
+            <div id="afk-banner"
+                 role="status" aria-live="polite"
+                 class="hidden mt-2 text-[10px] font-mono text-amber-400/90 items-center
+                        justify-center gap-1.5 px-2 py-1 rounded-lg border border-amber-500/30
+                        bg-amber-500/10">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              <span>En pausa por inactividad — pulsa para seguir cobrando</span>
+            </div>
+            <!--
               Aviso de guardado pendiente.
 
               Sin esto, con la red caída el jugador ve su saldo crecer en pantalla

@@ -573,6 +573,26 @@ body {
 .animate-core-breathe { animation: coreBreathe 4.5s ease-in-out infinite; }
 .animate-rise-in { animation: riseIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* --------------------------------------------------------------------------
+   B10 · El botón parado cuando el juego está en pausa por inactividad.
+   --------------------------------------------------------------------------
+
+   La respiración del botón es CSS puro (`animation: ... infinite`), así que no
+   depende de JavaScript y seguía corriendo con el ingreso parado: el botón
+   invitaba a pulsar por algo que ya no pagaba. Se ata a `data-afk` del
+   contenedor, que pone `updateUI` con la MISMA expresión que deja el contador
+   en +0/s: cartel y botón no pueden contradecir al número.
+
+   `paused` y no `none`: congelada se queda en el fotograma donde estaba, y al
+   volver sigue desde ahí. Quitarla de golpe sería un salto visible justo en el
+   momento de despertar. Sin capas ni `!important`: este CSS va sin capa y las
+   utilidades de Tailwind van con ella, así que ya gana por especificidad de
+   cascada. */
+#app[data-afk="true"] #click-btn,
+#app[data-afk="true"] #click-btn * {
+  animation-play-state: paused;
+}
+
 /* Barrido para tarjetas de rareza alta, aplicado a un hijo absoluto */
 .rare-sweep { position: relative; overflow: hidden; }
 .rare-sweep::after {

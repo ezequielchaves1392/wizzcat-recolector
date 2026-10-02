@@ -370,7 +370,7 @@ que F31.**
 
 ---
 
-### B10 · En AFK por inactividad no sale el cartel, y el botón sigue animado
+### B10 · En AFK por inactividad no sale el cartel, y el botón sigue animado — HECHO
 
 El AFK al estar en la pantalla pero estar quieto debe mostrar el cartel y detener la
 animación en el botón de recolección.
@@ -398,6 +398,21 @@ animación en el botón de recolección.
 > una regla y no con JavaScript. Y **esto hay que verlo en `preview.html` a 390×844 con
 > el reloj corriendo**, porque es de los pocos fallos que no se pueden medir con un
 > número: hay que mirar.
+>
+> > **Hecho, las dos mitades.**
+> >
+> > 1. **El cartel** (`#afk-banner` en la base): "En pausa por inactividad — pulsa
+> >    para seguir cobrando", con `role="status"`. Antes lo único que cambiaba
+> >    era el "+0 /s" y no se sabía por qué no entraba nada.
+> > 2. **La animación** (`#app[data-afk]` en `style.css`): congela el botón y sus
+> >    hijos con `animation-play-state: paused` —congelada, no quitada, para que
+> >    al volver siga desde el fotograma donde estaba—.
+> >
+> > **Las tres cosas van con la MISMA expresión** (`isAfk && !hasPassiveBuff`, la
+> > que deja el contador en +0/s): cartel, botón y número no pueden
+> > contradecirse. Por eso no hay banco: no hay regla nueva que atar, y un banco
+> > comprueba si la clase está puesta —que lo estará sí o sí— y no si el píxel
+> > se mueve. Se mira en `preview.html` a 390×844 con el reloj corriendo.
 
 ### B11 · En el celular no se puede cerrar sesión ni cambiar de theme
 
@@ -2303,6 +2318,9 @@ commitear. La tabla de bancos y commits se comprobó contra `git log` uno por un
       golpe y el precio por ranura se multiplicaba por 5,3), y el número de ranuras
       vive en `COMPANION_SLOT_BUY`, que leen el motor, el botón y la tarjeta.
       `ranuraCheck` (34).
+- [x] **B10 · cartel AFK y botón parado.** `#afk-banner` + `#app[data-afk]` que
+      congela la respiración del botón. Misma expresión que el +0/s: cartel,
+      botón y número juntos. Solo vista, sin banco (se mira en `preview.html`).
 - [x] **F16 · identidad arriba a la izquierda.** `#nav-identity` con avatar,
       nombre y título, parcheada en caliente al equipar. `miniIdentity()`
       compartida con el ranking. `identidadCheck` 8 → 14.
@@ -2451,6 +2469,16 @@ aquí para que el cuarto no pase.)*
 > **La regla que sale de esto, para lo que se añada:** cuando se declara una cosa con
 > nombre, multiplicador y probabilidad, **tiene que haber un banco que pregunte de dónde
 > sale**. No que funcione: que exista. Es barato, y los tres bugs eran gratis de evitar.
+
+### Descubierto haciendo B10 (medido en el código, no es bug de flujo)
+
+- Con tarjeta AFK activa y AFK por inactividad a la vez, el contador dice +0/s
+  **mientras el ingreso sigue entrando**: `updateUI` apaga el número con
+  `isAfk && !hasPassiveBuff`, pero el tick solo corta con `isEffectivelyAfk`,
+  que además descuenta `hasAfkBuff`. Es la misma divergencia de "el número que
+  se enseña no es el que se cobra" con otro disfraz, y el cartel nuevo la
+  hereda (usa la misma expresión a propósito). Cuando se toque ese panel, la
+  expresión buena es la del tick, no la del contador.
 
 ### Descubierto haciendo B12 (no es bug, es para no perderlo)
 
