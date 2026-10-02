@@ -62,7 +62,7 @@ fracaso. Está razonado en el archivo y en F36.
 |---|---|---|
 | **1** | ~~**F24** · Quitar material de la forja~~ **HECHO** | Era el atajo del id triplicado + el quitar, que ya existía. `stateCheck` +3. |
 | **2** | **F26 + F31** · Cristal del mismo tier + tienda solo en cajas básicas | **La pieza grande.** Una caja por tier resuelve F26 (el cristal sale de la caja correcta), F27 (el expansor alto sale de caja) y F31 (la llave y la caja del siguiente) de una sola vez, y mata el patrón de D4 por construcción. |
-| **3** | **F33** · Forja de 2 materiales que hereda el stat | **No espera ninguna respuesta tuya**: toca la cantidad de materiales y de dónde sale el stat, no la probabilidad. **Con 2 materiales un T10 sale 2,4× la carta; con 3 salen 91× y nadie lo usa.** El instinto era correcto y el motivo es aritmética. La curva de 60/68/75 es **otra cosa** (F34) y es independiente de esta. |
+| **3** | ~~**F33** · Forja de 2 materiales que hereda el stat~~ **HECHO** (`58d5a4e`) | El potencial 1..5 decide el daño, la forja promedia los dos. `stateCheck` +9. |
 | **4** | **F23** · Una sesión por dispositivo | Decidido: **negarse a entrar, no expulsar al otro**. Con reloj de expiración corto (30-60 s) para que cerrar la pestaña libere la cuenta. |
 | **5** | **F29** · Núcleos en el ranking + **no enseñar la fórmula de puntos** | Solo justo después de F23. Y lo de esconder la fórmula va en serio: con los pesos a la vista, regalar un logro de 250.000 puntos pasa a ser lo más rentable del juego —y te lo haría a ti. |
 | **6** | **F30, F28, F25** · Sueltos y pequeños | No dependen de nada. F30 es un R3 (se ve 99 y hay 150), F28 es delta time, F25 es una línea en un array. |
@@ -293,9 +293,37 @@ empieza el segundo tramo). **¿Cuánto?** (-1 lo normal, -2 raro, y el -2 subien
 nivel). **¿La probabilidad de fallo sube con el nivel?** Ese es el número que balancea el
 tramo alto.
 
-### F33 · La forja es el camino a los items perfectos
+### F33 · La forja es el camino a los items perfectos — HECHO (`58d5a4e`)
 
 > Si los items de tier 1 que mezclo están al máximo, su mezcla va a ser un tier 2 al máximo. [...] Una cosa es el nivel del objeto y otro "qué tan bien salieron los stats" [...]. Si los dos están al máximo, el tier nuevo está al máximo, pero el nivel es 0 y se pierde la subida por cristales. Y la forja debe pedir **dos** items del mismo tier, no tres.
+
+> **HECHO. La regla es una sola y son tres cosas a la vez:** el item lleva un
+> **potencial 1..5** que **es** lo que decide su daño dentro del rango de su tier
+> (`danioDeRango`, con 1 en el mínimo y 5 en el máximo exacto), la **tienda y las cajas
+> lo tiran**, y la **forja promedia los dos materiales**. Se quitó también el multiplicador
+> de daño por potencial, que haría que el mismo número contara dos veces.
+>
+> **Lo que esto arregla:** un item forjado salía siempre en el punto medio del rango, ni con
+> materiales perfectos. Buscar los buenos era tiempo perdido porque daba igual lo que
+> metieras. Ahora dos perfectos dan un perfecto y uno flojo baja el resultado.
+>
+> **La consecuencia que hay que tener presente, porque es diseño y no un detalle: promediar
+> nunca sube.** Un 5 sale de un 5, así que **la perfección se consigue en la tienda y en las
+> cajas, y la forja es la que conserva la que ya tienes.** Eso es lo que hace que las dos
+> vías compitan en precio y no en resultado, que es justo lo que pedía F33.
+>
+> **Y la receta es de 2 materiales sin devolución**, que era tu decisión. El precio no se
+> mueve (2ⁿ por tier). Se quitó la devolución de 1 porque con 2 materiales el coste neto
+> caía a 1 y la forja quedaba casi gratis; de paso la valoración tratando los 3 como
+> gastados cuando solo se cobraban 2 era R3 roto, y al quitarla la densidad se calcula
+> exacta.
+>
+> **Un dato que cambió y hay que mirar jugando:** la forja antes perdía valor total en los
+> tiers bajos y ahora **gana en todos** (márgenes por ranura de 2,5x-4,6x a 2,1x-5,8x). Si
+> en una partida se ve que solo conviene forjar y comprar nunca, el número a tocar es el de
+> aquí, no el del resto.
+>
+> Pruebas: `stateCheck` 232 → 241.
 
 **Corrección importante: hay dos cosas distintas y se me habían mezclado.** El **nivel**
 (0-20, o 35 con 5 estrellas) sale de **cristales**. El **stat** (dónde cayó dentro del
@@ -564,7 +592,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **24 bancos, 1552
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **24 bancos, 1471
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
@@ -649,6 +677,15 @@ pruebas**, todas en verde._
 - [x] **F24 · deduplicar la forja y el quitar** (paso 1 del plan). La vista no sube
       ids repetidos y el motor rechaza antes de cobrar consumibles. `stateCheck`
       232 → 235. La tanda queda en **24 bancos, 1552 pruebas**.
+- [x] **F33 · el potencial decide el daño y la forja promedia los dos** (`58d5a4e`).
+      `danioDeRango(tier, potencial)` con 1 en el mínimo y 5 en el máximo exacto;
+      la tienda y las cajas lo tiran, la forja promedia los dos materiales. Se fue
+      el multiplicador de daño por potencial, que hacía que el mismo número
+      contara dos veces. **Promediar nunca sube**, así que la perfección se trae
+      de la caja o la tienda y la forja la conserva. La receta son 2 materiales sin
+      devolución: el precio sigue en 2ⁿ, y con devolución el coste neto caía a 1.
+      Los items viejos lo reciben deducido de su propio daño (`saveVersion` 8), así
+      que ninguna partida guardada cambia de estadísticas. `stateCheck` 232 → 241.
 - [x] **Forja infinita, corte 1 · fórmulas 11+ y sin techo** (`d5daee3`). `rangoDePoder()`,
       `rarezaDeTier()` y `valorBaseTier()`; T10→T11 y T11→T12 comprobados.
       `stateCheck` 225 → 232. **Sin curva de probabilidad: esa sigue esperando tu sí.**
