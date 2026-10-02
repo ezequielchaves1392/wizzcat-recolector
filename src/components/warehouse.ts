@@ -31,6 +31,7 @@ import { ic } from '../ui/icons';
 import { pageShell, mountInto, wireNav, sectionHead } from '../ui/pageShell';
 import { showConfirmModal } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
+import { showCrateSummary, MAX_APERTURA_LOTE } from './crateSummary';
 import { showCrystalPicker } from './crystalPicker';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
@@ -77,7 +78,7 @@ const UNIDAD_SINGULAR: Record<string, string> = {
 // La regla de apilado vive en `data/stacking` porque el game loop necesita la
 // MISMA para saber si un item cabe. Con una copia aquí, el contador de ranuras y
 // la rejilla acaban contando cosas distintas otra vez.
-import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits, textoDeCantidad } from '../data/stacking';
+import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits, textoDeCantidad, topeDePila } from '../data/stacking';
 import { lorePara, lineaTipoCompanion } from '../data/tiers';
 
 // Estado de la pantalla. Sobrevive a los re-render.
@@ -940,6 +941,13 @@ export function visibleStacksFor(
   // el array. Antes solo se juntaban los VECINOS, así que la rejilla que pintaba
   // el agrupado y la que veía el arrastre tenían distinto número de celdas: el
   // número de celda que el jugador señalaba no era el mismo sitio en las dos.
+  //
+  // **Y SE ACUMULAN HASTA EL TOPE DE PILA, QUE ES LO NUEVO.** Una pila de cajas
+  // está llena en 20, así que 45 cajas son tres items en el almacén y tienen que
+  // ser **tres celdas**: si se agruparan en una, la rejilla diría 45 donde el
+  // almacén dice tres, y el contador de ranuras —que ya cuenta tres— quedaría
+  // descolocado de lo que el jugador ve. La agrupación de la vista tiene que usar
+  // la misma regla que el contador, o las dos mienten con dos números distintos.
   const grupos: Array<{ item: any; ids: string[]; count: number }> = [];
   const celdaDe = new Map<string, number>();
 
@@ -947,8 +955,9 @@ export function visibleStacksFor(
     if (isStackable(w)) {
       const clave = `${w.type}_${w.name}`;
       const previa = celdaDe.get(clave);
+      const tope = topeDePila(w.type);
 
-      if (previa !== undefined) {
+      if (previa !== undefined && tope === Infinity) {
         grupos[previa].ids.push(w.id);
         // F30 · Se suman las unidades REALES, sin `Math.min(..., tope)`: el tope es
         // de PINTADO, y recortar aquí hacía que 150 llaves se Teachan "99" con el
@@ -957,8 +966,14 @@ export function visibleStacksFor(
         continue;
       }
 
+      if (previa !== undefined && (grupos[previa].count as number) + stackUnits(w) <= tope) {
+        grupos[previa].ids.push(w.id);
+        grupos[previa].count += stackUnits(w);
+        continue;
+      }
+
       celdaDe.set(clave, grupos.length);
-      grupos.push({ item: w, ids: [w.id], count: w.stackCount || 1 });
+      grupos.push({ item: w, ids: [w.id], count: stackUnits(w) });
       continue;
     }
 
@@ -1306,9 +1321,13 @@ function confirmarYabrir(
 ) {
   // F18: con pila se pregunta cuántas, con el mismo selector de la venta. El
   // tope es lo que de verdad se puede abrir: cajas Y llaves, lo menor de los
-  // dos. Sin pila (o con una sola llave) no hay nada que decidir y va el
-  // diálogo de antes, tal cual.
-  const max = Math.min(stackUnits(item), stackUnits(llave));
+  // dos, **y el tope de una pila**.
+  //
+  // Y las tres cosas son necesarias por motivos distintos. Sin el mínimo de
+  // cajas y llaves, el motor se queda a medias. Y sin el tope de pila, el
+  // diálogo ofrecería abrir 45 cajas de una pila de 45 y el jugador vería en la
+  // rejilla que solo tiene 20 por celda: un número que no existe en ninguna parte.
+  const max = Math.min(stackUnits(item), stackUnits(llave), MAX_APERTURA_LOTE);
   if (max <= 1) {
     showConfirmModal(
       mensajeAbrirCaja(llave.name),
@@ -1337,24 +1356,33 @@ function confirmarYabrir(
 }
 
 /**
- * Abre N cajas seguidas con la misma llave y encadena sus carteles.
+ * Abre N cajas seguidas con la misma llave y enseña UNA lista de lo que salió.
  *
- * Cada apertura es una llamada entera a `openCrateBox`: el motor consume,
- * sortea y aplica de una en una, así que un lote es N operaciones honestas y
- * no una operación con multiplicador. Si una falla a mitad (la pila se acabó
- * por un botín que... no: el tope ya descuenta lo que hay; el fallo real es
- * que el item desapareciera entre el diálogo y el cobro), se para y se dice
- * cuántas se abrieron y por qué no siguieron: abrir las que quepan y contar
- * las que sobraron, que es la opción elegida de F18.
+ * Cada apertura es una llamada entera a `openCrateBox`: el motor consume, sortea
+ * y aplica de una en una, así que un lote es N operaciones honestas y no una
+ * operación con multiplicador. Si una falla a mitad, se para y se dice cuántas se
+ * abrieron y por qué no siguieron: abrir las que quepan y contar las que sobraron,
+ * que es la opción elegida de F18.
  *
- * Cada premio conserva su overlay y su CONTINUAR —saltar la ruleta (F17)
- * quita la espera, no la confirmación— y por eso no hay doble clic que se
- * coma carteles: los carteles se enseñan de uno en uno, en orden.
+ * **LO QUE CAMBIÓ ES CÓMO SE ENSEÑA, NO CÓMO SE SORTEA.** Antes un lote de 20
+ * encadenaba veinte ruletas con veinte CONTINUAR: veinte pantallas para un
+ * resultado, con el jugador teniendo que sumar a mano lo que se lleva. Y la
+ * cifra que más importa —las nanitas— salía partida en veinte casillas.
+ *
+ * Ahora **una caja sigue con su ruleta** —es el momento del trompo y se pierde— y
+ * **el lote se resuelve en una lista**: las monedas sumadas en una fila, los
+ * materiales agrupados por lo que son, y cada objeto con su nombre. Si sale el
+ * Espectro Azulado en la séptima de veinte, sale su fila y no un cartel entre
+ * diecinueve.
+ *
+ * Y `resumenDePremios()` es una función pura, sin DOM: la regla de qué se suma y
+ * qué no se suma se puede comprobar con un banco, que es lo único que impide que
+ * "sumar nanitas" y "enseñar el total" se separen.
  */
 function abrirCajas(
   game: any, item: any, crateType: any, llave: any, n: number, redraw: () => void
 ) {
-  const premios: Array<{ reward: any; crateType: any }> = [];
+  const premios: any[] = [];
   let motivo = '';
   for (let i = 0; i < n; i++) {
     const res = game.openCrateBox(item.id, llave.id);
@@ -1362,7 +1390,7 @@ function abrirCajas(
       motivo = res.msg || 'No se pudo abrir la caja.';
       break;
     }
-    premios.push({ reward: res.reward, crateType: res.crateType ?? crateType });
+    premios.push(res.reward);
   }
 
   ui.selectedId = null;
@@ -1373,15 +1401,19 @@ function abrirCajas(
     return;
   }
 
-  const mostrar = (idx: number): void => {
-    if (idx >= premios.length) {
-      if (premios.length < n) showToast(`Se abrieron ${premios.length} de ${n}: ${motivo}`, 'info');
-      redraw();
-      return;
-    }
-    showCrateRoulette(premios[idx].reward, premios[idx].crateType, () => mostrar(idx + 1));
+  const cerrar = () => {
+    if (premios.length < n) showToast(`Se abrieron ${premios.length} de ${n}: ${motivo}`, 'info');
+    redraw();
   };
-  mostrar(0);
+
+  // Una sola caja conserva la ruleta: es un momento y el trompo es el premio de
+  // abrir. El lote es lo que cambia, porque veinte trompos no son veinte datos.
+  if (premios.length === 1) {
+    showCrateRoulette(premios[0], crateType, cerrar);
+    return;
+  }
+
+  showCrateSummary(premios, { crateType, pedidas: n, motivo }, cerrar);
 }
 
 /**

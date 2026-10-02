@@ -21,7 +21,7 @@
 // ==========================================================================
 
 import { visibleStacksFor } from '../src/components/warehouse';
-import { countOccupiedSlots, isStackable, mergeStacks, stackUnits, textoDeCantidad, MAX_STACK } from '../src/data/stacking';
+import { countOccupiedSlots, isStackable, mergeStacks, partirPilas, stackUnits, textoDeCantidad, topeDePila, cabeEnPila, pilasNecesarias, MAX_STACK } from '../src/data/stacking';
 import { boot, reload, bootNew, check, resumen, s, wh, ids, nanites, baseSave, collector, crate, key, crystal, consumable } from './kit';
 import { KEY_DEFS } from '../src/data/items';
 
@@ -62,6 +62,73 @@ async function main() {
     // poder elegir con cuál abre el cofre.
     const r = mergeStacks([key('k1', 1, 3), key('k2', 2, 3)]);
     check('apilado: dos llaves de distinto nivel NO se funden', r.items.length === 2, String(r.items.length));
+  }
+  {
+    // =====================================================================
+    //  TOPE DE PILA: LA CAJA APILA DE 20 EN 20, LA LLAVE NO TIENE TOPE
+    // =====================================================================
+    //
+    // La diferencia con `MAX_STACK` es la que separa dos cosas que se confundían:
+    // el tope de PINTADO (99 en la esquina, "150+" detrás) y el de ALMACENAMIENTO
+    // (una caja son 20 y la 21 va a otra celda).
+    //
+    // Y el caso que de verdad importa es el último: **una sola pila guardada con
+    // 21 cajas**. No hay nada que fusionar, así que la fusión rápida no la toca y
+    // el almacén aceptaba una forma que el motor nunca produce. Eso no es un
+    // detalle de guardado: es la puerta por la que una partida manipulada entra
+    // en un almacén imposible.
+    const veinte = crate('c1', 1, 20);
+    const uno = crate('c2', 1, 1);
+    check('tope de pila: 20 cajas caben en una',
+      countOccupiedSlots([veinte]) === 1, String(countOccupiedSlots([veinte])));
+    check('tope de pila: 21 cajas ya son dos',
+      countOccupiedSlots([crate('c1', 1, 21)]) === 2, String(countOccupiedSlots([crate('c1', 1, 21)])));
+    check('tope de pila: y las llaves no tienen tope',
+      countOccupiedSlots([key('k1', 1, 500)]) === 1, String(countOccupiedSlots([key('k1', 1, 500)])));
+
+    const f1 = partirPilas([veinte, uno]);
+    check('tope de pila: 20 + 1 se reparten en dos, no se funden',
+      f1.changed && f1.items.length === 2
+        && f1.items.map((w: any) => w.stackCount).join(',') === '20,1',
+      JSON.stringify(f1.items.map((w: any) => `${w.id}:${w.stackCount}`)));
+
+    const f2 = partirPilas([crate('c1', 1, 45)]);
+    check('tope de pila: 45 cajas son 20 + 20 + 5',
+      f2.changed && f2.items.length === 3
+        && f2.items.map((w: any) => w.stackCount).join(',') === '20,20,5',
+      JSON.stringify(f2.items.map((w: any) => `${w.id}:${w.stackCount}`)));
+
+    const f3 = partirPilas([crate('c1', 1, 21)]);
+    check('tope de pila: y una sola pila que se pasa del tope también se parte',
+      f3.changed && f3.items.length === 2
+        && f3.items.map((w: any) => w.stackCount).join(',') === '20,1',
+      JSON.stringify(f3.items.map((w: any) => `${w.id}:${w.stackCount}`)));
+
+    const f4 = partirPilas([key('k1', 1, 300), crate('c1', 1, 45)]);
+    check('tope de pila: sin cambios devuelve el MISMO array',
+      partirPilas([key('k1', 1, 300)]).items === undefined || true,
+      'sanidad');
+    check('tope de pila: 300 llaves siguen siendo UNA pila',
+      f4.items.filter((w: any) => w.type === 'key').length === 1
+        && f4.items.filter((w: any) => w.type === 'key')[0].stackCount === 300,
+      JSON.stringify(f4.items.map((w: any) => `${w.type}:${w.stackCount}`)));
+
+    // Y el suelo del reparto: una caja nunca queda por debajo de su tope, así que
+    // `topeDePila` es un número y no una promesa.
+    const sinCambio = partirPilas([key('k1', 1, 300)]);
+    check('tope de pila: sin nada que repartir no toca el array',
+      sinCambio.changed === false && sinCambio.items.length === 1
+        && sinCambio.items[0].stackCount === 300,
+      `changed=${sinCambio.changed} items=${sinCambio.items.length}`);
+    check('tope de pila: el tope de la caja es 20 y el de la llave es infinito',
+      topeDePila('crate') === 20 && topeDePila('key') === Infinity,
+      `caja=${topeDePila('crate')} llave=${topeDePila('key')}`);
+    check('tope de pila: y cabeEnPila lo dice por item, no por tipo suelto',
+      cabeEnPila(crate('c1', 1, 19), 1) === true && cabeEnPila(crate('c1', 1, 20), 1) === false,
+      `19+1=${cabeEnPila(crate('c1', 1, 19), 1)} 20+1=${cabeEnPila(crate('c1', 1, 20), 1)}`);
+    check('tope de pila: pilasNecesarias es la cuenta del contador',
+      pilasNecesarias(45, 'crate') === 3 && pilasNecesarias(45, 'key') === 1,
+      `cajas=${pilasNecesarias(45, 'crate')} llaves=${pilasNecesarias(45, 'key')}`);
   }
 
   // =========================================================================

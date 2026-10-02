@@ -23,7 +23,7 @@
 
 ## Lo único que espera tu respuesta
 
-**Son cuatro cosas, y las cuatro son tuyas, no mías. Nada de la lista de abajo se puede
+**Son cinco cosas, y las cinco son tuyas, no más. Nada de la lista de abajo se puede
 programar bien hasta que estén.**
 
 | # | Qué | Por qué bloquea |
@@ -32,6 +32,7 @@ programar bien hasta que estén.**
 | **2** | **B8 · Ver el perfil de otro jugador.** ¿Se publica una **tarjeta pública** nueva, o se abre `users/{uid}` a lectura? | **Es privacidad, y no lo debe decidir un agente.** Recomiendo la tarjeta pública: lo no recomendable es abrir el documento privado, porque un incremental te enseña el gasto y el inventario de tu competencia. Bloquea F20 y F22. |
 | **3** | **P4 · Jugar otra partida y decir hasta dónde llegas.** | `balanceCheck` comprueba que los números encajen entre sí, no que la partida dure lo que tiene que durar. Eso solo se mide jugando. |
 | **4** | **F19 · Dos cosas de los logros como items.** Qué pasa con el item si ya tienes el logro (¿se vende, se guarda, no se usa dos veces?), y si los logros **seguros** son tradeares o solo los de caja. | Cambia el modelo de logros entero. Es la última cosa del lote a propósito. |
+| **5** | **P5 · Las cajas ya no dan nanitas.** El premio pasó de ×14-22 del par a **25-40%**, porque era una máquina de imprimir. | Cerrar el bucle compra-venta era lo que pediste, y la única palanca que quedaba era la **fórmula** de las nanitas. Con menos nanitas de las cajas, la **forja pasa a ser el ingreso principal** y la partida puede hacerse más lenta. El sitio del ajuste es un número, y cualquier valor sigue teniendo la prueba de que no supera el par. |
 
 **Y una cosa que no es una decisión, solo una limpieza:** `.github/workflows/publicar.yml`
 falla en **todos** los pushes porque Pages no está activado en el repo. **No quieres
@@ -584,6 +585,27 @@ pierdan. Cuando toque, se suben a Features._
   B6. Si el diagnóstico de una escalera dice "dos peldaños rotos", mira el tercero.
 
 ---
+- **Una rareza con UNA sola entrada se lleva el 100% de su bolsa, y eso es una trampa
+  que ya mordió dos veces.** El reparto de botín era por bolsas de rareza, y con las cuatro
+  cajas de antes cada bolsa tenía tres o cuatro entradas. Con una caja por tier (F31) **todas
+  las entradas de la caja tienen la misma rareza**, así que la tabla generada dejaba las
+  nanitas **solas en la bolsa Común** y la caja T7 daba **92,45% de nanitas** y 0,74% a cada
+  premio de verdad. La caja alta era un regalo de nanitas, y **ningún banco lo cantaba**:
+  `saltoCheck` mide el salto y los exclusivos, y el salto conservaba su banda porque tenía
+  bolsa propia. **Dentro de una caja manda el peso de autor; la rareza pesa entre cajas.**
+  Lo que queda de la rareza —el salto y los exclusivos con bolsa reservada— se sigue
+ midiendo, y la escalera se ve en la rareza que anuncia cada premio. Si algún día vuelve a
+  meterse rareza en el reparto dentro de la caja, hay que comprobar que **ninguna bolsa queda
+  con una sola entrada**.
+- **`pilasNecesarias(0, tipo)` devuelve 1, y eso no es un error.** Su pregunta es "cuántas
+  pilas necesito para GUARDAR esto" y de cero unidades la respuesta mínima razonable es una.
+  Quien la llama preguntando "cuántas tengo que ABRIR" tiene que tratar el cero antes, que es
+  lo que hace `planDeEntrada()`. Sin ese `if`, **nada que se sumara a una pila podía comprarse
+  con el almacén lleno**.
+- **Los bancos que reimplementan el sorteo miden su propia idea del sorteo.** `saltoCheck`
+  sorteaba con `e.weight` (los pesos de autor) mientras el juego sorteaba con
+  `tablaDePesos()`. Las dos cifras salían bien y no decían nada del juego; cuando el reparto
+  cambió, el banco falló por 1,1 puntos **midiendo la tabla equivocada**, no el juego.
 
 ## Balance y dificultad
 
@@ -606,6 +628,27 @@ Subir a nivel 20 costaba 100 cristales, que a 60 cada uno salían 6.000 nanitas:
 recolector**. No había nada que decidir, era un botón. **Arreglado:** curva de 1,14 a 1,26
 por nivel y el cristal a 200. Nivel 20 cuesta ahora ~47% del recolector. `balanceCheck`.
 
+### P5 · Las cajas ya no dan nanitas: eso cambia la partida y es tu decisión
+
+**Lo que era:** la caja T1 devolvía **9.375-15.000 nanitas** con un par caja+llave de 675.
+La caja T10 devolvía cientos de miles. Comprar y abrir cajas era **×14 a ×22**, y por eso
+la caja era la única fuente de ingresos que hacía falta.
+
+**Lo que es:** el premio de nanitas es del **25% al 40% del par**. La T1 da **169-270** y la
+T10 **36.347-58.155**. Todo lo que salga de una caja, vendido, vale como mucho lo que cuesta
+abrla.
+
+**Por qué está así y no más suave:** la regla que pediste es "nada de una caja da más que la
+caja y la llave". Cualquier valor por debajo del par la cumple; el 25-40% sale de leer el
+rango de autor (250-400) como tanto por mil del par, que es la lectura menos inventada que
+respeta el rango que ya estaba escrito.
+
+**Lo que hay que mirar:** con menos nanitas de las cajas, **la forja y la tienda pasan a ser
+el ingreso principal**, y el ritmo de la partida sube. Si se te hace lento, el sitio del
+tope es este número y no el de la reventa: se cambia un `1000` y está. El banco
+`loteCheck` mide que el par no se supera en ninguno de los diez tiers, así que cualquier
+valor que pongas aquí sigue teniendo una prueba detrás.
+
 ### P4 · Verificar en partida real
 
 **Pendiente de tu lado** (es el nº3 de lo que espera tu respuesta). El banco comprueba que
@@ -616,7 +659,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1649
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1727
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
@@ -710,14 +753,14 @@ pruebas**, todas en verde._
       balance que hizo falta: con la base en el mínimo del rango los **tiers se solapaban**
       (un T1 perfecto igualaba a un T2 normal), así que la base crece ×1,75 por tier y el
       peor de un tier supera al mejor del anterior. `stateCheck` +14, `saltoCheck` +6.
-- [x] **F31 · una caja por tier, y la tienda solo con la básica** (`aun sin commit`).
+- [x] **F31 — una caja por tier, y la tienda solo con la básica** (`3c72fd4`).
       Diez cajas (`Caja T1`…`Caja T10`), diez llaves con nombre propio, y **fuera las veinte
       cartas de tier** y las tres cajas altas. La caja T{n} suelta por construcción el
       cristal T{n}, su llave, un compañero T{n}, un recolector sobrecargado desde la T3, la
       caja T{n+1} y un salto. **Y las diez tablas de botín son una función**, no diez
       listas: era la causa de B6. Precios y reventa salen de una curva de tiers; el par
       caja+llave de la T1 baja de 750 a 675. Fuera `crates.ts`, que estaba muerto.
-- [x] **F26 · el cristal es del mismo tier del item, estrictamente** (`aun sin commit`).
+- [x] **F26 — el cristal es del mismo tier del item, estrictamente** (`3c72fd4`).
       `upgradeEquippedCollector()` **deja de recibir el nivel**: lo deduce del item, así que
       la vista no puede ofrecer un cristal que el motor vaya a rechazar. El selector pasa
       de una lista a **una fila**: la que tienes o la que te falta. Y el cristal deja de ser
@@ -760,6 +803,32 @@ pruebas**, todas en verde._
 - [x] **Forja infinita, corte 1 · fórmulas 11+ y sin techo** (`d5daee3`). `rangoDePoder()`,
       `rarezaDeTier()` y `valorBaseTier()`; T10→T11 y T11→T12 comprobados.
       `stateCheck` 225 → 232. **Sin curva de probabilidad: esa sigue esperando tu sí.**
+- [x] **Cajas: compra en lote, tope de 20 por pila, lista de lo que salió y bucle de
+      compra-venta cerrado** (sin commit). Cuatro cosas del mismo encargo, y salían
+      de ahí tres bugs que ningún banco miraba.
+      - **La caja no se compraba en lote.** La lista decía `itemKey.endsWith('Crate')`, que
+        era el nombre de la carta antes de F31. Con una caja por tier la carta se llama
+        `crateT1`, la condición dejó de cumplirse **en silencio** y comprar cinco cajas eran
+        cinco viajes a la tienda. La misma lista estaba copiada en la vista para elegir el
+        sustantivo ("cuántas **unidad**"), y las dos salen ahora de `esCartaEnLote()`.
+      - **Las cajas se apilan de 20 en 20.** `TOPE_PILA` es un tope de **almacenamiento**, y
+        `MAX_STACK` sigue siendo el de **pintado**: son dos cosas distintas y confundirlas
+        cuesta un banco entero. Lo que obliga a que el tope exista es el **lote**: comprar
+        25 cajas metía un item de 25 en una sola pila, por encima del 20 que el jugador ve
+        en la rejilla. `planDeEntrada()` reparte y `partirPilas()` migra, y los dos lo
+        comparten con `cabeEnAlmacen()` porque "**¿cabe?**" y "¿dónde va?" tienen que dar
+        el mismo número de ranuras.
+      - **Abrir de 20 en 20, con una lista y no veinte ruletas.** El sorteo sigue siendo
+        veinte tiradas honestas; lo que cambia es la pantalla. `resumenDePremios()` suma
+        monedas y materiales y **no** suma objetos: dos drones son dos filas, porque
+        escribirlos "×2" escondería que hay dos celdas ocupadas.
+      - **Y el bucle de compra y venta estaba abierto de par en par.** El recolector
+        sobrecargado de la T10 se vendía por **457.800** con un par caja+llave de **145.388**
+        (×3,15), y las nanitas de una caja T1 salían **9.375-15.000** con un par de 675
+        (×14-22): la máquina de imprimir llevaba desde el primer día, y era la **fórmula**
+        (`amount × coste / 12` = 21 a 33 veces su propio precio), no el precio. Ahora todo
+        premio de caja lleva **tope de reventa = par caja+llave**, y las nanitas son del
+        **25% al 40%** del par. `loteCheck`, banco nuevo (71).
 
 ### La economía y el ritmo (`v1.1.0`)
 

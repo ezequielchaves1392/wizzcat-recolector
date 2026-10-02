@@ -15,7 +15,7 @@ import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/pr
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
-import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
+import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias } from './data/stacking';
 
 // ==========================================================================
 //  LAS TABLAS Y LAS FUNCIONES PURAS ESTÁN FUERA. AQUÍ ESTÁ POR QUÉ.
@@ -411,11 +411,37 @@ export async function createGameLoop(
  * Vive fuera del objeto devuelto porque lo necesitan dos sitios: la vista, que
  * lo pinta, y `sellItem()`, que lo cobra. Con la fórmula duplicada, la tarjeta
  * podía enseñar un precio y el cobro aplicar otro.
- */function getSellPriceFor(item: any): number {
+ *
+ * **Y `sellPriceTope` ES UN TECHO, NO UN PRECIO.** Existe para una cosa muy
+ * concreta: que **un premio de caja no valga más vendido que la caja y la llave
+ * que lo dieron**. Medido, el recolector sobrecargado de la caja T10 se vendía
+ * por 457.800 con un par caja+llave de 145.388: **×3,15 de imprimir**, en el 15%
+ * de las cajas. Es decir, comprar cajas y abrirlas era un negocio mejor que
+ * jugar, y la economía del juego se rompía sola.
+ *
+ * La causa era que el recolector se valoraba por su rareza y su potencial
+ * (Sobrecargado ×2,4 y potencial 5 ×2,8) sin que nadie lo contrastara con lo que
+ * cuesta conseguirlo de una caja. Un tope por item lo dice sin tocar la
+ * valoración, que es correcta para lo que el jugador ha forjado durante horas.
+ *
+ * El tope se aplica DESPUÉS de la bonificación de venta del árbol, y también se
+ * multiplica por ella, para que el bonus siga sirviendo para algo: si se
+ * recortara el precio final, el jugador notaría que su bonificación no hace nada
+ * con los premios de caja, y si no se multiplicara, bastarían cuatro núcleos para
+ * volver a imprimir.
+ */
+function getSellPriceFor(item: any): number {
+  const conBonus = (base: number) => {
+    const precio = Math.floor(base * (1 + state.bonus.sellMult));
+    const tope = item?.sellPriceTope;
+    if (typeof tope !== 'number' || !Number.isFinite(tope) || tope <= 0) return precio;
+    return Math.min(precio, Math.floor(tope * (1 + state.bonus.sellMult)));
+  };
+
   if (item.type === 'collector') {
-    return sellPrice(item, { sellMult: 1 + state.bonus.sellMult });
+    return conBonus(sellPrice(item, { sellMult: 1 + state.bonus.sellMult }));
   }
-  return Math.floor((item.sellPrice || 0) * (1 + state.bonus.sellMult));
+  return conBonus(item.sellPrice || 0);
 }
 
 /**
@@ -459,20 +485,47 @@ function precioUnitarioTienda(itemKey: string): number {
 }
 
 /**
+ * Qué cartas se compran en lote: una lista de CARTAS, no un patrón de nombre.
+ *
+ * Solo lo apilable se compra en lote (llaves, cristales, cajas y consumibles):
+ * una carta de ranura o una carta de tier son únicas y siempre valen una, pida
+ * lo que pida la vista.
+ *
+ * **ESTO ESTABA EN UN `endsWith` Y POR ESO LAS CAJAS NO SE COMPRABAN EN LOTE.**
+ * Decía `itemKey.endsWith('Crate')`, que era el nombre de la carta antes de F31
+ * (`commonCrate`, `rareCrate`…). Con una caja por tier la carta se llama
+ * `crateT1`, no acaba en `Crate`, y la condición dejó de cumplirse en silencio:
+ * `getBulkMax` devolvía 1, la tarjeta no pintaba el selector de cantidad y
+ * comprar cinco cajas eran cinco viajes a la tienda.
+ *
+ * El bug no lanzaba ningún error —un `if` que ya no se cumple es el peor sitio
+ * para un cambio de nombre— y además el mismo `endsWith` estaba copiado en la
+ * vista, para elegir el sustantivo del selector ("¿cuántas **cajas**?"). Por eso
+ * las dos cosas salen de aquí: la lista y el nombre.
+ */
+function esCartaEnLote(itemKey: string): boolean {
+  return STORE_KEY_TIER[itemKey] !== undefined
+    || itemKey === 'upgradeCrystal'
+    || itemKey === 'crateT1'
+    || !!CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
+}
+
+/** Cómo llama la vista a una unidad de esta carta: "elige cuántas **cajas**". */
+function nombreDeUnidad(itemKey: string): string {
+  if (STORE_KEY_TIER[itemKey] !== undefined) return 'llave';
+  if (itemKey === 'upgradeCrystal') return 'cristal';
+  if (itemKey === 'crateT1') return 'caja';
+  return 'unidad';
+}
+
+/**
  * Cuántas unidades se compran, ya recortadas a lo válido.
  *
- * Solo lo apilable se compra en lote (llaves, cristales, cajas y
- * consumibles): una carta de tier o una ranura son únicas y siempre valen
- * una, pida lo que pida la vista. Un 0, un negativo o un NaN es "cantidad no
- * válida" y vale 0, que `buyStoreItem` rechaza sin cobrar —igual que
- * `unidadesVendibles` en la venta—.
+ * Un 0, un negativo o un NaN es "cantidad no válida" y vale 0, que `buyStoreItem`
+ * rechaza sin cobrar —igual que `unidadesVendibles` en la venta—.
  */
 function unidadesCompra(itemKey: string, pedidas?: number): number {
-  const apilable = STORE_KEY_TIER[itemKey] !== undefined
-    || itemKey === 'upgradeCrystal'
-    || !!CONSUMABLES[itemKey as keyof typeof CONSUMABLES]
-    || (itemKey.endsWith('Crate') && !!(CRATE_TYPES as Record<string, unknown>)[itemKey.replace('Crate', '').toLowerCase()]);
-  if (!apilable) return 1;
+  if (!esCartaEnLote(itemKey)) return 1;
   if (pedidas === undefined || pedidas === null) return 1;
   const n = Math.floor(Number(pedidas));
   if (!Number.isFinite(n) || n < 1) return 0;
@@ -489,44 +542,130 @@ function unidadesCompra(itemKey: string, pedidas?: number): number {
  * ranura, la rejilla las agrupaba en una celda con un "19" y el contador pedía
  * 19 ranuras por un item que el jugador nunca había visto duplicado.
  *
- * Un apilable se suma a la primera pila del mismo tipo y nombre; si no cabe en
- * ella, se abre una pila nueva. Un item que no es apilable siempre entra con su
- * propio id, porque dos recolectores son dos cosas distintas aunque se llamen
- * igual.
+ * Un apilable se suma a la primera pila del mismo tipo y nombre **que tenga hueco**,
+ * y lo que no quepa en ninguna abre piling nuevas del tamaño del tope. Un item
+ * que no es apilable siempre entra con su propio id, porque dos recolectores son
+ * dos cosas distintas aunque se llamen igual.
+ *
+ * **UNA COMPRA EN LOTE PUEDE TRAER MÁS DE UNA PILA.** Comprar 25 cajas con el
+ * almacén vacío mete un item de 25 y lo repartía en una sola pila de 25 —por
+ * encima del tope de 20 que el jugador ve en la rejilla—. Ahora las abre de
+ * veinte en veinte y las sobrantes reciben un id con sufijo. El reparto lo
+ * decide `planDeEntrada()`, el mismo que usa `cabeEnAlmacen()`, y esa es la razón
+ * de que sea un plan y no un `if`: **las dos preguntas tienen que dar el mismo
+ * número de ranuras**, porque si no el diálogo ofrece una cantidad que el motor
+* rechaza después de haber cobrado el precio.
  *
  * Devuelve false si no había hueco. No avisa: quien llama decide, porque hay
  * sitios que compensan en nanitas y sitios que pierden el botín a propósito.
  */
 function addToWarehouse(item: any): boolean {
-  const pila = pilaPara(item);
-  if (pila) {
-    pila.stackCount = stackUnits(pila) + stackUnits(item);
+  const unidades = stackUnits(item);
+
+  if (!isStackable(item)) {
+    if (countOccupiedSlots(state.warehouse) >= effectiveWarehouseCapacity()) return false;
+    state.warehouse.push(item);
     return true;
   }
 
-  if (countOccupiedSlots(state.warehouse) >= effectiveWarehouseCapacity()) return false;
-  state.warehouse.push(item);
+  const plan = planDeEntrada(item, unidades);
+  if (countOccupiedSlots(state.warehouse) + plan.ranurasNuevas > effectiveWarehouseCapacity()) {
+    return false;
+  }
+
+  // Se reparte: primero a las pilas que ya tienen hueco, y lo que sobre a piles
+  // nuevas del tamaño del tope. La primera pila nueva conserva el id del item
+  // recibido, que es el que el llamante devuelve a la vista.
+  let quedan = unidades;
+  for (const h of plan.huecos) {
+    if (quedan <= 0) break;
+    const take = Math.min(h.libre, quedan);
+    h.pila.stackCount = stackUnits(h.pila) + take;
+    quedan -= take;
+  }
+
+  const tope = topeDePila(item.type);
+  let n = 0;
+  while (quedan > 0) {
+    const take = tope === Infinity ? quedan : Math.min(tope, quedan);
+    const copia: any = { ...item, stackCount: take };
+    if (n > 0) copia.id = `${item.id}#${n + 1}`;
+    state.warehouse.push(copia);
+    quedan -= take;
+    n++;
+  }
   return true;
 }
 
 /**
- * La pila a la que se sumaría este item, o null si no hay ninguna.
+ * Dónde irían estas unidades: las pilas con hueco y cuántas ranuras nuevas hay
+ * que abrir.
  *
- * Es la pregunta "¿necesita ranura nueva?" y tiene que ser la MISMA que se hace
- * en `addToWarehouse`. Si se respondiera solo mirando si el almacén está lleno,
- * una compra de algo que cabe en una pila existente se rechazaría con el almacén
- * lleno: el jugador vería "Almacén lleno" por un item que no ocupa ni una ranura
- * y perdería las nanitas.
+ * **ESTO ES UN PLAN, NO UNA EJECUCIÓN**, y por eso lo comparten `addToWarehouse()`
+ * y `cabeEnAlmacen()`: las dos preguntas —"¿cabe?" y "¿dónde va?"— tienen que dar
+ * el mismo número de ranuras. Si cada una contara por su cuenta, el diálogo
+ * ofrecería una cantidad que el motor rechazaría, que es la peor forma de fallar:
+ * el jugador cobra una idea y paga una decepción.
+ *
+ * Y la parte que hace que el tope de pila signifique algo: una pila llena no
+ * admite ni una unidad más aunque el almacén esté vacío, así que **"caber" es
+ * "cuántas ranuras nuevas necesitas"**, no "¿queda alguna libre?".
  */
-function pilaPara(item: any): any {
-  if (!isStackable(item)) return null;
+function planDeEntrada(
+  item: any, unidades: number
+): { huecos: Array<{ pila: any; libre: number }>; ranurasNuevas: number } {
+  const tope = topeDePila(item.type);
   const clave = `${item.type}::${item.name}`;
-  return state.warehouse.find((w: any) => isStackable(w) && `${w.type}::${w.name}` === clave) ?? null;
+
+  const huecos: Array<{ pila: any; libre: number }> = [];
+  let cabenEnHuecos = 0;
+  for (const w of state.warehouse as any[]) {
+    if (!isStackable(w) || `${w.type}::${w.name}` !== clave) continue;
+    const libre = topeDePila(w.type) - stackUnits(w);
+    if (libre <= 0) continue;
+    huecos.push({ pila: w, libre });
+    cabenEnHuecos += libre;
+  }
+
+  const enHuecos = Math.min(unidades, cabenEnHuecos);
+  const nuevas = unidades - enHuecos;
+
+  // `nuevas <= 0` son cero ranuras, y hace falta el `if` porque
+  // `pilasNecesarias(0, ...)` devuelve 1 por construcción: su pregunta es
+  // "cuántas pilas necesito para estas unidades" y de cero unidades la respuesta
+  // mínima razonable es una. Aquí la pregunta es la otra —"cuántas tengo que
+  // abrir"—, y de cero unidades es cero.
+  //
+  // **SIN ESTE `if`, NADA QUE SUMARA A UNA PILA PODRÍA COMPRARSE CON EL ALMACÉN
+  // LLENO**: un almacén con una pila de cajas y ni una ranura libre daría
+  // "no cabe" para una caja que se suma a la pila sin ocupar nada. Es el bug que
+  // este `if` arregla, y el que hacía que "el lote se suma a la pila, no abre
+  // otra" no funcionara con el almacén lleno.
+  const ranurasNuevas = nuevas <= 0
+    ? 0
+    : (tope === Infinity ? 1 : pilasNecesarias(nuevas, item.type));
+
+  return { huecos, ranurasNuevas };
 }
 
-/** ¿Cabe este item en el almacén, fundiéndolo en una pila si se puede? */
-function cabeEnAlmacen(item: any): boolean {
-  return !!pilaPara(item) || countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity();
+/**
+ * ¿Cabe este item en el almacén con ESTAS unidades?
+ *
+ * La respuesta no es sí/no para un item suelto: 45 cajas necesitan tres ranuras y
+ * no caben en un almacén con dos libres. Por eso delega en el mismo plan que
+ * usa `addToWarehouse()` y solo compara el número de ranuras nuevas con las
+ * que quedan.
+ */
+function cabeEnAlmacen(item: any, unidades = 1): boolean {
+  if (!isStackable(item)) {
+    return countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity();
+  }
+  // `libres` puede salir 0 o negativo si el contador y la capacidad se han
+  // desincronizado; se recorta a 0 y sigue el cálculo. **No se puede volver
+  // aquí cuando no hay ranuras libres**, porque eso descartaría justo el caso
+  // bueno: un almacén lleno donde la pila de cajas tiene hueco.
+  const libres = Math.max(0, effectiveWarehouseCapacity() - countOccupiedSlots(state.warehouse));
+  return planDeEntrada(item, unidades).ranurasNuevas <= libres;
 }
 
 /**
@@ -550,10 +689,16 @@ const NO_OCUPA_RANURA = ['companionSlot1', 'companionSlot2', 'companionSlot3'];
  * una. La pregunta no es "¿quedan ranuras?" sino "¿cabe ESTE item?". Preguntar
  * solo por el fullness rechazaba comprar una caja con el almacén lleno, aunque
  * se fuera a sumar a la pila de cajas que ya había.
+ *
+ * **Y CON TOPE DE PILA HAY QUE PREGUNTAR POR LAS `unidades`, NO POR EL ITEM.**
+ * Sin eso, comprar 45 cajas de golpe se daría por bueno con una sola ranura
+ * libre —porque la última pila de cajas tiene hueco— y el motor metería las 45
+ * en una sola pila de 65, saltándose el tope que el jugador ve en la rejilla. La
+ * pregunta "¿cuántas ranuras nuevas necesitas?" es la única que no puede mentir.
  */
-function cabeLaCompra(itemKey: string): boolean {
+function cabeLaCompra(itemKey: string, unidades = 1): boolean {
   if (NO_OCUPA_RANURA.includes(itemKey)) return true;
-  return cabeEnAlmacen(previewStoreItem(itemKey));
+  return cabeEnAlmacen(previewStoreItem(itemKey), unidades);
 }
 
 /**
@@ -1082,7 +1227,7 @@ const AFK_THRESHOLD_MS = 60000;
        * suma a la pila existente, así que fusionar antes sería deshacer lo que
        * la migración acaba de apilar.
        */
-      const fusionado = mergeStacks(state.warehouse);
+      const fusionado = partirPilas(state.warehouse);
       if (fusionado.changed) {
         state.warehouse = fusionado.items;
         warehouseNeedsMigration = true;
@@ -3020,7 +3165,7 @@ const AFK_THRESHOLD_MS = 60000;
       // Llaves y cristales AHORA SÍ ocupan ranura: son items físicos. Lo que no
       // ocupa espacio son las Ampliaciones de almacén y los Huecos de
       // compañero, porque no son objetos que se guarden: son permisos.
-      if (!cabeLaCompra(itemKey as string)) {
+      if (!cabeLaCompra(itemKey as string, n)) {
         showToast('Almacén lleno. No puedes comprar más items.', 'error');
         return false;
       }
@@ -3593,19 +3738,49 @@ const AFK_THRESHOLD_MS = 60000;
     /**
      * Cuántas unidades se pueden comprar de golpe, ahora mismo (F14).
      *
-     * Lo no apilable vale 1: la vista compra directo sin preguntar. Lo
-     * apilable vale lo que alcanza con el saldo, porque el espacio no limita
-     * cantidades —una pila es una ranura, así que si cabe una caben N— y la
-     * única pregunta binaria (¿cabe?) ya la responde `cabeLaCompra`. Si no cabe
-     * ni una, vale 0 y la vista ni pregunta: deja el camino de siempre para
-     * que el motor rechace con su mensaje.
+     * Lo no apilable vale 1: la vista compra directo sin preguntar. Lo apilable
+     * vale lo que alcanzan **dos cosas**: el saldo y el espacio.
+     *
+     * Y EL ESPACIO PUEDE LIMITAR, QUE ANTES NO PASABA. Decía "una pila es una
+     * ranura, así que si cabe una caben N", y eso era cierto mientras las
+     * pilas no tuvieran tope. Con el tope de 20 cajas, un almacén con una pila
+     * de 20 y una ranura libre admite **una** caja más, no mil. Por eso el tope
+     * se calcula con `cabeLaCompra(itemKey, n)` en crudo, en vez de comprobar
+     * solo "¿cabe una?": si se comprobara solo eso, el diálogo ofrecería 500 cajas
+     * y el motor rechazaría la compra con "Almacén lleno", que es la peor forma
+     * de fallar.
+     *
+     * Si no cabe ni una, vale 0 y la vista ni pregunta: deja el camino de
+     * siempre para que el motor rechace con su mensaje.
      */
+    getBulkUnitName: (itemKey: string): string => nombreDeUnidad(itemKey),
+
     getBulkMax: (itemKey: string): number => {
       if (unidadesCompra(itemKey, 2) !== 2) return 1;
-      if (!cabeLaCompra(itemKey)) return 0;
       const unit = precioUnitarioTienda(itemKey);
       if (unit <= 0) return 1;
-      return Math.max(1, Math.floor(state.nanites / unit));
+      const porDinero = Math.floor(state.nanites / unit);
+      if (porDinero < 1 || !cabeLaCompra(itemKey, 1)) return 0;
+
+      // El mayor n tal que n cabe, y la respuesta NO es lineal en las unidades:
+      // con el tope de 20 cajas, un almacén con una pila de 20 admite una caja
+      // más y ni una de más, aunque el saldo sea de un millón. Por eso no vale
+      // una cuenta cerrada.
+      //
+      // Y POR QUÉ BUSCA Y NO RECORRE. La primera versión subía de uno en uno con
+      // `while (max < porDinero && cabe(...))`, que es correcto pero **se
+      // atasca**: con el saldo que da la caja T10, `porDinero` es de millones y
+      // el bucle se comía el hilo del navegador en una tienda que se acaba de
+      // abrir. La respuesta es monótona en n —más unidades nunca necesita menos
+      // ranuras—, así que un binary search da el mismo número en 20 pasos.
+      let bajo = 1;
+      let alto = porDinero;
+      while (bajo < alto) {
+        const medio = Math.ceil((bajo + alto) / 2);
+        if (cabeLaCompra(itemKey, medio)) bajo = medio;
+        else alto = medio - 1;
+      }
+      return bajo;
     },
 
     getCollectorValue: (itemId: string) => {

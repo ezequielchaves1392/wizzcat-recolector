@@ -56,28 +56,43 @@ const CAJA_EXCLUSIVA: CrateType = 9;
  */
 function botinDe(c: CrateType, n = 4000): any[] {
   const tabla = CRATE_LOOT[c];
-  const total = tabla.reduce((s, e) => s + e.weight, 0);
+  const pesos = tablaDePesos(c);
+  const total = pesos.reduce((s, w) => s + w, 0);
   const salida: any[] = [];
   for (let i = 0; i < n; i++) {
     let r = Math.random() * total;
-    for (const e of tabla) {
-      r -= e.weight;
-      if (r < 0) { salida.push(e.build({ ownedCosmetics: [] })); break; }
+    for (let j = 0; j < tabla.length; j++) {
+      r -= pesos[j];
+      if (r < 0) { salida.push(tabla[j].build({ ownedCosmetics: [] })); break; }
     }
   }
   return salida;
 }
 
-/** Cuenta cuántas veces sale una entrada concreta en `n` sorteos reales. */
+/**
+ * Cuenta cuántas veces sale una entrada concreta en `n` sorteos reales.
+ *
+ * **SORTEA CON `tablaDePesos()`, NO CON `e.weight`.** Antes sumaba los pesos de
+ * autor, y con cuatro cajas eso coincidía con lo bastante para que la
+ * comparación pasara: el salto pesaba casi lo mismo en los dos repartos. Con el
+ * reparto actual la diferencia es de más de un punto porcentual, y el banco
+ * fallaba por 1,1 puntos midiendo la tabla equivocada.
+ *
+ * Y es exactamente lo que advierte el comentario de este fichero: un banco que
+ * reimplementa el sorteo mide su propia idea de cómo se sortea. Esta función
+ * reimplementaba el sorteo con los números de autor mientras el juego usaba los
+ * definitivos, así que las dos cifras salían bien y no decían nada del juego.
+ */
 function vecesQueSale(c: CrateType, id: string, n = 20_000): number {
   const tabla = CRATE_LOOT[c];
-  const total = tabla.reduce((s, e) => s + e.weight, 0);
+  const pesos = tablaDePesos(c);
+  const total = pesos.reduce((s, w) => s + w, 0);
   let veces = 0;
   for (let i = 0; i < n; i++) {
     let r = Math.random() * total;
-    for (const e of tabla) {
-      r -= e.weight;
-      if (r < 0) { if (e.id === id) veces++; break; }
+    for (let j = 0; j < tabla.length; j++) {
+      r -= pesos[j];
+      if (r < 0) { if (tabla[j].id === id) veces++; break; }
     }
   }
   return veces;

@@ -126,17 +126,37 @@ async function main() {
       'stackCount=' + celda.item.stackCount);
   }
   {
-    // F30 · El tope de PINTADO no recorta el contador. Antes la rejilla hacía
+    // F30 · EL TOPE DE PINTADO NO RECORTA EL CONTADOR. Antes la rejilla hacía
     // `Math.min(count, tope)` y con 25 cajas pintaba 20, que es lo que el jugador
-    // reportaba como "tengo 25 y me sale 20" (R3). El tope decide el ancho del número,
-    // no su valor: el texto de la esquina es "20+".
-    const g = await boot(baseSave([crate('c1', 1, 25)]));
+    // reportaba como "tengo 25 y me sale 20" (R3).
+    //
+    // **Y AHORA EL CASO SON LAS LLAVES, PORQUE EL DE LAS CAJAS YA NO EXISTE.**
+    // Las cajas tienen tope de PILA —20 de almacenamiento—, así que 25 cajas son
+    // dos celdas de 20 y 5 y la pregunta de "25 en una celda" ya no se puede
+    // hacer. Las llaves no tienen tope de pila: 150 llaves son una celda, y el
+    // tope de 99 es solo de pintado. Es el mismo bug, en el tipo donde todavía
+    // puede ocurrir, y por eso la prueba se queda ahí en vez de desaparecer.
+    const g = await boot(baseSave([key('k1', 1, 150)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
-    check('pilas: el contador ya NO se recorta al tope (caja=20, hay 25)', celda.count === 25, 'count=' + celda.count);
-    check('pilas: y el item sigue con sus unidades reales', celda.item.stackCount === 25,
+    check('pilas: el contador ya NO se recorta al tope (tope 99, hay 150)', celda.count === 150,
+      'count=' + celda.count);
+    check('pilas: y el item sigue con sus unidades reales', celda.item.stackCount === 150,
       'stackCount=' + celda.item.stackCount);
-    check('pilas: la esquina dice "20+" y no "20"', textoDeCantidad(celda.count, 20) === '20+',
-      textoDeCantidad(celda.count, 20));
+    check('pilas: la esquina dice "99+" y no "99"', textoDeCantidad(celda.count, 99) === '99+',
+      textoDeCantidad(celda.count, 99));
+  }
+  {
+    // Y EL CONTRAPUNTO: con tope de pila, 25 cajas SÍ son dos celdas. No es que
+    // la rejilla las recorte —eso no pasa—: es que el almacén las reparte al
+    // cargar, y por eso hay dos celdas de verdad y no una que mienta.
+    const g = await boot(baseSave([crate('c1', 1, 25)]));
+    const celdas = visibleStacksFor(g, s(g), 'all', 'default');
+    check('pilas: 25 cajas son dos celdas, por el tope de pila',
+      celdas.length === 2 && celdas.map(c => c.count).sort((a, b) => b - a).join(',') === '20,5',
+      JSON.stringify(celdas.map(c => `${c.item.id}:${c.count}`)));
+    check('pilas: y ninguna dice "20+" cuando la pila está llena',
+      celdas.every(c => textoDeCantidad(c.count, 20) === String(c.count)),
+      celdas.map(c => textoDeCantidad(c.count, 20)).join(' · '));
   }
   {
     // El tope de llaves es 99, no 20. Con el tope metido en la función

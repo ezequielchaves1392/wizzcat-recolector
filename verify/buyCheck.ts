@@ -287,12 +287,95 @@ async function main() {
       'ranuras=' + ranuras(g));
   }
   {
-    // Y dos del MISMO tipo son una sola ranura, aunque sean dos entradas
-    // distintas: la fusion de `data/stacking` las junta al cargar.
+    // Y dos del MISMO tipo se funden en una sola ranura mientras quepan en el
+    // tope de pila. 30 cajas ya no caben: son dos pilas de 20 y 10, y por eso la
+    // comprobación es 2 y no 1.
+    //
+    // El tope de 20 por pila es lo que se pidió, y el motivo por el que este caso
+    // sigue teniendo contenido es que **la fusión y el tope son la misma regla
+    // vista desde dos lados**: `countOccupiedSlots()` cuenta
+    // `ceil(unidades / tope)` y `addToWarehouse()` abre la pila siguiente cuando
+    // la anterior está llena. Si uno de los dos no supiera del tope, el contador
+    // y la rejilla dirían cosas distintas.
     const g = await boot(baseSave([crate('c1', 1, 20), crate('c2', 1, 10)],
+      { nanites: 200_000, warehouseCapacity: 4 }));
+    check('capacidad: 30 cajas son dos pilas (tope de 20), no una',
+      ranuras(g) === 2, 'ranuras=' + ranuras(g));
+    check('capacidad: y el reparto es 20 + 10',
+      wh(g).filter((w: any) => w.type === 'crate')
+        .map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '20,10',
+      wh(g).map((w: any) => `${w.id}:${w.stackCount}`).join(' '));
+  }
+  {
+    // Y 21 cajas sí que son dos pilas, y la que se pasa de 20 NO se fusiona con la
+    // de 20 aunque se llamen igual. Aquí está el otro lado del tope.
+    const g = await boot(baseSave([crate('c1', 1, 21)],
+      { nanites: 200_000, warehouseCapacity: 4 }));
+    check('capacidad: 21 cajas ya son dos pilas',
+      ranuras(g) === 2 && wh(g).length === 2,
+      `ranuras=${ranuras(g)} items=${wh(g).length} unidades=${(find(g, 'c1')?.stackCount ?? 0)}`);
+    check('capacidad: y la pila grande no se come a la pequeña',
+      wh(g).length === 2
+        && wh(g).some((w: any) => w.stackCount === 20)
+        && wh(g).some((w: any) => w.stackCount === 1),
+      JSON.stringify(wh(g).map((w: any) => `${w.id}:${w.stackCount}`)));
+  }
+  {
+    // Las llaves NO tienen tope: son moneda. 150 llaves siguen siendo una ranura,
+    // y es justo lo contrario de las cajas a propósito.
+    const g = await boot(baseSave([key('k1', 1, 150)],
       { nanites: 200_000, warehouseCapacity: 2 }));
-    check('capacidad: dos cajas del mismo tipo se funden en una ranura', ranuras(g) === 1,
-      'ranuras=' + ranuras(g));
+    check('capacidad: 150 llaves siguen siendo una sola ranura',
+      ranuras(g) === 1 && (find(g, 'k1')?.stackCount ?? 0) === 150,
+      `ranuras=${ranuras(g)} unidades=${find(g, 'k1')?.stackCount}`);
+  }
+  {
+    // =====================================================================
+    //  LA CAJA SE COMPRA EN LOTE, COMO LAS LLAVES
+    // =====================================================================
+    //
+    // **ESTO ESTABA ROTO Y NO LANZABA NINGÚN ERROR.** La lista de "qué se compra
+    // en lote" decía `itemKey.endsWith('Crate')`, que era el nombre de la carta
+    // antes de F31. Con una caja por tier la carta se llama `crateT1`, así que la
+    // condición dejó de cumplirse: el diálogo no pintaba cantidad, `getBulkMax`
+    // devolvía 1, y comprar cinco cajas eran cinco viajes a la tienda. Un `if`
+    // que ya no se cumple es el peor sitio para un cambio de nombre.
+    //
+    // Y el tope del lote lo manda **el espacio, no el saldo**. Con el tope de 20
+    // por pila, un almacén con una pila de 20 y una ranura libre admite una caja
+    // más, no quinientas: si `getBulkMax` solo mirara el dinero, el diálogo
+    // ofrecería 500 y el motor rechazaría con "Almacén lleno".
+    const unit = STORE_ITEMS.crateT1.cost;
+    const g = await boot(baseSave([], { nanites: unit * 100, warehouseCapacity: 30 }));
+    check('lote caja: getBulkMax dice que sí se puede en lote',
+      g.getBulkMax('crateT1') > 1, `max=${g.getBulkMax('crateT1')}`);
+    const r = g.buyStoreItem('crateT1', 25) as any;
+    const pilas = wh(g).filter((w: any) => w.type === 'crate');
+    check('lote caja: comprar 25 de golpe mete las 25',
+      !!r && pilas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0) === 25,
+      `${pilas.length} pilas: ${pilas.map((w: any) => w.stackCount).join('+')}`);
+    check('lote caja: y en 20 + 5, por el tope de pila',
+      pilas.length === 2 && pilas.map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '20,5',
+      `${pilas.map((w: any) => w.stackCount).join(',')}`);
+    check('lote caja: y cobra 25 veces el unitario',
+      nanites(g) === unit * 100 - unit * 25, `nanites=${nanites(g)}`);
+    check('lote caja: y 25 caben en dos pilas, por el tope de 20',
+      ranuras(g) === 2, `ranuras=${ranuras(g)} items=${ids(g).join(',')}`);
+    check('lote caja: el diálogo enseña el mismo total que se cobra',
+      g.getBulkCost('crateT1', 25) === unit * 25, `bulk=${g.getBulkCost('crateT1', 25)}`);
+  }
+  {
+    // Y el tope lo manda el ESPACIO cuando el almacén se queda corto, que es el
+    // caso que antes habría mostrado 500 cajas y rechazado la compra.
+    const unit = STORE_ITEMS.crateT1.cost;
+    // 4 ranuras y ya hay una pila de 20: quedan 3 pilas libres, o sea 60 cajas más.
+    const g = await boot(baseSave([crate('c1', 1, 20)], { nanites: unit * 500, warehouseCapacity: 4 }));
+    const max = g.getBulkMax('crateT1');
+    check('lote caja: con 4 ranuras y una pila llena el tope son 60 cajas, no "el dinero que hay"',
+      max === 60, `max=${max} (3 pilas libres x 20; con el dinero alcanza para 500)`);
+    const r = g.buyStoreItem('crateT1', max) as any;
+    check('lote caja: y comprar ese tope funciona de verdad',
+      r !== false && ranuras(g) === 4, `ranuras=${ranuras(g)}`);
   }
   {
     // F27 · La ampliación YA no es un permiso: el expansor es un item y ocupa

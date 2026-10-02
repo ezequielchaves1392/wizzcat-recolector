@@ -8,7 +8,7 @@
 //     lo muestra. Si se invirtiera, la ruleta estaría mintiendo sobre las probabilidades.
 
 import { TIER_SYSTEM } from '../data/tiers';
-import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, type ExpansorTier } from '../data/store';
+import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, costeDeLlave, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
 // `CRATE_KEY_TIER` y `KEY_DEFS` entran como VALOR porque la entrada de llaves de
@@ -380,89 +380,78 @@ export function tablaDePesos(crateType: CrateType): number[] {
   const guardado = PESOS_CACHE[crateType];
   if (guardado) return guardado;
   const tabla = CRATE_LOOT[crateType];
-  const rarezas = rarezaDeTabla(crateType);
-  const brutos = tabla.map(e => e.weight);
-
-  // Cada rareza se lleva una BOLSA de peso, y las bolsas son más pequeñas
-  // cuanto más rara. Así la regla es cierta POR CONSTRUCCIÓN y no porque los
-  // pesos de autor happen to estar ordenados: la rareza decide cuánto se reparte
-  // el grupo entero, y los `weight` de autor solo ordenan DENTRO de cada grupo.
-  //
-  // La razón de hacerlo así, y no con un multiplicador por entrada: una caja
-  // tiene cuatro entradas Comunes y una Mítica, y con multiplicador por entrada
-  // la suma de las Comunes siempre le ganaba a la Mítica. Eso no es un bug de
-  // números, es que se estaba comparando el número de entradas de cada rareza
-  // con su peso. Repartir por bolsa compara lo que pediste: **cuánto se reparte
-  // más rareza, menos**.
-  const porRareza: Record<string, number[]> = {};
-  rarezas.forEach((rar, i) => {
-    if (tabla[i].id === 'up') return;
-    if (tabla[i].exclusivo) return;
-    (porRareza[rar] ??= []).push(i);
-  });
-  // La rareza con la que el salto COMPITE, que es su rareza nominal acotada.
-  const rarezaDeSalto = (c: CrateType): string =>
-    Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === rangoDeCaja(c)) ?? 'Común';
-
-  // El salto entra en el reparto de su rareza como cualquier otra entrada, con su
-  // peso de autor, y por eso se queda en el 1-8% que siempre tuvo. Sacarlo de su
-  // bolsa —que es lo que se probó— lo convertía en el 80% de la caja, porque al
-  // quedarse solo en la suya se llevaba el 100% de una bolsa que era el 80% del
-  // total. Ver `saltoCheck`, que es el banco que mide esto.
-  // Una rareza con UNA SOLA entrada se llevaría el 100% de su bolsa, que es el
-  // caso real del salto de la legendaria y del Espectro Azulado. Con eso el salto
-  // bajaba al 0,2% (un premio que nunca sale) y el Espectro subía al 73% (un
-  // compañero exclusivo que deja de serlo), que es justo el daño que esta regla
-  // iba a evitar.
-  //
-  // Por eso la bolsa se reparte entre las entradas de la rareza CON SU PESO DE
-  // AUTOR en lugar de por partes iguales: con partes iguales, una entrada sola se
-  // lleva todo, y con el peso de autor sigue llevándose la bolsa (que ya es
-  // pequeña) pero competiría con las de su misma rareza si alguna vez hay más de
-  // una. El suelo de `PESO_MINIMO_POR_ENTRADA` es lo que evita que una bolsa
-  // pequeña se convierta en una probabilidad tan baja que el premio desaparece.
   const pesos = new Array<number>(tabla.length).fill(0);
-  for (const [nombre, indices] of Object.entries(porRareza)) {
-    const bolsa = pesoDeRareza(RARITY_RANK[nombre] ?? 0);
-    const suma = indices.reduce((s, i) => s + brutos[i], 0) || 1;
-    for (const i of indices) pesos[i] = (brutos[i] / suma) * bolsa;
-  }
-  const exclusivos = tabla.map((e, i) => (e.exclusivo ? i : -1)).filter(i => i >= 0);
-  if (exclusivos.length > 0) {
-    const sumaExcl = exclusivos.reduce((s, i) => s + brutos[i], 0) || 1;
-    for (const i of exclusivos) pesos[i] = (brutos[i] / sumaExcl) * BOLSA_EXCLUSIVOS;
-  }
-  // El salto se reparte dentro de la bolsa de SU rareza nominal, junto a las
-  // entradas de esa rareza y con su peso de autor, que es lo que lo deja en el
-  // 1-8% de siempre. La rareza nominal del salto es la más alta de su caja
-  // (`rarezaAcotada` la deja donde está), así que compite contra los premios
-  // buenos de esa caja, que es exactamente lo que es un peldaño de sorpresa.
+
+  // =====================================================================
+  //  EL REPARTO DE UNA CAJA, QUE YA NO ES POR BOLSAS DE RAREZA
+  // =====================================================================
   //
-  // Y NO lleva bolsa propia: con bolsa propia, su peso de autor (4-6) competía
-  // contra las bolsas ya divididas por 3,5 y se llevaba el 90% de la caja.
-  const indiceSalto = tabla.findIndex(e => e.id === 'up');
-  if (indiceSalto >= 0) {
-    const nominal = rarezaDeSalto(crateType);
-    const bolsa = pesoDeRareza(RARITY_RANK[nominal] ?? 0);
-    const companeros = porRareza[nominal] ?? [];
-    const suma = (brutos[indiceSalto] + companeros.reduce((s, i) => s + brutos[i], 0)) || 1;
-    pesos[indiceSalto] = (brutos[indiceSalto] / suma) * bolsa;
-  }
-  // Ningún premio baja del suelo: por debajo, la caja anuncia algo que no da.
-// El suelo NO se aplica al salto ni a los exclusivos: los dos pesan por su autor
-// contra la caja entera y tienen su propia prueba, y aplicarles el suelo de la
-// bolsa Común los subía a todos al mismo valor (el Espectro, que debe ser el más
-// raro de la legendaria, quedaba igual que el Avatar).
-const suelo = pesoDeRareza(0) * PESO_MINIMO_POR_ENTRADA;
-  for (let i = 0; i < pesos.length; i++) {
-    if (tabla[i].id === 'up' || tabla[i].exclusivo) continue;
-    pesos[i] = Math.max(pesos[i], suelo);
+  // **POR QUÉ CAMBIÓ, Y SE MEDIÓ ANTES.** El reparto era por bolsas: cada rareza
+  // se llevaba `1 / 3,5^rango` y dentro de la bolsa mandaban los pesos de autor.
+  // Eso funcionaba con cuatro cajas, porque cada caja tenía **varias** rarezas
+  // dentro: la común tenía nanitas, dron y llave, las tres Comunes.
+  //
+  // Con una caja por tier, **todas las entradas de la caja tienen la misma
+  // rareza**, y el modelo se rompe por los dos lados:
+  //
+  //    · Una bolsa con UNA SOLA entrada se lleva el 100% de su bolsa. Con las
+  //      nanitas solas en la bolsa Común y todo lo demás Legendario, la caja T7
+  //      daba **92,45% de nanitas** y 0,74% a cada premio de verdad. La caja
+  //      alta era un regalo de nanitas.
+  //    · Y en el otro extremo, la bolsa entera de la caja colapsaba: la T10 es
+  //      Divina, y `1 / 3,5⁵` es el 0,19%. Una bolsa que vale el 0,19% al lado de
+  //      la de los exclusivos —que vale el 2,5%— se lleva el 7% de la caja.
+  //
+  // **LO QUE QUEDA ES MÁS SIMPLE Y ES LO CORRECTO.** Dentro de una caja manda el
+  // peso de autor, y la rareza decide lo que decide de verdad cuando hay una caja
+  // por tier: **qué rareza anuncia cada premio**. El compañero de la caja T1 es
+  // Común y el de la T10 es Divino, y eso es lo que el jugador lee en la ruleta,
+  // en la carta y en el resumen. La rareza pesa entre cajas, no dentro de una.
+  //
+  // Y eso no deja a nadie sin su regla: el **salto** y los **exclusivos** tienen
+  // su parte reservada, que es exactamente la parte que no puede depender del
+  // autor. Se calculan abajo.
+  //
+  // EL REPARTO NORMAL ES POR PESO DE AUTOR, y los pesos son los que ya estaban
+  // medidos: 34/26/22/20/12/10/6/6/5 dan en la caja T7 un 24% de nanitas, un 19%
+  // de cristal, un 16% de compañero y un 4% de expandido. La caja se lee bien y
+  // el premio grande es raro sin ser inalcanzable.
+
+  // El salto se lleva una parte fija, y la parte sale de su peso de autor frente
+  // a un peso de referencia de 100. Con los valores de `upWeight()` —de 6 en la
+  // T1 a 2 en la T9— eso da del 5,7% al 1,9%: la banda de siempre, sin tocar el
+  // `pesoDeRareza`, que ya no hacía falta para sujetarlo.
+  const ref = 100;
+  const pesoSalto = tabla.some(e => e.id === 'up') ? upWeight(crateType) / (ref + upWeight(crateType)) : 0;
+
+  // Los exclusivos se reparten la bolsa de los exclusivos. Sigue siendo el 2,5%
+  // que se calibró contra el salto del banco, y ahora hay hasta DOS por caja en
+  // las altas: cada uno se queda la mitad, o sea 1,25%, que es más raro todavía.
+  const exclusivos = tabla.map((e, i) => (e.exclusivo ? i : -1)).filter(i => i >= 0);
+  const pesoExclusivo = exclusivos.length > 0 ? BOLSA_EXCLUSIVOS : 0;
+
+  const parteNormal = Math.max(0, 1 - pesoSalto - pesoExclusivo);
+  const normales = tabla.map((e, i) => (e.id !== 'up' && !e.exclusivo ? i : -1)).filter(i => i >= 0);
+  const sumaNormales = normales.reduce((s, i) => s + tabla[i].weight, 0) || 1;
+  for (const i of normales) pesos[i] = (tabla[i].weight / sumaNormales) * parteNormal;
+
+  const idxSalto = tabla.findIndex(e => e.id === 'up');
+  if (idxSalto >= 0) pesos[idxSalto] = pesoSalto;
+  for (const i of exclusivos) pesos[i] = pesoExclusivo / exclusivos.length;
+
+  // Ningún premio se queda en cero aunque la parte normal sea microscópica. El
+  // suelo es una fracción de la parte normal y no del 0,8% absoluto de antes:
+  // medido contra el total, un suelo absoluto de 0,8% aplastaba los pesos de
+  // autor de las cajas altas y las dejaba a todas iguales.
+  if (parteNormal > 0) {
+    const suelo = parteNormal / (normales.length || 1) / 8;
+    for (const i of normales) pesos[i] = Math.max(pesos[i], suelo);
+    const total = pesos.reduce((s, w) => s + w, 0) || 1;
+    for (let i = 0; i < pesos.length; i++) pesos[i] /= total;
   }
 
-  const total = pesos.reduce((s, w) => s + w, 0);
-  const salida = pesos.map(w => w / total);
-  PESOS_CACHE[crateType] = salida;
-  return salida;
+  PESOS_CACHE[crateType] = pesos;
+  return pesos;
 }
 
 /** Recolectores sobrecargadas: mismo tier, daño por encima del rango normal del tier. */
@@ -704,7 +693,7 @@ function buildKeyLoot(crateType: CrateType): LootEntry {
  * reventa salen de `EXPANSOR_TIERS`: si se escribieran a mano aquí, la tabla
  * de la tienda y la del botín se separarían en el primer rebalanceo (D4).
  */
-function buildExpansorLoot(tier: 1 | 2 | 3, rarezaDeCaja: string): LootEntry {
+function buildExpansorLoot(tier: 1 | 2 | 3, rarezaDeCaja: string, caja: CrateType): LootEntry {
   const def = EXPANSOR_TIERS.find(t => t.tier === tier) as ExpansorTier;
   const rarity = tier === 1 ? 'Raro' : tier === 2 ? 'Épico' : 'Legendario';
   return {
@@ -722,7 +711,8 @@ function buildExpansorLoot(tier: 1 | 2 | 3, rarezaDeCaja: string): LootEntry {
       item: {
         id: `crate_expansor_${Date.now()}`, name: def.name, type: 'consumable',
         details: `Amplía el almacén +${def.slots} slots`, rarity,
-        buffId: def.buffId, stackable: true, stackCount: 1, sellPrice: def.resale
+        buffId: def.buffId, stackable: true, stackCount: 1,
+        sellPrice: def.resale, sellPriceTope: topeDeVenta(caja)
       }
     })
   };
@@ -767,6 +757,7 @@ function buildUpLoot(crateType: CrateType): LootEntry {
   return {
     id: 'up',
     weight: upWeight(crateType),
+    pesoComo: CRATE_TYPES[crateType].rarity,
     // sube UN peldaño (`subirNTier(crateType, 1)`), no "lo que salga"
     build: () => subirNTier(crateType, 1)
   };
@@ -803,9 +794,10 @@ function upWeight(tier: number): number {
  * tabla que la cinta puede pintar.
  */
 export function probabilidadDeSalto(crateType: CrateType): number {
+  const pesos = tablaDePesos(crateType);
   const tabla = CRATE_LOOT[crateType];
-  const total = tabla.reduce((s, e) => s + e.weight, 0);
-  return upWeight(crateType) / total;
+  const total = pesos.reduce((s, w) => s + w, 0);
+  return (pesos[tabla.findIndex(e => e.id === 'up')] ?? 0) / total;
 }
 
 /** Tirar el salto a mano. Solo para bancos; el juego usa la entrada de la tabla. */
@@ -853,6 +845,13 @@ function subirNTier(crateType: CrateType, pasos: number): any {
   // Mitad y mitad, y el lado se tira con `Math.random`. Un compañero y un
   // recolector valen cosas distintas (la companion da ingreso, el recolector daño)
   // y alternar hace que el salto no valga siempre lo mismo.
+  //
+  // **Y EL SALTO TAMBIEN LLEVA TOPE DE REVENTA.** Es el premio más caro de la
+  // caja —un recolector sobrecargado de un tier por encima— y se mide como tal.
+  // Medido sin tope, el salto de la caja T8 daba un sobrecargado T9 que se
+  // vendía por 225.960 con un par caja+llave de 44.288: ×5,1 de imprimir. Con el
+  // tope, el salto sigue siendo el premio mayor de la caja y no rompe el juego.
+  const tope = topeDeVenta(crateType);
   if (Math.random() < 0.5) {
     const t = TIER_SYSTEM.ranges[tier];
     const p = rand(t[0], t[1]);
@@ -867,13 +866,14 @@ function subirNTier(crateType: CrateType, pasos: number): any {
         name: nombre, type: 'companion', details: `Recolección por segundo: +${p}/s`,
         rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
         companionType: 'passive', power: p,
-        sellPrice: Math.floor(p * 62)
+        sellPrice: Math.floor(p * 62), sellPriceTope: tope
       },
       up: true
     };
   }
 
   const w = makeOverclockCollector(tier);
+  w.item.sellPriceTope = tope;
   return {
     kind: 'collector', amount: 1, name: w.name, label: w.name,
     details: w.details, rarity: w.rarity, icon: 'collector', tier,
@@ -907,6 +907,35 @@ const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
 /** El expansor que suelta una caja: los tres primeros dan los tres tipos. */
 function expansorDeCaja(tier: number): 1 | 2 | 3 {
   return (Math.min(3, tier) as 1 | 2 | 3);
+}
+
+/**
+ * EL TOPE DE REVENTA DE TODO LO QUE SALGA DE UNA CAJA.
+ *
+ * El jugador compró una caja y una llave, y lo que sale no puede valer más que
+ * eso: si valiera más, comprar cajas y abrirlas sería un negocio con beneficio
+ * y el juego dejaría de ser un juego.
+ *
+ * **MEDIDO ANTES DE PONERLO, Y ERA GRAVE.** El recolector sobrecargado —que sale
+ * en el 15% de las cajas desde la T3— se valoraba por rareza y potencial
+ * (Sobrecargado ×2,4, potencial 5 ×2,8) y se vendía por 457.800 en la caja T10,
+ * con un par caja+llave de 145.388. **×3,15 de imprimir.** Y no era un caso
+ * raro: del T3 al T10 el recolector sobraba entre ×1,25 y ×3,15.
+ *
+ * **POR QUÉ UN TOPE Y NO BAJAR LA VALORACIÓN.** La valoración dinámica es correcta
+ * para lo que el jugador ha forjado durante horas, y bajarla para arreglar un
+ * problema del botín de las cajas rompería la forja, que es el sistema donde
+ * esa valoración se gana. El tope va en el item, que es donde está el problema:
+ * un premio de caja no tiene precio de lista, porque no se compra: sale de un cofre.
+ *
+ * **Y ES EXACTAMENTE EL PAR, NO MENOS.** Si el tope fuera más bajo, la caja sería
+ * siempre una pérdida y el jugador sentiría que abrir es tirar el dinero; si
+ * fuera más alto, volvería el bucle. Con el tope en el par, el premio mayor de la
+ * caja **no pierde y no gana**, y todo lo demás sí pierde: que es la forma
+ * honesta de que una caja sea una decisión y no una inversión.
+ */
+function topeDeVenta(tier: number): number {
+  return costeDeCaja(tier) + costeDeLlave(tier);
 }
 
 /**
@@ -946,14 +975,50 @@ function expansorDeCaja(tier: number): 1 | 2 | 3 {
  */
 function botinDeCaja(tier: CrateType): LootEntry[] {
   const rareza = CRATE_TYPES[tier].rarity;
+
+  // =====================================================================
+  //  POR QUÉ TODAS LAS ENTRADAS DE UNA CAJA COMPITEN EN LA MISMA BOLSA
+  // =====================================================================
+  //
+  // **MEDIDO, Y ERA UN BUG GRAVE DE F31.** `tablaDePesos()` reparte por bolsas de
+  // rareza, y **una bolsa con una sola entrada se lleva el 100% de su bolsa**. Con
+  // las cuatro cajas de antes, la común tenía tres entradas Comunes —nanitas,
+  // dron y llave— y la bolsa se repartía entre ellas. Con la tabla generada, la
+  // caja T7 tenía **una sola entrada Común, las nanitas**, y todo lo demás era
+  // Legendario:
+  //
+  //     nanitas  92,45%
+  //     cristales, compañero, recolector, llave, caja siguiente…  0,74% cada una
+  //
+  // Es decir, la caja alta **era un regalo de nanitas** con algúnpremio de vez en
+  // cuando. Y no lo detectaba ningún banco: `saltoCheck` mide el salto y los
+  // exclusivos, y el salto seguía dando el 1-8% porque tenía bolsa propia.
+  //
+  // LA REGLA QUE QUEDA: **la rareza pesa la caja, y dentro de la caja deciden los
+  // pesos de autor.** La escalera de rareza sigue haciendo trabajo en tres sitios
+  // que el jugador ve —el salto tiene su propia bolsa, los exclusivos tienen la
+  // suya, y la rareza que anuncia cada premio sube con el tier de la caja— pero
+  // ya no reparte el botín de una misma caja.
+  //
+  // El reparto que sale es el de los pesos de autor, que están medidos y suman lo
+  // que tienen que sumar: 34/26/22/20/12/10/6/6/5 dan, en la T1, un 28% de
+  // nanitas y un 4% de cosméticos, y en la T7 un 23% y un 4%. La caja es legible
+  // y el premio grande es raro sin ser inalcanzable.
+  //
+  // Y `saltoCheck` mide ahora la escalera **entre cajas**, que es donde la rareza
+  // decide de verdad: el compañero de la T1 es Común y el de la T10 es Divino.
   const esUltima = tier >= MAX_CRATE_TIER;
+  // El tope de reventa de esta caja. Se aplica a TODO lo que salga y se pueda
+  // vender, en un solo sitio, para que no dependa de acordarse de ponerlo en cada
+  // entrada: un premio nuevo nace topado sin tener que pensarlo.
+  const tope = topeDeVenta(tier);
   const tabla: LootEntry[] = [];
 
   // Las nanitas NO tienen cantidad por tier: `resolveLootAmount` la multiplica
   // por el precio de la caja, así que la caja vale lo que vale y esto es un
   // número fijo. Un solo factor —el precio— en vez de dos que se contradigan.
   tabla.push({
-    id: 'nanites', weight: 34,
+    id: 'nanites', weight: 34, pesoComo: rareza,
     build: () => { const a = rand(250, 400); return { kind: 'nanites', amount: a, name: 'Nanitas', label: `+${a} Nanitas`, details: 'Materia prima básica', rarity: 'Común', icon: 'bolt' }; }
   });
 
@@ -990,7 +1055,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
           id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           name: nombre, type: 'companion', details: `Recolección por segundo: +${p}/s`,
           rarity: rareza, tier, companionType: 'passive', power: p,
-          sellPrice: Math.floor(p * 62)
+          sellPrice: Math.floor(p * 62), sellPriceTope: tope
         }
       };
     }
@@ -1005,6 +1070,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
       id: 'collector', weight: 20,
       build: () => {
         const w = makeOverclockCollector(tier);
+        w.item.sellPriceTope = tope;
         return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier, item: w.item };
       }
     });
@@ -1029,7 +1095,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
           item: {
             id: `crate_${tier + 1}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             name: def.name, type: 'crate', details: def.details, rarity: def.rarity,
-            tier: 0, sellPrice: Math.floor(costeDeCaja(tier + 1) / 4),
+            tier: 0, sellPrice: Math.floor(costeDeCaja(tier + 1) / 4), sellPriceTope: tope,
             stackable: true, stackCount: 1
           }
         };
@@ -1045,7 +1111,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
   // El expansor. Sale de `EXPANSOR_TIERS` y el tipo decide la caja: la T1 da el
   // expansor T1, la T2 el T2, y de la T3 en adelante el T3, que es el único que
   // llega al tope de 600 y por eso es el que tiene que venir de las cajas altas.
-  tabla.push(buildExpansorLoot(expansorDeCaja(tier), rareza));
+  tabla.push(buildExpansorLoot(expansorDeCaja(tier), rareza, tier));
 
   if (tier >= 8) {
     tabla.push({
@@ -1063,7 +1129,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
         return {
           kind: 'consumable', amount: 1, name: def.name, label: def.name, details: def.details,
           rarity: def.rarity, icon: 'flask',
-          item: { id: `crate_nano_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: 1, sellPrice: 55000 }
+          item: { id: `crate_nano_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: 1, sellPrice: 55000, sellPriceTope: tope }
         };
       }
     });
@@ -1079,7 +1145,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
           kind: 'consumable', amount: a, name: def.name,
           label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: def.details,
           rarity: def.rarity, icon: 'flask',
-          item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: a, sellPrice: 11250 }
+          item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: a, sellPrice: 11250, sellPriceTope: tope }
         };
       }
     });
@@ -1092,6 +1158,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
       id: `exclusivo_${idx}`, weight: 3, exclusivo: true,
       build: () => {
         const c = makeCrateOnlyCompanion(comp);
+        (c.item as any).sellPriceTope = tope;
         return { kind: 'companion', amount: 1, name: c.companion.name, label: c.companion.name, details: c.item.details, rarity: c.companion.rarity, icon: comp.icon, item: c.item, exclusive: true };
       }
     });
@@ -1170,8 +1237,36 @@ export function resolveLootAmount(crateType: CrateType, entry: Omit<CrateReward,
   const base: CrateReward = { ...entry, exclusive: entry.exclusive ?? false };
 
   if (base.kind === 'nanites') {
-    const value = Math.round(base.amount * CRATE_META[crateType].cost / 12);
-    return { ...base, amount: value, label: `+${value} Nanitas` };
+    // =====================================================================
+    //  LAS NANITAS DE UNA CAJA SON UN FRACCIÓN DEL PAR, Y SIEMPOR MENOR
+    // =====================================================================
+    //
+    // **ESTO ERA LA MÁQUINA DE IMPRIMIR, Y LLEVABA DESDE EL PRIMER DÍA.**
+    //
+    // La fórmula era `amount × costeDeCaja / 12`, con `amount` en 250-400. Eso da
+    // entre **21 y 33 veces el precio de la caja**: de la caja T1, que cuesta 450,
+    // salían 9.375-15.000 nanitas. Y como la caja T1 cuesta 675 con su llave, el
+    // jugador cobraba **×14-22 por abrir**. Comprar cajas y abrirlas era mejor que
+    // jugar, y el juego se rompía solo sin que nadie tocara nada más.
+    //
+    // No era un efecto del precio de F31: en el commit que metió la ruleta las
+    // cajas costaban 400/1200/4500/18000 y el multiplicador era el mismo. La
+    // cuenta estaba mal desde que se escribió, y ningún banco la miraba porque
+    // `medidaVenta` medía compañeros y recolectores, no la.nanita.
+    //
+    // LA REGLA QUE QUEDA: **el premio de nanitas es del 25% al 40% del par.** El
+    // número de autor, 250-400, se lee como tanto por mil del par, así que la caja
+    // paga una fracción de lo que cuesta y nunca llega a devolverlo. Sigue
+    // escalando con el tier —una caja T10 da mucho más que una T1—, que es lo
+    // que hace que subir de caja siga siendo la decisión buena.
+    //
+    // Y el `Math.min` de debajo no hace falta para que no se imprima: está porque
+    // una cifra que no puede superarse por construcción es mejor que una que se
+    // comprueba después, y porque el rango de autor puede cambiar sin que nadie
+    // tenga que acordarse de este comentario.
+    const par = topeDeVenta(crateType);
+    const final = Math.max(1, Math.min(Math.round((base.amount / 1000) * par), par));
+    return { ...base, amount: final, label: `+${formatNumber(final)} Nanitas` };
   }
   if (base.kind === 'crystals') {
     const value = Math.round(base.amount * (1 + RARITY_RANK[base.rarity] * 0.25));

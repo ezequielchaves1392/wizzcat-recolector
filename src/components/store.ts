@@ -527,9 +527,11 @@ function comprarFlujo(game: any, itemKey: string, container: HTMLElement, onBack
     return;
   }
   const label = (STORE_ITEMS as Record<string, any>)[itemKey]?.label ?? itemKey;
-  const unitName = itemKey.startsWith('keyT') ? 'llave'
-    : itemKey === 'upgradeCrystal' ? 'cristal'
-    : itemKey.endsWith('Crate') ? 'caja' : 'unidad';
+  // El sustantivo lo pone el motor, que es quien sabe qué cartas se compran en
+  // lote. La vista tenía su propia copia de esa lista —con el mismo
+  // `endsWith('Crate')` que ya había fallado una vez en el motor— y con la caja
+  // de F31 pasó a decir "elige cuántas **unidad**".
+  const unitName = game.getBulkUnitName?.(itemKey) ?? 'unidad';
   showConfirmModal(
     `Te alcanza para ${max}. Elige cuántas comprar.`,
     (units) => {

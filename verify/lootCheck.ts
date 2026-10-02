@@ -87,8 +87,16 @@ async function main() {
         }
         // `label` es el otro sitio donde se escribe la cifra, y la usa el
         // almacén. Si divergiera de la casilla, el jugador vería dos números.
-        if (!premio.label.includes(String(pagado))) {
-          fallos.push(`${caja}: la etiqueta "${premio.label}" no dice ${pagado}`);
+        //
+        // **SE COMPARA CONTRA LA MISMA CADENA QUE LA CASILLA, NO CONTRA EL
+        // NÚMERO CRUDE.** La etiqueta de las nanitas pasó a usar `formatNumber`
+        // —"+1.49 K Nanitas"— cuando el premio se reescaló, y la prueba pedía el
+        // número entero. Las dos cosas que esta comprobación quiere son "la
+        // casilla dice lo que se cobra" y "la etiqueta dice lo mismo que la
+        // casilla", y comparar contra `esperado` dice las dos sin depender de
+        // qué formato decida cada etiqueta.
+        if (!premio.label.includes(esperado)) {
+          fallos.push(`${caja}: la etiqueta "${premio.label}" no dice ${esperado}`);
         }
         if (fallos.length > 4) break;
       }
