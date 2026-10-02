@@ -157,7 +157,13 @@ const COSMETIC_ICON: Record<string, string> = {
 export function makeOverclockCollector(tier: number): { item: any; name: string; rarity: string; details: string } {
   const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
   const top = range[1];
-  // +25% sobre el máximo del tier: claramente mejor que su versión de tienda
+  // +25% sobre el máximo del tier: claramente mejor que su versión de tienda.
+  //
+  // F33 · Lleva `potential: 5`, o sea que ES un item perfecto, y encima el 25% de
+  // la sobrecarga. Es la excepción consciente a "el potencial decide el daño": por
+  // eso se llama Sobrecargado y es el premio mayor de la caja. Lo que NO puede
+  // pasar es que se quede sin potencial, porque entonces al meterlo en la forja
+  // se leería como un 3 y perdería tres quintos de su valor al promediar.
   const damage = Math.round(top * 1.25);
   const names = TIER_SYSTEM.collectorNames[tier as keyof typeof TIER_SYSTEM.collectorNames] || ['Blaster Láser'];
   const name = names[Math.floor(Math.random() * names.length)];
@@ -177,6 +183,7 @@ export function makeOverclockCollector(tier: number): { item: any; name: string;
       tier,
       level: 0,
       damage,
+      potential: 5,
       overclock: true,
       sellPrice: Math.round(CRATE_META.legendary.cost * 0.4)
     }

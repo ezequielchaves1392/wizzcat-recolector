@@ -143,6 +143,82 @@ export function collectorUpgradeCost(level: number): number {
 // Probabilidad de éxito
 // --------------------------------------------------------------------------
 
+/**
+ * El potencial es la escala 1..5 de un item, y **define su daño**: dentro del
+ * rango de su tier, 1 pega en el mínimo y 5 pega en el máximo. 5 es perfección
+ * del 100%, y da exactamente el tope, sin redondeos que lo dejen un pelo por
+ * debajo.
+ *
+ * Antes el daño no salía de aquí: el forjado usaba el PUNTO MEDIO del rango y la
+ * tienda tiraba un número suelto. Eso es lo que hacía que el mejor item forjado
+ * quedara por debajo de uno de tienda con suerte. Ahora los dos caminos salen de
+ * `danioDeRango`, y por eso el potencial y el daño no pueden separarse.
+ */
+export function danioDeRango(tier: number, potential: number): number {
+  const r = rangoDePoder(Math.max(1, tier));
+  const p = Math.max(1, Math.min(5, Math.round(potential) || 3));
+  return Math.round(r[0] + ((p - 1) / 4) * (r[1] - r[0]));
+}
+
+/**
+ * El potencial que explica el daño que un item YA tiene.
+ *
+ * Va al revés que `danioDeRango` a propósito, y es la misma regla en las dos
+ * direcciones. Se usa para deducir el potencial de los items que ya estaban
+ * guardados antes de que existiera el campo.
+ */
+export function potencialDeDanio(item: CollectorItem): number {
+  const r = rangoDePoder(Math.max(1, item.tier || 1));
+  const span = r[1] - r[0];
+  if (span <= 0) return 3;
+  const pos = ((item.damage ?? r[0]) - r[0]) / span;
+  return Math.max(1, Math.min(5, Math.round(pos * 4) + 1));
+}
+
+/**
+ * El potencial que trae un item, deducido del daño si no lo trae.
+ *
+ * Los items viejos no tienen el campo, y ponerles un 3 a pelo cambiaría su
+ * daño al punto medio al abrir la partida —eso sí sería tocarle el progreso al
+ * jugador. Deducirlo del daño que ya tienen los deja intactos.
+ */
+export function potencialDe(item: CollectorItem): number {
+  const p = item.potential;
+  return typeof p === 'number' && p >= 1 && p <= 5 ? p : potencialDeDanio(item);
+}
+
+/**
+ * Potencial 1..5 al crear un item nuevo.
+ *
+ * Sale del dado: es la lotería de la tienda y de las cajas. **La forja no lo
+ * tira, lo promedia**, y esa es justo la diferencia entre las dos vías.
+ *
+ * El 5 es el más raro a propósito. Con un reparto plano, uno de cada cinco items
+ * sería perfecto y buscarlo dejaría de ser nada; así que el 5 sale un 10%.
+ */
+export function rollPotentialFrom(rng: () => number = Math.random): number {
+  if (rng() < 0.10) return 5; // 10% perfección
+  return 1 + Math.floor(rng() * 4); // 1..4, el 90% restante
+}
+
+/**
+ * Dónde cayó un material dentro del rango de su tier, de 0 a 1.
+ *
+ * Es la regla de F33: lo que se mezcla al forjar **no es el daño, es la
+ * posición**. Un T10 tirado en 373 y otro en 559 no valen lo mismo aunque los dos
+ * sean T10, y esa diferencia es la que hace que buscar el item perfecto sea una
+ * decisión y no una casualidad.
+ *
+ * **Se recorta a 0..1 a propósito**, y por dos motivos que no son hipotéticos:
+ * el daño de un item sube con el potencial y con los afijos, y el de uno ya
+ * sintonizado sube con el nivel. Sin el recorte, un T5 de nivel 20 daría una
+ * posición de 4 y el forjado siempre saldría en el tope — o sea, la forja
+ * premiaría haber invertido antes en vez de en elegir bien el material.
+ */
+export function posicionEnRango(item: CollectorItem): number {
+  return (potencialDeDanio(item) - 1) / 4;
+}
+
 /** Probabilidad base de éxito de una fusión de tier T → T+1. */
 export function baseSuccessChance(fromTier: number): number {
   // T1 78% → T10 33%. Del T11 en adelante pisa el suelo del 30%: la curva
@@ -232,8 +308,8 @@ export interface ForgeResult {
 }
 
 /**
- * Intenta fusionar 3 recolectores del mismo tier.
- * - Si tiene éxito: devuelve la nueva recolector, los materiales se consumen.
+ * Intenta fusionar 2 recolectores del mismo tier.
+ * - Si tiene éxito: devuelve el nuevo recolector, los 2 materiales se consumen.
  * - Si falla: se consumen los materiales, se devuelven esquirlas.
  */
 export function attemptForge(
@@ -251,21 +327,21 @@ export function attemptForge(
 ): ForgeResult {
   const maxTier = options.maxTier ?? Infinity; // Forja infinita: el precio frena solo
 
-  if (materials.length !== 3) {
-    return { success: false, error: 'Se necesitan 3 recolectores del mismo tier.' };
+  if (materials.length !== 2) {
+    return { success: false, error: 'Se necesitan 2 recolectores del mismo tier.' };
   }
-  // F24 · Tres POSICIONES no son tres MATERIALES. Sin esto, mandar el mismo id
-  // tres veces cuenta como tres: se "fusiona" un solo recolector y salen dos,
-  // ahorrándose dos materiales. El que cuenta es el motor, no la vista.
-  if (new Set(materials.map(m => m.id)).size !== 3) {
-    return { success: false, error: 'Selecciona 3 recolectores distintos.' };
+  // F24 · Dos POSICIONES no son dos MATERIALES. Sin esto, mandar el mismo id dos
+  // veces cuenta como dos: se "fusiona" un solo recolector y sale otro,
+  // ahorrándose un material. El que cuenta es el motor, no la vista.
+  if (new Set(materials.map(m => m.id)).size !== 2) {
+    return { success: false, error: 'Selecciona 2 recolectores distintos.' };
   }
   if (tier < 1 || tier >= maxTier) {
     return { success: false, error: `No se pueden forjar recolectores de tier ${tier + 1}.` };
   }
   // Todos deben ser del mismo tier
   if (materials.some(m => m.tier !== tier)) {
-    return { success: false, error: 'Las 3 recolectores deben ser del mismo tier.' };
+    return { success: false, error: 'Los 2 recolectores deben ser del mismo tier.' };
   }
 
   // Probabilidad de afijos heredados (para el cálculo de chance)
@@ -283,13 +359,24 @@ export function attemptForge(
   }
 
   // Éxito: construir el recolector
-  const potential = rollPotential(materials, options.stonesUsed);
+  // F33 · El potencial es la MEDIA de los dos materiales, y es el potencial lo
+  // que decide el daño. Antes salía de `rollPotential`, que lo tiraba de la
+  // rareza, y el daño era el punto medio del rango: un item forjado nunca podía
+  // salir en el máximo ni con materiales perfectos.
+  //
+  // Y ojo con la consecuencia, que es la que hace útil la forja: promediar
+  // NUNCA sube el resultado. Un 5 sale de un 5, y un 4 de un 4 y un 5. O sea
+  // que la perfección se consigue en la tienda o en las cajas, y la forja es la
+  // que **consolida**: te da el potencial que querías sin depender del azar.
+  const potential = Math.max(1, Math.min(5, Math.round(
+    materials.reduce((acc, m) => acc + potencialDe(m), 0) / materials.length
+  )));
   const newTier = tier + 1;
   const name = forgeCollectorName(potential, newTier);
 
-  // Herencia: daño base del siguiente tier + bonificación por afijos y potencial
-  const baseRange = rangoDePoder(newTier);
-  const baseDamage = Math.round((baseRange[0] + baseRange[1]) / 2);
+  // El daño sale del potencial y del rango del tier nuevo. Una sola función, y
+  // la misma que usa la tienda, así que potencial y daño no pueden separarse.
+  const baseDamage = danioDeRango(newTier, potential);
 
   // Cuántos afijos hereda según potencial. La nanopartícula sube el tope a 4:
   // es su segundo efecto, el que justifica pagar 90.000 por ella.
@@ -297,9 +384,11 @@ export function attemptForge(
   const affixCount = Math.min(4, baseAffixCount + (nanoUsed > 0 ? 1 : 0));
   const affixes = pickAffixes(affixCount, materials);
 
-  // Daño final: base del tier × potencial × lvl extra
-  const potentialMult = 1 + (potential - 1) * 0.12;
-  const damage = Math.round(baseDamage * potentialMult);
+  // F33 · El daño ES el del rango para este potencial. Ya no se multiplica por
+  // `potentialMult`: el potencial ya elegía DÓNDE cae el stat dentro del rango, y
+  // aplicarle encima otro 12% por estrella hacía que el mismo número mandara dos
+  // veces en el mismo daño.
+  const damage = baseDamage;
 
   const rarity = collectorRarity(newTier, potential);
 

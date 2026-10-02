@@ -405,8 +405,11 @@ async function main() {
     // La migración no sirve de nada si no se guarda.
     const g2 = await reload();
     const guardado: any = (globalThis as any).__MEM_DB__[DB];
+    // F33 · `SAVE_VERSION` es 8 ahora (el `potential` del recolector), no 7. El
+    // resto del aserto no cambia: lo que se comprueba es que la migración se
+    // ESCRIBE, que es lo que la hacia util.
     check('renombre: se guarda y no vuelve al estado viejo',
-      deType(g2, 'collector') === 1 && guardado.saveVersion === 7,
+      deType(g2, 'collector') === 1 && guardado.saveVersion === 8,
       'saveVersion=' + guardado.saveVersion);
   }
   {

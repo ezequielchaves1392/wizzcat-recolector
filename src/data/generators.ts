@@ -17,6 +17,7 @@
 // ==========================================================================
 
 import { TIER_SYSTEM } from './tiers';
+import { danioDeRango, rollPotentialFrom } from './crafting';
 
 /** El nombre que le toca, por tier, de entre los tres que hay. */
 function nombreDe(tipo: 'companion' | 'collector', tier: number, rng: () => number): string {
@@ -56,15 +57,22 @@ export function generateCompanionByTier(
 /**
  * Un recolector nuevo del tier pedido.
  *
- * El `damage` es el poder del rango, y `details` lo dice con el mismo número: si
- * el texto y el daño no coinciden, el jugador compara la ficha con lo que le da
- * y no entiende la diferencia.
+ * El daño sale de `danioDeRango(tier, potential)` y no de un dado suelto. Esa
+ * es la regla de F33: el potencial es una escala de 1 a 5 y **elige dónde cae el
+ * stat dentro del rango**, con 5 siendo perfección del 100%. Así un T10 con
+ * potencial 3 pega en el punto medio del rango y uno con potencial 5 pega en el
+ * tope, y el jugador puede comparar dos items del mismo tier por un número que
+ * significa algo.
+ *
+ * Antes el daño era un número tirado suelto y el item no guardaba el potencial,
+ * así que la diferencia entre un T10 malo y un T10 bueno no se podía ni mirar.
  */
 export function generateCollectorByTier(
   tier: number,
   rng: () => number = Math.random
-): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number } {
-  const power = poderDe(tier, rng);
+): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number; potential: number } {
+  const potential = rollPotentialFrom(rng);
+  const power = danioDeRango(tier, potential);
   return {
     id: `collector_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
     name: nombreDe('collector', tier, rng),
@@ -73,6 +81,7 @@ export function generateCollectorByTier(
     rarity: TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común',
     tier,
     level: 0,
-    damage: power
+    damage: power,
+    potential
   };
 }

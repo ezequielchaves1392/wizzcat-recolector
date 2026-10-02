@@ -13,7 +13,7 @@ export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 import { TREE_BY_ID, nodeCost } from './data/tree';
-import { attemptForge, AFFIX_BY_ID, collectorMaxLevel } from './data/crafting';
+import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, mergeStacks, stackUnits } from './data/stacking';
 
@@ -94,15 +94,28 @@ import {
 // Antes esto era un modal con botón "Aceptar" para avisos como "Almacén lleno":
 // bloqueaba la partida por un mensaje informativo. Ahora es un toast no bloqueante.
 
+// Las migraciones se anotan de más nueva a más vieja.
+//
+// La 8 es la del `potential` en los recolectores. Antes el potencial solo
+// vivía en los items forjados y lo tiraba la rareza; ahora es la escala 1..5
+// que decide el daño de TODO recolector, y los items viejos lo reciben deducido
+// de su propio daño para que ninguno cambie de estadísticas al migrar.
+//
 // La 7 es la del renombre `weapon` -> `collector`. La 6 no avisó de nada: el
 // código pasó a esperar 'collector' y las partidas que ya existían se quedaron
-// con 'weapon' guardado, que no es un tipo que reconozca nadie. Por eso esta
+// con 'weapon' guardado, que no es un tipo que reconozca nadie. Por eso esa
 // versión no sube por el formato del documento sino por un cambio de NOMBRES
 // dentro de él, y por eso las migraciones de abajo se aplican solo al cruzarla.
 //
+// La 7 es la del renombre `weapon` -> `collector`. La 6 no avisó de nada: el
+// código pasó a esperar 'collector' y las partidas que ya existían se quedaron
+// con 'weapon' guardado, que no es un tipo que reconozca nadie. Por eso esa
+// versión no sube por el formato del documento sino por un cambio de NOMBRES
+// dentro de él, y por eso su migración se aplica solo al cruzarla.
+//
 // Una partida sin `saveVersion` (o con 0) se trata como anterior a la 7: es lo
 // que quiere decir no haber pasado nunca por este código.
-const SAVE_VERSION = 7;
+const SAVE_VERSION = 8;
 
 /**
  * Tope de seguridad de celdas de hueco guardadas.
@@ -163,6 +176,28 @@ function migrateItemTypes(warehouse: any[]): boolean {
     const moderno = LEGACY_ITEM_TYPES[item.type];
     if (!moderno) continue;
     item.type = moderno;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Rellena el `potential` de los recolectores que no lo traen.
+ *
+ * Los items guardados antes de que el potencial existiera no lo tienen, y el
+ * potencial **es** lo que decide el daño. Ponerles un 3 a pelo les cambiaría el
+ * daño al punto medio del rango al abrir la partida, que es tocarle el progreso
+ * al jugador; deducirlo del daño que ya tienen los deja exactamente como
+ * estaban y solo hace que el número sea legible.
+ *
+ * Devuelve si ha tocado algo.
+ */
+function migratePotential(warehouse: any[]): boolean {
+  let changed = false;
+  for (const item of warehouse) {
+    if (item.type !== 'collector') continue;
+    if (typeof item.potential === 'number' && item.potential >= 1 && item.potential <= 5) continue;
+    item.potential = potencialDeDanio(item);
     changed = true;
   }
   return changed;
@@ -876,6 +911,15 @@ const AFK_THRESHOLD_MS = 60000;
           state.equippedCollectorId = data.equippedWeaponId;
           warehouseNeedsMigration = true;
         }
+      }
+
+      // F33 · El potencial pasa a ser la escala 1..5 que decide el daño. Se
+      // deduce del daño que cada item ya tenía, así que **ningún item cambia de
+      // estadísticas al migrar**: lo único nuevo es que el número existe y se
+      // puede comparar. Es idempotente, pero igual que la 7 se aplica al cruzar
+      // la versión, no siempre.
+      if (savedVersion < 8) {
+        if (migratePotential(state.warehouse)) warehouseNeedsMigration = true;
       }
 
       // El id equipado y la bandera `equipped` son la misma información en dos
@@ -3246,25 +3290,25 @@ const AFK_THRESHOLD_MS = 60000;
       if ((state.nodeLevels.blueprint || 0) < 1) {
         return { success: false, msg: 'Necesitas el nodo "Planos Viejos" para craftear.' };
       }
-      if (materialIds.length !== 3) {
-        return { success: false, msg: 'Selecciona exactamente 3 recolectores.' };
+      if (materialIds.length !== 2) {
+        return { success: false, msg: 'Selecciona exactamente 2 recolectores.' };
       }
       const materials = materialIds
         .map(id => state.warehouse.find((w: any) => w.id === id))
         .filter((w: any): w is any => !!w);
-      if (materials.length !== 3) return { success: false, msg: 'Material no encontrado.' };
+      if (materials.length !== 2) return { success: false, msg: 'Material no encontrado.' };
       if (materials.some((m: any) => m.type !== 'collector')) {
         return { success: false, msg: 'Solo se pueden fusionar recolectores.' };
       }
       const tier = materials[0].tier || 1;
       if (materials.some((m: any) => (m.tier || 1) !== tier)) {
-        return { success: false, msg: 'Las 3 recolectores deben ser del mismo tier.' };
+        return { success: false, msg: 'Los 2 recolectores deben ser del mismo tier.' };
       }
       // F24 · Va ANTES de gastar piedras y nanopartículas: un rechazo después
       // del cobro se llevaría los consumibles sin forjar nada. La vista ya no
       // manda duplicados, pero la API no puede fiarse de la vista (R1).
-      if (new Set(materialIds).size !== 3) {
-        return { success: false, msg: 'Selecciona 3 recolectores distintos.' };
+      if (new Set(materialIds).size !== 2) {
+        return { success: false, msg: 'Selecciona 2 recolectores distintos.' };
       }
       // El recolector equipado no se puede consumir: perderla sería un castigo doble
       // Forja infinita: sin techo de tier (el `tier >= 11` se fue). El precio
@@ -3323,11 +3367,13 @@ const AFK_THRESHOLD_MS = 60000;
       if (result.success && result.collector) {
         const w = result.collector;
         w.sellPrice = sellPrice(w as any, { sellMult: 1 + state.bonus.sellMult });
-        // Restar 2 y devolver 1 en lugar de perder las tres: la tensión se
-        // mantiene (pierdes 2 recolectores) sin que un mal rollo vacíe el almacén.
-        const keep = materials.reduce((a: any, m: any) => (a.damage < m.damage ? a : m), materials[0]);
+        // F33 · Se consumen los 2, sin devolver ninguno. Antes se devolvía 1 en
+        // el acierto, y eso rompía dos cosas a la vez: la valoración y el banco
+        // tratan los materiales como gastados, así que mostraban una densidad
+        // un 50% peor que la real (R3), y con 2 materiales el coste neto por
+        // tier caía a 1 y la forja se volvía prácticamente gratis.
         state.warehouse = state.warehouse.filter(
-          (x: any) => !materialIds.includes(x.id) || x.id === keep.id
+          (x: any) => !materialIds.includes(x.id)
         );
         state.warehouse.push(w as any);
         state.forgedCount += 1;
@@ -3343,7 +3389,7 @@ const AFK_THRESHOLD_MS = 60000;
         };
       }
 
-      // Fallo: se pierden las 3 y se ganan esquirlas
+      // Fallo: se pierden los 2 y se ganan esquirlas
       state.warehouse = state.warehouse.filter((x: any) => !materialIds.includes(x.id));
       state.shards += result.shards || 0;
       onUpdate(state, isAfk);

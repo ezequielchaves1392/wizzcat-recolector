@@ -23,7 +23,7 @@
 
 import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
-import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel } from '../src/data/crafting';
+import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe } from '../src/data/crafting';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
 import { CRATE_LOOT } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
@@ -905,11 +905,11 @@ async function main() {
   // =========================================================================
   {
     // Sin el nodo que la abre, no se fusiona.
-    const g = await boot(baseSave([collector('a', 2), collector('b', 2), collector('c', 2)]));
-    const r = g.forgeCollector(['a', 'b', 'c']);
+    const g = await boot(baseSave([collector('a', 2), collector('b', 2)]));
+    const r = g.forgeCollector(['a', 'b']);
     check('forja: sin el nodo que la abre no se fusiona',
       !r.success && /Planos Viejos/i.test(r.msg ?? ''), r.msg ?? '');
-    check('forja: y no se consume ningun material', deType(g, 'collector') === 3, ids(g).join(','));
+    check('forja: y no se consume ningun material', deType(g, 'collector') === 2, ids(g).join(','));
   }
   {
     const conBlueprint = {
@@ -917,32 +917,32 @@ async function main() {
     };
     const g = await boot(baseSave([collector('a', 2), collector('b', 2), collector('c', 2)], conBlueprint));
 
-    // Exactamente 3, ni dos ni cuatro.
-    check('forja: con 2 materiales se rechaza', !g.forgeCollector(['a', 'b']).success);
-    check('forja: con 4 materiales se rechaza',
-      !g.forgeCollector(['a', 'b', 'c', 'a']).success);
-    check('forja: un id inexistente se rechaza', !g.forgeCollector(['a', 'b', 'nope']).success);
+    // F33 · Exactamente 2: ni uno ni tres.
+    check('forja: con 1 material se rechaza', !g.forgeCollector(['a']).success);
+    check('forja: con 3 materiales se rechaza',
+      !g.forgeCollector(['a', 'b', 'c']).success);
+    check('forja: un id inexistente se rechaza', !g.forgeCollector(['a', 'nope']).success);
     check('forja: y nada se ha consumido todavia', deType(g, 'collector') === 3, ids(g).join(','));
 
     // Mezcla de tiers.
     const g2 = await boot(baseSave([
-      collector('a', 2), collector('b', 3), collector('c', 2)
+      collector('a', 2), collector('b', 3)
     ], conBlueprint));
-    check('forja: los 3 tienen que ser del mismo tier',
-      !g2.forgeCollector(['a', 'b', 'c']).success);
+    check('forja: los 2 tienen que ser del mismo tier',
+      !g2.forgeCollector(['a', 'b']).success);
 
-    // F24 · El mismo id tres veces no son tres materiales: se rechaza, no se
+    // F24 · El mismo id dos veces no son dos materiales: se rechaza, no se
     // consume nada y no se gastan piedras (el rechazo va antes del cobro).
-    const rDup = g.forgeCollector(['a', 'a', 'a']);
-    check('forja: el mismo id tres veces se rechaza',
+    const rDup = g.forgeCollector(['a', 'a']);
+    check('forja: el mismo id dos veces se rechaza',
       !rDup.success && /distintos/i.test(rDup.msg ?? ''), rDup.msg ?? '');
     check('forja: y no se consume ningún material',
       deType(g, 'collector') === 3, ids(g).join(','));
     const gP = await boot(baseSave([
-      collector('a', 2), collector('b', 2), collector('c', 2),
+      collector('a', 2), collector('b', 2),
       consumable('p1', 'calibrationStone', 2, { name: 'Piedra de Calibración' })
     ], conBlueprint));
-    const rP = gP.forgeCollector(['a', 'a', 'a'], 2, 0);
+    const rP = gP.forgeCollector(['a', 'a'], 2, 0);
     check('forja: el rechazo por duplicados no gasta piedras',
       !rP.success && find(gP, 'p1')?.stackCount === 2,
       `ok=${rP.success} piedras=${find(gP, 'p1')?.stackCount}`);
@@ -950,12 +950,58 @@ async function main() {
     // Sin techo de tier (forja infinita): el T11 se fusiona y da T12. El precio
     // (2^n materiales) es lo que frena, no un rechazo.
     const g3 = await boot(baseSave([
-      collector('a', 11), collector('b', 11), collector('c', 11)
+      collector('a', 11), collector('b', 11)
     ], conBlueprint));
-    const r12 = conRoll(0, () => g3.forgeCollector(['a', 'b', 'c']));
+    const r12 = conRoll(0, () => g3.forgeCollector(['a', 'b']));
     check('forja: el T11 se fusiona y da T12',
       r12.success === true && (r12.collector as any)?.tier === 12,
       `success=${r12.success} tier=${(r12.collector as any)?.tier} msg=${r12.msg ?? ''}`);
+
+    {
+      // F33 · El potencial es lo que decide el daño, y la forja lo promedia. Esto
+      // es lo que hace que buscar los items buenos sea una decisión: si el
+      // forjado saliera siempre en el punto medio (que era lo que pasaba), el
+      // material que metieras da igual y buscarlo era tiempo perdido.
+      const [min5, max5] = rangoDePoder(5);
+      check('potencial: 1 es el minimo del rango y 5 es el maximo exacto',
+        danioDeRango(5, 1) === Math.round(min5) && danioDeRango(5, 5) === Math.round(max5),
+        `min=${min5} max=${max5} p1=${danioDeRango(5, 1)} p5=${danioDeRango(5, 5)}`);
+      check('potencial: los cinco escalones caen dentro del rango y suben',
+        [1, 2, 3, 4, 5].every(p => danioDeRango(5, p) >= min5 && danioDeRango(5, p) <= max5) &&
+        [1, 2, 3, 4, 5].every((p, i, a) => i === 0 || danioDeRango(5, p) > danioDeRango(5, a[i - 1])),
+        [1, 2, 3, 4, 5].map(p => danioDeRango(5, p)).join(','));
+      // Dos 5 dan 5: la perfección se conserva. Y un 5 con un 1 da 3: la media,
+      // no el mejor de los dos. Si saliera el mejor, forjar seria subir de
+      // potencial con un material malo y buscar el bueno no serviría de nada.
+      const conBp = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
+      const conPot = async (p1: number, p2: number) => {
+        const g = await boot(baseSave([
+          collector('a', 4, { damage: danioDeRango(4, p1), potential: p1 }),
+          collector('b', 4, { damage: danioDeRango(4, p2), potential: p2 })
+        ], conBp));
+        return conRoll(0, () => g.forgeCollector(['a', 'b']));
+      };
+      const dosPerfectos = await conPot(5, 5);
+      check('forja: dos items perfectos dan un item perfecto',
+        dosPerfectos.success && (dosPerfectos.collector as any)?.potential === 5,
+        `pot=${(dosPerfectos.collector as any)?.potential}`);
+      const unoFlojo = await conPot(5, 1);
+      check('forja: un 5 con un 1 da de media un 3, no el mejor de los dos',
+        unoFlojo.success && (unoFlojo.collector as any)?.potential === 3,
+        `pot=${(unoFlojo.collector as any)?.potential}`);
+      check('forja: y el daño de la forjada es el del potencial que ha salido',
+        (dosPerfectos.collector as any)?.damage === danioDeRango(5, 5) &&
+        (unoFlojo.collector as any)?.damage === danioDeRango(5, 3),
+        `daño perfecto=${(dosPerfectos.collector as any)?.damage} mezcla=${(unoFlojo.collector as any)?.damage}`);
+      // Un item viejo sin el campo NO puede cambiar de daño al migrar: su
+      // potencial se deduce del daño que ya tenía. Ponerle un 3 a pelo lo
+      // habría movido al punto medio al abrir la partida.
+      const viejo = { ...collector('v', 4), damage: danioDeRango(4, 5) };
+      delete (viejo as any).potential;
+      check('potencial: un item viejo sin el campo deduce el suyo del daño',
+        potencialDe(viejo as any) === 5 && danioDeRango(4, potencialDe(viejo as any)) === viejo.damage,
+        `deducido=${potencialDe(viejo as any)} daño=${viejo.damage}`);
+    }
 
     {
       // Las fórmulas de más allá del 10 son continuas con la tabla: el T11 no es
@@ -985,9 +1031,9 @@ async function main() {
       // definida. El dado se clava para que el acierto sea determinista.
       const conBlueprint = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
       const g = await boot(baseSave([
-        collector('a', 10), collector('b', 10), collector('c', 10)
+        collector('a', 10), collector('b', 10)
       ], conBlueprint));
-      const r = conRoll(0, () => g.forgeCollector(['a', 'b', 'c']));
+      const r = conRoll(0, () => g.forgeCollector(['a', 'b']));
       const item = (r.collector as any);
       const [min11b] = rangoDePoder(11);
       check('forja: el T10 da un T11 con daño de T11, no de T1',
@@ -1011,7 +1057,7 @@ async function main() {
     ], { ...conBlueprint, equippedCollectorId: 'a' }));
     check('forja: la partida arranca con un recolector equipado',
       s(g4).equippedCollectorId === 'a', String(s(g4).equippedCollectorId));
-    const r = g4.forgeCollector(['a', 'b', 'c']);
+    const r = g4.forgeCollector(['a', 'b']);
     check('forja: el recolector equipado no se puede consumir', !r.success, r.msg ?? '');
     check('forja: y sigue en el almacen', deType(g4, 'collector') === 3, ids(g4).join(','));
     check('forja: y sigue haciendo dano', g4.getClickDamage() > 0, 'danio=' + g4.getClickDamage());
@@ -1021,10 +1067,10 @@ async function main() {
     // recolectores no puede quedar en un estado imposible.
     const conBlueprint = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
     const g = await boot(baseSave([
-      collector('a', 2, { damage: 40 }), collector('b', 2, { damage: 30 }), collector('c', 2, { damage: 50 })
+      collector('a', 2, { damage: 40 }), collector('b', 2, { damage: 50 })
     ], conBlueprint));
-    const r = g.forgeCollector(['a', 'b', 'c']);
-    check('forja: con 3 del mismo tier se ejecuta',
+    const r = g.forgeCollector(['a', 'b']);
+    check('forja: con 2 del mismo tier se ejecuta',
       typeof r.success === 'boolean', r.msg ?? '');
     // El resultado de la forja es un DADO: la probabilidad depende del tier, de
     // la suerte y de las piedras. Comprobar el estado de "despues de acertar"
@@ -1032,13 +1078,13 @@ async function main() {
     // veces, solo segun la semilla. Aqui se comprueba el estado que corresponde
     // a CADA desenlace, y de paso el de fallo, que no se comprobaba nunca.
     if (r.success) {
-      check('forja: acierto, quedan el mas fuerte y la forjada',
-        deType(g, 'collector') === 2, 'recolectores=' + deType(g, 'collector'));
+      check('forja: acierto, queda solo la forjada',
+        deType(g, 'collector') === 1, 'recolectores=' + deType(g, 'collector'));
       check('forja: acierto, el almacen no queda ni vacio ni duplicado',
-        wh(g).length === 2 && new Set(ids(g)).size === wh(g).length, ids(g).join(','));
+        wh(g).length === 1 && new Set(ids(g)).size === wh(g).length, ids(g).join(','));
       check('forja: la cuenta de forjadas sube', s(g).forgedCount >= 1, String(s(g).forgedCount));
     } else {
-      check('forja: fallo, se pierden los 3 materiales',
+      check('forja: fallo, se pierden los 2 materiales',
         deType(g, 'collector') === 0, 'recolectores=' + deType(g, 'collector'));
       check('forja: fallo, y a cambio dan esquirlas',
         s(g).shards > 0, 'esquirlas=' + s(g).shards);
@@ -1052,10 +1098,10 @@ async function main() {
   {
     // Pedir mas piedras de las que hay no puede gastarlas de mas.
     const g = await boot(baseSave([
-      collector('a', 2), collector('b', 2), collector('c', 2),
+      collector('a', 2), collector('b', 2),
       consumable('p1', 'calibrationStone', 2, { name: 'Piedra de Calibración' })
     ], { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] }));
-    const r = g.forgeCollector(['a', 'b', 'c'], 5, 0);
+    const r = g.forgeCollector(['a', 'b'], 5, 0);
     check('forja: pedir mas piedras de las que hay se rechaza', !r.success, r.msg ?? '');
     check('forja: y no se gasta ninguna', find(g, 'p1')?.stackCount === 2,
       String(find(g, 'p1')?.stackCount));
@@ -1065,21 +1111,21 @@ async function main() {
     // asi que "pedir mas de las que hay" no se puede expresar con la firma: lo que
     // se comprueba es que sin nanoparticula la fusion se rechaza.
     const g = await boot(baseSave([
-      collector('a', 2), collector('b', 2), collector('c', 2)
+      collector('a', 2), collector('b', 2)
     ], { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] }));
-    const r = g.forgeCollector(['a', 'b', 'c'], 0, 1);
+    const r = g.forgeCollector(['a', 'b'], 0, 1);
     check('forja: pedir una nanoparticula sin tenerla se rechaza', !r.success, r.msg ?? '');
-    check('forja: y no se fusiona', deType(g, 'collector') === 3, ids(g).join(','));
+    check('forja: y no se fusiona', deType(g, 'collector') === 2, ids(g).join(','));
   }
   {
     // Con la nanoparticula en el almacen, la fusion la consume. Si el item
     // desaparece al pedirse y la fusion falla, el jugador pierde la nanoparticula
     // (la mas cara de la tienda) sin obtener nada.
     const g = await boot(baseSave([
-      collector('a', 2, { damage: 40 }), collector('b', 2, { damage: 30 }), collector('c', 2, { damage: 50 }),
+      collector('a', 2, { damage: 40 }), collector('b', 2, { damage: 50 }),
       consumable('n1', 'stabilityNano', 1, { name: 'Nanopartícula de Estabilidad' })
     ], { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] }));
-    const r = g.forgeCollector(['a', 'b', 'c'], 0, 1);
+    const r = g.forgeCollector(['a', 'b'], 0, 1);
     check('forja: con la nanoparticula la fusion se ejecuta', typeof r.success === 'boolean', r.msg ?? '');
     check('forja: y la nanoparticula se gasta', !find(g, 'n1'), ids(g).join(','));
   }
@@ -1111,20 +1157,19 @@ async function main() {
       for (let intento = 0; intento < 4; intento++) {
         const g = await boot(baseSave([
           collector('a', tier, { damage: 20 * tier }),
-          collector('b', tier, { damage: 20 * tier }),
-          collector('c', tier, { damage: 20 * tier })
+          collector('b', tier, { damage: 20 * tier })
         ], conBlueprint));
-        // Los tres materiales se consumen acierte o falle la fusion, asi que su
+        // Los dos materiales se consumen acierte o falle la fusion, asi que su
         // valor se lee ANTES de forjar.
-        const entrada = [find(g, 'a'), find(g, 'b'), find(g, 'c')].map((w: any) => ({ ...w }));
-        const r = g.forgeCollector(['a', 'b', 'c']);
+        const entrada = [find(g, 'a'), find(g, 'b')].map((w: any) => ({ ...w }));
+        const r = g.forgeCollector(['a', 'b']);
         intentos++;
         if (!r.success || !r.collector) continue;
         aciertos++;
         ultimaEntrada = entrada;
         ultimaSalida = r.collector;
         peorDensidad = Math.min(peorDensidad,
-          collectorValue(r.collector) / (entrada.reduce((s, w) => s + collectorValue(w), 0) / 3));
+          collectorValue(r.collector) / (entrada.reduce((s, w) => s + collectorValue(w), 0) / 2));
         const total = collectorValue(r.collector) / entrada.reduce((s, w) => s + collectorValue(w), 0);
         if (total > 1) algunaRenta = true; else algunaPerdida = true;
       }
@@ -1146,18 +1191,28 @@ async function main() {
       'margen por tier=' + JSON.stringify(porTier));
     // Y la funcion del juego dice lo mismo que el dato, no una copia del test.
     const ref = Object.keys(entradasPorTier)[0];
-    const gRef = await boot(baseSave([collector('a', 1), collector('b', 1), collector('c', 1)], conBlueprint));
-    const rRef = gRef.forgeCollector(['a', 'b', 'c']);
+    const gRef = await boot(baseSave([collector('a', 1), collector('b', 1)], conBlueprint));
+    const rRef = gRef.forgeCollector(['a', 'b']);
     check('forja: `fusionImprovesDensity` coincide con lo medido',
       !rRef.success || fusionImprovesDensity(
-        [collector('a', 1), collector('b', 1), collector('c', 1)], rRef.collector),
+        [collector('a', 1), collector('b', 1)], rRef.collector),
       ref ?? '');
-    // Dato, no invariante: la forja Pierde valor total en los tiers bajos. Se
-    // documenta para que un rebalance futuro no lo "arregle" sin querer, porque
-    // subirlo del todo haria de fusionar la unica accion optima y el juego
-    // perderia la tension de ranuras.
-    check('forja: DATO la curva de valor total (pierde en T1-T4)',
-      algunaPerdida, `hay tiers que ganan=${algunaRenta} y tiers que pierden=${algunaPerdida}`);
+    // DATO, no invariante, y F33 lo MOVIO: antes la forja perdia valor total en
+    // los tiers bajos, y ahora gana en todos. Se documenta porque es un hecho de
+    // balance que un rebalance futuro tiene que ver antes de "arreglarlo".
+    //
+    // La causa no es el potencial, es la receta: consumir 2 en vez de 3 deja la
+    // misma salida con la mitad de la entrada, asi que el cociente sube. Los
+    // margenes por ranura pasaron de 2,5x-4,6x a 2,1x-5,8x.
+    //
+    // Y el riesgo real es el que dice el comentario viejo: si forjar es la
+    // accion que mas valor da, comprar pierde su sentido. La respuesta de F33 es
+    // que ahi no se compra: el potencial se promedia, asi que la caja y la tienda
+    // (que tiran el dado) son las que traen la perfección, y la forja solo la
+    // conserva. Mismo número, distinta decisión.
+    check('forja: DATO el valor total ahora GANA en todos los tiers',
+      algunaRenta && !algunaPerdida,
+      `ganan=${algunaRenta} pierden=${algunaPerdida} — ver el comentario de arriba`);
   }
 
   // =========================================================================

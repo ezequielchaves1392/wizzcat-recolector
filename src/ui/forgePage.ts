@@ -19,8 +19,11 @@
 //   - La ruleta es decorativa. El resultado ya está decidido en `attemptForge`
 //     antes de que la animación arranque: si la ruleta decidiera, mentiría
 //     sobre las probabilidades y el jugador lo notaría en 20 tiradas.
-//   - Se devuelve 1 de los 3 materiales en caso de éxito. Perder las tres
-//     castiga dos veces (ya perdiste la tirada) y vacía el almacén.
+//   - F33 · La receta son 2 materiales del mismo tier, y el potencial de la
+//     nueva es la MEDIA de los dos. Promediar nunca sube el resultado: un 5 sale
+//     de un 5. Así que la perfección se consigue en la tienda o en las cajas, y
+//     la forja es la que consolida — te da el potencial que querías sin depender
+//     del azar. Los 2 se consumen aciertes o falles.
 // ==========================================================================
 
 import { ic } from './icons';
@@ -143,7 +146,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
         <span class="text-[9px] font-mono text-[var(--text-muted)] hidden sm:inline">3 del mismo tier → 1 del siguiente</span>
       `)}
 
-      <div class="forge-anvil">${[0, 1, 2].map(slot).join('')}</div>
+      <div class="forge-anvil">${[0, 1].map(slot).join('')}</div>
 
       <div class="mt-3">
         <div class="flex items-center justify-between gap-2 mb-1.5">
@@ -225,11 +228,11 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
         class="w-full mt-3 rounded-xl font-['Orbitron'] font-bold text-[12px] tracking-wide cursor-pointer
                ${ready ? 'btn-primary' : 'btn-ghost opacity-40 cursor-not-allowed'}"
         style="min-height:52px">
-        ${ready ? 'FORJAR' : `FALTAN ${3 - selectedCollectors.length} MATERIALES`}
+        ${ready ? 'FORJAR' : `FALTAN ${2 - selectedCollectors.length} MATERIALES`}
       </button>
       <p class="text-[9px] text-[var(--text-muted)] text-center mt-2 leading-relaxed">
-        Éxito: creas el recolector y recuperas 1 de los 3 materiales.
-        Fallo: pierdes los 3 y ganas esquirlas.
+        El nuevo sale con el potencial promedio de los dos.
+        Los 2 se consumen, aciertes o falles.
       </p>
     </section>
 
@@ -344,8 +347,8 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
         break;
       }
       case 'pick': {
-        if (ui.selected.length >= 3) {
-          showToast('El yunque ya tiene 3 materiales. Quita uno primero.', 'info');
+        if (ui.selected.length >= 2) {
+          showToast('El yunque ya tiene 2 materiales. Quita uno primero.', 'info');
           return;
         }
         // La regla del mismo tier se filtra AQUÍ y no solo en el game loop.
@@ -355,9 +358,9 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
         const { collectors, selected } = context();
         const picked = collectors.find(w => w.id === btn.dataset.id);
         if (!picked) return;
-        // F24 · Un id por material. Sin esto, tocar el mismo tres veces llena
-        // el yunque con el mismo item en las tres casillas ("enseña 3 y metí
-        // 1") y el motor lo aceptaba, regalando dos materiales.
+        // F24 · Un id por material. Sin esto, tocar el mismo dos veces llena
+        // el yunque con el mismo item en las dos casillas ("enseña 3 y metí
+        // 1") y el motor lo aceptaba, regalando un material.
         if (selected.includes(picked.id)) {
           sfx.error();
           showToast('Ese recolector ya está en el yunque. Toca su casilla para quitarlo.', 'info');
@@ -365,7 +368,7 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
         }
         if (selected.length && picked.tier !== selected[0].tier) {
           sfx.error();
-          showToast(`Ya hay un T${selected[0].tier} en el yunque. La fusión exige 3 del mismo tier.`, 'info');
+          showToast(`Ya hay un T${selected[0].tier} en el yunque. La fusión exige 2 del mismo tier.`, 'info');
           return;
         }
         if (picked.id === game.getState().equippedCollectorId) {
@@ -432,8 +435,8 @@ function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
   const chance = successChance(tier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0);
 
   showConfirmModal(
-    `Tres recolectores de tier ${tier} se funden en una de tier ${tier + 1}. ` +
-    `Si aciertas recuperas un material; si fallas, pierdes los tres.`,
+    `Dos recolectores de tier ${tier} se funden en una de tier ${tier + 1}. ` +
+    `El potencial de la nueva es la media de los dos, y los dos se consumen.`,
     () => runForge(game, sel, ui.stones, ui.nano, redraw),
     {
       sublabel: `Probabilidad ${Math.round(chance * 100)}%`,
