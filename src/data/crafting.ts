@@ -1,5 +1,5 @@
 // ==========================================================================
-// Crafteo de recolectores · Fusión, autoría y potencial
+// Fusión, autoría y potencial · recolectores y compañeros
 //
 // Reglas de diseño que sostienen el sistema:
 //
@@ -40,14 +40,15 @@
 //     vale más en la tienda, pero rinde lo mismo en tu daño: son dos ejes
 //     separados a propósito, para que la fama no se compre con dinero.
 //
-//  6. COMPENSACIÓN POR FALLO: al fallar se pierden los tres materiales, pero
+//  6. COMPENSACIÓN POR FALLO: al fallar se pierden los dos materiales, pero
 //     se ganan esquirlas proporcionales al tier. Sin esto, una racha mala
 //     vacía el almacén y el jugador deja de intentarlo; con esto, cada fallo
 //     acerca un poco la garantía del siguiente intento.
 // ==========================================================================
 
 import type { Affix, Rarity, CollectorItem } from '../types/domain';
-import { rangoDePoder, rarezaDeTier } from './tiers';
+import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from './tiers';
+import { nombreDe } from './nombres';
 
 // --------------------------------------------------------------------------
 // Atributos
@@ -239,6 +240,42 @@ export function danioDeRango(tier: number, potential: number): number {
 export function potencialNormalizado(potential: number | undefined): number {
   const p = Math.round(Number(potential));
   return Number.isFinite(p) && p >= 1 && p <= 5 ? p : 3;
+}
+
+/**
+ * EL POTENCIAL DE UN ITEM FUSIONADO: LA MEDIA DE LOS MATERIALES.
+ *
+ * **LA USA LOS DOS, Y POR QUÉ NO ESTÁ ESCRITA DOS VECES.** El recolector y el
+ * compañero heredan su calidad de la media de sus dos materiales, y esa es la
+ * regla que hace útil la forja. Escrita en los dos sitios, un día una redondea
+ * distinto de la otra y el jugador forja un par de recolectores y se encuentra
+ * con un compañero que no se parece en nada.
+ *
+ * **CADA LLAMANTE RESUELVE SUS PROPIOS MATERIALES ANTES DE LLAMAR.** El
+ * recolector infiere el potencial del daño cuando no lo tiene guardado —hay
+ * items viejos que no lo traían—, y el compañero lo tiene en la ficha. Aquí solo
+ * entra una lista de números.
+ *
+ * **Y EL EMPATE SUBE, QUE ES LO QUE HACE ESTA FUNCIÓN Y NO OTRA.**
+ * `Math.round(4,5)` es 5 en JavaScript, así que **fusionar un 4 con un 5 puede
+ * dar un 5**. No es un descuido: es lo que hace `Math.round`, y el día que se
+ * puso nadie se paró a mirarlo. Las dos consecuencias:
+ *
+ * - Un 4 solo es material de fusión de un 5, nunca de un 5 con otro 5 —porque
+ *   eso da 5 y habrías perdido el 4 por nada.
+ * - Un compañero con potencial 4 no tiene a quién fusionarse sin perderlo.
+ *
+ * Si algún día esto se cambia a redondear hacia abajo, es **esta línea**, y las
+ * pruebas que la fijan están en `forjaCheck`. Con 5, 5 sale 5 y con 3, 3 sale 3:
+ * eso no cambia con ninguna de las dos reglas.
+ */
+export function potencialFusionado(pots: Array<number | undefined>): number {
+  if (pots.length === 0) return 3;
+  // `undefined` entra y `potencialNormalizado()` lo pone a 3, que es lo que hace
+  // con cualquier valor fuera del 1..5: un material sin potencial se funde como
+  // uno normal, y no se inventa nada.
+  const medio = pots.reduce<number>((a, p) => a + potencialNormalizado(p), 0) / pots.length;
+  return Math.max(1, Math.min(5, Math.round(medio)));
 }
 
 /**
@@ -614,6 +651,149 @@ export interface ForgeResult {
  */
 export const MATERIALES_POR_FUSION = 2;
 
+
+
+/**
+ * EL POTENCIAL DE UN COMPAÑERO: LA POSICIÓN DENTRO DEL RANGO DE SU TIER.
+ *
+ * **QUÉ SIGNIFICA, DE LA MISMA MANERA QUE EN EL RECOLECTOR.** El potencial va de
+ * 1 a 5 y dice **hasta dónde llega este item dentro de lo que su tier puede
+ * dar**: ★1 es el suelo del rango y ★5 es el techo. Dos compañeros del mismo
+ * tier se comparan con un número, que es lo que hace que buscar uno sea una
+ * decisión.
+ *
+ * **Y POR QUÉ AQUÍ NO ES UN MULTIPLICADOR, COMO EN EL RECOLECTOR.** Porque el
+ * poder del compañero **es el rango**: su carta se paga por él, y el rango del
+ * tier es lo que fija el precio. Con `danioDeRango()` —base × (1 + 0,2 × p)— el
+ * techo de cada tier se multiplicaría otra vez por el potencial, y medido eso
+ * da un compañero T10 hasta **once veces** más fuerte que el de ahora con la
+ * misma carta: el precio por punto se desploma y el T10 vuelve a ser la trampa
+ * que `balanceCheck` ya cazó una vez. Con la regla de la posición, **la
+ * esperanza del dado no cambia** (potencial 3 cae en el punto medio, que es lo
+ * que `rand(min, max)` daba de media) y lo que cambia es la **diferencia entre
+ * dos compañeros del mismo tier**, que es justo lo que el potencial debe hacer.
+ *
+ * Y el orden entre tiers sigue siendo estricto: el techo del T9 (346) es menor
+ * que el suelo del T10 (373), así que subir de tier siempre mejora, con
+ * potencial o sin él.
+ */
+export function poderDeCompanero(tier: number, potential: number): number {
+  const [min, max] = rangoDePoder(tier);
+  const p = potencialNormalizado(potential);
+  return Math.round(min + ((max - min) * (p - 1)) / 4);
+}
+
+/**
+ * Un compañero del tier pedido, con el potencial que se le diga.
+ *
+ * **ESTA ES LA QUE USA LA FORJA, Y POR QUÉ NO TIRA EL POTENCIAL.** Un compañero
+ * forjado no lo sortea: lo **hereda de la media de sus dos materiales**, igual
+ * que el recolector forjado. Si esta función lo tirara, la forja de compañeros
+ * tendría que construir el objeto a mano, y el día que se añadiese un campo al
+ * compañero —potencial, afijo, lo que sea— la forja se quedaría sin él sin que
+ * nada lo dijera.
+ *
+ * Y está junto a `poderDeCompanero` y no en `generators.ts` porque la forja vive
+ * en `crafting.ts` y lo necesita: importarlo de `generators.ts` cerraría un
+ * ciclo, porque `generators.ts` ya importa de aquí.
+ */
+export function crearCompanioDeTier(
+  tier: number,
+  potential: number,
+  rng: () => number = Math.random
+): { id: string; name: string; type: 'click'; power: number; rarity: string; tier: number; potential: number } {
+  const p = potencialNormalizado(potential);
+  return {
+    id: `comp_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
+    name: nombreDe('companion', tier, rng),
+    type: 'click',
+    power: poderDeCompanero(tier, p),
+    rarity: TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común',
+    tier,
+    potential: p
+  };
+}
+/**
+ * LO QUE LAS DOS FUSIONES TIENEN QUE COMPARECER.
+ *
+ * La forja fusiona recolectores y también compañeros. Las dos comparten cuatro
+ * reglas: cuántos materiales entran, que sean **distintos**, que sean del mismo
+ * tier y que la probabilidad y el premio del fallo sean los mismos. **Esas cuatro
+ * están aquí, en un sitio**, porque duplicadas son cuatro oportunidades de que una
+ * acepte tres materiales y la otra dos, o de que una dé esquirlas y la otra no.
+ *
+ * Lo que sí es distinto —qué se produce, de dónde sale su calidad— vive en cada
+ * función, que es donde tiene que vivir: un recolector tiene afijos y un
+ * compañero no.
+ */
+interface IntentosDeForja {
+  craftLuck: number;
+  shardBonus: number;
+  stonesUsed: number;
+  /** 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. */
+  nanoUsed?: number;
+  maxTier?: number;
+  /** El dado. Sin él ninguna de las dos reglas se puede comprobar. */
+  rng?: () => number;
+}
+
+/**
+ * Las validaciones que no dependen de qué se está forjando.
+ *
+ * Devuelve el texto del error, o `null` si todo está bien. **Va ANTES de gastar
+ * nada**, que es lo que protege al jugador: un rechazo después del cobro se
+ * llevaría piedras y nanopartículas por una fusión que no ocurrió.
+ */
+export function validaMateriales(
+  materials: Array<{ id: string; tier?: number; type?: string }>,
+  tier: number,
+  tipo: 'recolectores' | 'compañeros',
+  maxTier = Infinity
+): string | null {
+  if (materials.length !== MATERIALES_POR_FUSION) {
+    return `Se necesitan ${MATERIALES_POR_FUSION} ${tipo} del mismo tier.`;
+  }
+  // F24 · Dos POSICIONES no son dos MATERIALES. Sin esto, mandar el mismo id dos
+  // veces cuenta como dos: se "fusiona" un solo item y sale otro, ahorrándose un
+  // material. El que cuenta es el motor, no la vista.
+  if (new Set(materials.map(m => m.id)).size !== MATERIALES_POR_FUSION) {
+    return `Selecciona ${MATERIALES_POR_FUSION} ${tipo} distintos.`;
+  }
+  if (tier < 1 || tier >= maxTier) {
+    return `No se pueden forjar ${tipo} de tier ${tier + 1}.`;
+  }
+  if (materials.some(m => (m.tier ?? 1) !== tier)) {
+    return `Los ${MATERIALES_POR_FUSION} ${tipo} deben ser del mismo tier.`;
+  }
+  return null;
+}
+
+/**
+ * La tirada: la probabilidad, y el premio del fallo.
+ *
+ * Sale de aquí en las dos fusiones, así que **la probabilidad de fundir dos
+ * compañeros es exactamente la de fundir dos recolectores** con los mismos
+ * consumibles. No es una coincidencia: es que el yunque es el mismo y el
+ * escribano es el mismo.
+ */
+export function tiraDeForja(
+  tier: number,
+  materials: Array<{ affixes?: string[]; rarity?: string }>,
+  options: IntentosDeForja
+): { acierto: boolean; chance: number; shards: number } {
+  // Los compañeros no tienen afijos, así que aquí aportan cero. No es que se les
+  // dé un trato peor: es que no tienen la entrada que suma esto.
+  const afixLuck = materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0);
+  const nanoUsed = options.nanoUsed ?? 0;
+  const chance = successChance(tier, options.craftLuck, options.stonesUsed, afixLuck, nanoUsed);
+  const rng = options.rng ?? Math.random;
+  if (rng() <= chance) return { acierto: true, chance, shards: 0 };
+
+  // Fallo: esquirlas proporcionales al tier **y a la rareza de los materiales**.
+  const matBonus = materials.reduce((a, m) => a + (RARITY_WEIGHT[m.rarity as Rarity] ?? 0) * 4, 0);
+  const baseShards = 8 + tier * 6;
+  return { acierto: false, chance, shards: Math.round((baseShards + matBonus) * (1 + options.shardBonus)) };
+}
 /**
  * Intenta fusionar 2 recolectores del mismo tier.
  * - Si tiene éxito: devuelve el nuevo recolector, los 2 materiales se consumen.
@@ -623,59 +803,16 @@ export function attemptForge(
   materials: CollectorItem[],
   tier: number,
   authorName: string,
-  options: {
-    craftLuck: number;
-    shardBonus: number;
-    stonesUsed: number;
-    /** 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. */
-    nanoUsed?: number;
-    maxTier?: number;
-    /**
-     * El dado. Entra para que un banco pueda comprobar la REGLA en vez de medir
-     * si ha salido la cara: sin él, probar el potencial medio o el rango de
-     * afijos es imposible, porque cada comprobación acaba siendo una tirada.
-     *
-     * Antes eran seis `Math.random()` sueltos en la función —el acierto, el
-     * nombre, el número de afijos y los dos pasos de la mezcla— y eso convertía
-     * la forja, que es la regla más fina del juego, en lo único que no se podía
-     * comprobar. Los demases generadores ya lo tenían así.
-     */
-    rng?: () => number;
-  }
+  options: IntentosDeForja
 ): ForgeResult {
   const rng = options.rng ?? Math.random;
   const maxTier = options.maxTier ?? Infinity; // Forja infinita: el precio frena solo
 
-  if (materials.length !== MATERIALES_POR_FUSION) {
-    return { success: false, error: `Se necesitan ${MATERIALES_POR_FUSION} recolectores del mismo tier.` };
-  }
-  // F24 · Dos POSICIONES no son dos MATERIALES. Sin esto, mandar el mismo id dos
-  // veces cuenta como dos: se "fusiona" un solo recolector y sale otro,
-  // ahorrándose un material. El que cuenta es el motor, no la vista.
-  if (new Set(materials.map(m => m.id)).size !== MATERIALES_POR_FUSION) {
-    return { success: false, error: 'Selecciona 2 recolectores distintos.' };
-  }
-  if (tier < 1 || tier >= maxTier) {
-    return { success: false, error: `No se pueden forjar recolectores de tier ${tier + 1}.` };
-  }
-  // Todos deben ser del mismo tier
-  if (materials.some(m => m.tier !== tier)) {
-    return { success: false, error: 'Los 2 recolectores deben ser del mismo tier.' };
-  }
+  const error = validaMateriales(materials, tier, 'recolectores', maxTier);
+  if (error) return { success: false, error };
 
-  // Probabilidad de afijos heredados (para el cálculo de chance)
-  const affixLuck = materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0);
-  const nanoUsed = options.nanoUsed ?? 0;
-  const chance = successChance(tier, options.craftLuck, options.stonesUsed, affixLuck, nanoUsed);
-
-  const roll = rng();
-  if (roll > chance) {
-    // Fallo: esquirlas proporcionales al tier y a los materiales
-    const baseShards = 8 + tier * 6;
-    const matBonus = materials.reduce((a, m) => a + RARITY_WEIGHT[m.rarity] * 4, 0);
-    const shards = Math.round((baseShards + matBonus) * (1 + options.shardBonus));
-    return { success: false, shards, chanceUsed: chance };
-  }
+  const tira = tiraDeForja(tier, materials, options);
+  if (!tira.acierto) return { success: false, shards: tira.shards, chanceUsed: tira.chance };
 
   // Éxito: construir el recolector
   // F33 · El potencial es la MEDIA de los dos materiales, y es el potencial lo
@@ -687,9 +824,18 @@ export function attemptForge(
   // NUNCA sube el resultado. Un 5 sale de un 5, y un 4 de un 4 y un 5. O sea
   // que la perfección se consigue en la tienda o en las cajas, y la forja es la
   // que **consolida**: te da el potencial que querías sin depender del azar.
-  const potential = Math.max(1, Math.min(5, Math.round(
-    materials.reduce((acc, m) => acc + potencialDe(m), 0) / materials.length
-  )));
+
+  // Éxito: construir el recolector
+  // F33 · El potencial es la MEDIA de los dos materiales, y es el potencial lo
+  // que decide el daño. Antes salía de `rollPotential`, que lo tiraba de la
+  // rareza, y el daño era el punto medio del rango: un item forjado nunca podía
+  // salir en el máximo ni con materiales perfectos.
+  //
+  // Y ojo con la consecuencia, que es la que hace útil la forja: promediar
+  // NUNCA sube el resultado. Un 5 sale de un 5, y un 4 de un 4 y un 5. O sea
+  // que la perfección se consigue en la tienda o en las cajas, y la forja es la
+  // que **consolida**: te da el potencial que querías sin depender del azar.
+  const potential = potencialFusionado(materials.map((m) => potencialDe(m)));
   const newTier = tier + 1;
   const name = forgeCollectorName(potential, newTier, rng);
 
@@ -699,10 +845,10 @@ export function attemptForge(
 
   // La rareza va ANTES que los afijos, porque es lo que decide cuántos lleva: la
   // rareza da el mínimo y el tope es 6 para todos. Antes el número venía del
-  // potencial y la rareza no ZEJohinting nada, así que un Divino podía salir con
+  // potencial y la rareza no influía en nada, así que un Divino podía salir con
   // un afijo y un Común con tres.
   const rarity = collectorRarity(newTier, potential);
-  const affixes = pickAffixes(materials, rarity, nanoUsed > 0, rng);
+  const affixes = pickAffixes(materials, rarity, (options.nanoUsed ?? 0) > 0, rng);
 
   const collector: CollectorItem = {
     id: `forged_${Date.now()}_${rng().toString(36).substring(2, 8)}`,
@@ -725,7 +871,59 @@ export function attemptForge(
     sellPrice: 0 // se calcula dinámicamente
   };
 
-  return { success: true, collector, chanceUsed: chance };
+  return { success: true, collector, chanceUsed: tira.chance };
+}
+
+/**
+ * Intenta fusionar 2 compañeros del mismo tier.
+ *
+ * **LO QUE PRODUCE Y DE DÓNDE SALE SU CALIDAD, Y POR QUÉ NO ES IGUAL AL
+ * RECOLECTOR.** El recolector forjado hereda **afijos** de la rareza de sus
+ * materiales. El compañero no tiene afijos: su eje de calidad es el
+ * **potencial**, y sale de la media de los dos, con la misma regla que el del
+ * recolector —**promediar nunca sube**: un 5 sale de un 5, y un 4 de un 4 y un 5.
+ *
+ * **QUÉ HACE LA NANOPARTÍCULA AQUÍ, Y POR QUÉ NO ES LO MISMO QUE EN EL
+ * RECOLECTOR.** La nanopartícula "garantiza un afijo extra", y un compañero no
+ * tiene afijos, así que copiarla tal cual convertiría un consumible de 90 000
+ * nanitas en **el mejor objeto del juego que no hace absolutamente nada**. En vez
+ * de dejarlo ahí, su equivalente para un compañero es su propio eje de calidad:
+ * **+1 al potencial**, con el tope de siempre.
+ *
+ * Y es la **única** vía por la que esta fusión puede superar la media. Sin
+ * nanopartícula, promediar no sube y punto: la forja de compañeros es igual de
+ * ciega que la de recolectores, y el jugador tiene que decidir conscientemente si
+ * quiere pagar esa excepción.
+ */
+export function attemptForgeCompanion(
+  materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number }>,
+  tier: number,
+  options: IntentosDeForja
+): { success: boolean; companion?: any; error?: string; shards?: number; chanceUsed?: number } {
+  const rng = options.rng ?? Math.random;
+  const maxTier = options.maxTier ?? Infinity;
+
+  const error = validaMateriales(materials, tier, 'compañeros', maxTier);
+  if (error) return { success: false, error };
+
+  const tira = tiraDeForja(tier, materials, options);
+  if (!tira.acierto) return { success: false, shards: tira.shards, chanceUsed: tira.chance };
+
+  const newTier = tier + 1;
+
+  // **LA MEDIA, Y LUEGO LA NANOPARTÍCULA.** En ese orden y no al revés: si el +1
+  // entrara antes de promediar, dos 5 y una nanopartícula darían un 6, que es un
+  // potencial que ningún otro camino del juego puede dar. Promediar primero
+  // mantiene la promesa de que la forja **consolida** y no **crea**.
+  // **LA MEDIA PRIMERO Y EL +1 ENCIMA.** Al revés —sumar antes de promediar— el
+  // +1 se colaba dentro del `potencialNormalizado()`, y `potencialNormalizado(6)`
+  // no es un 6: es un 3, que es lo que devuelve fuera del 1..5. Dos 5 con
+  // nanopartícula salían un **3**, peor que no gastarla, sin decir nada.
+  const base = potencialFusionado(materials.map((m) => m.potential));
+  const conNano = (options.nanoUsed ?? 0) > 0 ? 1 : 0;
+  const potential = Math.max(1, Math.min(5, base + conNano));
+
+  return { success: true, companion: crearCompanioDeTier(newTier, potential, rng), chanceUsed: tira.chance };
 }
 
 function collectorRarity(tier: number, potential: number): Rarity {

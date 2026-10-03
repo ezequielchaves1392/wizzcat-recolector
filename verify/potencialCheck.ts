@@ -28,9 +28,9 @@ import {
   CRATE_LOOT, tablaDePesos
 } from '../src/components/crateLoot';
 import { CRATE_TIERS } from '../src/data/store';
-import { poderDeCompanero, generateCompanionByTier } from '../src/data/generators';
+import { generateCompanionByTier } from '../src/data/generators';
 import { rangoDePoder } from '../src/data/tiers';
-import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX } from '../src/data/crafting';
+import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero } from '../src/data/crafting';
 
 
 /** ¿Coincide el ★3 con el punto medio del rango en los diez tiers? */

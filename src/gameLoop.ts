@@ -14,9 +14,10 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, poderDeCompanero } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias } from './data/stacking';
+import { MATERIALES_POR_FUSION } from './data/crafting';
 
 // ==========================================================================
 //  LAS TABLAS Y LAS FUNCIONES PURAS ESTÁN FUERA. AQUÍ ESTÁ POR QUÉ.
@@ -43,7 +44,7 @@ import {
   expansorPorBuff, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
-import { generateCompanionByTier, generateCollectorByTier, poderDeCompanero } from './data/generators';
+import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
 import { collectorUpgradeCost } from './data/crafting';
 
 // Se re-exportan las que el resto del juego ya importaba de aquí, con el mismo
@@ -1960,6 +1961,140 @@ const AFK_THRESHOLD_MS = 60000;
     return state.maxCompanionSlots + state.bonus.companionSlots;
   }
 
+  /**
+   * LOS MATERIALES DE UNA FUSIÓN, Y POR QUÉ ESTÁN AQUÍ Y NO EN LA FUNCIÓN.
+   *
+   * Recolectores y compañeros se fusionan con las mismas cuatro reglas: dos
+   * materiales, **distintos**, del mismo tipo y del mismo tier, y ninguno
+   * equipado. Escribidas dos veces son dos ocasiones de que una acepte tres
+   * materiales y la otra dos, o de que una deje consumir el recolector equipado y
+   * la otra no.
+   *
+   * Va en el cierre de `createGameLoop` y no dentro del objeto que se devuelve,
+   * porque **no es parte de la API**: es una cuenta interna que el motor hace
+   * antes de gastar nada. Si viviera en el objeto, la vista podría llamarla y
+   * saltarse el camino del cobro.
+   *
+   * **Y VA ANTES DE COBRAR NADA.** Eso no es un detalle de orden, es lo que
+   * protege al jugador: un rechazo después del cobro se lleva piedras y
+   * nanopartículas por una fusión que no ocurrió. La vista ya no manda
+   * duplicados, pero la API no puede fiarse de la vista (R1).
+   */
+  function materialesDeForja(
+    materialIds: string[],
+    tipo: 'collector' | 'companion'
+  ): { materials?: any[]; tier?: number; error?: string } {
+    const nombre = tipo === 'collector' ? 'recolectores' : 'compañeros';
+    const uno = tipo === 'collector' ? 'recolector' : 'compañero';
+    const equippedIds: string[] = tipo === 'collector'
+      ? state.warehouse.filter((w: any) => w.equipped).map((w: any) => w.id)
+      : (state.activeCompanions || []);
+
+    if (materialIds.length !== MATERIALES_POR_FUSION) {
+      return { error: `Selecciona exactamente ${MATERIALES_POR_FUSION} ${nombre}.` };
+    }
+    const materials = materialIds
+      .map(id => state.warehouse.find((w: any) => w.id === id))
+      .filter((w: any): w is any => !!w);
+    if (materials.length !== MATERIALES_POR_FUSION) {
+      return { error: 'Material no encontrado.' };
+    }
+    if (materials.some((m: any) => m.type !== tipo)) {
+      return { error: `Solo se pueden fusionar ${nombre}.` };
+    }
+    const tier = materials[0].tier || 1;
+    if (materials.some((m: any) => (m.tier || 1) !== tier)) {
+      return { error: `Los ${MATERIALES_POR_FUSION} ${nombre} deben ser del mismo tier.` };
+    }
+    // F24 · Dos POSICIONES no son dos MATERIALES. Sin esto, mandar el mismo id dos
+    // veces cuenta como dos: se "fusiona" un solo item y sale otro, ahorrándose un
+    // material. El que cuenta es el motor, no la vista.
+    if (new Set(materialIds).size !== MATERIALES_POR_FUSION) {
+      return { error: `Selecciona ${MATERIALES_POR_FUSION} ${nombre} distintos.` };
+    }
+    // Lo equipado no se puede consumir: perderlo sería un castigo doble. El
+    // recolector se marca con `equipped` en su ficha y además con el id del motor;
+    // el compañero con la lista de activos, que es lo único que hay para él.
+    if (materials.some((m: any) => equippedIds.includes(m.id))) {
+      return { error: `No puedes fusionar el ${uno} equipado. Desequípalo primero.` };
+    }
+    return { materials, tier };
+  }
+
+    /**
+   * Las piedras y la nanopartícula, y el orden en que se cobran.
+   *
+   * **POR QUÉ ESTA FUNCIÓN DEVUELVE EL ERROR EN LUGAR DE TIRAR.** Cobra de verdad:
+   * descuenta del almacén. Un cobro a medias —piedras sí, nanopartícula no— dejaría
+   * al jugador con la partida peor sin haber fusionsado nada. Así que primero se
+   * mira que estén las dos, y solo entonces se toca el almacén.
+   *
+   * El tope de 5 piedras por fusión es la regla de la forja infinita: a partir de
+   * ahí la probabilidad ya está cerca del tope y una más solo cobraría.
+   */
+  function gastaConsumiblesDeForja(
+    stonesUsed: number,
+    nanoUsed: number
+  ): { stones?: number; nano?: number; error?: string } {
+    const stones = Math.max(0, Math.min(5, stonesUsed));
+    const nano = nanoUsed > 0 ? 1 : 0;
+
+    // Se declara sin valor y se rellena solo si toca gastar: una ficha puede no
+    // existir y eso no es un error si no se pidió ninguna.
+    let piedra: any;
+    let nanoFicha: any;
+
+    if (stones > 0) {
+      piedra = state.warehouse.find(
+        (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
+      );
+      if (!piedra) return { error: 'No tienes Piedras de Calibración.' };
+      const available = piedra.stackCount || 1;
+      if (available < stones) {
+        return { error: `Solo tienes ${available} Piedra(s) de Calibración.` };
+      }
+    }
+    if (nano > 0) {
+      nanoFicha = state.warehouse.find(
+        (w: any) => w.type === 'consumable' && w.buffId === 'stabilityNano'
+      );
+      if (!nanoFicha) return { error: 'No tienes Nanopartículas de Estabilidad.' };
+      const available = nanoFicha.stackCount || 1;
+      if (available < nano) {
+        return { error: `Solo tienes ${available} Nanopartícula(s).` };
+      }
+    }
+
+    // Las dos existen y las dos alcanzan: aquí sí se toca el almacén, y aquí van
+    // las dos, no una detrás de otra con una comprobación en medio. Un cobro a
+    // medias dejaría al jugador peor sin haber fusionsado nada.
+    if (stones > 0) {
+      piedra.stackCount = (piedra.stackCount || 1) - stones;
+      if (piedra.stackCount <= 0) {
+        state.warehouse = state.warehouse.filter((w: any) => w.id !== piedra.id);
+      }
+    }
+    if (nano > 0) {
+      nanoFicha.stackCount = (nanoFicha.stackCount || 1) - nano;
+      if (nanoFicha.stackCount <= 0) {
+        state.warehouse = state.warehouse.filter((w: any) => w.id !== nanoFicha.id);
+      }
+    }
+    return { stones, nano };
+  }
+/**
+   * Lo que se hace con los materiales después de la tirada, sea cual sea el
+   * resultado: **en los dos casos se pierden**.
+   *
+   * F33 · El acierto soltaba 1 de los 2, y eso rompía dos cosas a la vez: la
+   * valoración y el banco tratan los materiales como gastados, así que mostraban
+   * una densidad un 50 % peor que la real (R3), y con 2 materiales el coste neto
+   * por tier caía a 1 y la forja se volvía prácticamente gratis.
+   */
+  function consumeMaterialesDeForja(materialIds: string[]) {
+    state.warehouse = state.warehouse.filter((x: any) => !materialIds.includes(x.id));
+  }
+
   /** Duración de una tarjeta AFK: 10 min base + extra del árbol. */
   function afkCardDurationMs(): number {
     return AFK_CARD_DURATION_MS + state.bonus.afkHours * 3600_000;
@@ -3867,106 +4002,36 @@ const AFK_THRESHOLD_MS = 60000;
     //  CRAFTEO
     // ======================================================================
 
-    /**
-     * Fusiona 3 recolectores del mismo tier en una de tier+1.
+/**
+     * Fusiona 2 recolectores del mismo tier en uno de tier+1.
      * `stonesUsed` es cuántas Piedras de Calibración se consumen: cada una
      * sube 12 puntos la probabilidad, hasta 5.
      */
     forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
       handleUserActivity();
 
+      // Las tres comprobaciones y el cobro salen de las cuentas internas: las
+      // mismas que usa la forja de compañeros, porque son las mismas reglas.
+      const mat = materialesDeForja(materialIds, 'collector');
+      if (mat.error || !mat.materials) return { success: false, msg: mat.error };
 
-
-
-
-
-
-
-      if (materialIds.length !== 2) {
-        return { success: false, msg: 'Selecciona exactamente 2 recolectores.' };
-      }
-      const materials = materialIds
-        .map(id => state.warehouse.find((w: any) => w.id === id))
-        .filter((w: any): w is any => !!w);
-      if (materials.length !== 2) return { success: false, msg: 'Material no encontrado.' };
-      if (materials.some((m: any) => m.type !== 'collector')) {
-        return { success: false, msg: 'Solo se pueden fusionar recolectores.' };
-      }
-      const tier = materials[0].tier || 1;
-      if (materials.some((m: any) => (m.tier || 1) !== tier)) {
-        return { success: false, msg: 'Los 2 recolectores deben ser del mismo tier.' };
-      }
-      // F24 · Va ANTES de gastar piedras y nanopartículas: un rechazo después
-      // del cobro se llevaría los consumibles sin forjar nada. La vista ya no
-      // manda duplicados, pero la API no puede fiarse de la vista (R1).
-      if (new Set(materialIds).size !== 2) {
-        return { success: false, msg: 'Selecciona 2 recolectores distintos.' };
-      }
-      // El recolector equipado no se puede consumir: perderla sería un castigo doble
-      // Forja infinita: sin techo de tier (el `tier >= 11` se fue). El precio
-      // (2^n materiales) frena solo, y las fórmulas de poder, rareza y valor
-      // ya llegan donde llegue.
-      if (materials.some((m: any) => m.equipped || m.id === state.equippedCollectorId)) {
-        return { success: false, msg: 'No puedes fusionar el recolector equipado. Desequípala primero.' };
-      }
-
-      // Consumir piedras
-      const stonesToUse = Math.max(0, Math.min(5, stonesUsed));
-      if (stonesToUse > 0) {
-        const stone = state.warehouse.find(
-          (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
-        );
-        if (!stone) return { success: false, msg: 'No tienes Piedras de Calibración.' };
-        const available = stone.stackCount || 1;
-        if (available < stonesToUse) {
-          return { success: false, msg: `Solo tienes ${available} Piedra(s) de Calibración.` };
-        }
-        stone.stackCount = available - stonesToUse;
-        if (stone.stackCount <= 0) {
-          state.warehouse = state.warehouse.filter((w: any) => w.id !== stone.id);
-        }
-      }
-
-      // Consumir la nanopartícula, como mucho una por fusión
-      const nanoToUse = nanoUsed > 0 ? 1 : 0;
-      if (nanoToUse > 0) {
-        const nano = state.warehouse.find(
-          (w: any) => w.type === 'consumable' && w.buffId === 'stabilityNano'
-        );
-        if (!nano) return { success: false, msg: 'No tienes Nanopartículas de Estabilidad.' };
-        const available = nano.stackCount || 1;
-        if (available < nanoToUse) {
-          return { success: false, msg: `Solo tienes ${available} Nanopartícula(s).` };
-        }
-        nano.stackCount = available - nanoToUse;
-        if (nano.stackCount <= 0) {
-          state.warehouse = state.warehouse.filter((w: any) => w.id !== nano.id);
-        }
-      }
+      const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed);
+      if (pago.error) return { success: false, msg: pago.error };
 
       const author = user.displayName || username || 'Anónimo';
-      const result = attemptForge(materials, tier, author, {
+      const result = attemptForge(mat.materials, mat.tier!, author, {
         craftLuck: state.bonus.craftLuck,
         shardBonus: state.bonus.shardBonus,
-        stonesUsed: stonesToUse,
-        nanoUsed: nanoToUse
+        stonesUsed: pago.stones!,
+        nanoUsed: pago.nano
       });
 
-      if (result.error) {
-        return { success: false, msg: result.error };
-      }
+      if (result.error) return { success: false, msg: result.error };
 
       if (result.success && result.collector) {
         const w = result.collector;
         w.sellPrice = sellPrice(w as any, { sellMult: 1 + state.bonus.sellMult });
-        // F33 · Se consumen los 2, sin devolver ninguno. Antes se devolvía 1 en
-        // el acierto, y eso rompía dos cosas a la vez: la valoración y el banco
-        // tratan los materiales como gastados, así que mostraban una densidad
-        // un 50% peor que la real (R3), y con 2 materiales el coste neto por
-        // tier caía a 1 y la forja se volvía prácticamente gratis.
-        state.warehouse = state.warehouse.filter(
-          (x: any) => !materialIds.includes(x.id)
-        );
+        consumeMaterialesDeForja(materialIds);
         state.warehouse.push(w as any);
         state.forgedCount += 1;
         recalculatePassiveIncome();
@@ -3982,7 +4047,7 @@ const AFK_THRESHOLD_MS = 60000;
       }
 
       // Fallo: se pierden los 2 y se ganan esquirlas
-      state.warehouse = state.warehouse.filter((x: any) => !materialIds.includes(x.id));
+      consumeMaterialesDeForja(materialIds);
       state.shards += result.shards || 0;
       onUpdate(state, isAfk);
       saveToFirebase();
@@ -3994,17 +4059,88 @@ const AFK_THRESHOLD_MS = 60000;
       };
     },
 
-    /** Cuántas esquirlas hacen falta para garantizar el próximo intento. */
+    /**
+     * Fusiona 2 compañeros del mismo tier en uno de tier+1.
+     *
+     * **ES LA MISMA FORJA, CON LA MISMA PROBABILIDAD Y EL MISCO COBRO.** Todo lo
+     * que no es qué se produce sale de las mismas funciones que la de
+     * recolectores, y por eso el jugador puede comparar las dos sin aprender dos
+     * reglas: dos tiradas cuestan lo mismo y salen igual de bien.
+     *
+     * **LO QUE CAMBIA ES EL RESULTADO, Y POR QUÉ NO ES UNA COPIA.** El compañero
+     * no tiene afijos: su calidad es el potencial, y sale de la media de los dos
+     * materiales. La nanopartícula, que en el recolector garantiza un afijo extra,
+     * aquí sube **+1 al potencial**, que es lo mismo dicho en el idioma del
+     * compañero. Si no hiciera eso, sería el mejor objeto del juego sin efecto
+     * ninguno.
+     */
+    forgeCompanion: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
+      handleUserActivity();
+
+      const mat = materialesDeForja(materialIds, 'companion');
+      if (mat.error || !mat.materials) return { success: false, msg: mat.error };
+
+      const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed);
+      if (pago.error) return { success: false, msg: pago.error };
+
+      const result = attemptForgeCompanion(mat.materials, mat.tier!, {
+        craftLuck: state.bonus.craftLuck,
+        shardBonus: state.bonus.shardBonus,
+        stonesUsed: pago.stones!,
+        nanoUsed: pago.nano
+      });
+
+      if (result.error) return { success: false, msg: result.error };
+
+      if (result.success && result.companion) {
+        const c = result.companion;
+        consumeMaterialesDeForja(materialIds);
+        // **AL ARRAY DE COMPAÑEROS, Y LUEGO AL ALMACÉN.** Es al revés del
+        // recolector, y no por capricho: el compañero tiene una ficha propia que
+        // `syncCompanionsToWarehouse()` crea. Si solo se metiera en el almacén,
+        // el panel no lo vería; si solo se metiera en el array, la rejilla no
+        // enseñaría sus estrellas.
+        state.companions.push(c);
+        syncCompanionsToWarehouse();
+        state.forgedCount += 1;
+        recalculatePassiveIncome();
+        checkAchievements();
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return {
+          success: true,
+          companion: c,
+          chance: result.chanceUsed,
+          msg: `${c.name} forjado`
+        };
+      }
+
+      consumeMaterialesDeForja(materialIds);
+      state.shards += result.shards || 0;
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return {
+        success: false,
+        shards: result.shards,
+        chance: result.chanceUsed,
+        msg: `Fallo en la forja: +${result.shards} esquirlas`
+      };
+    },
+
+    /**
+     * Cuántas esquirlas hay, y cuánto mejora la tirada el árbol.
+     *
+     * `baseChance` sale de `baseSuccessChance()`, que es donde vive la fórmula.
+     * Antes la reescribía aquí con los mismos números, y el `preview.ts` la
+     * reescribía por tercera vez: tres copias de una curva que el jugador puede
+     * leer, para que en el momento de decidir cuánto paga por una piedra no le
+     * digan una cosa y el yunque haga otra.
+     */
     getForgeInfo: () => ({
       shards: state.shards,
       craftLuck: state.bonus.craftLuck,
-      forgeUnlocked: (state.nodeLevels.blueprint || 0) > 0,
-      baseChance: (fromTier: number) => {
-        const b = 0.78 - (fromTier - 1) * 0.05;
-        return Math.min(0.95, Math.max(0.30, b) + state.bonus.craftLuck);
-      }
+      baseChance: (fromTier: number) => baseSuccessChance(fromTier) + state.bonus.craftLuck
     }),
-
     // ======================================================================
     //  VALORACIÓN Y VENTA
     // ======================================================================

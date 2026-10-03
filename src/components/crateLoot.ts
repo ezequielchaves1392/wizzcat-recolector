@@ -12,8 +12,8 @@
 //     distintas del mismo objeto.
 
 import { TIER_SYSTEM } from '../data/tiers';
-import { rollPotentialFrom } from '../data/crafting';
-import { poderDeCompanero, generateCollectorByTier } from '../data/generators';
+import { rollPotentialFrom, poderDeCompanero } from '../data/crafting';
+import { generateCollectorByTier } from '../data/generators';
 import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, costeDeLlave, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';

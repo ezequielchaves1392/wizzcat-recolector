@@ -31,6 +31,7 @@ import { renderPrestigePage } from './ui/prestigePage';
 import { renderRankings } from './components/rankings';
 import { TIER_SYSTEM } from './data/tiers';
 import { sellPrice } from './data/valuation';
+import { baseSuccessChance } from './data/crafting';
 
 const params = new URLSearchParams(location.search);
 const width = params.get('w');
@@ -143,7 +144,19 @@ const MOCK: any = {
     { id: 'c3', name: 'Titán de Acero', type: 'passive', power: 68, rarity: 'Legendario', tier: 9 },
     { id: 'c5', name: 'Fénix de Datos', type: 'passive', power: 40, rarity: 'Mítico', tier: 9 }
   ],
-  activeCompanions: ['c1', 'c2', 'c3', 'c5'],
+  // **LOS CUATRO ACTIVOS, PERO NO LOS DOS T9 A LA VEZ.**
+  //
+  // `c3` y `c5` son los dos únicos compañeros de tier 9, y son también los dos
+  // únicos con los que se puede **enseñar una fusión de compañeros en la
+  // forja**: los demás tiers tienen uno solo. Con los cuatro activos, los dos
+  // salen marcados "EQ", el yunque los rechaza con "desequípalo" y la pantalla
+  // que se quería mirar no se puede llegar a ver.
+  //
+  // El motivo de fondo es el mismo que ya se escribió para los cristales: **el
+  // `preview` es la única forma de mirar una pantalla sin jugar una partida hasta
+  // el nivel 12**, así que si el ejemplo no trae la combinación que hace falta,
+  // esa parte de la pantalla no existe para quien quiere mirarla.
+  activeCompanions: ['c1', 'c2', 'c3'],
   unlockedAchievements: [
     'first_click', 'collector_10', 'crate_opener', 'jackpot', 'rich',
     'first_forge', 'smith_25', 'ascendant', 'hidden'
@@ -229,11 +242,21 @@ const fakeGame: any = {
     return Math.floor((w.sellPrice || 1500) * (1 + MOCK.bonus.sellMult));
   },
   getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
-  getForgeInfo: () => ({ shards: MOCK.shards, craftLuck: MOCK.bonus.craftLuck, forgeUnlocked: true, baseChance: (t: number) => .78 - (t - 1) * .05 + MOCK.bonus.craftLuck }),
+  getForgeInfo: () => ({ shards: MOCK.shards, craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),
   buyStoreItem: () => true,
   buyNode: () => ({ success: true, msg: 'Nodo comprado' }),
   prestige: () => ({ success: true, gained: 8, msg: '+8 núcleos' }),
   forgeCollector: () => ({ success: true, collector: MOCK.warehouse[0], chance: 0.5, msg: 'ok' }),
+  // La fusión de compañeros también necesita su propio tropo en el `preview`, o el
+  // botón FORJAR de la pestaña de compañeros daría `undefined` y la ruleta se
+  // quedaría en blanco sin decir por qué. Un tropo que devuelve algo raro es peor
+  // que uno que no existe: parece un fallo de la pantalla.
+  forgeCompanion: () => ({
+    success: true,
+    companion: { id: 'mock_forjado', name: 'Dron Explorador', type: 'click', power: 214, rarity: 'Épico', tier: 4, potential: 4 },
+    chance: 0.5,
+    msg: 'ok'
+  }),
   equipCollector: noop,
   equipCompanion: noop,
   equipCosmetic: () => true,

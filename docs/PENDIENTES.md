@@ -223,9 +223,46 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       borrada es peor que no tenerla— y en su lugar hay una que verifica que **una partida
       recién creada, sin árbol ninguno, forja**.
 
+- [x] **B2 · La forja fusiona también compañeros.** Dos del mismo tier salen uno del
+      siguiente, con **la misma probabilidad, el mismo cobro y el mismo fallo** que dos
+      recolectores, y eso no es casualidad: las tres reglas que tienen que coincidir —
+      cuántos materiales, que sean distintos y del mismo tier, y cuánto esquirlas da el
+      fallo — están **en una función cada una** (`validaMateriales()` y `tiraDeForja()`),
+      y las dos fusiones las llaman. Escritas dos veces son dos ocasiones de que una
+      acepte tres materiales y la otra dos.
+      **Y LO QUE SÍ ES DISTINTO ESTÁ DONDE TIENE QUE ESTAR**: qué se produce y de dónde
+      sale su calidad. El recolector forjado hereda **afijos**; el compañero no tiene
+      afijos, así que su eje es el **potencial**, con la misma regla de la media.
+      **La nanopartícula sube +1 al potencial**, y esa es una decisión, no un olvido: si
+      no hiciera nada, un consumible de 90 000 nanitas sería **el mejor objeto del juego
+      que no hace absolutamente nada**. Y con esa excepción se toca el texto de la tienda,
+      que decía "un afijo extra garantizado" y no mencionaba la mitad de lo que hace.
+      En la pantalla hay un interruptor arriba —rec collectors / compañeros— y **los
+      materiales se filtran por el tipo elegido**: una lista con los dos mezclados
+      dejaría meter un recolector en un yunque de compañeros, y lo rechaza el motor, que
+      es la peor forma de fallar.
+
+#### Una discrepancia que salió de aquí, y no la había buscado
+
+**EL PROMEDIO DEL POTENCIAL SÍ PUEDE SUBIR, Y EL CÓDIGO LO DECÍA MAL.** El comentario de
+`attemptForge()` afirmaba que *"promediar NUNCA sube el resultado: un 5 sale de un 5, y un 4
+de un 4 y un 5"*. **Es falso en el empate**: `Math.round(4,5)` es `5` en JavaScript, así que
+un 4 con un 5 **da un 5**. Nadie lo miró porque el caso no es raro —es el más común— pero
+tampoco lo había fijado ninguna prueba.
+
+No se ha cambiado la regla: se ha **escrito como es** y se ha fijado con pruebas, porque
+cambiar el redondeo en la forja alteraría la partida de quien ya tiene objetos forjados. Lo
+que sí se ha hecho es sacarlo a `potencialFusionado()`, que ahora usan las dos fusiones, y
+dejar escrito qué significa:
+
+- Un **4 solo sirve como material de un 5**. Fusionarlo con otro 4 da 4 y wastea el 4.
+- **Un compañero con potencial 4 no tiene a quién fusionarse sin perderlo.**
+
+Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia abajo, es
+**una línea** en `potencialFusionado()` y las pruebas que la fijan están en `forjaCheck`.
+
 | Lote | Qué | Por qué aquí |
 |---|---|---|
-| **B2** | 3e fusión de compañeros en la misma forja | Depende de B1, ya hecho. |
 | **C** | 1b nav persistente + 1c sin botón de retroceso | UI pura. Riesgo cero para la economía. |
 | **D** | 3b cristales unificados + 3c recompensa por fallo | 3c depende de 3b. Migración de guardado: los cristales hoy son por tier. |
 | **E** | 1a quitar llaves | El más caro: toca botín, tienda, reventa, el tope que se puso en `b349393` y 220 pruebas de `llaveCheck`. Solo, con todo lo demás verde. |
@@ -993,7 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1939
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1961
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

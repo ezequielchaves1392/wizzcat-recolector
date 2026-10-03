@@ -52,7 +52,7 @@ export const CONSUMABLES_SIN_EXPANSOR = {
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
   clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
   calibrationStone: { name: 'Piedra de Calibración', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone' },
-  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'Deja el recolector forjado con un afijo extra garantizado', rarity: 'Legendario', buffId: 'stabilityNano' }
+  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'En un recolector, un afijo extra garantizado; en un compañero, +1 de potencial', rarity: 'Legendario', buffId: 'stabilityNano' }
 } as const;
 
 // ==========================================================================
@@ -556,7 +556,7 @@ export const STORE_ITEMS = {
   // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
   // una decisión, no algo que se compre en masa y se gaste sin pensar.
   calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },
-  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y un afijo extra)' }
+  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y afijo o potencial extra)' }
 };
 
 /**

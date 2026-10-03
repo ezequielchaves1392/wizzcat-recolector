@@ -16,45 +16,9 @@
 //  dejaría de seguir al poder y el banco de balance se enteraría.
 // ==========================================================================
 
-import { TIER_SYSTEM, rangoDePoder } from './tiers';
-import { danioDeRango, potencialNormalizado, rollPotentialFrom } from './crafting';
-
-/** El nombre que le toca, por tier, de entre los tres que hay. */
-function nombreDe(tipo: 'companion' | 'collector', tier: number, rng: () => number): string {
-  const tabla = tipo === 'companion' ? TIER_SYSTEM.companionNames : TIER_SYSTEM.collectorNames;
-  const nombres = (tabla as Record<number, readonly string[]>)[tier] || [tipo === 'companion' ? 'Dron Explorador' : 'Blaster Láser'];
-  return nombres[Math.floor(rng() * nombres.length)];
-}
-
-/**
- * EL POTENCIAL DE UN COMPAÑERO: LA POSICIÓN DENTRO DEL RANGO DE SU TIER.
- *
- * **QUÉ SIGNIFICA, DE LA MISMA MANERA QUE EN EL RECOLECTOR.** El potencial va de
- * 1 a 5 y dice **hasta dónde llega este item dentro de lo que su tier puede
- * dar**: ★1 es el suelo del rango y ★5 es el techo. Dos compañeros del mismo
- * tier se comparan con un número, que es lo que hace que buscar uno sea una
- * decisión.
- *
- * **Y POR QUÉ AQUÍ NO ES UN MULTIPLICADOR, COMO EN EL RECOLECTOR.** Porque el
- * poder del compañero **es el rango**: su carta se paga por él, y el rango del
- * tier es lo que fija el precio. Con `danioDeRango()` —base × (1 + 0,2 × p)— el
- * techo de cada tier se multiplicaría otra vez por el potencial, y medido eso
- * da un compañero T10 hasta **once veces** más fuerte que el de ahora con la
- * misma carta: el precio por punto se desploma y el T10 vuelve a ser la trampa
- * que `balanceCheck` ya cazó una vez. Con la regla de la posición, **la
- * esperanza del dado no cambia** (potencial 3 cae en el punto medio, que es lo
- * que `rand(min, max)` daba de media) y lo que cambia es la **diferencia entre
- * dos compañeros del mismo tier**, que es justo lo que el potencial debe hacer.
- *
- * Y el orden entre tiers sigue siendo estricto: el techo del T9 (346) es menor
- * que el suelo del T10 (373), así que subir de tier siempre mejora, con
- * potencial o sin él.
- */
-export function poderDeCompanero(tier: number, potential: number): number {
-  const [min, max] = rangoDePoder(tier);
-  const p = potencialNormalizado(potential);
-  return Math.round(min + ((max - min) * (p - 1)) / 4);
-}
+import { TIER_SYSTEM } from './tiers';
+import { nombreDe } from './nombres';
+import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom } from './crafting';
 
 /**
  * Un compañero nuevo del tier pedido.
@@ -72,16 +36,11 @@ export function generateCompanionByTier(
   tier: number,
   rng: () => number = Math.random
 ): { id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier: number; potential: number } {
-  const potential = rollPotentialFrom(rng);
-  return {
-    id: `comp_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
-    name: nombreDe('companion', tier, rng),
-    type: 'click',
-    power: poderDeCompanero(tier, potential),
-    rarity: TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común',
-    tier,
-    potential
-  };
+  // **DELEGA, Y NO ES COSMÉTICO.** El constructor se quedó en `crafting.ts`
+  // para que la forja de compañeros pueda usarlo sin un ciclo de importaciones. Si
+  // aquí se construyera el objeto a mano, el día que se añadiese un campo al
+  // compañero la tienda y la caja se lo saltarían sin que nada lo dijera.
+  return crearCompanioDeTier(tier, rollPotentialFrom(rng), rng) as any;
 }
 
 /**

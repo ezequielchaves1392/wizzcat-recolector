@@ -626,13 +626,30 @@ async function main() {
     check('arbol: y no se cobran nucleos', s(g).cores === antes, 'cores=' + s(g).cores);
   }
   {
-    // El nodo que abre la forja tiene que abrirla de verdad: es un caso sin
-    // bonificacion numerica, y por eso es facil que se quede sin efecto.
+    // **EL NODO QUE ESTÁ EN LA RAÍZ DE LA RAMA DE CRAFTEO TIENE QUE DAR ALGO.**
+    //
+    // Aquí hubo tres comprobaciones que decían que sin el nodo `blueprint` la
+    // forja estaba cerrada, y después de comprarlo se abría. Ya no hay puerta: la
+    // forja está abierta desde el inicio. Se han ido con ella, porque **una prueba
+    // que asegura una regla borrada es peor que no tenerla**: alguien la lee, la
+    // ve pasar, y se queda creyendo que el requisito sigue ahí.
+    //
+    // Lo que se conserva es **el motivo de que este banco comprobara ese nodo**, que
+    // es bueno: es el único de la rama sin bonificación numérica, y un nodo sin
+    // efecto es un nodo por el que el jugador paga 4 núcleos y no ve nada. Ahora da
+    // `craftLuck`, así que lo que se comprueba es que **suba la probabilidad** y que
+    // **eso sobreviva a recargar**. Si algún día el nodo vuelve a ser una puerta
+    // vacía, esta es la prueba que lo canta.
     const g = await boot(baseSave([], { cores: 100 }));
-    check('forja: antes del nodo la forja esta cerrada', g.getForgeInfo().forgeUnlocked === false);
-    g.buyNode('blueprint');
-    check('forja: tras comprarlo la forja se abre', g.getForgeInfo().forgeUnlocked === true);
-    check('forja: y se abre tambien tras recargar', (await reload()).getForgeInfo().forgeUnlocked === true);
+    const antes = g.getForgeInfo().craftLuck;
+    const r = g.buyNode('blueprint');
+    const despues = g.getForgeInfo().craftLuck;
+    check('arbol: el nodo de la forja sube la probabilidad, no es decorativo',
+      r.success && Math.abs((despues - antes) - 0.03) < 1e-9,
+      `success=${r.success} antes=${antes} despues=${despues} msg=${r.msg ?? ''}`);
+    check('arbol: y el efecto sigue ahí tras recargar',
+      Math.abs((await reload()).getForgeInfo().craftLuck - despues) < 1e-9,
+      `recargado=${(await reload()).getForgeInfo().craftLuck}`);
   }
 
   // =========================================================================
