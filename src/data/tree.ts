@@ -94,10 +94,15 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { craftLuck: 0.06 }, x: 1, y: 2
   },
   {
-    id: 'shard_sifter', name: 'Criba de Esquirlas', description: '+25% de esquirlas por fallo.',
+    // EL IDENTIFICADOR SE LLAMA TODAVÍA `shard_sifter` Y NO SE CAMBIA, PORQUE ES UNA
+    // LLAVE GUARDADA. `nodeLevels` guarda el nivel por identificador, así que renombrarlo
+    // le quitaría la bonificación de golpe a quien ya lo tenga comprado. El nombre y lo
+    // que hace sí cambian: las esquirlas ya no existen, y lo que este nodo multiplica es
+    // el premio del fallo de forja, que son los cristales.
+    id: 'shard_sifter', name: 'Alcornoque', description: '+25% de cristales por fallo de forja.',
     icon: 'crystal', category: 'crafteo', tier: 1, requires: ['blueprint'],
     baseCost: 3, costGrowth: G, maxLevel: 4,
-    bonus: { shardBonus: 0.25 }, x: 1, y: 3
+    bonus: { consolationBonus: 0.25 }, x: 1, y: 3
   },
   {
     id: 'storage_rack', name: 'Estantería Extra', description: '+3 ranuras de almacén por nivel.',

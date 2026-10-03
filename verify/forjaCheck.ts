@@ -49,7 +49,7 @@ import {
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
 
 const opts = (extra: any = {}) => ({
-  craftLuck: 0, shardBonus: 0, stonesUsed: 0, nanoUsed: 0, ...extra
+  craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, ...extra
 });
 
 async function main() {
@@ -523,15 +523,18 @@ async function main() {
       !rMedio.success && (piedrasMedio?.stackCount ?? 0) === 5,
       `piedras=${piedrasMedio?.stackCount} msg=${rMedio.msg}`);
 
-    // --- El fallo pierde los materiales y paga esquirlas ----------------------------
+    // --- El fallo pierde los materiales y paga cristales ----------------------------
     const gf = await boot(baseSave([
       companion('f1', 3, { potential: 5 }), companion('f2', 3, { potential: 5 }),
       ficha('f1', 3, { potential: 5 }), ficha('f2', 3, { potential: 5 })
-    ], { warehouseCapacity: 20, shards: 0 }));
+    ], { warehouseCapacity: 20 }));
     const rf: any = conRoll(0.999, () => gf.forgeCompanion(['f1', 'f2']));
-    check('compañero: el fallo da esquirlas',
-      !rf.success && rf.shards > 0,
-      `shards=${rf.shards} msg=${rf.msg}`);
+    // **ANTES AFIRMABA QUE EL FALLO DABA ESQUIRLAS.** Eran una moneda sin salida: se
+    // acumulaban y no se gastaban en nada. Lo que paga el fallo es lo único que se
+    // puede gastar, así que la misma comprobación pasa a ser la del cristal.
+    check('compañero: el fallo da cristales, y son los que se pueden gastar',
+      !rf.success && (rf.crystals ?? 0) > 0,
+      `crystals=${rf.crystals} msg=${rf.msg}`);
     check('compañero: y pierde los dos materiales, como el recolector',
       !ids(gf).includes('f1') && !ids(gf).includes('f2'),
       ids(gf).join(','));
@@ -578,7 +581,7 @@ const falloCon = async () => {
   const g = await boot(baseSave([
     collector('a', 3, { potential: 3, damage: 100 }),
     collector('b', 3, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+  ], { nanites: 0, warehouseCapacity: 40, crystals: 0 }));
   const r: any = conRoll(0.999, () => g.forgeCollector(['a', 'b']));
   const unidades = s(g).crystals;
   // **LOS INTENTOS, Y NO LAS UNIDADES.** El motor entrega unidades y el jugador
@@ -609,7 +612,7 @@ const falloCon = async () => {
     const g = await boot(baseSave([
       collector(`a${tier}`, tier, { potential: 3, damage: 100 }),
       collector(`b${tier}`, tier, { potential: 3, damage: 100 })
-    ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+    ], { nanites: 0, warehouseCapacity: 40, crystals: 0 }));
     conRoll(0.999, () => g.forgeCollector([`a${tier}`, `b${tier}`]));
     const unidades = s(g).crystals;
     // El motor convierte los intentos por el valor del cristal de ESE tier, así que
@@ -636,7 +639,7 @@ const falloCon = async () => {
   const gRec = await boot(baseSave([
     collector('a', 5, { potential: 3, damage: 100 }),
     collector('b', 5, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+  ], { nanites: 0, warehouseCapacity: 40, crystals: 0 }));
   const rRec: any = conRoll(0.999, () => gRec.forgeCollector(['a', 'b']));
   const rec = s(gRec).crystals / valorDeUnCristal(5);
 
@@ -646,7 +649,7 @@ const falloCon = async () => {
     ficha('c1', 5, { potential: 3 }),
     ficha('c2', 5, { potential: 3 })
   ], {
-    nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0,
+    nanites: 0, warehouseCapacity: 40, crystals: 0,
     companions: [ficha('c1', 5, { potential: 3 }), ficha('c2', 5, { potential: 3 })]
   }));
   const rCom: any = conRoll(0.999, () => gCom.forgeCompanion(['c1', 'c2']));
@@ -662,7 +665,7 @@ const falloCon = async () => {
   const g = await boot(baseSave([
     collector('a', 3, { potential: 3, damage: 100 }),
     collector('b', 3, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+  ], { nanites: 0, warehouseCapacity: 40, crystals: 0 }));
   conRoll(0.001, () => g.forgeCollector(['a', 'b']));
   const unidades = s(g).crystals;
   check('consuelo: el acierto NO da cristales de consuelo, que solo compensan el fallo',

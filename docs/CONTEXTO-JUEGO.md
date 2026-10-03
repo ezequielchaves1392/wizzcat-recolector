@@ -123,7 +123,7 @@ compañeros menos el de inicio, **y el almacén entero — incluidos los recolec
 forjados a mano**.
 
 **Se conserva:** núcleos, `totalCores`, número de reinicios, el árbol de pasivas,
-esquirlas, firmas realizadas, logros y cosméticos.
+firmas realizadas, logros y cosméticos.
 
 El almacén vacío después de la Ascensión es intencionado. Forjar de nuevo es el
 bucle de progresión.
@@ -199,8 +199,15 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 6. ~~**Los cosméticos nunca se desbloquean.**~~ **ARREGLADO.** `unlockCosmetic` ya
    tiene llamadores (`gameLoop.ts:2550` y `:2873`) y las cajas reparten cosméticos
    vía `crateCosmetics` (`data/cosmetics.ts:173`). Lo cubre `lootCheck`.
-7. **Las esquirlas se acumulan y nunca se gastan**, aunque el JSDoc de
-   `getForgeInfo` prometa lo contrario.
+7. ~~**Las esquirlas se acumulan y nunca se gastan.**~~ **ARREGLADO.** Eran una
+   moneda sin salida: la forja se paga con dos recolectores, así que se acumulaban,
+   se guardaban entre ascensiones y no servían para nada. **Se han borrado** del
+   estado, de la regla de forja y de la interfaz, y el fallo paga solo cristales. El
+   nodo `shard_sifter` conserva el identificador —es la clave con la que su nivel
+   está guardado en cada partida— pero se llama "Alcornoque" y multiplica los
+   cristales del fallo. El documento viejo pierde el campo con
+   `shards: deleteField()`, que se ejecuta en el guardado de cargar, así que nadie
+   lo arrastra. Lo cubre `stateCheck`.
 8. **Bonificaciones que no se consumen:** `crateLuck`, `offlineClicks`, y el
    `critChance` / `passiveMult` de los afijos en el ingreso pasivo.
 9. **Código muerto:** `state.totalInfraestructure`, `COLLECTOR_BASE_COSTS`,
@@ -340,7 +347,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 4 | Dos tablas de precio de caja | sigue |
 | 5 | La nanopartícula cuesta 90 000 en un sitio y 220 000 en otro | sigue |
 | 6 | Los cosméticos nunca se desbloquean | **arreglada** |
-| 7 | Las esquirlas nunca se gastan | sigue |
+| 7 | Las esquirlas nunca se gastan | **arreglada** (fuera del juego; el fallo paga cristales) |
 | 8 | `crateLuck` y `offlineClicks` no se consumen | sigue |
 | 9 | Código muerto | sigue |
 | 10 | El techo de niveles estaba escrito en 5 sitios y no coincidían | **arreglada** |

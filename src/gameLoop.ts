@@ -1,7 +1,7 @@
 import { showToast } from './utils/toast';
 import { formatNumber } from './utils/format';
 import { db } from './firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
@@ -448,12 +448,11 @@ export async function createGameLoop(
     resets: 0, // Veces que se ha reciclado el progreso
     unlockedNodes: [] as string[], // Nodos comprados
     nodeLevels: {} as Record<string, number>, // Nivel por nodo
-    shards: 0, // Esquirlas de crafteo
     forgedCount: 0, // Recolectores forjadas con exito
     // --- Bonificaciones agregadas del arbol (se recalculan al cargar) ---
     bonus: {
       clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
-      craftLuck: 0, shardBonus: 0, autoClick: 0, afkHours: 0,
+      craftLuck: 0, consolationBonus: 0, autoClick: 0, afkHours: 0,
       offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0
     },
     // --- Cosméticos equipados ---
@@ -1490,7 +1489,6 @@ const AFK_THRESHOLD_MS = 60000;
       state.resets = data.resets ?? 0;
       state.unlockedNodes = data.unlockedNodes ?? [];
       state.nodeLevels = data.nodeLevels ?? {};
-      state.shards = data.shards ?? 0;
       state.forgedCount = data.forgedCount ?? 0;
       state.cosmetics = {
         title: data.cosmetics?.title ?? 'title_default',
@@ -1668,7 +1666,6 @@ const AFK_THRESHOLD_MS = 60000;
         resets: state.resets,
         unlockedNodes: state.unlockedNodes,
         nodeLevels: state.nodeLevels,
-        shards: state.shards,
         forgedCount: state.forgedCount,
         cosmetics: state.cosmetics,
         updatedAt: new Date()
@@ -2514,10 +2511,28 @@ const AFK_THRESHOLD_MS = 60000;
         resets: state.resets,
         unlockedNodes: state.unlockedNodes,
         nodeLevels: state.nodeLevels,
-        shards: state.shards,
         forgedCount: state.forgedCount,
         cosmetics: state.cosmetics,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        // ======================================================================
+        //  EL BORRADO DE LAS ESQUIRLAS, Y POR QUÉ NECESITA SU PROPIA LÍNEA
+        // ======================================================================
+        //
+        //  `setDoc` va con `merge: true`, y con `merge` **lo que no está en el objeto no
+        //  se borra**: se queda. Quitar `shards` del estado y de esta lista no lo quita
+        //  del documento de nadie, solo deja de escribirlo —que es esconderse, no
+        //  borrarse—. Medido con una partida vieja: tras recargar, el documento seguía
+        //  teniendo `shards: 9999`.
+        //
+        //  `deleteField()` es el idiom de Firestore para eso, y por eso se escribe
+        //  **explícitamente el nombre del campo viejo**: porque dentro de dos años esto
+        //  va a ser lo raro de leer, y lo raro de leer tiene que decir por qué está ahí.
+        //
+        //  Y es la diferencia entre quitar el concepto y tapar el síntoma. Ya se hizo
+        //  antes con `equippedWeaponId` y allí se aceptó el rastro; aquí no, porque aquel
+        //  campo lo leía alguien y este ya no lo lee nadie.
+        // ======================================================================
+        shards: deleteField()
       };
       // ==========================================================================
 // ==========================================================================
@@ -4037,7 +4052,7 @@ const AFK_THRESHOLD_MS = 60000;
      * apuesta y `forgedCount` no significaría nada.
      *
      * Lo que NO se pierde: núcleos, nodos del árbol, cosméticos, logros,
-     * esquirlas y el contador de recolectores forjadas. Esa es toda la promesa del
+     * el contador de recolectores forjadas. Esa es toda la promesa del
      * reinicio, así que el estado se construye explícitamente en vez de
      * hacer `Object.assign` con un reset parcial: si mañana se añade un campo
      * al save, el reinicio lo limpia solo.
@@ -4070,7 +4085,6 @@ const AFK_THRESHOLD_MS = 60000;
       // que no traía el campo se comporta como el que sí: cobra de más una vez, y
       // a partir de ahí el contador ya es real.
 
-      const keptShards = state.shards;
       const keptForged = state.forgedCount;
       const keptAchievements = [...state.unlockedAchievements];
       const keptCores = state.cores + gained;
@@ -4195,7 +4209,6 @@ const AFK_THRESHOLD_MS = 60000;
         resets: keptResets,
         nodeLevels: keptNodes,
         unlockedNodes: Object.keys(keptNodes),
-        shards: keptShards,
         forgedCount: keptForged,
         unlockedAchievements: keptAchievements,
         cosmetics: keptCosmetics
@@ -4255,7 +4268,7 @@ const AFK_THRESHOLD_MS = 60000;
       const author = user.displayName || username || 'Anónimo';
       const result = attemptForge(mat.materials, mat.tier!, author, {
         craftLuck: state.bonus.craftLuck,
-        shardBonus: state.bonus.shardBonus,
+        consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
         nanoUsed: pago.nano
       });
@@ -4280,9 +4293,8 @@ const AFK_THRESHOLD_MS = 60000;
         };
       }
 
-      // Fallo: se pierden los 2 y se ganan esquirlas
+      // Fallo: se pierden los 2 y se ganan cristales
       consumeMaterialesDeForja(materialIds);
-      state.shards += result.shards || 0;
       // **EL FALLO DEJA CRISTALES, Y POR AQUÍ.**
       //
       // Un fallo cuesta los dos materiales del yunque, que es un objeto de tier:
@@ -4310,10 +4322,9 @@ const AFK_THRESHOLD_MS = 60000;
       saveToFirebase();
       return {
         success: false,
-        shards: result.shards,
         crystals: consuelo,
         chance: result.chanceUsed,
-        msg: `Fallo en la forja: +${result.shards} esquirlas y +${consuelo} cristales`
+        msg: `Fallo en la forja: +${consuelo} cristales`
       };
     },
 
@@ -4343,7 +4354,7 @@ const AFK_THRESHOLD_MS = 60000;
 
       const result = attemptForgeCompanion(mat.materials, mat.tier!, {
         craftLuck: state.bonus.craftLuck,
-        shardBonus: state.bonus.shardBonus,
+        consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
         nanoUsed: pago.nano
       });
@@ -4374,7 +4385,6 @@ const AFK_THRESHOLD_MS = 60000;
       }
 
       consumeMaterialesDeForja(materialIds);
-      state.shards += result.shards || 0;
       // **LO MISMO QUE EN EL RECOLECTOR, Y POR LA MISMA RAZÓN.** El fallo de una
       // fusión de compañeros también cuesta dos objetos de tier, así que también
       // tiene que dejar algo. Y lo deja la misma función, para que las dos
@@ -4388,15 +4398,14 @@ const AFK_THRESHOLD_MS = 60000;
       saveToFirebase();
       return {
         success: false,
-        shards: result.shards,
         crystals: consuelo,
         chance: result.chanceUsed,
-        msg: `Fallo en la forja: +${result.shards} esquirlas y +${consuelo} cristales`
+        msg: `Fallo en la forja: +${consuelo} cristales`
       };
     },
 
     /**
-     * Cuántas esquirlas hay, y cuánto mejora la tirada el árbol.
+     * Cuánto mejora la tirada la forja.
      *
      * `baseChance` sale de `baseSuccessChance()`, que es donde vive la fórmula.
      * Antes la reescribía aquí con los mismos números, y el `preview.ts` la
@@ -4405,7 +4414,6 @@ const AFK_THRESHOLD_MS = 60000;
      * digan una cosa y el yunque haga otra.
      */
     getForgeInfo: () => ({
-      shards: state.shards,
       craftLuck: state.bonus.craftLuck,
       baseChance: (fromTier: number) => baseSuccessChance(fromTier) + state.bonus.craftLuck
     }),

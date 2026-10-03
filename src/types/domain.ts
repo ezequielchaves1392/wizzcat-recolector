@@ -133,8 +133,8 @@ export interface PassiveBonuses {
   sellMult: number;
   /** Bonificación a la probabilidad de crafteo (fracción). */
   craftLuck: number;
-  /** Esquirlas extra por fallo de crafteo (fracción). */
-  shardBonus: number;
+  /** Cristales extra por fallo de forja, como fracción. */
+  consolationBonus: number;
   /** Clics automáticos por segundo. */
   autoClick: number;
   /** Horas extra de AFK por tarjeta. */
@@ -215,8 +215,6 @@ export interface PrestigeState {
   unlockedNodes: string[];
   /** Nivel por nodo: `{ nodeId: level }`. */
   nodeLevels: Record<string, number>;
-  /** Esquirlas de crafteo acumuladas. */
-  shards: number;
   /** Recolectores crafteadas por el jugador. */
   forgedCount: number;
 }

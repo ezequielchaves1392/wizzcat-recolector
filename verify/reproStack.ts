@@ -50,7 +50,7 @@ globalThis.__MEM_DB__ = {
     companions: [], activeCompanions: [], equippedCollectorId: null,
     warehouseCapacity: 21, maxCompanionSlots: 3,
     buffs: { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 },
-    nodeLevels: {}, unlockedNodes: [], cores: 0, totalCores: 0, shards: 0, forgedCount: 0,
+    nodeLevels: {}, unlockedNodes: [], cores: 0, totalCores: 0, forgedCount: 0,
     cosmetics: { title: 'title_default', frame: 'frame_none', banner: 'banner_none', unlocked: [] },
     unlockedAchievements: []
   }

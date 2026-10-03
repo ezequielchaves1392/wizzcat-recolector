@@ -31,7 +31,7 @@ export const EMPTY_BONUSES: PassiveBonuses = {
   costReduction: 0,
   sellMult: 0,
   craftLuck: 0,
-  shardBonus: 0,
+  consolationBonus: 0,
   autoClick: 0,
   afkHours: 0,
   offlineClicks: 0,

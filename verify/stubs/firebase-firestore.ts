@@ -85,7 +85,17 @@ export const setDoc = async (ref: any, data: any, options?: { merge?: boolean })
   // referencia al array del juego y el "guardado" de un bucle mezcla su memoria
   // con la del siguiente. Firestore serializa; el stub tiene que serializar.
   const previo = options?.merge ? db[ref.id] : undefined;
-  db[ref.id] = clonar(previo ? { ...previo, ...data } : data);
+  const escrito = previo ? { ...previo, ...data } : { ...data };
+  // `deleteField()` también en `setDoc`, porque es lo que usa el motor para **borrar**
+  // un campo que el documento viejo todavía tiene: `setDoc` va con `merge`, y con
+  // `merge` lo que no está en el objeto no se borra, se queda. Sin esto, el stub
+  // guardaría el símbolo en el documento en vez de quitar el campo, y una prueba que
+  // dice "el campo desaparece" estaría mirando un `Symbol(deleteField)` en su sitio y
+  // no notaría nada.
+  for (const k of Object.keys(escrito)) {
+    if ((escrito as any)[k] === DELETE_FIELD) delete (escrito as any)[k];
+  }
+  db[ref.id] = clonar(escrito);
 };
 
 /**

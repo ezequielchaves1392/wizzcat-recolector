@@ -36,7 +36,7 @@ function bonusLabel(key: keyof PassiveBonuses, value: number): string {
     case 'costReduction': return `−${Math.round(value * 100)}% coste de tienda`;
     case 'sellMult': return `${pct(value)} precio de venta`;
     case 'craftLuck': return `${pct(value)} éxito de forja`;
-    case 'shardBonus': return `${pct(value)} esquirlas por fallo`;
+    case 'consolationBonus': return `${pct(value)} cristales por fallo`;
     case 'autoClick': return `+${value} clics/s automáticos`;
     case 'afkHours': return `+${value * 60} min de AFK`;
     case 'offlineClicks': return `+${value} clics al volver`;
@@ -207,7 +207,7 @@ export function renderPrestigePage(
           <ul class="space-y-0.5 text-[var(--text-muted)] leading-snug">
             <li>Núcleos, nodos del árbol y cosméticos</li>
             <li>Logros y sus bonificaciones</li>
-            <li>Esquirlas y recolectores que ya forjaste</li>
+            <li>Los recolectores que ya forjaste</li>
           </ul>
         </div>
       </div>

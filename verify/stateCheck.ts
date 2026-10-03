@@ -146,7 +146,6 @@ async function main() {
       cores: 33,
       totalCores: 44,
       resets: 2,
-      shards: 9,
       forgedCount: 5,
       companions: [ficha('m1', 2)],
       activeCompanions: ['m1'],
@@ -168,7 +167,6 @@ async function main() {
     check('guardar: nucleos', t.cores === 33 && t.totalCores === 44,
       `${t.cores}/${t.totalCores} cola=${(globalThis as any).localStorage.getItem('cyberforge_nanitas_pendientes')}`);
     check('guardar: reinicios', t.resets === 2, String(t.resets));
-    check('guardar: esquirlas', t.shards === 9, String(t.shards));
     check('guardar: recolectores forjadas', t.forgedCount === 5, String(t.forgedCount));
     check('guardar: nodos del arbol', t.nodeLevels.core_sink === 3 && t.nodeLevels.core_edge === 1,
       JSON.stringify(t.nodeLevels));
@@ -191,6 +189,52 @@ async function main() {
     check('guardar: el documento queda en la version actual',
       guardado().saveVersion === s(g2).saveVersion,
       `documento=${guardado().saveVersion} estado=${s(g2).saveVersion}`);
+
+    // =========================================================================
+    //  UNA PARTIDA VIEJA QUE TRAE ESQUIRLAS, Y POR QUÉ ESTA PRUEBA EXISTE
+    // =========================================================================
+    //
+    //  Las esquirlas se han borrado del estado. Eso **no rompe** las partidas que ya
+    //  las tienen: el documento las trae, la carga ignora lo que no reconoce y sigue.
+    //  Pero "no rompe" es una afirmación, y una afirmación sin prueba es una suposición.
+    //  Lo que se comprueba aquí es lo contrario de lo que parece: que el campo desaparece
+    //  **sin dejar rastro** —ni en el estado ni en el documento que se vuelve a
+    //  guardar—, porque un campo que se queda en el documento no se está borrando, se
+    //  está escondiendo.
+    //
+    //  Las dos pruebas que había de esto —"guardar: esquirlas" y "prestigio: se conservan
+    //  las esquirlas"— afirmaban que un contador de una moneda sin salida era parte del
+    //  juego. Se han ido con la moneda, y su sitio lo ocupa esta, que es la que vigila la
+    //  frontera entre la partida vieja y la nueva.
+    // =========================================================================
+  }
+  {
+    const conEsquirlas = await boot(baseSave([collector('r1', 2, { equipped: true })], {
+      nanites: 500,
+      // Como venía en el documento antes de que las esquirlas existieran.
+      shards: 9_999
+    }));
+    const st = s(conEsquirlas) as any;
+    check('migracion: una partida con esquirlas carga igual',
+      st.nanites === 500 && deType(conEsquirlas, 'collector') === 1,
+      `nanitas=${st.nanites} recolectores=${deType(conEsquirlas, 'collector')}`);
+    check('migracion: y el estado no las arrastra',
+      !('shards' in st), `estado=${'shards' in st}`);
+
+    // Y el documento. **NO HAY QUE HACER NADA PARA QUE SE BORRE.** La carga ya guarda —
+    // es lo que sube la versión del documento—, así que `shards: deleteField()` se
+    // ejecuta en el primer guardado de todo, que es el de cargar. La primera versión de
+    // esta comprobación daba verde mirando el documento recién sembrado, que es el viejo:
+    // miraba el campo antes de que nadie lo hubiera borrado y se declaraba conforme.
+    check('migracion: el documento pierde las esquirlas al cargar, sin tocar nada',
+      !('shards' in guardado()), 'shards=' + guardado().shards);
+
+    // Y con una recarga encima, para que el borrado no sea solo de este arranque.
+    conEsquirlas.click();
+    await reload();
+    check('migracion: y no vuelve a aparecer al recargar',
+      !('shards' in guardado()) && !(s(await boot()) as any).shards,
+      'documento=' + ('shards' in guardado()));
   }
   {
     // El documento NO se reescribe entero: `setDoc` va con `merge: true`, asi
@@ -982,7 +1026,7 @@ async function main() {
       crystals: 5 * valorDeUnCristal(1),
       cores: 7, totalCores: 12, resets: 3,
       nodeLevels: { core_sink: 2 }, unlockedNodes: ['core_sink'],
-      unlockedAchievements: ['first_click'], forgedCount: 4, shards: 6
+      unlockedAchievements: ['first_click'], forgedCount: 4
     }));
     const crystalsAntes = s(g).crystals;
     const esperado = nextCores({
@@ -1003,7 +1047,6 @@ async function main() {
       s(g).unlockedAchievements.join(','));
     check('prestigio: se conservan las recolectores forjadas', s(g).forgedCount === 4,
       String(s(g).forgedCount));
-    check('prestigio: se conservan las esquirlas', s(g).shards === 6, String(s(g).shards));
     // Lo unico que sobrevive al reinicio son las 2 cajas de bienvenida, y son UN
     // item apilado con 2 unidades: la capacidad se cuenta en ranuras.
     //
@@ -1382,8 +1425,11 @@ async function main() {
     check('forja: fallo, se pierden los 2 materiales',
       mal.rr.success === false && deType(mal.g, 'collector') === 0,
       `exito=${mal.rr.success} recolectores=${deType(mal.g, 'collector')}`);
-    check('forja: fallo, y a cambio dan esquirlas',
-      s(mal.g).shards > 0, 'esquirlas=' + s(mal.g).shards);
+    // **ANTES AFIRMABA QUE A CAMBIO DE UN FALLO DABAN ESQUIRLAS**, que eran una moneda
+    // sin salida: subían y no se gastaban en nada. Ahora lo que paga el fallo es lo
+    // único que se puede gastar, así que la comprobación es la del cristal.
+    check('forja: fallo, y a cambio dan cristales',
+      s(mal.g).crystals > 0, 'cristales=' + s(mal.g).crystals);
     check('forja: fallo, y el almacen no queda con ids repetidos',
       new Set(ids(mal.g)).size === wh(mal.g).length, ids(mal.g).join(','));
 
@@ -2169,7 +2215,7 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
     const g = await boot(baseSave([
       collector(`a${tier}`, tier, { potential: 3, damage: 100 }),
       collector(`b${tier}`, tier, { potential: 3, damage: 100 })
-    ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+    ], { nanites: 0, warehouseCapacity: 40, crystals: 0 }));
     const r: any = conRoll(0.999, () => g.forgeCollector([`a${tier}`, `b${tier}`]));
     const c: number = g.getState().crystals;
     return { intentos: c / valorDeUnCristal(tier), unidades: c, r };
@@ -2186,7 +2232,7 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
   const g = await boot(baseSave([
     collector('a', 3, { potential: 3, damage: 100 }),
     collector('b', 3, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+  ], { nanites: 0, warehouseCapacity: 40, crystals: 0 }));
   conRoll(0.001, () => g.forgeCollector(['a', 'b']));
   check('forja: el acierto NO deja cristales de consuelo',
     (g.getState().crystals as number) === 0,

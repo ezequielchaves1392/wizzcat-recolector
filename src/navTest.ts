@@ -41,7 +41,7 @@ const MOCK: any = {
   cosmetic: { title: '', frame: '', banner: '' },
   cosmetics: { unlocked: [], title: '', frame: '', banner: '' },
   unlockedAchievements: ['first_click', 'collector_10', 'rich', 'crate_opener'],
-  forgedCount: 4, shards: 3, nodeLevels: { blueprint: 1 },
+  forgedCount: 4, nodeLevels: { blueprint: 1 },
   bonus: { clickMult: 0, passiveMult: 0, sellMult: 0, costReduction: 0, companionSlots: 0, coreGain: 0, afkBonus: 0 },
   achievements: 0, secretAchievements: 0,
   warehouse: [

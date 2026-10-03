@@ -41,7 +41,7 @@
 //     separados a propósito, para que la fama no se compre con dinero.
 //
 //  6. COMPENSACIÓN POR FALLO: al fallar se pierden los dos materiales, pero
-//     se ganan esquirlas proporcionales al tier. Sin esto, una racha mala
+//     se ganan cristales proporcionales al tier. Sin esto, una racha mala
 //     vacía el almacén y el jugador deja de intentarlo; con esto, cada fallo
 //     acerca un poco la garantía del siguiente intento.
 // ==========================================================================
@@ -757,8 +757,6 @@ export function forgeCollectorName(potential: number, tier: number, rng = Math.r
 export interface ForgeResult {
   success: boolean;
   collector?: CollectorItem;
-  /** Esquirlas ganadas por el fallo. */
-  shards?: number;
   /** Cristales de consuelo que deja el fallo. Los mismos en las dos fusiones. */
   crystals?: number;
   chanceUsed?: number;
@@ -962,7 +960,7 @@ export function poderEfectivoDeCompanio(comp: { power?: number; level?: number }
  * reglas: cuántos materiales entran, que sean **distintos**, que sean del mismo
  * tier y que la probabilidad y el premio del fallo sean los mismos. **Esas cuatro
  * están aquí, en un sitio**, porque duplicadas son cuatro oportunidades de que una
- * acepte tres materiales y la otra dos, o de que una dé esquirlas y la otra no.
+ * acepte tres materiales y la otra dos, o de que una pague más cristales que la otra.
  *
  * Lo que sí es distinto —qué se produce, de dónde sale su calidad— vive en cada
  * función, que es donde tiene que vivir: un recolector tiene afijos y un
@@ -970,7 +968,8 @@ export function poderEfectivoDeCompanio(comp: { power?: number; level?: number }
  */
 interface IntentosDeForja {
   craftLuck: number;
-  shardBonus: number;
+  /** Multiplicador del consuelo en cristales, del nodo del árbol. */
+  consolationBonus: number;
   stonesUsed: number;
   /** 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. */
   nanoUsed?: number;
@@ -1022,66 +1021,84 @@ export function tiraDeForja(
   tier: number,
   materials: Array<{ affixes?: string[]; rarity?: string }>,
   options: IntentosDeForja
-): { acierto: boolean; chance: number; shards: number; crystals: number } {
+): { acierto: boolean; chance: number; crystals: number } {
   // Los compañeros no tienen afijos, así que aquí aportan cero. No es que se les
   // dé un trato peor: es que no tienen la entrada que suma esto.
   const afixLuck = materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0);
   const nanoUsed = options.nanoUsed ?? 0;
   const chance = successChance(tier, options.craftLuck, options.stonesUsed, afixLuck, nanoUsed);
   const rng = options.rng ?? Math.random;
-  if (rng() <= chance) return { acierto: true, chance, shards: 0, crystals: 0 };
+  if (rng() <= chance) return { acierto: true, chance, crystals: 0 };
 
-  // Fallo: esquirlas proporcionales al tier **y a la rareza de los materiales**.
-  const matBonus = materials.reduce((a, m) => a + (RARITY_WEIGHT[m.rarity as Rarity] ?? 0) * 4, 0);
-  const baseShards = 8 + tier * 6;
+  // Fallo: lo único que deja es cristales.
   return {
     acierto: false,
     chance,
-    shards: Math.round((baseShards + matBonus) * (1 + options.shardBonus)),
-    crystals: cristalesDeConsuelo(tier)
+    crystals: cristalesDeConsuelo(tier, options.consolationBonus)
   };
 }
 
 /**
-/**
- * CUÁNTOS CRISTALES DEJA UN FALLO DE FORJA, Y POR QUÉ SON ESTOS Y NO OTROS.
- *
- * **EL MOTIVO POR EL QUE EL FALLO NO PUEDE SER UN CALLEJÓN SIN SALIDA.** Un fallo
- * cuesta los dos materiales del yunque, y eso es un objeto de tier: en los niveles
- * altos es el equivalente a miles de nanitas. Sin más, la racha mala vacía el almacén
- * y el jugador deja de intentar; con algo que se lleva, la racha mala **cuesta pero
- * no empobrece**, y se sigue intentando.
- *
- * **POR QUÉ SUBE CON EL TIER.** Porque el coste del fallo también sube: dos T10
- * duelen mucho más que dos T1, y una compensación plana haría que el fallo fuera una
- * pesadilla al principio y gratis al final.
- *
- * **Y POR QUÉ NO ES TANTA COMO DA UNA CAJA.** Una caja de tier n da entre 3n y 5n
- * cristales, más el multiplicador de rareza. Aquí el fallo da 2 + n. La razón de que
- * la diferencia sea deliberada: **abrir cajas tiene que seguir siendo la forma buena
- * de conseguir cristales**, y la forja es la que se usa cuando ya tienes el material
- * en la mano. Si igualáramos las dos fuentes, las cajas dejarían de tener sentido y con
- * ellas el 30 % del botín que dan.
- *
- * **EL NÚMERO DEVUELTO SON INTENTOS, Y EL MOTOR LOS CONVIERTE.** El recurso es único,
- * así que esta función devuelve "cuántos intentos de nivel 0" y quien entrega los
- * multiplica por `valorDeUnCristal(tier)`. Multiplicar en el motor y no aquí es a
- * propósito: **el dinero lo decide quien lo paga.** Si esta función devolviera
- * unidades, la mitad de los llamadores podrían olvidar el factor y la forja valdría
- * casi cero en los niveles altos sin que nada lo delatara.
- *
- * El número está aquí y no en el motor porque es **la mitad de la regla del fallo**,
- * igual que las esquirlas. Y es **la misma función para las dos fusiones**: si el
- * recolector y el compañero dieran distinto, serían dos reglas.
- */
-export function cristalesDeConsuelo(tier: number): number {
-  return 2 + Math.max(1, Math.floor(tier));
+/**
+ * CUÁNTOS CRISTALES DEJA UN FALLO DE FORJA, Y POR QUÉ SON ESTOS Y NO OTROS.
+ *
+ * **EL MOTIVO POR EL QUE EL FALLO NO PUEDE SER UN CALLEJÓN SIN SALIDA.** Un fallo
+ * cuesta los dos materiales del yunque, y eso es un objeto de tier: en los niveles
+ * altos es el equivalente a miles de nanitas. Sin más, la racha mala vacía el almacén
+ * y el jugador deja de intentar; con algo que se lleva, la racha mala **cuesta pero
+ * no empobrece**, y se sigue intentando.
+ *
+ * **POR QUÉ SUBE CON EL TIER.** Porque el coste del fallo también sube: dos T10
+ * duelen mucho más que dos T1, y una compensación plana haría que el fallo fuera una
+ * pesadilla al principio y gratis al final.
+ *
+ * **Y POR QUÉ NO ES TANTA COMO DA UNA CAJA.** Una caja de tier n da entre 3n y 5n
+ * cristales, más el multiplicador de rareza. Aquí el fallo da 2 + n. La razón de que
+ * la diferencia sea deliberada: **abrir cajas tiene que seguir siendo la forma buena
+ * de conseguir cristales**, y la forja es la que se usa cuando ya tienes el material
+ * en la mano. Si igualáramos las dos fuentes, las cajas dejarían de tener sentido y con
+ * ellas el 30 % del botín que dan.
+ *
+ * **EL NÚMERO DEVUELTO SON INTENTOS, Y EL MOTOR LOS CONVIERTE.** El recurso es único,
+ * así que esta función devuelve "cuántos intentos de nivel 0" y quien entrega los
+ * multiplica por `valorDeUnCristal(tier)`. Multiplicar en el motor y no aquí es a
+ * propósito: **el dinero lo decide quien lo paga.** Si esta función devolviera
+ * unidades, la mitad de los llamadores podrían olvidar el factor y la forja valdría
+ * casi cero en los niveles altos sin que nada lo delatara.
+ *
+ * El número está aquí y no en el motor porque es **la mitad de la regla del fallo**:
+ * la otra mitad es la probabilidad, y las dos tienen que estar escritas una al lado de
+ * la otra para que se vea que el fallo se paga. Y es **la misma función para las dos
+ * fusiones**: si el recolector y el compañero dieran distinto, serían dos reglas.
+ *
+ * ## POR QUÉ EL FALLO PAGA CRISTALES Y NADA MÁS
+ *
+ * Antes pagaba **esquirlas y cristales**, y las esquirlas eran una moneda **sin ninguna
+ * salida**: se acumulaban, se guardaban entre ascensiones y no se gastaban en nada. La
+ * forja se paga con dos recolectores, no con esquirlas. Eran un contador que subía y
+ * una palabra nueva que aprender, a cambio de nada.
+ *
+ * Así que el fallo paga **una sola cosa, y es la que se puede gastar**: cristales, que
+ * suben de nivel. Lo que se conserva del reparto viejo es lo que sí tenía sentido —que
+ * el nodo `shard_sifter` multiplicase el premio del fallo—, y ahora multiplica estos.
+ * Su identificador **no se cambia**, porque es la clave con la que el nivel del nodo está
+ * guardado en cada partida: renombrarla le quitaría la bonificación de golpe a quien ya
+ * la tuviera comprada, además de dejar inalcanzables los dos nodos que la tienen como
+ * requisito.
+ *
+ * **LO QUE ESTO COBRA, Y SE DICE.** El fallo paga menos que antes, porque lo que ya no se
+ * paga era una moneda muerta. La cifra de los cristales es la de siempre y el
+ * multiplicador del árbol es el de siempre, así que el cambio se ve en un sitio: en el
+ * botín del fallo.
+ */
+export function cristalesDeConsuelo(tier: number, bonus = 0): number {
+  return Math.round((2 + Math.max(1, Math.floor(tier))) * (1 + bonus));
 }
 
 /**
  * Intenta fusionar 2 recolectores del mismo tier.
  * - Si tiene éxito: devuelve el nuevo recolector, los 2 materiales se consumen.
- * - Si falla: se consumen los materiales, se devuelven esquirlas.
+ * - Si falla: se consumen los materiales y se pagan cristales de consuelo.
  */
 export function attemptForge(
   materials: CollectorItem[],
@@ -1097,7 +1114,7 @@ export function attemptForge(
 
   const tira = tiraDeForja(tier, materials, options);
   if (!tira.acierto) {
-    return { success: false, shards: tira.shards, crystals: tira.crystals, chanceUsed: tira.chance };
+    return { success: false, crystals: tira.crystals, chanceUsed: tira.chance };
   }
 
   // Éxito: construir el recolector
@@ -1185,7 +1202,7 @@ export function attemptForgeCompanion(
   materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number }>,
   tier: number,
   options: IntentosDeForja
-): { success: boolean; companion?: any; error?: string; shards?: number; crystals?: number; chanceUsed?: number } {
+): { success: boolean; companion?: any; error?: string; crystals?: number; chanceUsed?: number } {
   const rng = options.rng ?? Math.random;
   const maxTier = options.maxTier ?? Infinity;
 
@@ -1194,7 +1211,7 @@ export function attemptForgeCompanion(
 
   const tira = tiraDeForja(tier, materials, options);
   if (!tira.acierto) {
-    return { success: false, shards: tira.shards, crystals: tira.crystals, chanceUsed: tira.chance };
+    return { success: false, crystals: tira.crystals, chanceUsed: tira.chance };
   }
 
   const newTier = tier + 1;

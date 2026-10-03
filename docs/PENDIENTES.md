@@ -226,7 +226,7 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 - [x] **B2 · La forja fusiona también compañeros.** Dos del mismo tier salen uno del
       siguiente, con **la misma probabilidad, el mismo cobro y el mismo fallo** que dos
       recolectores, y eso no es casualidad: las tres reglas que tienen que coincidir —
-      cuántos materiales, que sean distintos y del mismo tier, y cuánto esquirlas da el
+      cuántos materiales, que sean distintos y del mismo tier, y cuánto paga el
       fallo — están **en una función cada una** (`validaMateriales()` y `tiraDeForja()`),
       y las dos fusiones las llaman. Escritas dos veces son dos ocasiones de que una
       acepte tres materiales y la otra dos.
@@ -1030,7 +1030,47 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1835**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1837**, todas en verde._
+
+### El sistema que se ha quitado entero
+
+- [-] **Las esquirlas, como concepto.** Eran **una moneda sin salida**: la forja se paga
+      con dos recolectores, no con esquirlas, así que se acumulaban, se guardaban entre
+      ascensiones y no se gastaban en nada. Un contador que sube y una palabra nueva que
+      aprender, a cambio de nada.
+      **El fallo de forja paga ahora una sola cosa, y es la que se puede gastar:
+      cristales.** La cifra de los cristales es la de siempre (`2 + tier` intentos, que el
+      motor convierte con `valorDeUnCristal()`), así que **el fallo paga menos que antes**:
+      lo que ya no se paga era la moneda muerta. Ese es el coste del cambio y conviene
+      saberlo, porque el botín del fallo es el único sitio donde se nota.
+      Lo que se conserva es lo que sí tenía sentido: el nodo que multiplicaba el premio
+      del fallo. **Conserva su identificador, `shard_sifter`, y eso es deliberado**: es la
+      clave con la que su nivel está guardado en cada partida, así que renombrarla le
+      quitaría la bonificación de golpe a quien ya la tuviera comprada y dejaría
+      inalcanzables los dos nodos que la tienen como requisito (`crate_sight` y
+      `afk_extend`). Se llama **"Alcornoque"**, dice "+25 % de cristales por fallo de
+      forja" y su bonus es ahora `consolationBonus`.
+      Fuera del estado, de la regla, de la franja de estadísticas de la Forja, de la
+      píldora de la cabecera, del panel de administración, del listado del admin y del
+      texto de la Ascensión. La píldora de la Forja **no se queda vacía**: ahora dice
+      cuánto paga un fallo en el tier abierto, que es el dato con el que el jugador decide
+      si arriesgar los dos materiales —antes ponía el total de esquirlas, que no era lo
+      que se ganaba al fallar—. Y el texto de debajo del yunque, que decía "+N esquirlas
+      para el siguiente intento", decía una cosa que no era verdad porque las esquirlas no
+      se gastaban en el siguiente intento; ahora dice los cristales que deja el fallo.
+
+      **Y BORRARLO NO ERA SUFICIENTE: HABÍA QUE QUE NO SE QUEDARA EN EL DOCUMENTO.** El
+      guardado va con `setDoc(..., { merge: true })`, y con `merge` **lo que no está en el
+      objeto no se borra, se queda**. Quitar `shards` del estado y de la lista de campos
+      lo deja de escribir, que es esconderse, no borrarse. Ahora el documento incluye
+      `shards: deleteField()`, que es el idiom de Firestore para eso, y **se ejecuta en el
+      guardado de cargar**, o sea que el rastro desaparece solo la primera vez que se entra
+      y el jugador no tiene que hacer nada.
+      Las dos pruebas que había —"guardar: esquirlas" y "prestigio: se conservan las
+      esquirlas"— afirmaban que un contador de una moneda muerta era parte del juego, así
+      que se han ido con la moneda. En su lugar hay cuatro que vigilan la frontera: una
+      partida vieja con `shards: 9999` carga igual, el estado no las arrastra, el documento
+      las pierde al cargar sin tocar nada y no vuelven al recargar.
 
 ### La chrome, y por qué se ha medido
 

@@ -232,8 +232,7 @@ export const CAMPOS_EDITABLES = [
   { campo: 'cratesOpened', etiqueta: 'Cajas abiertas' },
   { campo: 'totalClicks', etiqueta: 'Clics totales' },
   { campo: 'cores', etiqueta: 'Núcleos' },
-  { campo: 'totalCores', etiqueta: 'Núcleos totales' },
-  { campo: 'shards', etiqueta: 'Esquirlas' }
+  { campo: 'totalCores', etiqueta: 'Núcleos totales' }
 ] as const;
 
 /** Escribe un campo numérico suelto del documento del operativo. */

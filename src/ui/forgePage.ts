@@ -28,7 +28,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION } from '../data/crafting';
+import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, cristalesDeConsuelo, valorDeUnCristal } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -173,7 +173,6 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
 
   const body = `
     ${statStrip([
-      { label: 'Esquirlas', value: formatNumber(state.shards), tone: 'text-cyan-300' },
       { label: N.muchos[0].toUpperCase() + N.muchos.slice(1), value: String(materiales.length) },
       { label: 'Forjadas', value: String(state.forgedCount) },
       { label: 'Piedras', value: String(stoneCount) }
@@ -325,10 +324,29 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     icon: 'anvil',
     route: 'forja',
     state,
+    // LA PÍLDORA DE LA CABECERA DICE CUÁNTO PAGA UN FALLO, Y ANTES DECÍA OTRA COSA.
+    //
+    // Estaba el total de esquirlas, y el fallo no se pagaba en esquirlas: se acumulaban
+    // y no servían para nada. Era el dato equivocado en el sitio donde el jugador mira
+    // antes de decidir si conviene risking los dos materiales.
+    //
+    // Ahora es **la compensación de un fallo en el tier que está abierto**, convertida a
+    // unidades, que es la cifra con la que el jugador piensa: "si fallo, pierdo estos dos
+    // y me quedo con esto". Sale de las dos funciones de la regla —`cristalesDeConsuelo()`
+    // y `valorDeUnCristal()`—, no de un número escrito aquí.
+    //
+    // **Y LLEVA LA PALABRA "SI FALLA" AL LADO, PORQUE UN NÚMERO SOLO NO SE SABE QUÉ ES.**
+    // La franja de la cabecera ya enseña el saldo de cristales, así que un 24,8 K suelto
+    // al lado se lee como el saldo otra vez —la misma cifra por otro camino— o como nada.
+    // La palabra no cabe en todos los anchos: por debajo de `sm` se oculta y el número se
+    // queda solo, que es lo único que cabe en 360 px. En cualquier ancho con sitio, se lee.
     actions: `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
-                   text-[11px] font-mono text-cyan-300">
-        ${ic('crystal', 'w-3.5 h-3.5')} ${formatNumber(state.shards)}
+                   text-[11px] font-mono text-cyan-300"
+            title="Lo que deja un fallo en el tier abierto">
+        ${ic('crystal', 'w-3.5 h-3.5')}
+        <span class="hidden lg:inline opacity-60">si falla</span>
+        ${formatNumber(cristalesDeConsuelo(ui.tier) * valorDeUnCristal(ui.tier))}
       </span>`
   }, body));
 
@@ -599,7 +617,7 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
             : 'Sin afijos'),
         esCompanion ? 'Fusionado por ti' : `Forjada por: ${w.forgedBy ?? '-'}`
       ].join('<br>')
-    : `+${result.shards ?? 0} esquirlas para el siguiente intento`;
+    : `+${formatNumber(result.crystals ?? 0)} cristales de consuelo`;
 
   const CELLS = 18;
   const WIN = 9;

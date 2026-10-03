@@ -167,7 +167,6 @@ const MOCK: any = {
   cores: 24,
   totalCores: 61,
   resets: 3,
-  shards: 118,
   forgedCount: 9,
   unlockedNodes: ['core_sink', 'core_edge', 'scrapyard', 'blueprint', 'auto_clicker', 'passive_loop', 'forge_luck'],
   nodeLevels: {
@@ -176,7 +175,7 @@ const MOCK: any = {
   },
   bonus: {
     clickMult: 0.32, passiveMult: 0.42, costReduction: 0.04, sellMult: 0.12,
-    craftLuck: 0.12, shardBonus: 0, autoClick: 1, afkHours: 0, offlineClicks: 0,
+    craftLuck: 0.12, consolationBonus: 0, autoClick: 1, afkHours: 0, offlineClicks: 0,
     crateLuck: 0, coreGain: 0, storageSlots: 3, companionSlots: 1
   },
   // Cosméticos
@@ -244,7 +243,7 @@ const fakeGame: any = {
     return Math.floor((w.sellPrice || 1500) * (1 + MOCK.bonus.sellMult));
   },
   getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
-  getForgeInfo: () => ({ shards: MOCK.shards, craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),
+  getForgeInfo: () => ({ craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),
   buyStoreItem: () => true,
   buyNode: () => ({ success: true, msg: 'Nodo comprado' }),
   prestige: () => ({ success: true, gained: 8, msg: '+8 núcleos' }),

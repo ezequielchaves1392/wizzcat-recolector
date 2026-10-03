@@ -410,7 +410,6 @@ export function baseSave(items: any[], extra: any = {}) {
     unlockedNodes: [],
     cores: 0,
     totalCores: 0,
-    shards: 0,
     forgedCount: 0,
     cosmetics: { title: 'title_default', frame: 'frame_none', banner: 'banner_none', unlocked: [] },
     unlockedAchievements: [],

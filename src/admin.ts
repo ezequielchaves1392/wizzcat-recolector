@@ -730,7 +730,6 @@ function pintarDetalle() {
         ${campo('Almacén', `${u.items} / ${d.warehouseCapacity ?? '—'}`)}
         ${campo('Logros', formatNumber(Array.isArray(d.unlockedAchievements) ? d.unlockedAchievements.length : 0))}
         ${campo('Reinicios', formatNumber(Number(d.resets) || 0))}
-        ${campo('Esquirlas', formatNumber(Number(d.shards) || 0))}
         ${campo('Guardado', esc(haceCuando(u.actualizado)))}
       </div>
 
