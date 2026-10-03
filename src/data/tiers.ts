@@ -215,16 +215,21 @@ export const LORE: Record<string, string> = {
 };
 
 /**
+/**
  * El lore de un nombre, o `null` si no tiene.
  *
- * Conoce al "SOBRECARGADO" de la forja de cajas: un item sobrecargado lleva
- * el nombre de base más el sufijo, y su historia es la de su nombre original.
- * Cualquier otro nombre sin entrada no tiene lore, y eso es lo que el banco
+ * **ANTES TENÍA QUE CONOCER EL SUFIJO "SOBRECARGADO".** Un item sobrecargado
+ * llevaba el nombre de su base más ese sufijo, así que la función hacía un
+ * `replace()` para quitarlo y buscar el lore del nombre de verdad. Como el
+ * sobrecargado ya no existe, el `replace()` se va con él: un nombre es su lore o
+ * no lo es.
+ *
+ * Cualquier nombre sin entrada no tiene lore, y eso es lo que el banco
  * `loreCheck` vigila: un nombre sin lore es contenido a medias (D4).
  */
 export function lorePara(nombre: string): string | null {
   if (!nombre) return null;
-  return LORE[nombre] ?? LORE[nombre.replace(/ SOBRECARGADO$/, '')] ?? null;
+  return LORE[nombre] ?? null;
 }
 
 /**

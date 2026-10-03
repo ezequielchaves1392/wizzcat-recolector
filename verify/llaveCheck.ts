@@ -81,34 +81,60 @@ async function main() {
     }
   }
 
-  // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
   //  2. EL TEXTO. NO PUEDE PROMETER UNA CAJA QUE NO ABRE.
   //
   //     La forma de que esto no vuelva a pasar es que el texto no se escriba:
   //     sale de `cratesOpenedBy()`, que llama a `keyOpens()`. Aquí se comprueba
   //     que la promesa y la regla dicen lo mismo, caja por caja y llave por
   //     llave.
+  //
+  //     **EL TEXTO YA NO ESCRIBE LOS NOMBRES DE LAS CAJAS, DICE LA REGLA.**
+  //     Antes era "Abre Caja T1, Caja T2 y Caja T3", que con diez cajas salía
+  //     con una línea de ocho nombres que además tenía que cambiar cada vez que
+  //     se añadía una caja. Ahora es "Abre la caja de su tier y todas las de
+  //     menor", que es la regla entera en una frase.
+  //
+  //     Por eso la comprobación ya no es "el texto menciona la caja N": es **que
+  //     el texto sea el mismo para toda llave que abre el mismo número de cajas**,
+  //     y que no nombre ninguna caja por encima de su tier. Un texto que dijera
+  //     "Caja T9" en la llave T3 mentiría aunque la regla no cambiara.
   // -----------------------------------------------------------------------
   {
+    const textosPorAlcance = new Map<number, Set<string>>();
     for (const t of KEY_TIER_ORDER) {
       const def = KEY_DEFS[t];
-      const prometidas = cratesOpenedBy(t);
-      for (const c of CAJAS) {
-        const realmenteAbre = keyOpens(t, CRATE_KEY_TIER[c]);
-        if (realmenteAbre) {
-          check(`texto: ${def.name} dice que abre ${CRATE_TYPES[c].name}, y lo abre`,
-            def.details.includes(CRATE_TYPES[c].name),
-            `details="${def.details}"`);
-        }
-      }
-      // Y la dirección inversa: si el texto nombra una caja, la abre de verdad.
-      for (const c of CAJAS) {
-        if (def.details.includes(CRATE_TYPES[c].name)) {
-          check(`texto: ${def.name} nombra ${CRATE_TYPES[c].name} y de verdad la abre`,
-            keyOpens(t, CRATE_KEY_TIER[c]),
-            `T${t} contra ${c} (necesita T${CRATE_KEY_TIER[c]})`);
-        }
-      }
+      const n = cratesOpenedBy(t).length;
+
+      // 1. Que la frase tenga la forma de la regla: "su tier", y "menor" cuando
+      //    abre más de una. Es lo que impide que vuelva a enumerar nombres.
+      check(`texto: ${def.name} dice la regla, no la lista`,
+        def.details.includes('su tier')
+          && (n <= 1 ? !def.details.includes('menor') : def.details.includes('menor')),
+        `details="${def.details}" abre=${n}`);
+
+      // 2. Que no nombre ninguna caja. Un nombre escrito es una lista que se
+      //    queda vieja, que es justo lo que se quitó.
+      const nombraAlguna = CAJAS.some(c => def.details.includes(CRATE_TYPES[c].name));
+      check(`texto: ${def.name} no nombra ninguna caja`,
+        !nombraAlguna, `details="${def.details}"`);
+
+      // 3. Que la regla del texto case con la regla real, caja por caja. El
+      //    texto dice "su tier y todas las de menor", así que lo que se comprueba
+      //    es que abre exactamente las cajas de tier ≤ el suyo.
+      const esperada = CAJAS.filter(c => CRATE_KEY_TIER[c] <= t);
+      check(`texto: ${def.name} abre exactamente las cajas de su tier y las de menor`,
+        cratesOpenedBy(t).join(',') === esperada.join(','),
+        `abre=[${cratesOpenedBy(t).join(',')}] esperada=[${esperada.join(',')}]`);
+
+      if (!textosPorAlcance.has(n)) textosPorAlcance.set(n, new Set());
+      textosPorAlcance.get(n)!.add(def.details);
+    }
+    // Y todas las llaves que abren lo mismo dicen lo mismo, que es lo que
+    // significa "el texto sale de la regla y no de la lista".
+    for (const [n, textos] of textosPorAlcance) {
+      check(`texto: las llaves que abren ${n} cajas dicen lo mismo`,
+        textos.size === 1, `${textos.size} textos distintos para ${n}: ${[...textos].join(' | ')}`);
     }
   }
 

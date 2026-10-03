@@ -34,7 +34,7 @@ import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
-import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP } from '../data/store';
+import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, type CrateType } from '../data/store';
 // Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
 // nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
 import { STORE_KEY_TIER, KEY_DEFS, KEY_TIERS, cratesOpenedBy } from '../data/items';
@@ -66,12 +66,28 @@ interface Category {
  * llega abriendo la T8.
  *
  * Las dos listas de abajo están **generadas** con `KEY_TIERS`: con diez llaves,
- * escribirlas una a una era un sitio más donde olvidarse la novena.
  */
+/**
+ * Los expansores que están en la tienda, por orden de tier.
+ *
+ * Sale de `EXPANSOR_TIERS` filtrando los que tienen precio, que es la misma
+ * condición que usa `STORE_ITEMS` para construirlos. **Si las dos listas se
+ * construyen con el mismo filtro, no pueden separarse**: la categoría no puede
+ * enseñar una carta que no existe ni dejar de enseñar una que sí.
+ */
+const EXPANSORES_EN_VENTA = EXPANSOR_TIERS
+  .filter(e => e.cost !== null)
+  .map(e => e.buffId)
+  .sort();
+
 const CATEGORIES: Category[] = [
   { id: 'llaves', label: 'Llaves', icon: 'key', items: KEY_TIERS.map(t => `keyT${t}`) },
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1'] },
-  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', 'expansorT1', 'expansorT2'] },
+  // Los expansores que se venden salen de `EXPANSOR_TIERS`, no de una lista
+  // escrita. Con diez expansores y solo dos a la venta, escribirlos aquí era
+  // otro sitio donde olvidarse de uno; y si mañana se vendiera el T3, esta línea
+  // seguiría enseñando dos.
+  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', ...EXPANSORES_EN_VENTA] },
   // F4 · Solo las tres tarjetas. `clickBuff` y `passiveBuff` se han retirado de la
   // lista: la categoría ya no puede nombrarlos porque no existen, y
   // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
@@ -105,14 +121,6 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   upgradeCrystal: {
     what: 'Cristal T1, para subir el nivel de un recolector T1.',
     detail: 'F26: cada recolector se sintoniza con el cristal de SU MISMO tier. Los otros nueve salen de las cajas de su nivel; aquí solo se vende el T1.'
-  },
-  expansorT1: {
-    what: 'Añade 2 ranuras permanentes al almacén.',
-    detail: 'Se usa desde el almacén. Vale hasta 120 de capacidad: al crecer hay que subir al T2. Las ranuras del árbol se suman a estas.'
-  },
-  expansorT2: {
-    what: 'Añade 5 ranuras permanentes al almacén.',
-    detail: 'Se usa desde el almacén. Vale hasta 300 de capacidad. El T3, que llega al tope, solo sale de cajas altas.'
   },
 
   afkCard: {
@@ -155,6 +163,35 @@ const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   }
 };
 
+/**
+ * La ficha de un expansor, GENERADA desde `EXPANSOR_TIERS`.
+ *
+ * Las dos estaban escritas a mano con los tres números dentro —"añade 2 ranuras",
+ * "vale hasta 120", "sube al T2"— y por eso eran la tercera copia de la misma
+ * regla en el mismo repo (la tabla, el consumible y la ficha). Con diez tiers eso
+ * ya no es mantenible, y además lo que contestaban mal era **la pregunta que el
+ * jugador se hace al mirarlas**: "¿me sirve?", que es si su almacén está por
+ * debajo del techo.
+ *
+ * Por eso el texto dice **qué hace falta para que sirva**, no solo cuántas
+ * ranuras da: "si tu almacén ya está en N o más, necesitas el Expansor T{n+1}".
+ * Con eso la tarjeta contesta la pregunta sin que haya que abrir nada.
+ */
+function descDeExpansor(e: typeof EXPANSOR_TIERS[number]): { what: string; detail: string } {
+  const siguiente = EXPANSOR_TIERS.find(x => x.tier === e.tier + 1);
+  return {
+    what: `Añade ${e.slots} ranuras permanentes al almacén, hasta un total de ${e.maxCap}.`,
+    detail: siguiente
+      ? `Se usa desde el almacén. Si ya llegas a ${e.maxCap}, deja de servir: necesitas el ${siguiente.name}, que llega hasta ${siguiente.maxCap}.`
+      : `Se usa desde el almacén. Es el último: llega hasta ${e.maxCap} y no hay nada por encima.`
+  };
+}
+
+/** La carta de un expansor, o `undefined` si no lo es. */
+function expansorDeCarta(itemKey: string): typeof EXPANSOR_TIERS[number] | undefined {
+  return EXPANSOR_TIERS.find(e => e.buffId === itemKey);
+}
+
 /** Descripción de las tarjetas de tier, generada: cambia el número, no la idea. */
 function tierDescription(kind: 'companion' | 'collector', tier: number): { what: string; detail: string } {
   const range = tierRange(tier);
@@ -196,7 +233,10 @@ function iconFor(itemKey: string): IconName {
   if (STORE_KEY_TIER[itemKey] !== undefined) return 'key';
   if (itemKey === 'crateT1') return 'crate';
   const map: Record<string, IconName> = {
-    upgradeCrystal: 'crystal', expansorT1: 'warehouse', expansorT2: 'warehouse',
+    upgradeCrystal: 'crystal',
+    // Los expansores comparten icono: los diez son el mismo objeto con distinto
+    // techo, y el icono lo dice mejor así que un icono por tier.
+    ...Object.fromEntries(EXPANSOR_TIERS.map(e => [e.buffId, 'warehouse' as IconName])),
     afkCard: 'clock', clickX2Card: 'bolt', clickX3Card: 'bolt',
     calibrationStone: 'flask', stabilityNano: 'flask',
     // Las cartas de ranura salen de la tabla, no de una entrada por carta. Con una
@@ -216,7 +256,11 @@ function rarityOf(itemKey: string): string | null {
   // habría acertado en cuatro.
   if (itemKey === 'crateT1') return CRATE_TYPES[1].rarity;
   const map: Record<string, string> = {
-    upgradeCrystal: 'Raro', expansorT1: 'Raro', expansorT2: 'Épico',
+    upgradeCrystal: 'Raro',
+    // La rareza de un expansor es la de su caja: es un item de caja T{n}. Antes
+    // eran dos números escritos y el expansor T2 ponía "Épico" cuando su caja es
+    // Común, que es lo que hace que un rebalance de rarezas se note aquí.
+    ...Object.fromEntries(EXPANSOR_TIERS.map(e => [e.buffId, CRATE_TYPES[e.tier as CrateType].rarity])),
     // F4 · Sin `clickBuff` ni `passiveBuff`: no hay carta, no hay rareza.
     afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
@@ -232,6 +276,11 @@ function rarityOf(itemKey: string): string | null {
 }
 
 function descFor(itemKey: string): { what: string; detail: string } {
+  // El expansor se genera aquí y no está en `DESCRIPTIONS`, porque su texto lleva
+  // el número de su techo y el del siguiente: dos números que antes estaban
+  // escritos a mano en la ficha, en el consumible y en la tabla.
+  const expansor = expansorDeCarta(itemKey);
+  if (expansor) return descDeExpansor(expansor);
   if (DESCRIPTIONS[itemKey]) return DESCRIPTIONS[itemKey];
   // Las llaves tampoco tienen texto aquí, y por el mismo motivo que la rareza:
   // el `details` de `KEY_DEFS` ya lo dice con el mismo criterio que la regla que

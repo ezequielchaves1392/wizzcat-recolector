@@ -6,11 +6,22 @@
 // Firestore terminaba guardando objetos que ningún módulo sabía leer.
 // ==========================================================================
 
-/** Rareza. El orden importa: se usa para ordenar y para el índice de color. */
-export type Rarity = 'Común' | 'Raro' | 'Épico' | 'Legendario' | 'Mítico' | 'Divino' | 'Sobrecargado';
+/**
+ * Rareza. El orden importa: se usa para ordenar y para el índice de color.
+ *
+ * **YA NO HAY UNA RAREZA POR ENCIMA DE `Divino`.** Existía `Sobrecargado`, una
+ * séptima rareza que solo se obtenía del recolector sobrecargado de las cajas, y
+ * que era una segunda escala de calidad **además del potencial**: un item podía
+ * ser `Divino` por tier y `Sobrecargado` por sobrecarga, y entonces la rareza
+ * decía una cosa y el potencial otra. Como el potencial ya es la escala de
+ * calidad de 1 a 5, y además decide el poder de los compañeros, la sobrecarga se
+ * va: **un item es tan bueno como su potencial**, y la rareza solo dice de qué
+ * tier viene.
+ */
+export type Rarity = 'Común' | 'Raro' | 'Épico' | 'Legendario' | 'Mítico' | 'Divino';
 
 export const RARITY_ORDER: Rarity[] = [
-  'Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino', 'Sobrecargado'
+  'Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'
 ];
 
 /** Atributo que un recolector crafteado hereda de sus materiales. */
@@ -61,8 +72,6 @@ export interface CollectorItem {
   forgedBy?: string;
   /** Fecha de forja, para mostrar antigüedad en el mercado. */
   forgedAt?: number;
-  /** Marca de recolector sobrecargado de caja. */
-  overclock?: boolean;
   /** Rareza de los materiales con los que se forjó, para el valor. */
   lineage?: Rarity[];
   equipped?: boolean;
@@ -76,6 +85,17 @@ export interface CompanionItem {
   details: string;
   rarity: Rarity;
   tier?: number;
+  /**
+   * Potencial 1..5, y con él el poder sale de la posición dentro del rango del
+   * tier. **Es la misma escala que la del recolector y la misma que decide el
+   * daño del click**: aquí decide el ingreso.
+   *
+   * Solo lo llevan los compañeros cuyo poder sale del rango de su tier —los de
+   * tienda y los de caja—. Los seis compañeros exclusivos de caja tienen un
+   * poder escrito a mano y no de tier, así que escalarlos por tier los
+   * destrozaría; esos vienen sin estrellas y con su número de siempre.
+   */
+  potential?: number;
   sellPrice?: number;
 }
 

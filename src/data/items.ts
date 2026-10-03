@@ -130,13 +130,28 @@ export function cratesOpenedBy(keyTier: KeyTier): CrateType[] {
   return KEY_TIERS.filter(c => keyOpens(keyTier, CRATE_KEY_TIER[c]));
 }
 
-/** El `details` de una llave, generado con el mismo criterio que la regla. */
+/**
+ * EL `details` DE UNA LLAVE: LA REGLA, NO LA LISTA.
+ *
+ * **ANTES ENUMERABA LOS COFRES** —"Abre Caja T1, Caja T2, Caja T3, Caja T4,
+ * Caja T5, Caja T6 y Caja T7"— y con diez cajas la T7 salía con una línea de
+ * texto de ocho nombres, que además cambia con cada caja que se añade.
+ *
+ * La regla es mucho más corta y no se puede quedar vieja: **`keyOpens()` dice
+ * que una llave abre su caja y todas las de abajo**, así que el texto dice
+ * exactamente eso. Un texto derivado ya no puede mentir (B6), y con este además
+ * **no hay nada derivado que actualizar**: no hay lista, solo una frase sobre
+ * la regla que ya existe.
+ *
+ * Y dice "y todas las de menor tier" en vez de "o inferior" porque es lo que el
+ * jugador entiende mirando la escalera de cajas de abajo hacia arriba: la T5 está
+ * más abajo que la T8.
+ */
 function detailsDeLlave(keyTier: KeyTier): string {
-  const nombres = cratesOpenedBy(keyTier).map(c => CRATE_TYPES[c].name);
-  if (nombres.length === 0) return 'No abre ningún cofre.';
-  if (nombres.length === 1) return `Abre ${nombres[0]}.`;
-  const ultimo = nombres.pop();
-  return `Abre ${nombres.join(', ')} y ${ultimo}.`;
+  const n = cratesOpenedBy(keyTier).length;
+  if (n === 0) return 'No abre ningún cofre.';
+  if (n === 1) return 'Abre la caja de su tier.';
+  return 'Abre la caja de su tier y todas las de menor.';
 }
 
 /**

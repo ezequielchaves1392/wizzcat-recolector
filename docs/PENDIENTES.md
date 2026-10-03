@@ -659,7 +659,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1727
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1693
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
@@ -829,6 +829,55 @@ pruebas**, todas en verde._
         (`amount × coste / 12` = 21 a 33 veces su propio precio), no el precio. Ahora todo
         premio de caja lleva **tope de reventa = par caja+llave**, y las nanitas son del
         **25% al 40%** del par. `loteCheck`, banco nuevo (71).
+
+- [x] **Fuera la mecánica de sobrecargados, el potencial pasa a los compañeros, la
+      leyenda dice la regla y los expansores tienen techo por tier** (sin commit).
+      Cuatro cosas del mismo encargo, y las cuatro eran copias del mismo problema:
+      **una lista escrita al lado de la tabla que la genera**.
+      - **No hay sobrecargados.** La séptima rareza `Sobrecargado` desaparece: del tipo
+        `Rarity`, de `RARITY_RANK`, de los tres mapas de color, del multiplicador
+        de valor, de la tabla de afijos y de `overclock?: boolean`. Y el motivo
+        no es que sobrara: es que **era una segunda escala de calidad encima del
+        potencial**, y las dos podían decir cosas distintas del mismo objeto.
+        `Divino` se lleva ahora los 6 afijos, que era del peldaño que se iba.
+      - **`makeOverclockCollector()` se sustituye por `makeCrateCollector()`**, que
+        sale de `generateCollectorByTier()`: un recolector normal de su tier con
+        el potencial tirado. El ★5 de caja es ahora el item perfecto y hay que
+        buscarlo, en vez de regalarse en una de cada siete cajas.
+      - **El potencial decide el poder de los compañeros.** `poderDeCompanero(tier, p)`
+        coloca el poder en la posición del rango que le toca a ese potencial: ★1 es
+        el suelo y ★5 el techo. **La esperanza no cambia** —el ★3 es el punto
+        medio, que es lo que `rand(min, max)` daba de media—, así que la economía
+        está intacta y lo que cambia es la diferencia entre dos compañeros del
+        mismo tier. Y no es un multiplicador como el del recolector porque el
+        techo del rango es lo que se paga: con `danioDeRango()` el T10 salía
+        **once veces** más fuerte con la misma carta y `balanceCheck` lo cazaría
+        como la trampa que ya cazó una vez.
+      - **El salto y la Ascensión dejaron de mentir sobre el compañero de partida.**
+        Su poder era un `5` escrito a mano, que es un T2 dentro del rango del T1,
+        y el comentario que decía "es un T1 real" mentía. Ahora sale de
+        `poderDeCompanero(1, 3)`, y **el item del almacén se construye desde
+        `baseCompanion`** en vez de con números: antes la ficha decía "+6/s" y el
+        item decía "+5/s" del mismo compañero.
+      - **La leyenda de la caja dice la regla, no el botín.** Las diez cajas dicen
+        lo mismo —"Se abre con la llave de su tier o de un tier superior"— porque
+        antes cada una enumeraba su contenido y **ninguna mencionaba el expansor,
+        el salto ni el cosmético**, y dos nombraban un "material de T4" que no
+        existe. Y las diez llaves dicen "Abre la caja de su tier y todas las de
+        menor", en vez de una línea de ocho nombres.
+      - **Diez expansores, uno por tier, y cada uno con su TECHO.** El expansor T{n}
+        da +5 ranuras y vale hasta `15 + 5n`: el T1 hasta 20, el T3 hasta 30, el
+        T10 hasta 65. **Cuando ya llegas a su techo no se puede usar** y el
+        rechazo dice el número y cuál hace falta. Antes eran tres con techos de
+        120, 300 y 600, que no frenaban nada: desde 15 de partida el T1 seguía
+        sirviendo a los 119.
+      - **Y la caja T{n} suelta el expansor T{n}.** Antes lo daba `Math.min(3, tier)`,
+        o sea que de la T4 a la T10 salía siempre el T3 —y con el techo nuevo ese
+        expansor **solo sirve hasta 30 ranuras**: en la caja T7 era botín muerto.
+      - **`WAREHOUSE_MAX_CAP` sigue en 600 a propósito.** Bajarlo a 65 haría que
+        `enforceWarehouseCapacity()` **le borrara items del almacén** a quien ya
+        pasó de ahí. El techo frena el crecimiento; nunca recorta lo que ya hay.
+
 
 ### La economía y el ritmo (`v1.1.0`)
 

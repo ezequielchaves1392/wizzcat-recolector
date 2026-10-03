@@ -355,7 +355,7 @@ export function rollPotential(materials: CollectorItem[], stonesUsed: number): n
 }
 
 const RARITY_WEIGHT: Record<Rarity, number> = {
-  'Común': 0, 'Raro': 0.5, 'Épico': 1, 'Legendario': 1.6, 'Mítico': 2.4, 'Divino': 3.2, 'Sobrecargado': 2.8
+  'Común': 0, 'Raro': 0.5, 'Épico': 1, 'Legendario': 1.6, 'Mítico': 2.4, 'Divino': 3.2
 };
 
 // --------------------------------------------------------------------------
@@ -498,10 +498,19 @@ function collectorRarity(tier: number, potential: number): Rarity {
   return (base as Rarity) || 'Común';
 }
 
-/** Cuántos afijos lleva como MÍNIMO un item de cada rareza. El tope son 6. */
+/**
+ * Cuántos afijos lleva como MÍNIMO un item de cada rareza. El tope son 6.
+ *
+ * **`Divino` SE LLEVA EL TOPO ENTERO.** Antes el sexto escalón era `Sobrecargado`
+ * y el que llevaba los 6 afijos; con esa rareza fuera, un item con 6 afijos
+ * tiene que ser `Divino`, o el tope de afijos es inalcanzable y la regla de
+ * "más rareza, más afijos" deja de tener final. La rareza la pone el tier —o el
+ * potencial, en la forja—, así que un Divino de T9 forjado con buenos materiales
+ * es el item más completo del juego, que es lo que tenía que ser.
+ */
 export const AFIX_MIN_POR_RARIDAD: Record<string, number> = {
   'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3,
-  'Mítico': 4, 'Divino': 5, 'Sobrecargado': 6
+  'Mítico': 4, 'Divino': 6
 };
 
 /** El tope de afijos de un item. Nadie lleva más de estos. */

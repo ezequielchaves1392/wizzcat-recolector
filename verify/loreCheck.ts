@@ -66,10 +66,17 @@ async function main() {
   //  3. EL LORE AGUANTA LO RARO.
   // -----------------------------------------------------------------------
   {
-    check('lore: el SOBRECARGADO hereda el lore de su nombre base',
-      lorePara('Desintegrador Táctico SOBRECARGADO') === lorePara('Desintegrador Táctico') &&
+    // **UN NOMBRE ES SU LORE O NO LO ES.** Antes esta función hacía un `replace()`
+    // para quitarle el sufijo "SOBRECARGADO" al nombre y buscar el lore del de
+    // verdad, porque el item sobrecargado llevaba el nombre de su base más ese
+    // sufijo. Como el sobrecargado ya no existe, el `replace()` se va con él: lo
+    // que se comprueba ahora es que **un nombre con sufijo no tiene lore**, que
+    // es lo que hace un item mal escrito: que se muestre sin historia en vez de
+    // con la de otro.
+    check('lore: un nombre con sufijo no se inventa el lore de otro',
+      lorePara('Desintegrador Táctico SOBRECARGADO') === null &&
       lorePara('Desintegrador Táctico') !== null,
-      String(lorePara('Desintegrador Táctico SOBRECARGADO')));
+      `${String(lorePara('Desintegrador Táctico SOBRECARGADO'))} / base=${String(lorePara('Desintegrador Táctico'))}`);
     check('lore: un nombre inventado no tiene lore, no un texto roto',
       lorePara('Cosa Que No Existe') === null,
       String(lorePara('Cosa Que No Existe')));

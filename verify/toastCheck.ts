@@ -397,22 +397,25 @@ async function main() {
   // ---------------------------------------------------------------------
 
   // 7a · Usar un expansor, que es la acción que cumple "Almacén Masivo" por la
+// 7a · Usar un expansor, que es la acción que cumple "Almacén Masivo" por la
   // vía de la tienda (F27: la compra mete el item y ampliar es usarlo). La
   // emisión del logro vive en `useConsumable`, como en las demás rutas.
+  //
+  // **EL EXPANSOR T1 DA +5 Y SOLO SE USA UNA VEZ**, porque a partir de 20 deja de
+  // servir. Antes daba +2 y se podía usar tres veces seguidas, y esta comprobación
+  // miraba que con 17 todavía no hubiera logro. Ese caso ya no existe: con un
+  // solo uso el almacén llega a 20 y el logro salta, que es lo correcto.
+  //
+  // Lo que se comprueba ahora es lo que se puede comprobar: **que el logro salte
+  // al llegar a 20 y que el expansorutzado no sirva para nada más**. La segunda
+  // mitad es la que importa, porque es la que convierte el techo en una regla y no
+  // en un número decorativo.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
     const e = g.buyStoreItem('expansorT1', 3) as any;
-    const id = e.id;
-    g.useConsumable(id);
+    g.useConsumable(e.id);
     check(
-      'logros: con 17 todavía no hay logro',
-      !g.getState().unlockedAchievements.includes('deep_pockets'),
-      'logros=' + JSON.stringify(g.getState().unlockedAchievements)
-    );
-    g.useConsumable(id);
-    g.useConsumable(id);
-    check(
-      'logros: ampliar el almacén hasta 20 desbloquea el logro',
+      'logros: ampliar el almacen hasta 20 desbloquea el logro',
       g.getState().unlockedAchievements.includes('deep_pockets'),
       'logros=' + JSON.stringify(g.getState().unlockedAchievements)
     );
@@ -421,26 +424,39 @@ async function main() {
       vistos.includes('Almacén Masivo'),
       'anunciados=' + JSON.stringify(vistos)
     );
+    // Y el segundo expansor T1 ya no sirve: el techo está alcanzado. El item
+    // sigue en el almacén, porque no se gasta un item que no hace nada.
+    const otro = g.useConsumable(e.id);
+    check('logros: el segundo expansor T1 no sirve de nada',
+      otro.ok === false && g.getState().warehouseCapacity === 20,
+      `ok=${otro.ok} cap=${g.getState().warehouseCapacity} msg=${otro.msg ?? ''}`);
   }
-
   // 7b · Y que se anuncie UNA VEZ. Con más usos, el logro ya está
-  // desbloqueado y no debe volver a salir: un `×2` en el cartel sería el mismo
-  // bug que el del `×5` de los avisos, y aquí no hay forma de verlo mirando.
+// 7b · Y que se anuncie UNA VEZ. Con más usos, el logro ya está
+  // desbloqueado y no debe volver a salir: un "×2" en el cartel sería el mismo
+  // bug que el del "×5" de los avisos, y aquí no hay forma de verlo mirando.
+  //
+  // **Y AQUÍ NO SE PUEDE REPETIR EL MISMO EXPANSOR**, porque con la escalera de
+  // diez el T1 se queda muerto en el primer uso: usarlo tres veces seguidas
+  // solo daría dos rechazos y el logro no volvería a saltar, que no es lo que
+  // esta comprobación mide. Lo que mide es "el cartel no repite", y para eso
+  // hacen falta dos AMPLIOSIONES DISTINTAS que sí sirvan: el T1 y el T2.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
-    const e = g.buyStoreItem('expansorT1', 3) as any;
-    g.useConsumable(e.id);
-    g.useConsumable(e.id);
-    g.useConsumable(e.id);
+    g.buyStoreItem('expansorT1', 1);
+    g.buyStoreItem('expansorT2', 1);
+    const t1 = (g.getState().warehouse as any[]).find((w: any) => w.buffId === 'expansorT1');
+    const t2 = (g.getState().warehouse as any[]).find((w: any) => w.buffId === 'expansorT2');
+    g.useConsumable(t1.id);
     const trasLaPrimera = vistos.length;
-    const e2 = g.buyStoreItem('expansorT1', 2) as any;
-    g.useConsumable(e2.id);
-    g.useConsumable(e2.id);
+    g.useConsumable(t2.id);
+    const t3 = g.buyStoreItem('expansorT3', 1) as any;
+    g.useConsumable(t3.id);
 
     check(
-      'logros: ampliar más no vuelve a anunciar el mismo logro',
+      'logros: un logro anunciado no se vuelve a anunciar aunque amplia despues',
       vistos.length === trasLaPrimera,
-      `antes=${trasLaPrimera} despues=${vistos.length} lista=${JSON.stringify(vistos)}`
+      'antes=' + trasLaPrimera + ' despues=' + JSON.stringify(vistos)
     );
   }
 

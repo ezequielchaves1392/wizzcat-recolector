@@ -42,7 +42,7 @@ import {
   expansorPorBuff, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
-import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
+import { generateCompanionByTier, generateCollectorByTier, poderDeCompanero } from './data/generators';
 import { collectorUpgradeCost } from './data/crafting';
 
 // Se re-exportan las que el resto del juego ya importaba de aquí, con el mismo
@@ -249,14 +249,18 @@ function reconcileEquippedCollector(
 }
 
 // Deduce el buffId de un consumible guardado antes de que existiera el campo.
-// Se usa una sola vez, al migrar saves antiguos.
+// Se usa una sola vez, al migrar saves antiguas.
 function inferBuffIdFromName(name: string): string | null {
   const lower = name.toLowerCase();
-  // Los tipos van antes que el genérico: un "Expansor T1" sin `buffId` es un
-  // T1, no el +1 viejo. El genérico queda para el stock de antes de los tipos.
-  if (lower.includes('expansor t3')) return 'expansorT3';
-  if (lower.includes('expansor t2')) return 'expansorT2';
-  if (lower.includes('expansor t1')) return 'expansorT1';
+  // Los tipos van antes que el genérico: un "Expansor T7" sin `buffId` es un
+  // T7, no el +1 viejo. El genérico queda para el stock de antes de los tipos.
+  //
+  // **Y EL NÚMERO SE SACA CON UNA EXPRESIÓN, NO CON DIEZ `if`.** Antes había tres líneas para tres expansores y con diez habría sido una línea por tier, que
+  // es exactamente el sitio donde un expansor nuevo nace sin migrar: el item
+  // guardado se leería como el +1 viejo y aplicaría una ranura en vez de cinco.
+  // Un `match` sobre el número del nombre no puede quedarse atrás.
+  const tierDeNombre = lower.match(/expansor t(\d+)/);
+  if (tierDeNombre) return `expansorT${Number(tierDeNombre[1])}`;
   if (lower.includes('expansor')) return 'warehouseExpander';
   if (lower.includes('afk')) return 'afk';
   if (lower.includes('click x3')) return 'clickX3';
@@ -309,9 +313,15 @@ export async function createGameLoop(
     id: 'companion_base_001',
     name: 'Dron Explorador',
     type: 'click' as const,
-    power: 5,
+    // El compañero de partida con **potencial 3**, que es el punto medio del
+    // rango del T1. Antes su poder era un 5 escrito a mano, que es un T2 en el
+    // rango del T1 y por eso el "compañero inicial es un T1 real" del comentario
+    // no era cierto. Ahora sale de `poderDeCompanero(1, 3)` y por construcción es
+    // el T1 de la mitad, que es lo que dice el comentario.
+    power: poderDeCompanero(1, 3),
     rarity: 'Común',
-    tier: 1
+    tier: 1,
+    potential: 3
   };
 
   // Bonus especial para usuarios de prueba
@@ -1460,6 +1470,14 @@ const AFK_THRESHOLD_MS = 60000;
           type: 'companion',
           details: `Recolección por segundo: +${comp.power}/s`,
           rarity: comp.rarity,
+          // **EL POTENCIAL Y EL TIER VIENEN DE LA FICHA, NO SE DEJAN.** Este item
+          // es el mismo compañero que `state.companions`, y el del almacén es el
+          // que pinta las estrellas y el que se vende: si naciera sin potencial,
+          // la rejilla mostraría un compañero sin estrellas que en el panel sí las
+          // tiene. Los seis exclusivos de caja no tienen potencial y por eso
+          // salen sin él, que es lo correcto y no un olvido.
+          tier: comp.tier,
+          potential: comp.potential,
           sellPrice: comp.rarity === 'Común' ? 100 : comp.rarity === 'Raro' ? 500 : comp.rarity === 'Épico' ? 2000 : 10000
         } as any);
       }
@@ -2804,19 +2822,34 @@ const AFK_THRESHOLD_MS = 60000;
       let nuevoItem = true;
 
       switch (buffId) {
-        case 'expansorT1':
-        case 'expansorT2':
-        case 'expansorT3': {
-          // F27 · Cada tipo vale hasta su techo: al crecer hay que subir de
-          // tipo. Lo que pide el siguiente lo dice el propio rechazo, para que
-          // el jugador no tenga que adivinar qué comprar.
-          const tipo = expansorPorBuff(buffId)!;
-          if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
-            return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };
+        // Los expansores son diez `case`, uno por tier. Se podrían cubrir con un
+        // `default` que preguntara a la tabla, pero entonces un `buffId` mal
+        // escrito daría el mensaje de "no sé qué hace" y un expansor nuevo
+        // nacía muerto sin que nadie lo notara: **con diez casos escritos, el
+        // banco `consumableCheck` ve que los diez buffIds de la tabla tienen su
+        // caso**, y un undécimo expansor obliga a tocar este sitio a propósito.
+        case 'expansorT1': case 'expansorT2': case 'expansorT3': case 'expansorT4': case 'expansorT5':
+        case 'expansorT6': case 'expansorT7': case 'expansorT8': case 'expansorT9': case 'expansorT10': {
+          // El tipo sale de la tabla, y con un `case` por buffId no puede ser
+          // `undefined` salvo que alguien añada un expansor sin tocar aquí: en ese
+          // caso el mensaje lo dice en vez de dar un error de `undefined`.
+          const tipo = expansorPorBuff(buffId);
+          if (!tipo) {
+            return { ok: false, msg: `No hay expansor ${buffId}: la escalera de expansores y la del almacén se han separado.` };
           }
+          // **EL TECHO ES LO QUE DECIDE SI SIRVE.** El expansor T{n} vale hasta
+          // `techoDeExpansor(n)`; a partir de ahí no se usa y hay que buscar uno
+          // de un tier superior. El mensaje dice el número y el nombre del
+          // siguiente, para que el rechazo conteste "¿y qué hago?" en vez de
+          // dejar al jugador adivinando.
           if (state.warehouseCapacity >= tipo.maxCap) {
-            const siguiente = EXPANSOR_TIERS.find(t => t.tier === tipo.tier + 1 as 2 | 3);
-            return { ok: false, msg: `Tu almacén necesita un ${siguiente?.name ?? 'expansor mayor'}.` };
+            const siguiente = EXPANSOR_TIERS.find(t => t.tier === tipo.tier + 1);
+            return {
+              ok: false,
+              msg: siguiente
+                ? `Tu almacén ya está en ${state.warehouseCapacity} y el ${tipo.name} solo vale hasta ${tipo.maxCap}. Necesitas un ${siguiente.name} (hasta ${siguiente.maxCap}).`
+                : `Tu almacén ya está en ${state.warehouseCapacity}, que es todo lo que da el ${tipo.name}. No hay expansor por encima.`
+            };
           }
           state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + tipo.slots);
           break;
@@ -2825,20 +2858,25 @@ const AFK_THRESHOLD_MS = 60000;
           // Stock de antes de los tipos (+1): sigue sirviendo con el tope
           // nuevo. No es un cuarto tipo —no se vende ni sale de cajas— y por
           // eso no está en la tabla.
+          //
+          // Y SIGUE SIENDO EL ÚNICO QUE LLEGA MÁS ALLÁ DE LA ESCALERA DE
+          // EXPANSORES. Si no existiera, un almacén de 65 se quedaría clavado
+          // para siempre; y bajarlo a 65 haría que `enforceWarehouseCapacity()`
+          // le borrara items a quien ya pasó de ahí.
           if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
             return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };
           }
           state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + 1);
           break;
         case 'afk': {
-          const base = Math.max(ahora, state.afkExpiresAt || 0);
           // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
+          const base = Math.max(ahora, state.afkExpiresAt || 0);
           state.afkExpiresAt = Math.min(base + afkMs, ahora + afkMs * 3);
           break;
         }
         case 'clickBoost': {
           const base = Math.max(ahora, state.buffs.clickBoostExpiresAt);
-          state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 60 * 60_000);
+          state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 30 * 60_000);
           break;
         }
         case 'passiveBoost': {
@@ -3261,6 +3299,14 @@ const AFK_THRESHOLD_MS = 60000;
           details: `Recolección por segundo: +${comp.power}/s`,
           rarity: comp.rarity,
           tier: comp.tier,
+          // **EL POTENCIAL VIAJA AL ITEM DEL ALMACÉN, COMO EN EL RECOLECTOR.**
+          // Sin esta línea el compañero se compraba con potencial en
+          // `state.companions` y sin él en el almacén, o sea **el mismo objeto con
+          // dos fichas distintas**: la del almacén es la que pinta las estrellas
+          // y la que se puede vender. Un item sin estrellas en la rejilla y con
+          // estrellas en el panel es el descuadre de R3 en su forma más difícil de
+          // ver, porque las dos cifras son del mismo objeto.
+          potential: comp.potential,
           sellPrice: Math.floor(item.cost / 4)
         };
         // Un compañero SIEMPRE necesita ranura propia —dos Dron Explorador son
@@ -3494,7 +3540,22 @@ const AFK_THRESHOLD_MS = 60000;
         activeCompanions: [],
         warehouse: [
           { id: 'collector_blaster_001', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
-          { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +5/s', rarity: 'Común', tier: 1, sellPrice: 250 }
+          // **EL COMPAÑERO DE PARTIDA SE CONSTRUYE DESDE `baseCompanion`, NO CON
+          // NÚMEROS ESCRITOS.** Antes la ficha decía "+5/s" y no traía potencial,
+          // mientras que la entrada de `state.companions` decía otra cosa: el mismo
+          // compañero con dos números distintos en dos sitios, que es R3 en la
+          // forma más difícil de ver porque las dos cifras son del mismo objeto y
+          // solo una se pinta. Al derivarlo de `baseCompanion` no pueden separarse.
+          {
+            id: baseCompanion.id,
+            name: baseCompanion.name,
+            type: 'companion',
+            details: `Recolección por segundo: +${baseCompanion.power}/s`,
+            rarity: baseCompanion.rarity,
+            tier: baseCompanion.tier,
+            potential: baseCompanion.potential,
+            sellPrice: 250
+          }
         ],
         buffs: { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 },
         // Lo permanente

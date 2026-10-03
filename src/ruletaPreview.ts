@@ -51,7 +51,7 @@ const CASOS: Caso[] = [
   { titulo: 'Llaves (T1)', caja: 1, id: 'keys' },
   { titulo: 'Caja T4 (caja T3)', caja: 3, id: 'nextCrate' },
   { titulo: 'Piedras x2 (T6)', caja: 6, id: 'calibrationStone' },
-  { titulo: 'Recolector sobrecargado (T3)', caja: 3, id: 'collector' },
+{ titulo: 'Recolector de caja (T3)', caja: 3, id: 'collector' },
   { titulo: 'Avatar del Vacío (T10)', caja: 10, id: 'exclusivo_2' },
   { titulo: 'Cosmético: título (T1)', caja: 1, id: 'cosmetic' },
   { titulo: 'Cosmético: marco (T10)', caja: 10, id: 'cosmetic' },

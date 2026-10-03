@@ -229,14 +229,13 @@ async function main() {
       wh(g7).length === antesSlots + 1, `${antesSlots} -> ${wh(g7).length}`);
     const usado = g7.useConsumable((expansor as any).id);
     check('almacén: ampliar es usarlo', usado.ok === true, usado.msg ?? '');
-    // OJO: el T1 da +2 ranuras, no +5. El +5 era del permiso que ya no existe.
-    check('almacén: y al usarlo suben 2 ranuras',
-      g7.getCapacity() === capTrasComprar + 2,
+    // El expansor T1 da +5 ranuras y vale hasta 20, que es su techo: a partir de ahí deja de servir.
+    check('almacén: y al usarlo suben 5 ranuras',
+      g7.getCapacity() === capTrasComprar + 5,
       `${capTrasComprar} -> ${g7.getCapacity()}`);
-
     const g8 = await reload();
     check('almacén: la ampliación sobrevive a la recarga',
-      g8.getCapacity() === antesCap + 2, 'cap=' + g8.getCapacity());
+      g8.getCapacity() === antesCap + 5, 'cap=' + g8.getCapacity());
 
     // Y ahora la parte que más se ha roto: con el almacén lleno, lo que no cabe
     // no se compra, y lo que sí cabe en una pila sí se compra.

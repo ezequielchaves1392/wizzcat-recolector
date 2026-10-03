@@ -47,9 +47,7 @@
 //
 // O sea: se retiran de la tienda y no se pueden comprar, pero no se toca el estado.
 // Es lo mismo que se hizo con las ampliaciones de huecos del almacén.
-export const CONSUMABLES = {
-  expansorT1: { name: 'Expansor T1', details: 'Aumenta el almacén +2 slots. Vale hasta 120 de capacidad.', rarity: 'Raro', buffId: 'expansorT1' },
-  expansorT2: { name: 'Expansor T2', details: 'Aumenta el almacén +5 slots. Vale hasta 300 de capacidad.', rarity: 'Épico', buffId: 'expansorT2' },
+export const CONSUMABLES_SIN_EXPANSOR = {
   afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
   clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
@@ -80,17 +78,39 @@ export const CONSUMABLES = {
 //  adivinar por palabra suelta. Antes caía en "legendaria" con cualquier
 //  nombre que no reconociera, así que un item mal escrito se abría como el
 //  mejor cofre del juego.
+/**
+ * LA LEYENDA DE UNA CAJA, UNA Y LA MISMA PARA LAS DIEZ.
+ *
+ * **ANTES ENUMERABA LO QUE ABRÍA, Y ESO ES UNA COPIA DEL BOTÍN QUE SE QUEMA.**
+ * Cada caja tenía su texto escrito a mano —"Nanitas, cristal T7, un recolector T7
+ * y la llave de la T8"— y era la misma clase de problema que B6 en las llaves:
+ * una lista escrita al lado de la tabla que genera esa lista. Cuando la tabla
+ * cambió, los textos no. Con diez cajas había diez textos que se habían quedado
+ * mintiendo: la T4 decía "material de T4" (que no existe: los cristales se
+ * llaman por su nombre), la T6 decía "piedras de calibración" sin decir cuántas, y
+ * ninguna mencionaba el expansor, el salto ni el cosmético.
+ *
+ * **LO QUE DICE AHORA ES LA REGLA, Y ES LO ÚNICO QUE EL JUGADOR NECESITA ANTES
+ * DE ABRIR:** qué llave la abre. El contenido se ve cuando sale, que es cuando
+ * importa, y está en la misma pantalla que el resto del lote.
+ *
+ * Y es la misma frase en las diez, lo cual es la prueba de que no puede quedar
+ * vieja: si algún día una caja necesita un texto propio, es que ha dejado de
+ * seguir la regla de "una caja por tier".
+ */
+
+const DETALLES_DE_CAJA = 'Se abre con la llave de su tier o de un tier superior.';
 export const CRATE_TYPES: Record<CrateType, { name: string; rarity: string; details: string }> = {
-  1: { name: 'Caja T1', rarity: 'Común',     details: 'Nanitas, cristal T1, un compañero T1 y su llave.' },
-  2: { name: 'Caja T2', rarity: 'Común',     details: 'Nanitas, cristal T2, un compañero T2 y su llave.' },
-  3: { name: 'Caja T3', rarity: 'Raro',      details: 'Nanitas, cristal T3, un compañero T3, un recolector T3 y su llave.' },
-  4: { name: 'Caja T4', rarity: 'Raro',      details: 'Nanitas, cristal T4, material de T4, un recolector T4 y su llave.' },
-  5: { name: 'Caja T5', rarity: 'Épico',     details: 'Nanitas, cristal T5, material de T5, un recolector T5 y su llave.' },
-  6: { name: 'Caja T6', rarity: 'Épico',     details: 'Nanitas, cristal T6, piedras de calibración y un recolector T6.' },
-  7: { name: 'Caja T7', rarity: 'Legendario', details: 'Nanitas, cristal T7, un recolector T7 y la llave de la T8.' },
-  8: { name: 'Caja T8', rarity: 'Legendario', details: 'Nanitas, cristal T8, la Nanopartícula de Estabilidad y la llave de la T9.' },
-  9: { name: 'Caja T9', rarity: 'Mítico',    details: 'Nanitas, cristal T9, un recolector T9 y la llave de la T10.' },
-  10: { name: 'Caja T10', rarity: 'Divino',  details: 'Nanitas, cristal T10 y lo mejor de la caja: compañero y recolector T10.' }
+  1: { name: 'Caja T1', rarity: 'Común',     details: DETALLES_DE_CAJA },
+  2: { name: 'Caja T2', rarity: 'Común',     details: DETALLES_DE_CAJA },
+  3: { name: 'Caja T3', rarity: 'Raro',      details: DETALLES_DE_CAJA },
+  4: { name: 'Caja T4', rarity: 'Raro',      details: DETALLES_DE_CAJA },
+  5: { name: 'Caja T5', rarity: 'Épico',     details: DETALLES_DE_CAJA },
+  6: { name: 'Caja T6', rarity: 'Épico',     details: DETALLES_DE_CAJA },
+  7: { name: 'Caja T7', rarity: 'Legendario', details: DETALLES_DE_CAJA },
+  8: { name: 'Caja T8', rarity: 'Legendario', details: DETALLES_DE_CAJA },
+  9: { name: 'Caja T9', rarity: 'Mítico',    details: DETALLES_DE_CAJA },
+  10: { name: 'Caja T10', rarity: 'Divino',  details: DETALLES_DE_CAJA }
 };
 
 /**
@@ -252,38 +272,73 @@ export function costeDeLlave(tier: number): number {
 }
 
 // ==========================================================================
-//  Expansores de almacén por tipo (F27)
+//  Expansores de almacén, uno por tier de caja
 // ==========================================================================
 //
-//  EL MODELO: tres tipos con más ranuras y más precio, y cada uno vale hasta
-//  una capacidad. Al crecer hay que subir de tipo: el T1 deja de servir a los
-//  120 y el T2 a los 300. El T3 no se vende —solo sale de cajas altas— y es
-//  el que llega al tope.
+//  EL MODELO: **diez expansores, uno por tier, y cada uno tiene un TECHO de
+//  capacidad.** Un expansor T{n} solo sirve mientras el almacén esté por debajo
+//  de su techo; cuando ya lo has alcanzado, **no se puede usar** y hay que buscar
+//  uno de un tier superior, que llega más lejos.
 //
-//  POR QUÉ SOLO TOPE POR ARRIBA Y NO BANDAS CERRADAS. Un T3 en un almacén
-//  pequeño tiene que servir: si solo valiera a partir de 300, sería botín
-//  muerto para quien no llega. Lo que no puede es un T1 barato donde toca un
-//  T2: por eso cada tipo tiene su techo y no su suelo.
+//      Expansor T1  →  hasta 20 ranuras
+//      Expansor T2  →  hasta 25
+//      …
+//      Expansor T10 →  hasta 65
 //
-//  EL TOPE SALE DE AQUÍ Y NO DE LA VISTA. Antes el "Al máximo" era un 50
-//  escrito en `store.ts` y otro 50 en `useConsumable`, dos números a mano
-//  para la misma regla. Ahora es `WAREHOUSE_MAX_CAP` y lo leen los dos.
+//  LA ESCALERA, Y POR QUÉ +5. El almacén arranca en 15 y cada peldaño son 5
+//  ranuras, así que la tabla es `15 + 5 × n` y **el techo de un expansor es
+//  exactamente el suelo del siguiente más un peldaño**. Con eso cada expansor
+//  sirve una vez y se queda muerto: el T1 te lleva a 20 y a partir de ahí necesitas
+//  el T2, que te lleva a 25. Eso convierte al expansor en **una razón para subir
+//  de caja**: la caja T4 trae el expansor T4 y sin él no puedes pasar de 35.
 //
-//  LA MIGRACIÓN NO QUITA NADA. Quien ya pasó el tope (500+ con la carta vieja
-//  sin tope) conserva cada ranura: el tope frena lo nuevo, no recorta lo
-//  comprado. Y por eso el tope es alto (600) y la presión viene del precio y
-//  de las cajas, no de un muro.
+//  **LO QUE ANTES ERA, Y POR QUÉ ESTABA MAL.** Eran tres tipos con techos de 120,
+//  300 y 600, con 2, 5 y 10 ranuras cada uno. El techo no frenaba nada: con 15
+//  ranuras de partida, el expansor T1 seguía sirviendo a los 119, y los tres
+//  tipos eran casi lo mismo con otro nombre. El techo tenía que ser **el
+//  siguiente escalón real**, no un número grande.
 //
-//  LO VIEJO SIGUE SIRVIENDO. Los `warehouseExpander` (+1) que ya hay en
-//  almacenes y botines se usan con el tope nuevo: son stock finito de antes de
-//  los tipos, no un cuarto tipo encubierto.
+//  EL TECHO FRENA EL CRECIMIENTO, NO RECORTA LO QUE HAY. Esto es lo importante
+//  para las partidas viejas: un jugador con 200 de capacidad no pierde nada, sus
+//  expansores simplemente no sirven. **Bajaría `WAREHOUSE_MAX_CAP` a 65 y
+//  `enforceWarehouseCapacity()` empezaría a BORRARLE items del almacén**, que es
+//  justo lo que la regla "la migración no quita nada" prohíbe. Por eso
+//  `WAREHOUSE_MAX_CAP` sigue siendo 600: es el suelo de seguridad para el stock
+//  viejo de `warehouseExpander` (+1), no el techo de la escalera nueva.
+//
+//  SOLO TOPE POR ARRIBA Y NO BANDAS CERRADAS. Un expansor T7 en un almacén de 20
+//  tiene que servir: si solo valiera a partir de 35, sería botín muerto para
+//  quien no llega. Lo que no puede es un T1 barato donde toca un T4: por eso cada
+//  uno tiene su techo y no su suelo.
+//
+//  LO VIEJO SIGUE SIRVIENDO. Los `warehouseExpander` (+1) de los almacenes
+//  anteriores al F27 siguen dando +1 hasta 600. Son stock finito de antes de los
+//  tipos, no un tipo encubierto.
 // ==========================================================================
 
-/** Tope de capacidad base del almacén. Los slots del árbol suman encima. */
+/**
+ * Tope duro de capacidad base del almacén. Los slots del árbol suman encima.
+ *
+ * **NO ES EL TECHO DE LA ESCALA DE EXPANSORES**, que son 65. Este es 600 a
+ * propósito, para que las partidas que ya pasaron de 65 no pierdan items: el
+ * borrow del almacén solo recorta si la capacidad baja, y bajarla sería cambiar
+ * el progreso de un jugador que hizo todo lo que el juego le dejó hacer.
+ */
 export const WAREHOUSE_MAX_CAP = 600;
 
+/** Capacidad de partida, de la que sale la escalera de expansores. */
+export const WAREHOUSE_BASE_CAP = 15;
+
+/** Cuántas ranuras añade cada expansor. Es el paso de la escalera. */
+export const RANURAS_POR_EXPANSOR = 5;
+
+/** El techo del expansor T{n}: 20, 25, 30… hasta 65. */
+export function techoDeExpansor(tier: number): number {
+  return WAREHOUSE_BASE_CAP + RANURAS_POR_EXPANSOR * Math.max(1, Math.floor(tier));
+}
+
 export interface ExpansorTier {
-  tier: 1 | 2 | 3;
+  tier: number;
   /** Ranuras que da al usarse. */
   slots: number;
   /** Precio en tienda, o `null` si solo sale de cajas. */
@@ -297,11 +352,67 @@ export interface ExpansorTier {
   name: string;
 }
 
-export const EXPANSOR_TIERS: ExpansorTier[] = [
-  { tier: 1, slots: 2, cost: 3000, resale: 750, maxCap: 120, buffId: 'expansorT1', name: 'Expansor T1' },
-  { tier: 2, slots: 5, cost: 18000, resale: 4500, maxCap: 300, buffId: 'expansorT2', name: 'Expansor T2' },
-  { tier: 3, slots: 10, cost: null, resale: 9000, maxCap: WAREHOUSE_MAX_CAP, buffId: 'expansorT3', name: 'Expansor T3' }
-];
+/**
+ * LOS DIEZ EXPANSORES, GENERADOS.
+ *
+ * Los tres de antes eran tres líneas escritas a mano con tres números cada una —
+ * `slots`, `cost`, `maxCap`— y con diez tiers serían treinta números que pueden
+ * descuadrarse entre sí. Aquí los diez salen de `techoDeExpansor()` y del mismo
+ * `COSTE_POR_TIER` que el resto del juego, así que **añadir un tier de caja no
+ * puede olvidarse de añadir su expansor**: no hay nada que añadir.
+ *
+ * EL PRECIO sale de la curva de tiers por un cuarto, que es la misma regla que la
+ * reventa de todo lo demás (R18). Los dos primeros se venden, como hasta ahora:
+ * son la red de seguridad de las primeras cajas, que es donde el expansor es
+ * barato comparado con lo que cuesta el botín. Del T3 para arriba solo salen de
+ * cajas, que es lo que hace que subir de caja siga siendo la decisión buena.
+ */
+export const EXPANSOR_TIERS: ExpansorTier[] = CRATE_TIERS.map((tier) => ({
+  tier,
+  slots: RANURAS_POR_EXPANSOR,
+  cost: tier <= 2 ? Math.floor(COSTE_POR_TIER[tier - 1] / 4) : null,
+  resale: Math.floor(COSTE_POR_TIER[tier - 1] / 16),
+  maxCap: techoDeExpansor(tier),
+  buffId: `expansorT${tier}`,
+  name: `Expansor T${tier}`
+}));
+
+/**
+ * LOS EXPANSORES, COMO CONSUMIBLES. SALEN DE LA MISMA TABLA.
+ *
+ * **ESTOS DOS ENTRADAS ESTABAN ESCRITAS A MANO Y MENTÍAN.** Decían "+2 slots,
+ * vale hasta 120" y "+5 slots, vale hasta 300" mientras la tabla decía otra
+ * cosa, y cuando los tres números cambiaron a la vez no había nada que impidiera
+ * que se quedaran atrás: es la misma trampa que B6 y que la leyenda de las cajas,
+ * y por eso aquí no hay ningún número escrito.
+ *
+ * La rareza sale de la rareza del tier de caja, que es lo que el expansor
+ * representa: el expansor T5 es un item de caja T5. Y el texto **enseña el
+ * techo**, que es la mitad de la regla y lo que el jugador necesita para decidir
+ * si le sirve: "vale hasta 35" contesta a "¿me sirve?" sin que tenga que abrir la
+ * ficha del almacén.
+ */
+export const EXPANSOR_CONSUMABLES = Object.fromEntries(
+  EXPANSOR_TIERS.map(e => [e.buffId, {
+    name: e.name,
+    details: `Amplía el almacén +${e.slots} ranuras. Vale hasta ${e.maxCap} de capacidad.`,
+    rarity: CRATE_TYPES[e.tier as CrateType]?.rarity ?? 'Raro',
+    buffId: e.buffId
+  }])
+) as Record<string, { name: string; details: string; rarity: string; buffId: string }>;
+
+/**
+ * Todos los consumibles, con los expansores dentro.
+ *
+ * Se declara aquí y no arriba porque `EXPANSOR_TIERS` vive más abajo en el
+ * fichero: un `const` que leyese una tabla declarada después daría error de
+ * zona muerta temporal, que es un fallo que solo aparece al importar el módulo
+ * y no al compilarlo.
+ */
+export const CONSUMABLES = {
+  ...CONSUMABLES_SIN_EXPANSOR,
+  ...EXPANSOR_CONSUMABLES
+} as const;
 
 /** El tipo de expansor de un `buffId`, o `undefined` si no es un expansor. */
 export function expansorPorBuff(buffId: string): ExpansorTier | undefined {
@@ -418,9 +529,19 @@ export const STORE_ITEMS = {
   // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).
   // Se han retirado de la tienda; ver el comentario en `CONSUMABLES` para el porqué
   // de que el efecto siga en el motor y solo desaparezca la compra.
-  // Nuevos items: expansores por tipo (F27). El T3 no tiene carta: solo de cajas.
-  expansorT1: { cost: 3000, label: 'Expansor T1 (+2 slots)' },
-  expansorT2: { cost: 18000, label: 'Expansor T2 (+5 slots)' },
+  // Los expansores que se venden, generados desde `EXPANSOR_TIERS`. Antes eran
+  // dos líneas con el precio, el "+N" y el nombre escritos a mano, y el precio
+  // no era el de la tabla: la tabla decía 3000 y 18000 y la carta decía 3000 y
+  // 18000 por casualidad, no por construcción.
+  //
+  // **LA TARJETA ENSEÑA EL TECHO, NO SOLO EL "+5".** "Vale hasta 20" es lo que
+  // contesta a "¿me sirve?", y sin eso el jugador tiene que abrir el almacén,
+  // buscar el expansor y leer su ficha para averiguar que ya no le sirve.
+  ...Object.fromEntries(
+    EXPANSOR_TIERS
+      .filter(e => e.cost !== null)
+      .map(e => [e.buffId, { cost: e.cost as number, label: `${e.name} (+${e.slots}, hasta ${e.maxCap})` }])
+  ) as Record<string, { cost: number; label: string }>,
   // Las tres cartas de ranura salen de `defDeRanura()`, que es donde está el
   // número de ranuras que da cada una. La tarjeta no pone "+N" escrito: lo dice
   // la tabla, que es la misma que lee el motor (R3).

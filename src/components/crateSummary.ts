@@ -8,10 +8,13 @@
 //
 //  Y el número que importa no es el del medio premio: es la suma. "10 veces
 //  nanitas" no son diez noticias, es una cifra, y teacharla partida en veinte
-//  casillas obliga al jugador a sumar a mano para saber cuánto tiene.
+//  casillas obliga al jugador a sumar a mano para saber cuánto tiene. La fila de
+//  nanitas sale una, con el total ya sumado, y **no hay un cuadro aparte que la
+//  repita**: un número que aparece dos veces en la misma pantalla hace que el
+//  jugador se pregunte cuál de los dos es el bueno.
 //
 //  Lo que sale de la ruleta es lo que entra en la lista, premio por premio y sin
-//  recalcular nada: laruleta sigue decidiendo con `pickLoot()` y el mismo
+//  recalcular nada: la ruleta sigue decidiendo con `pickLoot()` y el mismo
 //  `resolveLootAmount()` que cuando se abre de una en una.
 // ==========================================================================
 
@@ -132,11 +135,23 @@ export function showCrateSummary(
   const meta = CRATE_META[opts.crateType];
   const filas = resumenDePremios(premios);
 
-  // El total se calcula de las filas ya sumadas, no sumando por encima: así la
-  // cifra grande de abajo es exactamente la suma de lo que se ve en la lista. Si
-  // las dos se calcularan por su cuenta, un día discreparían y el jugador leería
-  // un número que no está en ninguna fila.
-  const nanitas = filas.find(f => f.reward.kind === 'nanites')?.total ?? 0;
+  // Y LA SUMA DE LAS NANITAS ESTÁ EN SU FILA, Y SOLO EN SU FILA.
+  //
+  // La primera versión de esta hoja enseñaba además, debajo de la lista, un cuadro
+  // grande con "TOTAL EN NANITAS". Y eran **el mismo número dos veces**: una vez
+  // como la fila de nanitas de la lista y otra como el total de abajo. Lo pedido
+  // era que las cantidades se acumulasen —que saliera "600" y no tres "+200"— y
+  // eso ya lo hace la fila. El cuadro de abajo no añadía información: obligaba a
+  // mirar el mismo sitio dos veces y a preguntarse cuál de los dos es el bueno.
+  //
+  // Por eso **no se calcula ningún total aparte**: lo que se ve es la lista, y la
+  // lista ya está sumada por `resumenDePremios()`. Una cifra que se calcula dos
+  // veces es una cifra que un día discrepa de la otra.
+  //
+  // Y en vez de ese cuadro, lo que se distingue es la fila: la de nanitas se
+  // pinta más grande y con más fondo. La cifra que el jugador va a buscar se
+  // encuentra sin contar filas.
+  const hayNanitas = filas.some(f => f.reward.kind === 'nanites');
 
   const filaHtml = (f: ResumenFila): string => {
     const r = f.reward;
@@ -144,18 +159,23 @@ export function showCrateSummary(
     const glow = RARITY_GLOW[r.rarity] || '';
     const unit = LOOT_UNITS[r.kind] ?? '';
     const counted = isCountedLoot(r);
+    // **LA FILA DE NANITAS SE PINTA DISTINTA**, y es lo único que esta hoja
+    // destaca. Antes había un cuadro de total debajo; al quitarlo, la cifra que
+    // el jugador va a buscar es la de esta fila, y si se lee como las demás
+    // obligaría a contar las filas para encontrarla.
+    const esNanitas = r.kind === 'nanites';
     // "×3" solo cuando el mismo material salió más de una vez. Con un uno, el
     // asterisco sería ruido en todas las filas.
     const veces = f.veces > 1 ? `<span class="text-[9px] font-mono opacity-70 ml-1">×${f.veces}</span>` : '';
     return `
-      <div class="flex items-center gap-3 rounded-xl border ${rarityColor} px-3 py-2 ${glow}" style="background: color-mix(in srgb, var(--accent) 6%, transparent)">
+      <div class="flex items-center gap-3 rounded-xl border ${rarityColor} px-3 ${esNanitas ? 'py-3' : 'py-2'} ${glow}" style="background: color-mix(in srgb, var(--accent) ${esNanitas ? 14 : 6}%, transparent)">
         <span class="flex-shrink-0 ${RARITY_TEXT[r.rarity] || ''} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(r.icon as IconName)}</span>
         <span class="min-w-0 flex-1">
           <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${r.name}${veces}</span>
           <span class="block text-[9px] font-mono text-[var(--text-muted)] truncate">${r.rarity}${unit ? ` · ${unit}` : ''}</span>
         </span>
         <span class="text-right flex-shrink-0">
-          ${counted ? `<span class="block text-[13px] font-mono font-bold accent-text tabular">+${formatNumber(f.total)}</span>` : ''}
+          ${counted ? `<span class="block ${esNanitas ? 'text-[17px]' : 'text-[13px]'} font-mono font-bold accent-text tabular">+${formatNumber(f.total)}</span>` : ''}
           ${!counted && f.total > 1 ? `<span class="block text-[11px] font-mono text-[var(--text-muted)]">×${f.total}</span>` : ''}
           ${r.item ? '<span class="block text-[9px] font-mono text-[var(--text-muted)]">✓ Almacén</span>' : ''}
         </span>
@@ -178,13 +198,8 @@ export function showCrateSummary(
 
     <div class="card-glass-elevated border rounded-2xl w-full max-w-md max-h-[55vh] overflow-y-auto flex flex-col gap-1.5 p-3">
       ${filas.map(filaHtml).join('')}
+      ${!hayNanitas ? '<p class="text-[10px] font-mono text-center pt-1" style="color: var(--text-muted)">Esta vez no salieron nanitas.</p>' : ''}
     </div>
-
-    ${nanitas > 0 ? `
-      <div class="card-glass-elevated border rounded-2xl px-5 py-3 text-center">
-        <div class="text-[9px] font-mono uppercase tracking-[0.2em]" style="color: var(--text-muted)">TOTAL EN NANITAS</div>
-        <div class="font-['Orbitron'] font-black text-2xl accent-text tabular-nums">+${formatNumber(nanitas)}</div>
-      </div>` : ''}
 
     ${opts.motivo ? `<p class="text-[10px] font-mono text-center" style="color: var(--text-muted)">${opts.motivo}</p>` : ''}
 

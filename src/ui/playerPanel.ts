@@ -30,7 +30,6 @@ export function renderPanel(
       // que la barra no pueda prometer un nivel que el motor luego rechace.
       const maxLevel = collectorMaxLevel(equippedItem.maxLevel);
       const rarity = equippedItem.rarity || 'Común';
-      const overclocked = Boolean(equippedItem.overclock);
       // Los afijos son la diferencia entre dos recolectores del mismo tier
       const affixes: string[] = equippedItem.affixes || [];
 
@@ -70,8 +69,7 @@ export function renderPanel(
 
       collectorContainer.innerHTML = `
         <div class="flex items-center gap-3">
-          <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0
-                      ${overclocked ? 'rarity-glow-sobrecargado' : ''}"
+<div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
                style="background: color-mix(in srgb, var(--accent) 12%, transparent);
                       border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
             <span class="[&>span>svg]:w-5 [&>span>svg]:h-5 accent-text">${ic('collector')}</span>
@@ -87,7 +85,6 @@ export function renderPanel(
             </div>
             <div class="flex items-center gap-2 mt-1">
               <span class="text-[10px] font-mono rarity-${slug(rarity)}">${rarity}</span>
-              ${overclocked ? `<span class="text-[9px] font-mono rarity-sobrecargado">· SOBRECARGADO</span>` : ''}
               ${equippedItem.potential ? `<span class="text-[9px] text-amber-400">· ${'★'.repeat(equippedItem.potential)}</span>` : ''}
             </div>
             ${affixes.length ? `
@@ -173,7 +170,10 @@ export function renderPanel(
       if (comp) {
         const isMult = comp.type === 'multiplier';
         const rarity = comp.rarity || 'Común';
-        const sweep = ['Épico', 'Legendario', 'Mítico', 'Divino', 'Sobrecargado'].includes(rarity);
+// La escalera de rareza es de cuatro peldaños y se queda ahí: `Sobrecargado`
+        // era el quinto y se ha ido con el resto de la mecánica. El brillo se
+        // decide con la rareza del item, no con una marca aparte.
+        const sweep = ['Épico', 'Legendario', 'Mítico', 'Divino'].includes(rarity);
         // POR QUÉ PIDE LA CIFRA AL MOTOR Y NO USA `comp.power`. `power` es el
         // valor desnudo del compañero: lo que entra en la cuenta es ese número
         // después de `passiveMultiplier`, de los logros, del árbol y del buff x2.

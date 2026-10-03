@@ -52,14 +52,28 @@ export const ACHIEVEMENTS: Achievement[] = [
     progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 3), target: 3 })
   },
   {
+    // F33 · EL PRIMER ITEM PERFECTO.
+    //
+    // **ESTE LOGRO ERA "CONSIGUE UN RECOLECTOR SOBRECARGADO" Y SE QUEDA CON EL
+    // MISMO ID Y LA MISMA RECOMPENSA, PERO OTRA CONDICIÓN.** El id no cambia por
+    // dos razones: una partida vieja que ya lo tiene desbloqueado no pierde la
+    // bonificación de +10% de click que ya se le está pagando, y el banco de
+    // logros compara ids contra una lista que sigue teniendo el mismo tamaño.
+    //
+    // Y la condición es la que le corresponde ahora: un item con potencial 5, que
+    // es la perfección del 100%. Es el mismo logro con otro nombre —"salir de
+    // especificación" es tener algo que no debería existir todavía—, y sigue
+    // siendo alcanzable, que es lo que importa: si solo se hubiera borrado,
+    // este logro se quedaba puesto para siempre en el perfil de quien ya lo tenía
+    // y se volvía imposible para el resto.
     id: 'overclocked',
     title: 'Fuera de Especificación',
-    description: 'Consigue un recolector Sobrecargado',
+    description: 'Consigue un item con 5 estrellas de potencial',
     icon: 'flame',
     rewardText: '+10% poder de click',
     reward: { clickBonus: 0.10, passiveBonus: 0 },
     progress: (s) => ({
-      current: (s.warehouse ?? []).some((w: any) => w.overclock) ? 1 : 0,
+      current: (s.warehouse ?? []).some((w: any) => (w.potential ?? 0) >= 5) ? 1 : 0,
       target: 1
     })
   },

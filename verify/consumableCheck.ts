@@ -23,6 +23,10 @@
 
 import { AFK_CARD_DURATION_MS } from '../src/gameLoop';
 import {
+  EXPANSOR_TIERS, CONSUMABLES, RANURAS_POR_EXPANSOR, WAREHOUSE_BASE_CAP, WAREHOUSE_MAX_CAP,
+  techoDeExpansor
+} from '../src/data/store';
+import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
   collector, crate, consumable
 } from './kit';
@@ -34,70 +38,144 @@ const BUFFS_ZERO = { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2Ex
 
 async function main() {
   // =========================================================================
-  //  1. Expansores por tipo: +N ranuras, cada uno hasta su techo
+  //  1. EXPANSORES: UNO POR TIER, CADA UNO HASTA SU TECHO
+  //
+  //  LA REGLA ENTERA, QUE ANTES NO TENÍA NI SIQUIERA CASOS:
+  //
+  //      el expansor T{n} da +{RANURAS} ranuras y vale hasta {15 + 5n}
+  //
+  //  **EL TECHO ES LO QUE HACE LA REGLA.** Con los tres expansores antiguos los
+  //  techos eran 120, 300 y 600, que no frenaban nada: desde 15 de partida el
+  //  expansor T1 seguía sirviendo a los 119. Con la escalera de diez, el T1
+  //  sirve hasta 20 y a partir de ahí **no se puede usar**: hay que buscar el T2,
+  //  que llega a 25.
+  //
+  //  Y el motivo por el que `WAREHOUSE_MAX_CAP` sigue en 600, pese a que la
+  //  escalera acaba en 65, es que **bajarlo haría que
+  //  `enforceWarehouseCapacity()` le borrara items del almacén** a quien ya pasó
+  //  de 65. El techo frena el crecimiento; nunca recorta lo que ya hay.
   // =========================================================================
   {
-    // F27 · El T1 da +2 y se gasta la unidad. Lo que era "+1" es ahora el
-    // legado de abajo.
-    const g = await boot(baseSave([consumable('e1', 'expansorT1', 1, { name: 'Expansor T1' })]));
+    const g = await boot(baseSave([consumable('e1', 'expansorT1', 1, { name: 'Expansor T1' })],
+      { warehouseCapacity: WAREHOUSE_BASE_CAP }));
     const capAntes = s(g).warehouseCapacity;
     const r = g.useConsumable('e1');
 
     check('expansor: se aplica', r.ok, r.msg ?? '');
-    check('expansor: sube la capacidad 2', s(g).warehouseCapacity === capAntes + 2,
+    check('expansor: sube la capacidad RANURAS_POR_EXPANSOR',
+      s(g).warehouseCapacity === capAntes + RANURAS_POR_EXPANSOR,
       `${capAntes} -> ${s(g).warehouseCapacity}`);
     check('expansor: y consume la unidad', wh(g).length === 0, ids(g).join(','));
   }
   {
+    // **LA ESCALERA COMPLETA, LOS DIEZ.** Cada expansor T{n} sirve mientras el
+    // almacén esté por debajo de su techo, y usarlo lleva la capacidad
+    // **exactamente a su techo**: el T1 a 20, el T2 a 25, el T10 a 65. Eso es la
+    // escalera, y es lo que hace que subir de caja siga siendo la decisión buena:
+    // sin el expansor del siguiente tier no se puede pasar de ese peldaño.
+    const g = await boot(baseSave([], { warehouseCapacity: WAREHOUSE_BASE_CAP }));
+    let fallos = 0;
+    let mensaje = '';
+    for (const e of EXPANSOR_TIERS) {
+      const esperado = techoDeExpansor(e.tier);
+      g.updateState({ warehouse: [consumable('x1', e.buffId, 1, { name: e.name })] });
+      const r = g.useConsumable('x1');
+      if (!r.ok || s(g).warehouseCapacity !== esperado) {
+        fallos++;
+        if (!mensaje) mensaje = `T${e.tier}: ok=${r.ok} cap=${s(g).warehouseCapacity} esperado=${esperado} msg=${r.msg}`;
+      }
+    }
+    check('expansor: los diez llevan la capacidad a su techo, uno detrás de otro',
+      fallos === 0 && s(g).warehouseCapacity === techoDeExpansor(EXPANSOR_TIERS.length),
+      `${fallos} fallos · final=${s(g).warehouseCapacity} · ${mensaje}`);
+  }
+  {
+    // **Y EL RECHAZO, QUE ES LA MITAD DE LA REGLA.** Ya en el techo del T1, el
+    // Expansor T1 no se puede usar, no se gasta y el mensaje dice cuál hace
+    // falta: el jugador no tiene que adivinar qué comprar.
     const g = await boot(baseSave([consumable('e1', 'expansorT1', 1, { name: 'Expansor T1' })],
+      { warehouseCapacity: techoDeExpansor(1) }));
+    const r = g.useConsumable('e1');
+    check('expansor: en su propio techo NO se usa',
+      !r.ok && s(g).warehouseCapacity === techoDeExpansor(1), `ok=${r.ok} cap=${s(g).warehouseCapacity}`);
+    check('expansor: y NO se gasto el item', wh(g).length === 1, ids(g).join(','));
+    check('expansor: y el mensaje dice el numero y el expansor que falta',
+      /20/.test(r.msg ?? '') && /Expansor T2/.test(r.msg ?? ''), r.msg ?? '');
+  }
+  {
+    // Un expansor alto en un almacén pequeño SÍ sirve: la regla es techo, no
+    // banda. Si solo valiera a partir de su techo, sería botín muerto.
+    const g = await boot(baseSave([consumable('e1', 'expansorT7', 1, { name: 'Expansor T7' })],
+      { warehouseCapacity: 15 }));
+    const r = g.useConsumable('e1');
+    check('expansor: el T7 en un almacen de 15 si sirve', r.ok, r.msg ?? '');
+    check('expansor: y sube 5, no 12', s(g).warehouseCapacity === 20,
+      'cap=' + s(g).warehouseCapacity);
+  }
+  {
+    // El tope duro de 600 sigue existiendo para el +1 viejo. El T10 acaba en 65,
+    // así que para llegar a 600 hace falta el stock antiguo.
+    const g = await boot(baseSave([consumable('e1', 'expansorT10', 1, { name: 'Expansor T10' })],
       { warehouseCapacity: 600 }));
     const r = g.useConsumable('e1');
-    check('expansor: en el maximo (600) se rechaza', !r.ok && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
-    check('expansor: y NO se gasta el item', wh(g).length === 1, ids(g).join(','));
+    check('expansor: con el almacen al tope duro se rechaza y dice que no hay mas',
+      !r.ok && /No hay expansor por encima/.test(r.msg ?? ''), r.msg ?? '');
+    check('expansor: y NO se gasto el item', wh(g).length === 1, ids(g).join(','));
   }
   {
     // El tope es sobre la base GUARDADA, no sobre el total efectivo: los slots
-    // del arbol no se "gastan" al usar un expansor. Con la base en 599 y slots
-    // del árbol, el T3 entra y lleva la base a 600; con la base ya en 600 se
-    // rechaza.
+    // del árbol no se "gastan" al usar un expansor. Con la base por debajo de su
+    // techo y slots del árbol, entra y sube solo la base.
     const g = await boot(baseSave([consumable('e1', 'expansorT3', 1, { name: 'Expansor T3' })], {
-      warehouseCapacity: 599,
+      warehouseCapacity: 28,
       nodeLevels: { storage_rack: 2, scrapyard: 1 },
       unlockedNodes: ['storage_rack', 'scrapyard']
     }));
     const r = g.useConsumable('e1');
-    check('expansor: con la base en 599 y slots del arbol se aplica', r.ok, r.msg ?? '');
-    check('expansor: y lleva la BASE a 600, no el total', s(g).warehouseCapacity === 600,
-      'base=' + s(g).warehouseCapacity);
+    check('expansor: con la base en 28 y slots del arbol se aplica', r.ok, r.msg ?? '');
+    check('expansor: y sube solo la BASE, no el total',
+      s(g).warehouseCapacity === 33, 'base=' + s(g).warehouseCapacity);
   }
   {
     // Una pila de expansores: usar uno baja el contador, no borra la celda.
-    const g = await boot(baseSave([consumable('e1', 'expansorT2', 3, { name: 'Expansor T2' })]));
+    const g = await boot(baseSave([consumable('e1', 'expansorT2', 3, { name: 'Expansor T2' })],
+      { warehouseCapacity: 15 }));
     const antes = s(g).warehouseCapacity;
     const r = g.useConsumable('e1');
     check('expansor: una pila de 3 se queda en 2', r.ok && find(g, 'e1')?.stackCount === 2,
       `ok=${r.ok} stack=${find(g, 'e1')?.stackCount}`);
-    check('expansor: y la capacidad sube 5', s(g).warehouseCapacity === antes + 5,
+    check('expansor: y la capacidad sube 5', s(g).warehouseCapacity === antes + RANURAS_POR_EXPANSOR,
       `${antes} -> ${s(g).warehouseCapacity}`);
   }
   {
     const g = await boot(baseSave([consumable('e1', 'expansorT2', 2, { name: 'Expansor T2' })], {
-      warehouseCapacity: 600
+      warehouseCapacity: techoDeExpansor(2)
     }));
     const r = g.useConsumable('e1');
-    check('expansor: con el almacen al tope NO se gasta ni una unidad de la pila',
+    check('expansor: en el techo del T2 NO se gasta ni una unidad de la pila',
       !r.ok && find(g, 'e1')?.stackCount === 2, `stack=${find(g, 'e1')?.stackCount}`);
   }
   {
-    // El +1 de antes de los tipos sigue sirviendo, con el tope nuevo.
-    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })]));
+    // El +1 de antes de los tipos sigue sirviendo, con el tope duro. Es el único
+    // camino por encima de los 65 de la escalera de expansores.
+    const g = await boot(baseSave([consumable('e1', 'warehouseExpander', 1, { name: 'Expansor de Almacén' })],
+      { warehouseCapacity: 65 }));
     const capAntes = s(g).warehouseCapacity;
     const r = g.useConsumable('e1');
-    check('expansor: el +1 viejo se aplica', r.ok, r.msg ?? '');
+    check('expansor: el +1 viejo se aplica por encima de la escalera', r.ok, r.msg ?? '');
     check('expansor: y sube la capacidad 1', s(g).warehouseCapacity === capAntes + 1,
       `${capAntes} -> ${s(g).warehouseCapacity}`);
   }
-
+  {
+    // **Y LA TABLA NO PUEDE SEPARARSE DE LOS DIEZ CASES DEL MOTOR.** El
+    // `switch` de `useConsumable` tiene un `case` por buffId escrito a mano: un
+    // expansor nuevo que no se añada ahí nace muerto, en silencio, hasta que
+    // alguien lo usa y no pasa nada. Aquí se mira que los dos coincidan.
+    const buffsDeTabla = EXPANSOR_TIERS.map(e => e.buffId);
+    const faltan = buffsDeTabla.filter(b => !(b in CONSUMABLES));
+    check('expansor: los diez buffIds de la tabla son consumibles',
+      faltan.length === 0, `faltan: ${faltan.join(',') || 'ninguno'}`);
+  }
   // =========================================================================
   //  2. Tarjeta AFK: acumula tiempo, con tope de 3 tarjetas
   // =========================================================================

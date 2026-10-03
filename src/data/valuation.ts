@@ -50,8 +50,7 @@ const RARITY_VALUE_MULT: Record<Rarity, number> = {
   'Épico': 1.70,
   'Legendario': 2.20,
   'Mítico': 2.80,
-  'Divino': 3.60,
-  'Sobrecargado': 2.40
+  'Divino': 3.60
 };
 
 /** Cada nivel del recolector suma un porcentaje creciente del valor base. */

@@ -25,6 +25,7 @@ import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLo
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom } from '../src/data/crafting';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
+import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_LOOT, tablaDePesos } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
 import {
@@ -1072,10 +1073,21 @@ async function main() {
       // venía del potencial, así que un Divino podía salir con 1 afijo y un Común
       // con 3. Y en la forja se heredan los de los dos materiales primero, que es
       // lo que hace que buscar un item con buenos afijos tenga recompensa.
+      //
+      // **EL SEXTO ESCALÓN ERA `SOBRECARGADO`, Y CON ESA RAREZA FUERA EL TOPO
+      // ENTERO SE LO LLEVA `Divino`.** Si no, un item con 6 afijos no existiría:
+      // el `AFIX_MAX` es 6 y ningún peldaño de la escalera llegaría, así que la
+      // de "más rareza, más afijos" se quedaría sin final. Con el Divino en 6, el
+      // item más completo del juego es un Divino forjado con buenos materiales,
+      // que es lo que tenía que ser.
       check('afijos: la rareza da el minimo y el tope es 6',
-        AFIX_MIN_POR_RARIDAD['Común'] === 0 && AFIX_MIN_POR_RARIDAD['Divino'] === 5 &&
-        AFIX_MIN_POR_RARIDAD['Sobrecargado'] === 6 &&
-        Object.values(AFIX_MIN_POR_RARIDAD).every(v => v <= 6),
+        AFIX_MIN_POR_RARIDAD['Común'] === 0 && AFIX_MIN_POR_RARIDAD['Divino'] === 6 &&
+        Object.keys(AFIX_MIN_POR_RARIDAD).length === 6 &&
+        Object.values(AFIX_MIN_POR_RARIDAD).every(v => v <= 6) &&
+        // Y la escalera es estrictamente creciente: cada rareza da más que la de
+        // abajo, que es lo que hace que "más rareza" signifique algo.
+        RARITY_ORDER.every((r, i) => i === 0
+          || AFIX_MIN_POR_RARIDAD[r] > AFIX_MIN_POR_RARIDAD[RARITY_ORDER[i - 1]]),
         JSON.stringify(AFIX_MIN_POR_RARIDAD));
       check('afijos: NINGUNO da dano plano, o rompe los items de tier bajo',
         AFFIXES.every(a => a.effect.flatDamage === undefined && a.effect.flatPassive === undefined),
@@ -1425,36 +1437,37 @@ async function main() {
     // ranura de compañero tampoco (companionSlot1 deja el almacén igual
     // porque es un permiso, y eso se comprueba en `ranuraCheck`).
     const g = await boot(baseSave([], {
-      nanites: 500_000, warehouseCapacity: 30, maxCompanionSlots: 1
+      nanites: 500_000, warehouseCapacity: 15, maxCompanionSlots: 1
     }));
     const antes = wh(g).length;
     const e1 = g.buyStoreItem('expansorT1') as any;
     check('tienda: el expansor mete un item',
       !!e1 && wh(g).length === antes + 1, `items=${wh(g).length}`);
     const r = g.useConsumable(e1.id);
-    check('tienda: y al usarlo la capacidad sube 2',
-      r.ok === true && s(g).warehouseCapacity === 32,
+    check('tienda: y al usarlo la capacidad sube 5',
+      r.ok === true && s(g).warehouseCapacity === 20,
       `cap=${s(g).warehouseCapacity} msg=${r.msg ?? ''}`);
     const g2 = await reload();
     check('tienda: y la ampliación sobrevive a la recarga',
-      s(g2).warehouseCapacity === 32, `cap=${s(g2).warehouseCapacity}`);
+      s(g2).warehouseCapacity === 20, `cap=${s(g2).warehouseCapacity}`);
   }
   {
-    // Cada tipo vale hasta su techo: el T1 deja de servir a los 120 y lo dice.
-    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 119 }));
+    // Cada expansor vale hasta SU techo, y el techo es el siguiente peldaño:
+    // el T1 sirve hasta 20 y en 20 deja de servir y pide el T2.
+    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 19 }));
     const e1 = g.buyStoreItem('expansorT1') as any;
-    check('tipos: el T1 sirve por debajo de 120', g.useConsumable(e1.id).ok === true,
+    check('tipos: el T1 sirve por debajo de su techo', g.useConsumable(e1.id).ok === true,
       `cap=${s(g).warehouseCapacity}`);
-    const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 120 }));
+    const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 20 }));
     const e2 = gB.buyStoreItem('expansorT1') as any;
     const r2 = gB.useConsumable(e2.id);
-    check('tipos: en 120 el T1 pide el T2 y no gasta',
-      r2.ok === false && /T2/.test(r2.msg ?? '') && s(gB).warehouseCapacity === 120,
+    check('tipos: en 20 el T1 pide el T2 y no gasta',
+      r2.ok === false && /T2/.test(r2.msg ?? '') && s(gB).warehouseCapacity === 20,
       `msg=${r2.msg ?? ''} cap=${s(gB).warehouseCapacity}`);
-    const gC = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 299 }));
+    const gC = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 24 }));
     const e3 = gC.buyStoreItem('expansorT2') as any;
-    check('tipos: el T2 sirve por debajo de 300 y da +5',
-      gC.useConsumable(e3.id).ok === true && s(gC).warehouseCapacity === 304,
+    check('tipos: el T2 sirve por debajo de 25 y da +5',
+      gC.useConsumable(e3.id).ok === true && s(gC).warehouseCapacity === 29,
       `cap=${s(gC).warehouseCapacity}`);
   }
   {

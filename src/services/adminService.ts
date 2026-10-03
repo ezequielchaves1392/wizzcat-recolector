@@ -513,8 +513,7 @@ const COLOR_RAREZA: Record<string, string> = {
   'epico': '#c084fc',
   'legendario': '#fbbf24',
   'mitico': '#fb7185',
-  'divino': '#fde047',
-  'sobrecargado': '#f0abfc'
+  'divino': '#fde047'
 };
 
 export function colorRareza(rareza: string): string {

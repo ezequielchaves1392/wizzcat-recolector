@@ -1,13 +1,19 @@
 // Tabla de botín de las cajas y generador de recompensas.
 //
 // Reglas de diseño que sostiene este archivo:
-//  1. La caja es la UNICA fuente de los compañeros multiplicadores y de las recolectores
-//     sobrecargadas. No se pueden comprar, por eso la ruleta tiene valore real.
+//  1. La caja es la UNICA fuente de los compañeros multiplicadores. No se pueden
+//     comprar, por eso la ruleta tiene valor real.
 //  2. Todo drop que no cabe en el almacén se compensa en nanitas, nunca se pierde.
 //  3. La ruleta NO decide el premio: `rollCrateReward` decide y la animación solo
 //     lo muestra. Si se invirtiera, la ruleta estaría mintiendo sobre las probabilidades.
+//  4. LA CALIDAD DE UN ITEM LA DICE SU POTENCIAL, DE 1 A 5. No hay una rareza por
+//     encima de `Divino` ni una marca de "sobrecargado": eran una segunda escala
+//     de calidad que competía con el potencial, y los dos podían decir cosas
+//     distintas del mismo objeto.
 
 import { TIER_SYSTEM } from '../data/tiers';
+import { rollPotentialFrom } from '../data/crafting';
+import { poderDeCompanero, generateCollectorByTier } from '../data/generators';
 import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, costeDeLlave, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
@@ -71,8 +77,7 @@ export const RARITY_TEXT: Record<string, string> = {
   'Épico': 'text-purple-400',
   'Legendario': 'text-amber-400',
   'Mítico': 'text-rose-400',
-  'Divino': 'text-yellow-300',
-  'Sobrecargado': 'text-fuchsia-300'
+  'Divino': 'text-yellow-300'
 };
 
 export const RARITY_BORDER: Record<string, string> = {
@@ -81,8 +86,7 @@ export const RARITY_BORDER: Record<string, string> = {
   'Épico': 'border-purple-500/40',
   'Legendario': 'border-amber-500/50',
   'Mítico': 'border-rose-500/50',
-  'Divino': 'border-yellow-400/60',
-  'Sobrecargado': 'border-fuchsia-400/60'
+  'Divino': 'border-yellow-400/60'
 };
 
 /** Clase de glow. Se escriben completas para que Tailwind las vea. */
@@ -92,8 +96,7 @@ export const RARITY_GLOW: Record<string, string> = {
   'Épico': 'rarity-glow-epico',
   'Legendario': 'rarity-glow-legendario',
   'Mítico': 'rarity-glow-mitico',
-  'Divino': 'rarity-glow-divino',
-  'Sobrecargado': 'rarity-glow-sobrecargado'
+  'Divino': 'rarity-glow-divino'
 };
 
 /** Atajo: color + borde en una sola clase, para las casillas de la ruleta. */
@@ -121,7 +124,7 @@ export function raritySlug(rarity: string): string {
 }
 
 export const RARITY_RANK: Record<string, number> = {
-  'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3, 'Mítico': 4, 'Divino': 5, 'Sobrecargado': 6
+  'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3, 'Mítico': 4, 'Divino': 5
 };
 
 /**
@@ -306,9 +309,9 @@ function rangoDeCaja(crateType: CrateType): number {
 /**
  * La rareza que DECIDE el peso de una entrada: la nominal **acotada a su caja**.
  *
- * Sin el recorte, el salto de una caja común —que es un Sobrecargado por diseño—
- * pesaría por debajo del Épico que le toca, y la caja común tendría el premio
- * más caro con el peso más bajo. Acotada, la caja se parece a lo que es.
+ * Sin el recorte, el salto de una caja baja —que trae un item del tier de
+ * arriba— pesaría por debajo del "Épico" que le toca, y la caja común tendría el
+ * premio más caro con el peso más bajo. Acotada, la caja se parece a lo que es.
  */
 function rarezaAcotada(crateType: CrateType, rarity: string): string {
   const tope = rangoDeCaja(crateType);
@@ -454,43 +457,50 @@ export function tablaDePesos(crateType: CrateType): number[] {
   return pesos;
 }
 
-/** Recolectores sobrecargadas: mismo tier, daño por encima del rango normal del tier. */
-export function makeOverclockCollector(tier: number): { item: any; name: string; rarity: string; details: string } {
-  const range = TIER_SYSTEM.ranges[tier as keyof typeof TIER_SYSTEM.ranges] || [1, 5];
-  const top = range[1];
-  // +25% sobre el máximo del tier: claramente mejor que su versión de tienda.
-  //
-  // F33 · Lleva `potential: 5`, o sea que ES un item perfecto, y encima el 25% de
-  // la sobrecarga. Es la excepción consciente a "el potencial decide el daño": por
-  // eso se llama Sobrecargado y es el premio mayor de la caja. Lo que NO puede
-  // pasar es que se quede sin potencial, porque entonces al meterlo en la forja
-  // se leería como un 3 y perdería tres quintos de su valor al promediar.
-  const damage = Math.round(top * 1.25);
-  const names = TIER_SYSTEM.collectorNames[tier as keyof typeof TIER_SYSTEM.collectorNames] || ['Blaster Láser'];
-  const name = names[Math.floor(Math.random() * names.length)];
-  const rarity = RARITY_RANK[tier >= 9 ? 'Divino' : tier >= 7 ? 'Mítico' : 'Legendario'] !== undefined
-    ? (tier >= 9 ? 'Divino' : tier >= 7 ? 'Mítico' : 'Legendario')
-    : 'Legendario';
+/**
+ * EL RECOLECTOR DE UNA CAJA: UN RECOLECTOR NORMAL, CON SU POTENCIAL TIRADO.
+ *
+ * **ESTO ERA `makeOverclockCollector()`, Y ERA LA ÚNICA RAZA POR ENCIMA DE
+ * `Divino`.** Sobrecargado sonaba a premio mayor, pero medido era lo contrario:
+ * el sobrecargado de la T10 se vendía por 457.800 con un par caja+llave de
+ * 145.388 —**×3,15 de imprimir**— y salía en el 15% de las cajas desde la T3.
+ *
+ * Y el problema de fondo no era el precio: era que **`Sobrecargado` era una
+ * segunda escala de calidad encima del potencial**. El item llevaba `potential:
+ * 5` —es decir, era un item perfecto— y además una rareza propia, así que la
+ * rareza y el potencial decían dos cosas distintas sobre el mismo objeto, y
+ * cualquiera de las dos se podía desincronizar.
+ *
+ * **LO QUE QUEDA ES UNA SOLA ESCALA: el potencial.** La caja da un recolector de
+ * su tier con el potencial tirado por `rollPotentialFrom()` —los mismos pesos
+ * que la tienda y que la forja promedia—, así que un ★5 de caja es el item
+ * perfecto y hay que buscarlo, en vez de regalarse en una de cada siete cajas.
+ * La fuerza la pone el potencial, la rareza solo dice de qué tier viene.
+ *
+ * Y sale de `generateCollectorByTier()`, que es el mismo generador que usa la
+ * tienda: un T7 de la caja y un T7 comprado se construyen con la misma función,
+ * que es la regla de R2 aplicada a un objeto que antes tenía regla propia.
+ */
+export function makeCrateCollector(
+  tier: number,
+  topeVenta: number,
+  rng: () => number = Math.random
+): { item: any; name: string; rarity: string; details: string } {
+  const base = generateCollectorByTier(tier, rng);
   return {
-    name: `${name} SOBRECARGADO`,
-    rarity: 'Sobrecargado',
-    details: `Recolección por click: +${damage} (base T${tier}: ${top})`,
+    name: base.name,
+    rarity: base.rarity,
+    details: base.details,
     item: {
-      id: `oc_collector_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name: `${name} SOBRECARGADO`,
-      type: 'collector',
-      details: `Recolección por click: +${damage} (base T${tier}: ${top})`,
-      rarity: 'Sobrecargado',
-      tier,
-      level: 0,
-      damage,
-      potential: 5,
-      overclock: true,
-      sellPrice: Math.round(costeDeCaja(tier) * 0.5)
+      ...base,
+      // El tope de reventa lo pone `botinDeCaja()`, que es quien sabe qué caja
+      // es. Se pasa como argumento y no se lee de aquí porque este módulo no
+      // debe saber cuánto cuesta una caja.
+      sellPrice: Math.round(costeDeCaja(tier) * 0.5),
+      sellPriceTope: topeVenta
     }
   };
 }
-
 export function makeCrateOnlyCompanion(entry: typeof CRATE_ONLY_COMPANIONS[number]) {
   const id = `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const details = entry.type === 'multiplier'
@@ -685,36 +695,48 @@ function buildKeyLoot(crateType: CrateType): LootEntry {
 }
 
 /**
- * EL EXPANSOR DE CADA CAJA (F27).
+ * EL EXPANSOR DE CADA CAJA: EL DE SU MISMO TIER.
  *
- * La común suelta el T1, la rara el T2 y la épica y la legendaria el T3: la
- * ampliación grande es recompensa de caja y no compra, que es lo que le da a
- * las cajas el valor que F31 quiere darles. El nombre, las ranuras y la
- * reventa salen de `EXPANSOR_TIERS`: si se escribieran a mano aquí, la tabla
- * de la tienda y la del botín se separarían en el primer rebalanceo (D4).
+ * **ANTES LO DABA EL `Math.min(3, tier)`, Y ESO ERA UNA TAPA.** La caja T4 a la
+ * T10 soltaban todas el expansor T3, que es el último de la lista. Con la regla
+ * del techo —cada expansor sirve hasta un máximo y después necesitas uno de un
+ * tier superior— un expansor T3 **solo sirve hasta 30 ranuras**, así que en la
+ * caja T7 era un item muerto: salía, se usaba y no pasaba nada.
+ *
+ * Ahora la caja T{n} suelta el expansor T{n}, y el expansor es exactamente la
+ * llave del siguiente peldaño del almacén. Es la regla de F31 aplicada a un
+ * objeto más: "la caja N suelta el cristal N, la llave N, el expansor N y la
+ * caja N+1".
+ *
+ * El nombre, las ranuras, el techo y la reventa salen de `EXPANSOR_TIERS`, que
+ * los genera para los diez tiers. Si se escribieran a mano aquí, la tabla de la
+ * tienda y la del botín se separarían en el primer rebalanceo (D4).
  */
-function buildExpansorLoot(tier: 1 | 2 | 3, rarezaDeCaja: string, caja: CrateType): LootEntry {
-  const def = EXPANSOR_TIERS.find(t => t.tier === tier) as ExpansorTier;
-  const rarity = tier === 1 ? 'Raro' : tier === 2 ? 'Épico' : 'Legendario';
+function buildExpansorLoot(tier: number, rarezaDeCaja: string, caja: CrateType): LootEntry {
+  const def = EXPANSOR_TIERS.find(t => t.tier === tier);
+  if (!def) throw new Error(`No hay expansor T${tier}: la escalera de expansores y la de cajas se han separado.`);
   return {
     id: 'expansor',
     weight: 6,
-    // Mismo motivo que las llaves y las piedras: el expansor T3 es Legendario en
-    // cualquier caja que lo suelte, y con diez cajas eso lo metía en la bolsa
-    // Legendaria de la T4…T10 —donde el resto de la tabla está en la bolsa de la
-    // caja— y rompía la escalera de rarezas. Lo que decide cuánto sale es la
-    // caja, no el tipo de expansor.
+    // Lo que decide cuánto sale es la CAJA, no el tipo de expansor: por eso el
+    // peso es el de la caja. Con diez tiers y un expansor por tier, además, el
+    // expansor nunca es más raro que la caja que lo trae, así que la fila de la
+    // escalera se lee sin sorpresas.
     pesoComo: rarezaDeCaja,
-    build: () => ({
-      kind: 'consumable', amount: 1, name: def.name, label: `+1 ${def.name}`,
-      details: `Amplía el almacén +${def.slots} slots`, rarity, icon: 'plus',
-      item: {
-        id: `crate_expansor_${Date.now()}`, name: def.name, type: 'consumable',
-        details: `Amplía el almacén +${def.slots} slots`, rarity,
-        buffId: def.buffId, stackable: true, stackCount: 1,
-        sellPrice: def.resale, sellPriceTope: topeDeVenta(caja)
-      }
-    })
+    build: () => {
+      const detalles = `Amplía el almacén +${def.slots} ranuras. Vale hasta ${def.maxCap}.`;
+      return {
+        kind: 'consumable', amount: 1, name: def.name, label: `+1 ${def.name}`,
+        details: detalles, rarity: rarezaDeCaja, icon: 'plus',
+        item: {
+          id: `crate_expansor_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: def.name, type: 'consumable', details: detalles,
+          rarity: rarezaDeCaja,
+          buffId: def.buffId, stackable: true, stackCount: 1,
+          sellPrice: def.resale, sellPriceTope: topeDeVenta(caja)
+        }
+      };
+    }
   };
 }
 
@@ -726,8 +748,8 @@ function buildExpansorLoot(tier: 1 | 2 | 3, rarezaDeCaja: string, caja: CrateTyp
  * es la razón por la que abrir una caja común tiene una sorpresa, aunque sea rara:
  *
  *   común     6%   dron T2 o recolector T2
- *   rara      5%   T6 o recolector T6 sobrecargado
- *   épica     4%   T10 o recolector T10 sobrecargado
+ *   rara      5%   T6 o recolector T6
+ *   épica     4%   T10 o recolector T10
  *   legendaria 4%  compañía exclusiva de caja que no estaba en la tabla
  *
  * **POR QUÉ EL PESO ES BAJO Y NO UNA FRACCIÓN.** El peso es relativo dentro de la
@@ -843,40 +865,42 @@ function subirNTier(crateType: CrateType, pasos: number): any {
   const tier = Math.min(MAX_CRATE_TIER, crateType + pasos);
 
   // Mitad y mitad, y el lado se tira con `Math.random`. Un compañero y un
-  // recolector valen cosas distintas (la companion da ingreso, el recolector daño)
+  // recolector valen cosas distintas (el compañero da ingreso, el recolector daño)
   // y alternar hace que el salto no valga siempre lo mismo.
   //
-  // **Y EL SALTO TAMBIEN LLEVA TOPE DE REVENTA.** Es el premio más caro de la
-  // caja —un recolector sobrecargado de un tier por encima— y se mide como tal.
-  // Medido sin tope, el salto de la caja T8 daba un sobrecargado T9 que se
-  // vendía por 225.960 con un par caja+llave de 44.288: ×5,1 de imprimir. Con el
-  // tope, el salto sigue siendo el premio mayor de la caja y no rompe el juego.
+  // **Y EL SALTO LLEVA TOPE DE REVENTA Y POTENCIAL TIRADO, COMO TODO LO DEMÁS.**
+  // El salto es el premio más caro de la caja y se mide como tal: sin tope, el
+  // salto de la caja T8 daba un item de T9 que se vendía por 225.960 con un par
+  // caja+llave de 44.288. Y el potencial no se fuerza a 5 como antes: el salto
+  // tira el dado como cualquier item, porque si no el "sorpresa" es siempre
+  // perfecta y deja de serlo.
   const tope = topeDeVenta(crateType);
   if (Math.random() < 0.5) {
-    const t = TIER_SYSTEM.ranges[tier];
-    const p = rand(t[0], t[1]);
+    const potential = rollPotentialFrom();
+    const p = poderDeCompanero(tier, potential);
     const nombre = nombreDeArriba('companion', tier);
+    const detalles = `Recolección por segundo: +${p}/s`;
     return {
       kind: 'companion', amount: 1, name: nombre, label: nombre,
-      details: `Recolección por segundo: +${p}/s`,
+      details: detalles,
       rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier],
-      icon: 'companion', tier,
+      icon: 'companion', tier, potential,
       item: {
         id: `crate_up_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: nombre, type: 'companion', details: `Recolección por segundo: +${p}/s`,
+        name: nombre, type: 'companion', details: detalles,
         rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
-        companionType: 'passive', power: p,
+        companionType: 'passive', power: p, potential,
         sellPrice: Math.floor(p * 62), sellPriceTope: tope
       },
       up: true
     };
   }
 
-  const w = makeOverclockCollector(tier);
-  w.item.sellPriceTope = tope;
+  const w = makeCrateCollector(tier, tope);
   return {
     kind: 'collector', amount: 1, name: w.name, label: w.name,
     details: w.details, rarity: w.rarity, icon: 'collector', tier,
+    potential: w.item.potential,
     item: w.item, up: true
   };
 }
@@ -904,10 +928,6 @@ const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
   10: [2]
 };
 
-/** El expansor que suelta una caja: los tres primeros dan los tres tipos. */
-function expansorDeCaja(tier: number): 1 | 2 | 3 {
-  return (Math.min(3, tier) as 1 | 2 | 3);
-}
 
 /**
  * EL TOPE DE REVENTA DE TODO LO QUE SALGA DE UNA CAJA.
@@ -954,7 +974,7 @@ function topeDeVenta(tier: number): number {
  *
  *    · el cristal T{n}, que es lo que hace que F26 no sea un muro;
  *    · la llave T{n}, la suya;
- *    · un compañero T{n} y, desde la T3, un recolector T{n} sobrecargado;
+*   · un compañero T{n} y, desde la T3, un recolector T{n};
  *    · la caja T{n+1}, que es la cadena de F31;
  *    · un salto a T{n+1}, que es la sorpresa de F6;
  *    · un expansor, una piedra de calibración desde la T6 y la nanopartícula
@@ -1038,40 +1058,44 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     }
   });
 
-  // El compañero del tier de la caja. El poder sale de `TIER_SYSTEM.ranges`, el
-  // mismo del que salen el de la tienda y el del salto, así que un T5 de la caja
-  // y un T5 comprado hacen exactamente lo mismo (R2).
+  // El compañero del tier de la caja. **El potencial decide su poder**, y sale de
+  // `poderDeCompanero()`, que es la misma función que usa la tienda: un T5 de la
+  // caja y un T5 comprado hacen exactamente lo mismo (R2). Antes el poder era
+  // `rand(min, max)` del rango, o sea que **el compañero de caja no tenía
+  // estrellas**: el potencial era una escala de calidad solo del recolector, y
+  // en el almacén la mitad de los objetos de tier no la traían.
   tabla.push({
     id: 'companion', weight: 22,
     build: () => {
-      const r = TIER_SYSTEM.ranges[tier];
-      const p = rand(r[0], r[1]);
+      const potential = rollPotentialFrom();
+      const p = poderDeCompanero(tier, potential);
       const nombre = nombreDeArriba('companion', tier);
+      const detalles = `Recolección por segundo: +${p}/s`;
       return {
         kind: 'companion', amount: 1, name: nombre, label: nombre,
-        details: `Recolección por segundo: +${p}/s`,
-        rarity: rareza, icon: 'companion', tier,
+        details: detalles,
+        rarity: rareza, icon: 'companion', tier, potential,
         item: {
           id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          name: nombre, type: 'companion', details: `Recolección por segundo: +${p}/s`,
-          rarity: rareza, tier, companionType: 'passive', power: p,
+          name: nombre, type: 'companion', details: detalles,
+          rarity: rareza, tier, companionType: 'passive', power: p, potential,
           sellPrice: Math.floor(p * 62), sellPriceTope: tope
         }
       };
     }
   });
 
-  // El recolector sobrecargado entra en la T3. Antes la caja común solo daba un
-  // dron y su salto; a partir de la T3 hay dos objetos de tier en la tabla, que
-  // es cuando una caja empieza a merecer el nombre de caja de tier y no de caja
-  // de.material.
+  // El recolector entra en la T3. Antes la caja común solo daba un dron y su
+  // salto; a partir de la T3 hay dos objetos de tier en la tabla, que es cuando
+  // una caja empieza a merecer el nombre de caja de tier y no de caja de
+  // material. Y ya no es un sobrecargado: es un recolector normal de su tier con
+  // el potencial tirado, que es lo que hace que buscar el ★5 sea una búsqueda.
   if (tier >= 3) {
     tabla.push({
       id: 'collector', weight: 20,
       build: () => {
-        const w = makeOverclockCollector(tier);
-        w.item.sellPriceTope = tope;
-        return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier, item: w.item };
+        const w = makeCrateCollector(tier, tope);
+        return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier, potential: w.item.potential, item: w.item };
       }
     });
   }
@@ -1111,7 +1135,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
   // El expansor. Sale de `EXPANSOR_TIERS` y el tipo decide la caja: la T1 da el
   // expansor T1, la T2 el T2, y de la T3 en adelante el T3, que es el único que
   // llega al tope de 600 y por eso es el que tiene que venir de las cajas altas.
-  tabla.push(buildExpansorLoot(expansorDeCaja(tier), rareza, tier));
+tabla.push(buildExpansorLoot(tier, rareza, tier));
 
   if (tier >= 8) {
     tabla.push({

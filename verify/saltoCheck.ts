@@ -326,15 +326,15 @@ async function main() {
     // del mismo `tablaDePesos` que usa el sorteo.
     for (const c of CAJAS) {
       const tabla = CRATE_LOOT[c];
-      // La rareza que manda es la ACOTADA a la caja. Sin acotar, la caja común
-      // tendría un Sobrecargado —que su salto es por diseño— pesando por debajo
-      // de su Raro, y saldría más a menudo: la caja dejaría de parecer la que es.
+      // La rareza que manda es la ACOTADA a la caja. Sin acotar, la caja baja
+      // tendría un item del tier de arriba pesando por debajo de su Raro, y
+      // saldría más a menudo: la caja dejaría de parecer la que es.
       const rarezas = rarezaDeTabla(c);
       // Lo que se mide NO es la suma de la rareza del PREMIO, sino el **peso por
       // unidad de rareza**: cuánto pesa de media una entrada de esa rareza.
       //
-      // La diferencia no es un detalle. La suma de "Sobrecargado" puede ser la de
-      // TRES entradas distintas y la de "Raro" la de una sola, así que comparar
+      // La diferencia no es un detalle. La suma de una rareza puede ser la de
+      // TRES entradas distintas y la de otra la de una sola, así que comparar
       // los totales brutos mide cuántos premios hay de cada rareza, no su
       // probabilidad, y da un falso positivo que no dice nada del juego.
       //
@@ -382,10 +382,10 @@ async function main() {
       }
     }
 
-    // Que la rareza que DECIDE EL PESO esté acotada a la caja. La nominal puede
-    // ser altísima (el salto de una común es un Sobrecargado por diseño), pero
-    // para el peso vale la de la caja: si no, la caja común tendría un Divino
-    // compitiendo con su Raro y dejaría de parecer una común.
+    // Que la rareza que DECIDE EL PESO está acotada a la caja. La nominal puede
+    // ser altísima -el salto de una caja baja trae un item del tier de arriba-,
+    // pero para el peso vale la de la caja: si no, una caja común tendría un
+    // Divino compitiendo con su Raro y dejaría de parecer una común.
     // F31 · EL TOPE DE CADA CAJA ES SU RAREZA, LEÍDA DE SU NOMBRE.
     //
     // Antes era un objeto de cuatro: `{ common: 1, rare: 2, epic: 3, legendary: 4 }`.

@@ -38,6 +38,7 @@ export default defineConfig({
         filterCheck: resolve(here, 'filterCheck.ts'),
         moveCheck: resolve(here, 'moveCheck.ts'),
         stackCheck: resolve(here, 'stackCheck.ts'),
+        potencialCheck: resolve(here, 'potencialCheck.ts'),
         loteCheck: resolve(here, 'loteCheck.ts'),
         consumableCheck: resolve(here, 'consumableCheck.ts'),
         stateCheck: resolve(here, 'stateCheck.ts'),
