@@ -21,8 +21,7 @@ import { renderStoreTab } from './components/store';
 import { renderForgePage } from './ui/forgePage';
 import { renderProfilePage } from './ui/profilePage';
 import { renderPrestigePage } from './ui/prestigePage';
-import { Router, rutaVisible, type Route } from './ui/router';
-import { motivoDeForjaCerrada } from './data/tree';
+import { Router, type Route } from './ui/router';
 
 import { applyTheme, getSavedTheme, setTheme, type ThemeName } from './theme';
 import { showConfirmModal } from './utils/modal';
@@ -594,24 +593,6 @@ function renderRoute(route: Route) {
 
   const go = (r: Route) => {
     sfx.nav();
-    /**
-     * G6 · OCULTAR EL BOTÓN NO ES LO MISMO QUE NEGARSE A ENTRAR.
-     *
-     * La Forja desaparece de las barras mientras no esté desbloqueada, pero el
-     * `data-nav` puede venir de un enlace, de un botón de otra página o de la
-     * pila de navegación. Si la ruta siguiera respondiendo, el botón escondido
-     * no valdría para nada: habría una pantalla sin usar a un clic de distancia y
-     * el jugador tendría que descubrir por qué.
-     *
-     * Y no es un `return` en silencio: dice el motivo y da el atajo, que es lo
-     * que hace falta para que el cierre sea información y no un callejón sin
-     * salida. La razón la pone `data/tree.ts`, que es donde vive la regla.
-     */
-    const motivo = motivoDeForjaCerrada(activeGameInstance?.getState?.()?.nodeLevels);
-    if (motivo && !rutaVisible(r, activeGameInstance?.getState?.())) {
-      showToast(motivo, 'info');
-      return;
-    }
     router.goTo(r);
     renderRoute(router.current);
   };
@@ -664,7 +645,7 @@ function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
   }, {
     name: activeGameInstance?.getDisplayName?.() ?? user.displayName ?? 'Operativo',
     cosmetics: activeGameInstance?.getState?.()?.cosmetics
-  }, activeGameInstance?.getState?.());
+  });
   // La cabecera se reconstruye: la marca de la identidad parcheada ya no vale.
   lastIdentityKey = '';
 

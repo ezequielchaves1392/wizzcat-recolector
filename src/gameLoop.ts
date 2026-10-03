@@ -12,7 +12,7 @@ import { SECRET_ACHIEVEMENTS } from './data/achievements';
 export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
-import { motivoDeForjaCerrada } from './data/tree';
+
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
@@ -3874,14 +3874,14 @@ const AFK_THRESHOLD_MS = 60000;
      */
     forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
       handleUserActivity();
-      // G6 · La regla es de `data/tree.ts`, no de aquí. Estaba escrita a mano en el
-      // motor y otra vez en la tienda, y G6 iba a añadir una tercera copia en el
-      // botón de navegación. Tres copias de "¿tengo el nodo?" es exactamente como
-      // dos de ellas dejan de estar de acuerdo.
-      const cerrada = motivoDeForjaCerrada(state.nodeLevels);
-      if (cerrada) {
-        return { success: false, msg: cerrada };
-      }
+
+
+
+
+
+
+
+
       if (materialIds.length !== 2) {
         return { success: false, msg: 'Selecciona exactamente 2 recolectores.' };
       }

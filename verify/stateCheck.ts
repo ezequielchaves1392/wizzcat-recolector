@@ -993,12 +993,21 @@ async function main() {
   //  10. La forja
   // =========================================================================
   {
-    // Sin el nodo que la abre, no se fusiona.
-    const g = await boot(baseSave([collector('a', 2), collector('b', 2)]));
+    // **LA FORJA NO TIENE PUERTA.** Aquí había dos comprobaciones que decían que sin
+    // el nodo "Planos Viejos" no se fusionaba, y ya no hay nodo que la abra. Se han
+    // ido con la puerta: una prueba que afirma una regla borrada es peor que no
+    // tenerla, porque alguien la lee, la ve pasar, y se queda creyendo que el
+    // requisito sigue ahí.
+    //
+    // Lo que se conserva —y ya está en `forjaCheck`, con partida recién creada— es
+    // que la forja funciona sin árbol ninguno. Aquí solo hace falta que el rechazo
+    // siga sin costar materiales cuando lo hay por otro motivo.
+    const g = await boot(baseSave([collector('a', 2)]));
     const r = g.forgeCollector(['a', 'b']);
-    check('forja: sin el nodo que la abre no se fusiona',
-      !r.success && /Planos Viejos/i.test(r.msg ?? ''), r.msg ?? '');
-    check('forja: y no se consume ningun material', deType(g, 'collector') === 2, ids(g).join(','));
+    check('forja: un material que no existe se rechaza, y no dice nada de nodos',
+      !r.success && !/Planos Viejos/i.test(r.msg ?? ''), r.msg ?? '');
+    check('forja: y ese rechazo tampoco consume nada',
+      deType(g, 'collector') === 1, ids(g).join(','));
   }
   {
     const conBlueprint = {

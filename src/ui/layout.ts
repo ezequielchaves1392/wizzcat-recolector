@@ -32,7 +32,7 @@
 import { ic, type IconName } from './icons';
 import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
 import { THEMES } from '../theme';
-import { rutasVisibles, routeTitle, type Route } from './router';
+import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
 import { miniIdentity, type IdentityCosmetics } from './identity';
 
 export interface LayoutCallbacks {
@@ -56,31 +56,26 @@ export function renderLayoutHTML(
   savedTheme: string,
   activeRoute: Route,
   cb: LayoutCallbacks,
-  identity?: NavIdentity,
-  /** Estado de la partida, para saber qué rutas están abiertas (G6). */
-  state?: any
+  identity?: NavIdentity
 ): string {
   const options = THEMES.map(t =>
     `<option value="${t.value}" ${t.value === savedTheme ? 'selected' : ''}>${t.label}</option>`
   ).join('');
 
   /**
-   * G6 · LAS DOS BARRAS SALEN DE LA MISMA LISTA.
+   * G6 · LAS DOS BARRAS SALEN DE LA MISMA LISTA. YA NO HACE FALTA.
    *
-   * Antes las dos filtraban `BOTTOM_BAR_ROUTES` y `HEADER_ROUTES` por separado, y
-   * por eso una condición de "esto aún no está abierto" escrita aquí solo habría
-   * ocultado el botón en una de las dos: en escritorio la Forja seguía estando.
-   * `rutasVisibles()` es la que contesta, y contesta una sola vez.
+   * Aquí hubo una condición de "esto aún no está abierto" y dos listas derivadas,
+   * para que la Forja no saliera hasta tener su nodo. **Con la forja abierta desde
+   * el inicio se han ido las dos cosas**: la condición y la lista. Las barras
+   * vuelven a filtrar `BOTTOM_BAR_ROUTES` y `HEADER_ROUTES` por su cuenta, que es
+   * lo más simple y no tiene un estado que haya que sincronizar detrás.
    *
-   * Y el `flex-1` de cada botón es lo que reparte el ancho: con cinco entradas y
-   * con cuatro, cada una ocupa lo que le toca. Por eso no hace falta nada más
-   * para que la barra no deje un hueco donde estaba la Forja.
+   * Se deja el hueco en vez de un `if (false)`: una condición apagada es una
+   * condición que alguien vuelve a encender sin mirar por qué estaba apagada.
    */
-  const barraAbajo = rutasVisibles(state, r => r.inBottomBar);
-  const barraArriba = rutasVisibles(state, r => r.inHeader);
-
   const navBtn = (route: Route) => {
-    const def = barraAbajo.find(r => r.id === route)!;
+    const def = BOTTOM_BAR_ROUTES.find(r => r.id === route)!;
     const active = activeRoute === route;
     return `
       <button data-nav="${route}"
@@ -126,7 +121,7 @@ export function renderLayoutHTML(
 
           <!-- Navegación de escritorio -->
           <nav class="hidden lg:flex items-center gap-0.5 flex-shrink-0" aria-label="Navegación">
-            ${barraArriba.map(r => {
+            ${HEADER_ROUTES.map(r => {
               const active = activeRoute === r.id;
               return `
                 <button data-nav="${r.id}"
@@ -384,7 +379,7 @@ export function renderLayoutHTML(
         style="padding-bottom: max(0.25rem, env(safe-area-inset-bottom))"
         aria-label="Navegación principal">
         <div class="flex items-stretch gap-0.5 relative">
-          ${barraAbajo.map(r => navBtn(r.id)).join('')}
+          ${BOTTOM_BAR_ROUTES.map(r => navBtn(r.id)).join('')}
         </div>
       </nav>
 

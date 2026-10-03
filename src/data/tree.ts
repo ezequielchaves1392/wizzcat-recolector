@@ -49,10 +49,29 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { costReduction: 0.04 }, x: 0, y: 3
   },
   {
-    id: 'blueprint', name: 'Planos Viejos', description: 'Desbloquea el Crafteo de recolectores.',
+    // **ESTE NODO ERA UNA PUERTA Y AHORA ES UNA RAÍZ, QUE ES OTRO OFICIO.**
+    //
+    // Antes su único trabajo era *desbloquear* la forja, y por eso tenía
+    // `bonus: {}`: no hacía falta, lo que hacía era dejarte entrar. Con la forja
+    // abierta desde el inicio ya no hay nada que abrir, y un nodo de 4 núcleos que
+    // no da nada es una trampa: el jugador lo compra, ve que no cambia nada, y
+    // pierde la confianza en el árbol entero.
+    //
+    // **Y NO SE PUEDE BORRAR, Y POR QUÉ ES LO IMPORTANTE.** Es la **raíz de la
+    // rama de crafteo**: `forge_luck` y `shard_sifter` lo tienen en `requires`.
+    // Borrarlo dejaba esos dos inalcanzables —con sus bonificaciones
+    // desaparecidas de golpe para quien ya los tenía— y partía el árbol por la
+    // mitad. Por eso se queda como raíz, y por eso tiene que dar algo: **todos los
+    // demás nodos de la columna 0 dan un bonus**, y este era el único que no.
+    //
+    // El bonus es `craftLuck` porque es lo que hace el nodo: "sabes cómo funciona
+    // una forja". El 3 % es de una raíz de 4 núcleos y un nivel, al lado del +6 %
+    // por nivel de `forge_luck`, que es la rama que ya se carrera en esa estadística.
+    // **Si algún día molesta, es este número y esta línea.**
+    id: 'blueprint', name: 'Planos Viejos', description: 'Raíz de la forja: +3% a la probabilidad de fusionar.',
     icon: 'sparkle', category: 'exclusivo', tier: 0, requires: [],
     baseCost: 4, costGrowth: 1, maxLevel: 1,
-    bonus: {}, x: 0, y: 4
+    bonus: { craftLuck: 0.03 }, x: 0, y: 4
   },
 
   // ---------------------------------------------------------------- TIER 1
@@ -183,36 +202,6 @@ export const TREE_BY_ID: Record<string, TreeNode> = Object.fromEntries(
 );
 
 export const TREE_TIERS = [0, 1, 2, 3, 4];
-
-/**
- * EL NODO DE LA FORJA, POR SU ID, Y LA REGLA DE SI SE PUEDE USAR.
- *
- * **LA REGLA ESTABA COPIADA EN DOS SITIOS Y VA A ESTAR EN TRES.** El motor la
- * comprobaba para no forjar, y la tienda la comprobaba para avisar de que las
- * piedras no servían de nada. G6 mete una tercera copia —el botón de la forja— y
- * una copia más es exactamente como estas dos dejaron de estar de acuerdo: un día
- * alguien renombra el nodo, el motor deja de bloquear la forja y la tienda sigue
- * diciendo que está cerrada.
- *
- * **POR QUÉ `?? 0` Y NO `|| 1`.** Un guardado viejo puede traer el `nodeLevels` sin
- * este id, y `undefined || 1` daría uno —la forja abierta— a quien no la tiene.
- * Con `?? 0` la ausencia es un cero, que es lo que es: no lo has comprado.
- *
- * Y el mensaje va aquí y no en la vista, porque lo usan tres sitios y la razón de
- * que se diga una cosa y no tres.
- */
-export const FORGE_NODE_ID = 'blueprint';
-
-export function forjaDesbloqueada(nodeLevels: Record<string, number> | undefined): boolean {
-  return (nodeLevels?.[FORGE_NODE_ID] ?? 0) > 0;
-}
-
-/** Por qué no se puede usar la forja, en una frase. `null` si sí se puede. */
-export function motivoDeForjaCerrada(nodeLevels: Record<string, number> | undefined): string | null {
-  return forjaDesbloqueada(nodeLevels)
-    ? null
-    : `Necesitas el nodo "${TREE_BY_ID[FORGE_NODE_ID]?.name ?? FORGE_NODE_ID}" del árbol para usar la Forja.`;
-}
 
 export const TREE_CATEGORY_META: Record<string, { label: string; color: string; icon: string }> = {
   automatizacion: { label: 'Automatización', color: 'text-cyan-400', icon: 'bolt' },

@@ -21,8 +21,6 @@
 // nada atrás, quien llama cae a la base.
 // ==========================================================================
 
-import { forjaDesbloqueada } from '../data/tree';
-
 export type Route = 'base' | 'almacen' | 'forja' | 'tienda' | 'perfil' | 'ranking' | 'prestigio';
 
 export interface RouteDef {
@@ -55,33 +53,6 @@ export const ROUTES: RouteDef[] = [
 
 export const BOTTOM_BAR_ROUTES = ROUTES.filter(r => r.inBottomBar);
 export const HEADER_ROUTES = ROUTES.filter(r => r.inHeader);
-
-/**
- * G6 · QUÉ RUTAS PUEDE VER EL JUGADOR AHORA MISMO.
- *
- * **POR QUÉ ESTO VIVE EN EL ROUTER Y NO EN LA BARRA.** La barra de abajo y la de
- * escritorio pintan la misma lista, así que una condición escrita en el sitio
- * donde se pinta solo ocultaría el botón en una de las dos. Y el enrutador
- * necesita la misma respuesta para **negarse a entrar**, no solo para esconder el
- * botón: si el botón desaparece pero la ruta sigue respondiendo, el jugador la
- * alcanza con un clic en cualquier enlace que apunte a ella y ve una pantalla que
- * no puede usar. Esconderse y negarse son la misma regla preguntada dos veces.
- *
- * **Y LA REGLA DE LA FORJA NO ESTÁ AQUÍ.** Está en `data/tree.ts`, junto al nodo,
- * porque el motor y la tienda también la necesitan. Si el "qué necesita esto"
- * viviera en el router, el motor tendría que importar de la interfaz para poder
- * decir que no.
- */
-export function rutasVisibles(state: any, filtro: (r: RouteDef) => boolean): RouteDef[] {
-  if (state && forjaDesbloqueada(state.nodeLevels)) return ROUTES.filter(filtro);
-  return ROUTES.filter(r => r.id !== 'forja' && filtro(r));
-}
-
-/** ¿Se puede entrar en esta ruta con esta partida? */
-export function rutaVisible(route: Route, state: any): boolean {
-  if (route !== 'forja') return true;
-  return forjaDesbloqueada(state?.nodeLevels);
-}
 
 export function routeTitle(route: Route): string {
   return ROUTES.find(r => r.id === route)?.title ?? 'Cyber Base';

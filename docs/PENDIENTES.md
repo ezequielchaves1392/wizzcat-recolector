@@ -206,9 +206,26 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 
 ### Lo que queda de este encargo, en orden
 
+- [x] **B1 · La forja se abre desde el inicio y se elimina el requisito.** La puerta era
+      real y estaba en cuatro sitios —el motor la rechazaba, la tienda ocultaba las cartas y
+      avisaba, el botón de navegación no salía y el enrutador se negaba a entrar—. Ahora
+      **no queda ni una línea de esa regla en el proyecto**: un requisito que ya no existe
+      no puede quedarse a medias en cuatro ficheros, porque un semi-requisito es un requisito
+      que alguien puede volver a cerrar sin querer.
+      **Y `blueprint` NO se ha borrado, y no es casualidad:** es la **raíz de la rama de
+      crafteo** —`forge_luck` y `shard_sifter` lo tienen en `requires`—, así que borrarla
+      dejaba esos dos inalcanzables y con sus bonificaciones desaparecidas de golpe para
+      quien ya los tenía. Se queda como raíz y **ahora da `craftLuck` 3 %**, porque un nodo de
+      4 núcleos que no hace nada es una trampa: el jugador lo compra, ve que no cambia nada, y
+      pierde la confianza en el árbol entero. Es además el único nodo de la columna 0 que no
+      daba bonus. **Si molesta, es ese número y esa línea.**
+      Las pruebas que afirmaban la puerta se han ido con ella —una prueba que asegura una regla
+      borrada es peor que no tenerla— y en su lugar hay una que verifica que **una partida
+      recién creada, sin árbol ninguno, forja**.
+
 | Lote | Qué | Por qué aquí |
 |---|---|---|
-| **B** | 3a forja abierta desde el inicio + 3e fusión de compañeros | 3a **deshace** el requisito que G6 acaba de montar. Hay que quitarlo limpio, no dejar media regla. 3e depende de 3a. |
+| **B2** | 3e fusión de compañeros en la misma forja | Depende de B1, ya hecho. |
 | **C** | 1b nav persistente + 1c sin botón de retroceso | UI pura. Riesgo cero para la economía. |
 | **D** | 3b cristales unificados + 3c recompensa por fallo | 3c depende de 3b. Migración de guardado: los cristales hoy son por tier. |
 | **E** | 1a quitar llaves | El más caro: toca botín, tienda, reventa, el tope que se puso en `b349393` y 220 pruebas de `llaveCheck`. Solo, con todo lo demás verde. |
@@ -976,7 +993,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1952
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1939
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

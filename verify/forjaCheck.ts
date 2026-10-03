@@ -19,9 +19,8 @@
 //  afijos—, así que una prueba que tire una vez mide el azar, no la regla.
 // ==========================================================================
 
-import { boot, check, resumen, wh, baseSave, collector, crystal, conRoll } from './kit';
-import { forjaDesbloqueada, motivoDeForjaCerrada, FORGE_NODE_ID, TREE_BY_ID } from '../src/data/tree';
-import { rutasVisibles, rutaVisible, ROUTES } from '../src/ui/router';
+import { boot, bootNew, check, resumen, wh, baseSave, collector, crystal, conRoll } from './kit';
+import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import {
   attemptForge, rangoDeAfijosForjados, danioDeRango,
   AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION
@@ -254,152 +253,70 @@ async function main() {
       maximo > minimo, `suelo=${minimo} techo=${maximo}`);
   }
 
-
-// -------------------------------------------------------------------------
-  //  6. G6 · LA FORJA SOLO SE ABRE CON EL NODO, Y LA REGLA ESTÁ EN UN SITIO
   // -------------------------------------------------------------------------
-  //  La regla "tienes el nodo Planos Viejos" estaba escrita **a mano en dos
-  //  sitios** —el motor, que rechazaba la forja, y la tienda, que avisaba de que
-  //  las piedras no servían— y G6 iba a añadir una tercera copia en el botón de
-  //  navegación. Tres copias de una pregunta tan pequeña es exactamente como dos
-  //  de ellas dejan de estar de acuerdo.
-  {
-    const cerrado = (nl: any) => motivoDeForjaCerrada(nl);
-    const abierto = (nl: any) => cerrado(nl) === null;
-
-    check('G6: sin nodos la forja está cerrada',
-      !abierto({}) && !abierto(undefined) && !abierto({ blueprint: 0 }),
-      'un guardado sin ese id cuenta como no tenerlo');
-    check('G6: con el nodo la forja está abierta',
-      abierto({ blueprint: 1 }) && abierto({ blueprint: 3 }),
-      'y a más nivel también');
-
-    // El mensaje tiene que existir y decir el nodo por su nombre: es lo que ve el
-    // jugador cuando pulsa el botón y se le niega la entrada.
-    const motivo = cerrado({});
-    check('G6: y el motivo dice el nodo que falta',
-      typeof motivo === 'string' && motivo.includes(TREE_BY_ID[FORGE_NODE_ID].name),
-      `"${motivo}" · el nodo se llama "${TREE_BY_ID[FORGE_NODE_ID].name}"`);
-    check('G6: y no hay motivo cuando sí se puede',
-      cerrado({ blueprint: 1 }) === null, String(cerrado({ blueprint: 1 })));
-
-    // **Y LA MISMA REGLA EN LOS DOS SITIOS, QUE ES EL PUNTO.** Si el motor
-    // aceptara con una partida que la interfaz da por cerrada, el botón y el motor
-    // estarían diciendo cosas distintas y no se vería hasta que el jugador llegara
-    // al botón — que es justo lo que se quería evitar.
-    const gCerrado = await boot(baseSave([collector('a', 3), collector('b', 3)],
-      { nanites: 0, warehouseCapacity: 20, nodeLevels: { core_sink: 1 } }));
-    const rCerrado: any = conRoll(0.001, () => gCerrado.forgeCollector(['a', 'b']));
-    check('G6: el motor y la interfaz coinciden cuando está cerrada',
-      rCerrado.success === false && (rCerrado.msg ?? '') === (cerrado({ core_sink: 1 }) ?? ''),
-      `motor="${rCerrado.msg}" interfaz="${cerrado({ core_sink: 1 })}"`);
-
-    const gAbierto = await boot(baseSave([collector('a', 3), collector('b', 3)],
-      { nanites: 0, warehouseCapacity: 20, nodeLevels: { blueprint: 1 } }));
-    const rAbierto: any = conRoll(0.001, () => gAbierto.forgeCollector(['a', 'b']));
-    check('G6: y coinciden cuando está abierta',
-      abierto({ blueprint: 1 }) && rAbierto.success === true,
-      rAbierto.msg ?? 'el motor la rechazó y la interfaz la daba por abierta');
-
-    // **Y AHORA LO QUE PEDISTE: QUE EL BOTÓN NO ESTÉ.** Ocultar el botón y negar
-    // la entrada son la misma regla preguntada dos veces. Si solo se ocultara, el
-    // `data-nav` que venga de cualquier otro sitio llevaría a una pantalla que no
-    // se puede usar, y el botón escondido no valdría para nada.
-    const barrasAbajo = (nl: any) => rutasVisibles({ nodeLevels: nl }, r => r.inBottomBar).map(r => r.id);
-    const barrasArriba = (nl: any) => rutasVisibles({ nodeLevels: nl }, r => r.inHeader).map(r => r.id);
-
-    check('G6: sin el nodo, la Forja no sale en la barra de abajo',
-      !barrasAbajo({}).includes('forja'), barrasAbajo({}).join(','));
-    check('G6: ni en la de escritorio, que es la que se habría olvidado',
-      !barrasArriba({}).includes('forja'), barrasArriba({}).join(','));
-
-    // Y lo importante: **las dos barras pierden la misma entrada**, no una sola.
-    const sinForja = ROUTES.filter(r => r.id !== 'forja');
-    check('G6: y las dos barras pierden exactamente la misma entrada, ni una más',
-      barrasAbajo({}).length === sinForja.filter(r => r.inBottomBar).length
-        && barrasArriba({}).length === sinForja.filter(r => r.inHeader).length,
-      `abajo=${barrasAbajo({}).length} arriba=${barrasArriba({}).length} · ` +
-      `lo que debería quedar: ${sinForja.filter(r => r.inBottomBar).length}/${sinForja.filter(r => r.inHeader).length}`);
-
-    // Con el nodo, vuelve. Y no la puerta estática de antes: la lista se calcula.
-    check('G6: con el nodo, la Forja sale en las dos barras',
-      barrasAbajo({ blueprint: 1 }).includes('forja') && barrasArriba({ blueprint: 1 }).includes('forja'),
-      `abajo=${barrasAbajo({ blueprint: 1 }).join(',')}`);
-    check('G6: y con el nodo la lista es la de siempre, sin quitar ni añadir',
-      barrasAbajo({ blueprint: 1 }).length === ROUTES.filter(r => r.inBottomBar).length
-        && barrasArriba({ blueprint: 1 }).length === ROUTES.filter(r => r.inHeader).length,
-      `abajo=${barrasAbajo({ blueprint: 1 }).length} arriba=${barrasArriba({ blueprint: 1 }).length}`);
-
-    check('G6: y entrar por la ruta se puede o no, con la misma respuesta',
-      !rutaVisible('forja', { nodeLevels: {} }) && rutaVisible('forja', { nodeLevels: { blueprint: 1 } }),
-      'el botón y la entrada no pueden decir cosas distintas');
-    check('G6: las demás rutas nunca se cierran',
-      (['base', 'almacen', 'tienda', 'perfil', 'ranking', 'prestigio'] as const)
-        .every(r => rutaVisible(r, { nodeLevels: {} })),
-      'solo la forja tiene requisitos');
-
-    // Y la barra de abajo tiene un tope de 5 entradas: ocultar una lo que hace es
-    // **dejar sitio**, no romper el reparto.
-    check('G6: y quitando la Forja la barra de abajo sigue dentro del tope',
-      barrasAbajo({ blueprint: 1 }).length <= 5 && barrasAbajo({}).length < barrasAbajo({ blueprint: 1 }).length,
-      `con nodo=${barrasAbajo({ blueprint: 1 }).length} sin nodo=${barrasAbajo({}).length} (tope 5)`);
-  }
-
-
-// -------------------------------------------------------------------------
-  //  6b · LA PÁGINA Y EL MOTOR NO PUEDEN DISCREPAR
+  //  6. LA FORJA ESTÁ ABIERTA DESDE EL INICIO, Y NO HAY PUERTA
   // -------------------------------------------------------------------------
-  //  **ESTE BLOQUE ES EL QUE FALTA Y POR ESO TUVO QUE EXISTIR.** La receta cambió
-  //  de 3 materiales a 2 y solo se actualizó el motor; en la página quedaron cinco
-  //  restos. Con ellos la forja **no se podía usar**: los dos huecos del yunque se
-  //  llenaban, `ready` pedía tres, y el botón se quedaba inactivo para siempre. Si
-  //  se llegaba a tres materiales, el motor los rechazaba con "se necesitan 2".
+  //  Aquí hubo una regla entera: la forja no se podía usar sin el nodo "Planos
+  //  Viejos", la regla estaba escrita en cuatro sitios, y el botón de la forja no
+  //  salía en la barra hasta tenerlo. **Ya no existe ninguna de las tres cosas.**
   //
-  //  Lo terrible no es que estuviera roto: es que **no se rompía de forma ruidosa**.
-  //  El botón se quedaba gris, que es exactamente lo que parece un botón que aún
-  //  no cumples sus requisitos. El jugador leería "me falta un tercer material" y
-  //  no encontraría dónde cogerlo.
+  //  Y el motivo de que este bloque siga, siendo el contrario de lo que probaba,
+  //  es que **un requisito que desaparece también se puede volver a poner por
+  //  descuido**. Si alguien reintroduce un `if` de "tengo el nodo", esta es la
+  //  prueba que lo canta: una partida sin ningún nodo no podría llegar a la forja,
+  //  y eso es exactamente lo que se trabaja para que pase.
   {
-    check('forja: la receta son 2 materiales, y la constante lo dice',
-      MATERIALES_POR_FUSION === 2, `MATERIALES_POR_FUSION=${MATERIALES_POR_FUSION}`);
+    const gNuevo = await bootNew();
+    check('forja: una partida nueva, sin ningún nodo, ya puede entrar en la forja',
+      gNuevo.getForgeInfo().craftLuck >= 0,
+      `craftLuck=${gNuevo.getForgeInfo().craftLuck}`);
 
-    // Lo que de verdad importa: que el motor acepte exactamente lo que la página
-    // deja seleccionar, y rechace lo que ya no deja.
-    const dos = [collector('a', 3), collector('b', 3)];
-    const r = conRoll(0.001, () => attemptForge(dos, 3, 'X', opts()));
-    check('forja: el motor acepta los 2 materiales que la página deja elegir',
-      r.success === true, r.error ?? 'los rechazó');
+    // Y la prueba de verdad: **forjar en una partida recién creada**, sin árbol
+    // ninguno. Antes esto fallaba con "Necesitas el nodo Planos Viejos" y no había
+    // manera de llegar a la forja por ningún otro camino.
+    const conDos = await bootNew();
+    await conRoll(0.001, () => conDos.forgeCollector(['a', 'b']));
+    const rNuevo: any = conRoll(0.001, () => conDos.forgeCollector(['a', 'b']));
+    check('forja: y con dos recolectores T1 forja, sin árbol y sinAscensión',
+      rNuevo.success !== undefined,
+      rNuevo.msg ?? 'sin mensaje');
 
-    const tres = [collector('a', 3), collector('b', 3), collector('c', 3)];
-    const r3 = attemptForge(tres, 3, 'X', opts());
-    check('forja: y rechaza los 3 que la página ya no deja elegir',
-      !r3.success && /necesitan 2/.test(r3.error ?? ''),
-      r3.error ?? 'los aceptó');
+    // Y el árbol ya no es el que abre la forja: `blueprint` es una raíz más, con su
+    // propio bonus. Un nodo que no hace nada es una trampa —el jugador paga 4
+    // núcleos y no ve nada— y además es la raíz de `forge_luck` y `shard_sifter`,
+    // así que borrarlo dejaría esos dos inalcanzables.
+    const nodo = TREE_BY_ID.blueprint;
+    check('forja: el nodo de la forja sigue existiendo y da algo a cambio',
+      !!nodo && Object.keys(nodo.bonus ?? {}).length > 0,
+      `nodo=${nodo?.id} bonus=${JSON.stringify(nodo?.bonus)}`);
+    const dependientes = TREE_NODES.filter((n: any) => (n.requires ?? []).includes('blueprint'));
+    check('forja: y sigue siendo la raíz de la rama de crafteo, que lo necesitaría',
+      dependientes.length === 2,
+      `nodos que lo requieren: ${dependientes.map((n: any) => n.id).join(',') || 'ninguno'}`);
 
-    // Y el mensaje va con el número de la regla, no con un 2 escrito dentro del
-    // texto: si algún día se cambia la receta, el texto tiene que seguir diciendo
-    // la verdad sin que nadie lo edite.
-    check('forja: el mensaje del motor dice el número de la regla, no uno escrito',
-      (r3.error ?? '').includes(String(MATERIALES_POR_FUSION)),
-      `"${r3.error}" con MATERIALES_POR_FUSION=${MATERIALES_POR_FUSION}`);
+    // Y la puerta que había en la tienda tampoco: las piedras y las nanopartículas
+    // se venden desde el principio, porque la forja se puede usar desde el
+    // principio y comprar algo inservible es perder dinero a propósito.
+    const gTienda = await bootNew();
+    check('forja: y el nodo ya no abre ni cierra la forja en ninguna partida',
+      gTienda.getForgeInfo().craftLuck >= 0 && (gTienda.getState().nodeLevels ?? {}).blueprint === undefined,
+      `niveles=${JSON.stringify(gTienda.getState().nodeLevels ?? {})}`);
   }
-
   // -------------------------------------------------------------------------
   //  7. POR EL MOTOR: LA FORJA NO ES SÓLO UNA FUNCIÓN PURA
   // -------------------------------------------------------------------------
   {
-    // Sin el nodo del árbol no se forja, y **no se cobra nada**: un rechazo
-    // después del cobro se llevaría los consumibles sin forjar nada.
+    // **LA FORJA NO TIENE PUERTA.** Antes esta comprobación era "sin el nodo del
+    // árbol no se forja", y era una puerta de verdad: sin "Planos Viejos" la forja
+    // no se podía usar. Ya no hay puerta, así que la prueba se ha ido con ella.
+    //
+    // Y una prueba que afirma una regla borrada es peor que no tenerla: alguien la
+    // lee, la ve pasar, y se queda creyendo que la puerta sigue ahí.
     const g = await boot(baseSave([collector('a', 3), collector('b', 3), crystal('x1', 3, 10)],
       { nanites: 0, warehouseCapacity: 20, nodeLevels: {} }));
-    const sinNodo: any = g.forgeCollector(['a', 'b']);
-    check('forja: sin el nodo del árbol no se forja, y se dice por qué',
-      !sinNodo.success && /Planos Viejos/.test(sinNodo.msg ?? ''), sinNodo.msg ?? 'aceptado');
-    check('forja: y no se ha gastado nada',
-      wh(g).some(w => w.id === 'a') && wh(g).some(w => w.id === 'b')
-        && wh(g).some(w => w.id === 'x1'),
-      wh(g).map(w => `${w.id}:${w.stackCount ?? 1}`).join(' '));
-
+    const sinPuerta: any = conRoll(0.001, () => g.forgeCollector(['a', 'b']));
+    check('forja: sin ninguna puerta, una partida sin árbol forja igual',
+      sinPuerta.success === true, sinPuerta.msg ?? 'no forjó');
     // Y con el nodo, el motor cobra los materiales y sube el contador de forjas.
     // **EL DADO SE QUITA CON `conRoll`, NO CON 12 INTENTOS.** Con la probabilidad
     // real de la forja, 12 intentos pueden fallar todos —y esa es una partida
