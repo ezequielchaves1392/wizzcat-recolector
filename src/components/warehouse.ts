@@ -31,7 +31,7 @@ import { ic } from '../ui/icons';
 import { pageShell, mountInto, wireNav, sectionHead } from '../ui/pageShell';
 import { showConfirmModal } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
-import { showCrateSummary, MAX_APERTURA_LOTE } from './crateSummary';
+import { showCrateSummary, maximoDeApertura } from './crateSummary';
 import { showCrystalPicker } from './crystalPicker';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
@@ -943,8 +943,8 @@ export function visibleStacksFor(
   // número de celda que el jugador señalaba no era el mismo sitio en las dos.
   //
   // **Y SE ACUMULAN HASTA EL TOPE DE PILA, QUE ES LO NUEVO.** Una pila de cajas
-  // está llena en 20, así que 45 cajas son tres items en el almacén y tienen que
-  // ser **tres celdas**: si se agruparan en una, la rejilla diría 45 donde el
+  // está llena en 99, así que 250 cajas son tres items en el almacén y tienen que
+  // ser **tres celdas**: si se agruparan en una, la rejilla diría 250 donde el
   // almacén dice tres, y el contador de ranuras —que ya cuenta tres— quedaría
   // descolocado de lo que el jugador ve. La agrupación de la vista tiene que usar
   // la misma regla que el contador, o las dos mienten con dos números distintos.
@@ -1320,14 +1320,14 @@ function confirmarYabrir(
   game: any, item: any, crateType: any, llave: any, redraw: () => void
 ) {
   // F18: con pila se pregunta cuántas, con el mismo selector de la venta. El
-  // tope es lo que de verdad se puede abrir: cajas Y llaves, lo menor de los
-  // dos, **y el tope de una pila**.
+  // tope es lo que de verdad se puede abrir, y lo decide `maximoDeApertura()`:
+  // cajas Y llaves, lo menor de los dos, y el tope de una apertura.
   //
-  // Y las tres cosas son necesarias por motivos distintos. Sin el mínimo de
-  // cajas y llaves, el motor se queda a medias. Y sin el tope de pila, el
-  // diálogo ofrecería abrir 45 cajas de una pila de 45 y el jugador vería en la
-  // rejilla que solo tiene 20 por celda: un número que no existe en ninguna parte.
-  const max = Math.min(stackUnits(item), stackUnits(llave), MAX_APERTURA_LOTE);
+  // La regla vive en `crateSummary.ts` y no aquí. Antes era este `Math.min`
+  // suelto, y eso era R2 en la forma más silenciosa que hay: la regla no estaba
+  // duplicada, estaba **escondida** en el único sitio del proyecto al que ningún
+  // banco puede llegar.
+  const max = maximoDeApertura(stackUnits(item), stackUnits(llave));
   if (max <= 1) {
     showConfirmModal(
       mensajeAbrirCaja(llave.name),

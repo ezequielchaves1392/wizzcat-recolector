@@ -288,36 +288,46 @@ async function main() {
   }
   {
     // Y dos del MISMO tipo se funden en una sola ranura mientras quepan en el
-    // tope de pila. 30 cajas ya no caben: son dos pilas de 20 y 10, y por eso la
-    // comprobación es 2 y no 1.
+    // tope de pila. Dos pilas de 40 son 80, que caben en una sola: una ranura.
     //
-    // El tope de 20 por pila es lo que se pidió, y el motivo por el que este caso
-    // sigue teniendo contenido es que **la fusión y el tope son la misma regla
-    // vista desde dos lados**: `countOccupiedSlots()` cuenta
-    // `ceil(unidades / tope)` y `addToWarehouse()` abre la pila siguiente cuando
-    // la anterior está llena. Si uno de los dos no supiera del tope, el contador
-    // y la rejilla dirían cosas distintas.
-    const g = await boot(baseSave([crate('c1', 1, 20), crate('c2', 1, 10)],
+    // El motivo por el que este caso sigue teniendo contenido es que **la fusión
+    // y el tope son la misma regla vista desde dos lados**: `countOccupiedSlots()`
+    // cuenta `ceil(unidades / tope)` y `addToWarehouse()` abre la pila siguiente
+    // cuando la anterior está llena. Si uno de los dos no supiera del tope, el
+    // contador y la rejilla dirían cosas distintas.
+    const g = await boot(baseSave([crate('c1', 1, 40), crate('c2', 1, 40)],
       { nanites: 200_000, warehouseCapacity: 4 }));
-    check('capacidad: 30 cajas son dos pilas (tope de 20), no una',
-      ranuras(g) === 2, 'ranuras=' + ranuras(g));
-    check('capacidad: y el reparto es 20 + 10',
-      wh(g).filter((w: any) => w.type === 'crate')
-        .map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '20,10',
+    check('capacidad: dos pilas de 40 se funden en una sola ranura',
+      ranuras(g) === 1 && wh(g).length === 1,
+      `ranuras=${ranuras(g)} items=${wh(g).length}`);
+    check('capacidad: y las 80 unidades están todas ahí',
+      wh(g)[0].stackCount === 80, `unidades=${wh(g)[0].stackCount}`);
+  }
+  {
+    // Y por pasarse del tope, ya no caben. 60 + 60 son 120, que se reparten en 99 y
+    // 21: **la fusión no puede quedarse sin tope**, porque si no el almacén
+    // aceptaría una forma que el motor nunca produce.
+    const g = await boot(baseSave([crate('c1', 1, 60), crate('c2', 1, 60)],
+      { nanites: 200_000, warehouseCapacity: 4 }));
+    check('capacidad: 120 cajas sí son dos pilas',
+      ranuras(g) === 2 && wh(g).length === 2,
+      `ranuras=${ranuras(g)} items=${wh(g).length}`);
+    check('capacidad: y el reparto es 99 + 21',
+      wh(g).map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '99,21',
       wh(g).map((w: any) => `${w.id}:${w.stackCount}`).join(' '));
   }
   {
-    // Y 21 cajas sí que son dos pilas, y la que se pasa de 20 NO se fusiona con la
-    // de 20 aunque se llamen igual. Aquí está el otro lado del tope.
-    const g = await boot(baseSave([crate('c1', 1, 21)],
+    // Y 150 cajas sí que son dos pilas, y la que se pasa del tope NO se fusiona con
+    // la otra aunque se llamen igual. Aquí está el otro lado del tope.
+    const g = await boot(baseSave([crate('c1', 1, 150)],
       { nanites: 200_000, warehouseCapacity: 4 }));
-    check('capacidad: 21 cajas ya son dos pilas',
+    check('capacidad: 150 cajas ya son dos pilas',
       ranuras(g) === 2 && wh(g).length === 2,
       `ranuras=${ranuras(g)} items=${wh(g).length} unidades=${(find(g, 'c1')?.stackCount ?? 0)}`);
     check('capacidad: y la pila grande no se come a la pequeña',
       wh(g).length === 2
-        && wh(g).some((w: any) => w.stackCount === 20)
-        && wh(g).some((w: any) => w.stackCount === 1),
+        && wh(g).some((w: any) => w.stackCount === 99)
+        && wh(g).some((w: any) => w.stackCount === 51),
       JSON.stringify(wh(g).map((w: any) => `${w.id}:${w.stackCount}`)));
   }
   {
@@ -341,38 +351,41 @@ async function main() {
     // devolvía 1, y comprar cinco cajas eran cinco viajes a la tienda. Un `if`
     // que ya no se cumple es el peor sitio para un cambio de nombre.
     //
-    // Y el tope del lote lo manda **el espacio, no el saldo**. Con el tope de 20
-    // por pila, un almacén con una pila de 20 y una ranura libre admite una caja
-    // más, no quinientas: si `getBulkMax` solo mirara el dinero, el diálogo
+    // Y el tope del lote lo manda **el espacio, no el saldo**. Con un tope de pila,
+    // un almacén con la pila de cajas llena y una ranura libre admite **una caja
+    // más**, no quinientas: si `getBulkMax` solo mirara el dinero, el diálogo
     // ofrecería 500 y el motor rechazaría con "Almacén lleno".
     const unit = STORE_ITEMS.crateT1.cost;
-    const g = await boot(baseSave([], { nanites: unit * 100, warehouseCapacity: 30 }));
+    const g = await boot(baseSave([], { nanites: unit * 300, warehouseCapacity: 30 }));
     check('lote caja: getBulkMax dice que sí se puede en lote',
       g.getBulkMax('crateT1') > 1, `max=${g.getBulkMax('crateT1')}`);
-    const r = g.buyStoreItem('crateT1', 25) as any;
+    // 250 para pasarse del tope de 99 y ver el reparto: es el caso que importa,
+    // porque por debajo del tope todo entra en una pila y no se ve nada.
+    const r = g.buyStoreItem('crateT1', 250) as any;
     const pilas = wh(g).filter((w: any) => w.type === 'crate');
-    check('lote caja: comprar 25 de golpe mete las 25',
-      !!r && pilas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0) === 25,
+    check('lote caja: comprar 250 de golpe mete las 250',
+      !!r && pilas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0) === 250,
       `${pilas.length} pilas: ${pilas.map((w: any) => w.stackCount).join('+')}`);
-    check('lote caja: y en 20 + 5, por el tope de pila',
-      pilas.length === 2 && pilas.map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '20,5',
+    check('lote caja: y en 99 + 99 + 52, por el tope de pila',
+      pilas.length === 3 && pilas.map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '99,99,52',
       `${pilas.map((w: any) => w.stackCount).join(',')}`);
-    check('lote caja: y cobra 25 veces el unitario',
-      nanites(g) === unit * 100 - unit * 25, `nanites=${nanites(g)}`);
-    check('lote caja: y 25 caben en dos pilas, por el tope de 20',
-      ranuras(g) === 2, `ranuras=${ranuras(g)} items=${ids(g).join(',')}`);
+    check('lote caja: y cobra 250 veces el unitario',
+      nanites(g) === unit * 300 - unit * 250, `nanites=${nanites(g)}`);
+    check('lote caja: y 250 ocupan tres ranuras, por el tope de 99',
+      ranuras(g) === 3, `ranuras=${ranuras(g)} items=${ids(g).join(',')}`);
     check('lote caja: el diálogo enseña el mismo total que se cobra',
-      g.getBulkCost('crateT1', 25) === unit * 25, `bulk=${g.getBulkCost('crateT1', 25)}`);
+      g.getBulkCost('crateT1', 250) === unit * 250, `bulk=${g.getBulkCost('crateT1', 250)}`);
   }
   {
     // Y el tope lo manda el ESPACIO cuando el almacén se queda corto, que es el
     // caso que antes habría mostrado 500 cajas y rechazado la compra.
     const unit = STORE_ITEMS.crateT1.cost;
-    // 4 ranuras y ya hay una pila de 20: quedan 3 pilas libres, o sea 60 cajas más.
-    const g = await boot(baseSave([crate('c1', 1, 20)], { nanites: unit * 500, warehouseCapacity: 4 }));
+    // 4 ranuras y ya hay una pila LLENA de 99: quedan 3 pilas libres de 99, o
+    // sea 297 cajas más. Comprarlas tiene que funcionar y llenar las tres.
+    const g = await boot(baseSave([crate('c1', 1, 99)], { nanites: unit * 1000, warehouseCapacity: 4 }));
     const max = g.getBulkMax('crateT1');
-    check('lote caja: con 4 ranuras y una pila llena el tope son 60 cajas, no "el dinero que hay"',
-      max === 60, `max=${max} (3 pilas libres x 20; con el dinero alcanza para 500)`);
+    check('lote caja: con 4 ranuras y una pila llena el tope son 297 cajas, no "el dinero que hay"',
+      max === 297, `max=${max} (3 pilas libres x 99; con el dinero alcanza para 1000)`);
     const r = g.buyStoreItem('crateT1', max) as any;
     check('lote caja: y comprar ese tope funciona de verdad',
       r !== false && ranuras(g) === 4, `ranuras=${ranuras(g)}`);

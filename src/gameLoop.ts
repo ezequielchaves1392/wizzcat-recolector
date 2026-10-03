@@ -557,10 +557,10 @@ function unidadesCompra(itemKey: string, pedidas?: number): number {
  * que no es apilable siempre entra con su propio id, porque dos recolectores son
  * dos cosas distintas aunque se llamen igual.
  *
- * **UNA COMPRA EN LOTE PUEDE TRAER MÁS DE UNA PILA.** Comprar 25 cajas con el
- * almacén vacío mete un item de 25 y lo repartía en una sola pila de 25 —por
- * encima del tope de 20 que el jugador ve en la rejilla—. Ahora las abre de
- * veinte en veinte y las sobrantes reciben un id con sufijo. El reparto lo
+ * **UNA COMPRA EN LOTE PUEDE TRAER MÁS DE UNA PILA.** Comprar 250 cajas con el
+ * almacén vacío mete un item de 250 y lo repartía en una sola pila de 250 —por
+ * encima del tope de 99 que el jugador ve en la rejilla—. Ahora las abre de
+ * tope en tope y las sobrantes reciben un id con sufijo. El reparto lo
  * decide `planDeEntrada()`, el mismo que usa `cabeEnAlmacen()`, y esa es la razón
  * de que sea un plan y no un `if`: **las dos preguntas tienen que dar el mismo
  * número de ranuras**, porque si no el diálogo ofrece una cantidad que el motor
@@ -661,7 +661,7 @@ function planDeEntrada(
 /**
  * ¿Cabe este item en el almacén con ESTAS unidades?
  *
- * La respuesta no es sí/no para un item suelto: 45 cajas necesitan tres ranuras y
+ * La respuesta no es sí/no para un item suelto: 250 cajas necesitan tres ranuras y
  * no caben en un almacén con dos libres. Por eso delega en el mismo plan que
  * usa `addToWarehouse()` y solo compara el número de ranuras nuevas con las
  * que quedan.
@@ -701,7 +701,7 @@ const NO_OCUPA_RANURA = ['companionSlot1', 'companionSlot2', 'companionSlot3'];
  * se fuera a sumar a la pila de cajas que ya había.
  *
  * **Y CON TOPE DE PILA HAY QUE PREGUNTAR POR LAS `unidades`, NO POR EL ITEM.**
- * Sin eso, comprar 45 cajas de golpe se daría por bueno con una sola ranura
+ * Sin eso, comprar 250 cajas de golpe se daría por bueno con una sola ranura
  * libre —porque la última pila de cajas tiene hueco— y el motor metería las 45
  * en una sola pila de 65, saltándose el tope que el jugador ve en la rejilla. La
  * pregunta "¿cuántas ranuras nuevas necesitas?" es la única que no puede mentir.
@@ -3921,8 +3921,8 @@ const AFK_THRESHOLD_MS = 60000;
      *
      * Y EL ESPACIO PUEDE LIMITAR, QUE ANTES NO PASABA. Decía "una pila es una
      * ranura, así que si cabe una caben N", y eso era cierto mientras las
-     * pilas no tuvieran tope. Con el tope de 20 cajas, un almacén con una pila
-     * de 20 y una ranura libre admite **una** caja más, no mil. Por eso el tope
+     * pilas no tuvieran tope. Con el tope de 99 cajas, un almacén con una pila
+     * de 99 y una ranura libre admite **una** caja más, no mil. Por eso el tope
      * se calcula con `cabeLaCompra(itemKey, n)` en crudo, en vez de comprobar
      * solo "¿cabe una?": si se comprobara solo eso, el diálogo ofrecería 500 cajas
      * y el motor rechazaría la compra con "Almacén lleno", que es la peor forma
@@ -3941,7 +3941,7 @@ const AFK_THRESHOLD_MS = 60000;
       if (porDinero < 1 || !cabeLaCompra(itemKey, 1)) return 0;
 
       // El mayor n tal que n cabe, y la respuesta NO es lineal en las unidades:
-      // con el tope de 20 cajas, un almacén con una pila de 20 admite una caja
+      // con el tope de 99 cajas, un almacén con una pila de 99 admite una caja
       // más y ni una de más, aunque el saldo sea de un millón. Por eso no vale
       // una cuenta cerrada.
       //

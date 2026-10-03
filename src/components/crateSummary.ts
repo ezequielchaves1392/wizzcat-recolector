@@ -31,17 +31,44 @@ import type { CrateType } from '../data/store';
 /**
  * CUÁNTAS CAJAS SE ABREN DE UNA VEZ.
  *
- * Es el tope de una pila (`TOPE_PILA.crate`), y no es casualidad: veinte cajas en
- * un lote es exactamente una pila, así que el número que el jugador ve en la
- * esquina de su celda es el mismo que el del diálogo. Si el diálogo dijera 50 y
- * la celda 20, el jugador leería "abrir 50" sobre un botón que le deja abrir 20.
+ * **Y POR QUÉ 20 SI LA PILA CABE 99.** Antes eran el mismo número y no era
+ * casualidad: veinte cajas era exactamente una pila, así que el diálogo y la
+ * esquina de la celda decían lo mismo. Con la caja apilando de 99 en 99 (G3) los
+ * dos topes se separan, y este ya no es el del almacén: es una decisión de
+ * **cuántas aperturas de golpe se le ofrecen a alguien**.
  *
  * **Y NO ES MÁS PORQUE UNA LISTA DE 50 PREMIOS NO CABE EN UNA PANTALLA.** Con 20
  * caben en una columna con scroll y el jugador ve el total sin desplazar. Un tope
  * más alto no daría más información: daría un scroll que esconde el final, que
- * es justo la parte que más importa.
+ * es justo la parte que más importa. Subir el tope de pila a 99 **no obliga** a
+ * subir este: son dos cosas distintas y atarlas era casualidad.
  */
 export const MAX_APERTURA_LOTE = 20;
+
+/**
+ * Cuántas cajas se pueden abrir de golpe con lo que hay encima.
+ *
+ * Son tres mínimos y **los tres hacen falta, por motivos distintos**: las cajas
+ * que tienes, las llaves que tienes y el tope de una apertura. Sin los dos
+ * primeros el motor se queda a medias; sin el tercero, el diálogo ofrecería 45
+ * aperturas y escondería el final de la lista detrás de un scroll.
+ *
+ * **POR QUÉ VIVE AQUÍ Y NO EN LA VISTA.** Antes era un `Math.min` suelto dentro
+ * del manejador de clic del almacén, y eso quiere decir que **ningún banco podía
+ * comprobarlo**: la regla que decide cuántas cajas se abren de golpe vivía en el
+ * único sitio del proyecto donde las pruebas no llegan. Es R2 en la forma más
+ * silenciosa: la regla no estaba duplicada, estaba escondida.
+ */
+export function maximoDeApertura(cajas: number, llaves: number): number {
+  return Math.max(
+    0,
+    Math.min(
+      Math.floor(cajas) || 0,
+      Math.floor(llaves) || 0,
+      MAX_APERTURA_LOTE
+    )
+  );
+}
 
 const LOOT_UNITS: Record<string, string> = {
   nanites: 'Nanitas',

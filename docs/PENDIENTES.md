@@ -64,9 +64,21 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       reinician, y **el ranking lleva lo producido**. De paso: `maxCompanionSlots` se
       reiniciaba a 1 y eran **ranuras compradas con recurso** —cobrar y perderlas al
       ascender—; las del árbol nunca општились porque viven en `nodeLevels`.
-- [ ] **G3 · El stack de cajas.** El tope son 20 y se pide 99, y el síntoma que describes
-      (`120/20`) es que **una compra en lote se salta el tope**: el item entra entero y la
-      rejilla pinta el número real contra un denominador viejo.
+- [x] **G3 · El stack de cajas.** Pides el tope a 99, y el síntoma que describías
+      (`120/20`) era de **pintado**, no de almacenamiento. **Causa raíz: hay DOS topes y
+      uno se quedó atrás.** `TOPE_PILA` (cómo se guarda) estaba a 20 y `MAX_STACK` (qué
+      número se pinta en la esquina) también, pero el motor partía por un lado y la rejilla
+      pintaba por otro: una celda con 99 cajas enseñaba "20+". El motor y la compra en lote
+      **ya respetaban el tope** —`planDeEntrada()` lo calcula y lo reparte bien—, así que
+      `120/20` no era un bug de compra sino dos números distintos en pantalla y nadie
+      sabiendo cuál era el bueno.
+      **Los dos topes suben a 99 y ahora hay una prueba que los ata**, porque una igualdad
+      entre dos tablas que viven en el mismo fichero y no se obligan entre sí no la
+      comprueba nadie. De paso: el tope de **apertura** se queda en 20 y ya **no es el mismo
+      número** a propósito —es cuántas aperturas de golpe se le ofrecen a alguien, no cuántas
+      caben en una celda—, pero mantiene la garantía de caber en una sola pila. Y la regla
+      que lo decide estaba **suelta dentro de un manejador de clic**, donde ningún banco
+      puede llegar: ahora es `maximoDeApertura()`, en `crateSummary.ts`, y sí se prueba.
 
 ### Lote 2 · INVARIANTES DE LOS OBJETOS
 
@@ -134,13 +146,16 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 
 ### Las dos decisiones que necesito de ti
 
-1. **F40 · ¿Con qué se sube el Vault?** Con núcleos cuesta poco y es rápido; con items de
-   caja hace falta un item nuevo. **Recomiendo núcleos**, porque el Vault es un progreso
-   permanente y unAscenso da justo eso, y porque el árbol ya cobra núcleos.
-2. **F44 · Los expansores hasta T30.** El juego tiene 10 cajas. **Recomiendo no subir las
-   cajas** —el salto a 30 niveles de caja es un rebalance entero— y hacer que los expansores
-   de T11 a T30 **no existan**, con la escalera de 15 a 65 que ya está puesta. Dime si
-   prefieres lo otro y lo planteo con su coste.
+**Las dos están contestadas (3 de octubre de 2026). Quedan aquí escritas, porque una
+decisión que solo vive en un mensaje no existe dentro de tres meses.**
+
+1. **F40 · El Vault se sube con NÚCLEOS.** **Por qué:** el Vault es progreso permanente
+   y un Ascenso da justo eso; el árbol ya cobra núcleos, así que no hace falta un item
+   nuevo ni un segundo camino de Divisas.
+2. **F44 · Los expansores NO llegan a T30.** **Por qué:** el juego tiene 10 cajas, y subir
+   a 30 niveles de caja es un rebalance entero. Se queda la escalera de 15 a 65 con diez
+   tiers, que ya está puesta y probada. **Consecuencia que hay que aceptar:** el expansor
+   más alto abre hasta 65 ranuras, y a partir de ahí el almacén se llena solo con expansores.
 
 ---
 
@@ -803,7 +818,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **26 bancos, 1866
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **26 bancos, 1875
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

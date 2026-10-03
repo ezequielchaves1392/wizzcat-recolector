@@ -22,7 +22,7 @@
 // ==========================================================================
 
 import { visibleStacksFor, moveItemTo, matchesFilter } from '../src/components/warehouse';
-import { textoDeCantidad } from '../src/data/stacking';
+import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave,
   collector, companion, crate, key, crystal, consumable
@@ -146,22 +146,22 @@ async function main() {
       textoDeCantidad(celda.count, 99));
   }
   {
-    // Y EL CONTRAPUNTO: con tope de pila, 25 cajas SÍ son dos celdas. No es que
+    // Y EL CONTRAPUNTO: con tope de pila, 250 cajas SÍ son tres celdas. No es que
     // la rejilla las recorte —eso no pasa—: es que el almacén las reparte al
-    // cargar, y por eso hay dos celdas de verdad y no una que mienta.
-    const g = await boot(baseSave([crate('c1', 1, 25)]));
+    // cargar, y por eso hay tres celdas de verdad y no una que mienta.
+    const g = await boot(baseSave([crate('c1', 1, 250)]));
     const celdas = visibleStacksFor(g, s(g), 'all', 'default');
-    check('pilas: 25 cajas son dos celdas, por el tope de pila',
-      celdas.length === 2 && celdas.map(c => c.count).sort((a, b) => b - a).join(',') === '20,5',
+    check('pilas: 250 cajas son tres celdas, por el tope de pila',
+      celdas.length === 3 && celdas.map(c => c.count).sort((a, b) => b - a).join(',') === '99,99,52',
       JSON.stringify(celdas.map(c => `${c.item.id}:${c.count}`)));
-    check('pilas: y ninguna dice "20+" cuando la pila está llena',
-      celdas.every(c => textoDeCantidad(c.count, 20) === String(c.count)),
-      celdas.map(c => textoDeCantidad(c.count, 20)).join(' · '));
+    check('pilas: y ninguna se pinta recortada, porque ninguna pasa de su tope',
+      celdas.every(c => textoDeCantidad(c.count, MAX_STACK.crate) === String(c.count)),
+      celdas.map(c => textoDeCantidad(c.count, MAX_STACK.crate)).join(' · '));
   }
   {
-    // El tope de llaves es 99, no 20. Con el tope metido en la función
-    // `textoDeCantidad`, una tabla mezclada se ve: 120 llaves se pintarían "20+"
-    // como si fueran cajas.
+    // El tope de llaves es 99, como el de las cajas. Con el tope metido en la
+    // función `textoDeCantidad`, una tabla mezclada se ve: 120 llaves se
+    // pintarían "20+" como si fueran cajas.
     const g = await boot(baseSave([key('k1', 1, 120)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
     check('pilas: 120 llaves tampoco se recortan', celda.count === 120, 'count=' + celda.count);

@@ -37,12 +37,25 @@ export const STACKABLE_TYPES = ['consumable', 'crate', 'key', 'crystal'] as cons
 /**
  * Unidades que caben en la esquina de una celda antes de recortar el número.
  *
- * Es un tope DE PINTADO, no de almacenamiento. Llave y cristal admiten 99 porque
- * se gastan de uno en uno y 99 es de sobra; caja y consumible, 20, porque se
- * leen en un vistazo.
+ * Es un tope DE PINTADO, no de almacenamiento. Llave, caja y cristal admiten 99
+ * porque es lo que cabe en dos o tres dígitos de la esquina; el consumible, 20,
+ * porque se lee en un vistazo y no interesa la cifra exacta.
+ *
+ * **DEBE COINCIDIR CON `TOPE_PILA` EN TODOS LOS TIPOS QUE ALSO LO TENGAN.**
+ * Los dos topes existían y el de pintado se quedó en 20 cuando el de
+ * almacenamiento cambió: las cajas se apilaban de 99 en 99 y la esquina pintaba
+ * `"20+"`. Un tope por debajo del otro no es un detalle de estilo: es **la cifra
+ * que ve el jugador**: 120 cajas se pintaban como tres celdas de "20+" cuando
+ * en la partida eran una de 99 y otra de 21. Un jugador que ve "20+" donde el
+ * código tiene 99 no puede saber cuál de los dos números es el bueno, y el que
+ * adivina mal se lleva una sorpresa.
+ *
+ * La razón de que sean dos y no uno es buena y sigue valiendo: el pintado puede
+ * ser más bajo que el real (el consumible enseña "20+" y guarda mil). Lo que no
+ * puede es ser **más alto**: eso sí que mentiría al revés.
  */
 export const MAX_STACK: Record<string, number> = {
-  consumable: 20, crate: 20, key: 99, crystal: 99
+  consumable: 20, crate: 99, key: 99, crystal: 99
 };
 
 /**
@@ -54,8 +67,8 @@ export const MAX_STACK: Record<string, number> = {
  *   · `MAX_STACK` es de **pintado**. "150 llaves" se teachan como "99+" porque el
  *     150 no cabe en la esquina, y siguen siendo **una** ranura. Las 150 llaves
  *     existen detrás de la pantalla (F30).
- *   · `TOPE_PILA` es de **almacenamiento**. Una caja no se apila más de 20: a la
- *     21 se abre una pila nueva, si hay sitio. Son dos ranuras, no una.
+ *   · `TOPE_PILA` es de **almacenamiento**. Una caja no se apila más de 99: a la
+ *     100 se abre una pila nueva, si hay sitio. Son dos ranuras, no una.
  *
  * **POR QUÉ LAS CAJAS Y NO LAS LLAVES.** Porque una caja es un objeto, no una
  * moneda: la rejilla tiene que poder teachas cuántas cajas hay sin que ese número
@@ -68,8 +81,12 @@ export const MAX_STACK: Record<string, number> = {
  * Que el tope valga **solo** para los tipos que están en la tabla y no sea un
  * número global es lo que evita tener que decidirlo para cada consumible nuevo:
  * un tipo que no esté aquí se apila entero, como hasta ahora.
+ *
+ * **EL 99 NO ES UN NÚMERO, ES EL DE `MAX_STACK`.** Antes eran 20 y 20, pero se
+ * tocaron al subir uno solo: el almacén pasó a 99 y el pintado se quedó atrás.
+ * Suben los dos juntos, y quien los cambie tiene que cambiar los dos.
  */
-export const TOPE_PILA: Record<string, number> = { crate: 20 };
+export const TOPE_PILA: Record<string, number> = { crate: 99 };
 
 /**
  * Cuántas unidades caben en UNA pila de este tipo.
@@ -156,7 +173,7 @@ export function stackKey(item: any): string {
  *
  * Es la función que responde "¿queda hueco?" y la que pinta el "21/21 ranuras".
  * Cuenta GRUPOS, no entradas, pero **un grupo con tope de pila cuenta tan varias
- * veces como pilas necesita**: 45 cajas son tres ranuras, no una. Sin esto el
+ * veces como pilas necesita**: 150 cajas son dos ranuras, no una. Sin esto el
  * contador diría "1" de un almacén con tres celdas de cajas y el jugador leería
  * que le queda sitio donde no lo hay.
  */
@@ -198,8 +215,8 @@ export function countOccupiedSlots(items: any[] | undefined): number {
  * lo que la rejilla ya estaba mostrando desde antes. No se pierde ninguna
  * unidad: se suman, y `syncMaterialCounters` sigue viendo el mismo total.
  *
- * Y cuando la suma **supera el tope de pila**, se reparten en varias: 45 cajas
- * son tres items de 20, 20 y 5, no uno de 45. Antes se fundían en uno solo y el
+ * Y cuando la suma **supera el tope de pila**, se reparten en varias: 250 cajas
+ * son tres items de 99, 99 y 52, no uno de 250. Antes se fundían en uno solo y el
  * almacén parecía tener sitio de sobra para siempre, que es justo lo que pasa
  * si el tope no existe.
  *
@@ -287,7 +304,7 @@ export function mergeStacks(items: any[]): { items: any[]; changed: boolean } {
  * aceptaba una pila de 21 que el motor nunca crearía y que `countOccupiedSlots()`
  * contaría como una sola ranura.
  *
- * Que el guardadoacepte una forma que el motor no produce no es un detalle: es
+ * Que el guardado acepte una forma que el motor no produce no es un detalle: es
  * la puerta por la que una partida manipulada entra en un almacén imposible.
  */
 export function partirPilas(items: any[]): { items: any[]; changed: boolean } {

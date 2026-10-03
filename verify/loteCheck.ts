@@ -1,5 +1,5 @@
 // ==========================================================================
-//  La apertura en lote: compra múltiple, tope de 20 y la lista de lo que salió
+//  La apertura en lote: compra múltiple, el tope de apertura y la lista de lo que salió
 //
 //  Tres cosas se compran aquí y ninguna es el sorteo —eso lo mide `lootCheck`—:
 //
@@ -17,7 +17,7 @@
 import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, key, crystal, distintos } from './kit';
 import { STORE_ITEMS, costeDeCaja, costeDeLlave, CRATE_TYPES, type CrateType } from '../src/data/store';
 import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
-import { resumenDePremios, MAX_APERTURA_LOTE } from '../src/components/crateSummary';
+import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
 
 async function main() {
@@ -31,25 +31,27 @@ async function main() {
     check('compra: la caja se compra en lote',
       g.getBulkMax('crateT1') > 1, `getBulkMax=${g.getBulkMax('crateT1')}`);
 
-    const r = g.buyStoreItem('crateT1', 25) as any;
+    const r = g.buyStoreItem('crateT1', 200) as any;
     const pilas = wh(g).filter((w: any) => w.type === 'crate');
-    check('compra: 25 cajas de golpe entran las 25',
-      !!r && pilas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0) === 25,
+    check('compra: 200 cajas de golpe entran las 200',
+      !!r && pilas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0) === 200,
       `${pilas.length} pilas · ${pilas.map((w: any) => w.stackCount).join('+')}`);
-    check('compra: y repartidas en 20 + 5, por el tope de pila',
-      pilas.length === 2 && pilas.map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '20,5',
+    // 200 = 99 + 99 + 2. Es el caso que de verdad importa: por debajo del tope
+    // todo entra en una pila y el reparto no llega a verse.
+    check('compra: y repartidas en 99 + 99 + 2, por el tope de pila',
+      pilas.length === 3 && pilas.map((w: any) => w.stackCount).sort((a: number, b: number) => b - a).join(',') === '99,99,2',
       `${pilas.map((w: any) => w.stackCount).join(',')}`);
-    check('compra: y se cobran 25 veces el unitario',
-      nanites(g) === unit * 200 - unit * 25, `nanites=${nanites(g)}`);
+    check('compra: y se cobran 200 veces el unitario',
+      nanites(g) === unit * 200 - unit * 200, `nanites=${nanites(g)}`);
     check('compra: el total del diálogo es el que se cobra',
-      g.getBulkCost('crateT1', 25) === unit * 25, `bulk=${g.getBulkCost('crateT1', 25)}`);
+      g.getBulkCost('crateT1', 200) === unit * 200, `bulk=${g.getBulkCost('crateT1', 200)}`);
 
     // El tope lo manda el ESPACIO, y con el tope de pila eso ya no es "una pila
     // es una ranura, así que caben N".
-    const g2 = await boot(baseSave([crate('c1', 1, 20)], { nanites: unit * 500, warehouseCapacity: 4 }));
+    const g2 = await boot(baseSave([crate('c1', 1, 99)], { nanites: unit * 1000, warehouseCapacity: 4 }));
     const max = g2.getBulkMax('crateT1');
     check('compra: el tope del lote lo manda el espacio, no el saldo',
-      max === 60, `max=${max}; con el dinero alcanza para 500`);
+      max === 297, `max=${max}; con el dinero alcanza para 1000`);
     check('compra: y comprar ese tope entero funciona',
       g2.buyStoreItem('crateT1', max) !== false, 'rechazada');
     check('compra: y llena el almacén sin pasarse',
@@ -75,12 +77,28 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  //  2. EL TOPE DE 20, Y QUE SEA EL MISMO QUE EL DE LA PILA
+  //  2. EL TOPE DE APERTURA, Y POR QUÉ ESTÁ ATADO AL DE LA PILA
   // -------------------------------------------------------------------------
   {
-    check('lote: el tope de apertura es el tope de pila de la caja',
-      MAX_APERTURA_LOTE === TOPE_PILA.crate,
+    // **NO TIENEN QUE SER IGUALES. TIENEN QUE CUMPLIR UNA COSA.**
+    //
+    // Antes sí eran el mismo número y la prueba lo exigía con `===`, porque el
+    // tope de pila era 20 y el de apertura también. Con la caja apilando de 99 en
+    // 99 (G3) ya no: el de apertura sigue en 20 porque es una decisión de
+    // **cuántas aperturas de golpe se le ofrecen a alguien**, no de cuántas caben
+    // en una celda. Son dos cosas distintas y atarlas era casualidad, no regla.
+    //
+    // Lo que sí tiene que ser cierto es la **garantía**: abrir N cajas de golpe
+    // no puede ocupar más de una ranura nueva, porque si no el diálogo ofrecería
+    // una apertura que no cabe. De ahí sale la desigualdad: si el lote fuera mayor
+    // que el tope de pila, abrirlo entero necesitaría más de una ranura y el
+    // almacén decidiría por su cuenta cuántos Botín de menos.
+    check('lote: el tope de apertura cabe en una sola pila, así que no gasta dos ranuras',
+      MAX_APERTURA_LOTE <= TOPE_PILA.crate,
       `lote=${MAX_APERTURA_LOTE} pila=${TOPE_PILA.crate}`);
+    check('lote: y sigue siendo un tope de verdad, no "todas las que haya"',
+      MAX_APERTURA_LOTE >= 10 && Number.isFinite(MAX_APERTURA_LOTE),
+      `lote=${MAX_APERTURA_LOTE}`);
 
     // Y que abrir de verdad N cajas solo gaste N llaves y N cajas.
     const g = await boot(baseSave([crate('c1', 1, 20), key('k1', 1, 20)],
@@ -110,19 +128,31 @@ async function main() {
     check('lote: el contador de cajas abiertas sube por cada una',
       s(g).cratesOpened === 20, `abiertas=${s(g).cratesOpened}`);
 
-    // Y con 30 en la pila el tope sigue siendo 20: es el de la pila, no el de
-    // lo que hay. Por eso el diálogo no puede ofrecer abrir 30.
-    const g2 = await boot(baseSave([crate('c1', 1, 20), crate('c2', 1, 10), key('k1', 1, 20)],
-      { nanites: 0, warehouseCapacity: 40 }));
-    const abiertas2: CrateReward[] = [];
-    for (let i = 0; i < MAX_APERTURA_LOTE + 5; i++) {
-      const res: any = g2.openCrateBox('c1', 'k1');
-      if (!res.ok) break;
-      abiertas2.push(res.reward);
-    }
-    check('lote: el tope del lote no es "las cajas que tengo"',
-      abiertas2.length <= MAX_APERTURA_LOTE,
-      `abiertas=${abiertas2.length} tope=${MAX_APERTURA_LOTE}`);
+    // Y el tope NO es "las cajas que tengo". Con 99 cajas y 99 llaves encima, el
+    // diálogo ofrece 20: el tope manda por encima de las dos cosas.
+    //
+    // **ESTA PRUEBA MEDÍA SU PROPIO MONTAJE, NO LA REGLA.** Abría cajas en bucle
+    // y contaba cuántas salían, con la idea de que se pararía en el tope. Pero
+    // `openCrateBox` abre **una** caja: el tope de apertura nunca estuvo en el
+    // motor, está en el `Math.min` del diálogo. La prueba se paraba porque se
+    // acababan las cajas del banco, no porque existiera el tope, y lo que de
+    // verdad comprobaba era el inventario del Test.
+    //
+    // La regla se mide ahora donde está: `maximoDeApertura()`, en
+    // `crateSummary.ts`. Sacarla de la vista es lo que la ha hecho comprobable;
+    // mientras viviera en un manejador de clic no había forma de preguntarle nada.
+    check('lote: con 99 cajas y 99 llaves, el tope sigue mandando',
+      maximoDeApertura(99, 99) === MAX_APERTURA_LOTE,
+      `diálogo=${maximoDeApertura(99, 99)} tope=${MAX_APERTURA_LOTE}`);
+    check('lote: y lo que hay de menos manda también',
+      maximoDeApertura(99, 8) === 8 && maximoDeApertura(8, 99) === 8,
+      `cajas99/llaves8=${maximoDeApertura(99, 8)} cajas8/llaves99=${maximoDeApertura(8, 99)}`);
+    check('lote: sin llaves no se abre ninguna, y no se ofrece un número negativo',
+      maximoDeApertura(99, 0) === 0 && maximoDeApertura(0, 99) === 0,
+      `sin llaves=${maximoDeApertura(99, 0)} sin cajas=${maximoDeApertura(0, 99)}`);
+    check('lote: una pila de 99 cabe de sobra en una apertura',
+      maximoDeApertura(99, 99) >= MAX_APERTURA_LOTE,
+      `${maximoDeApertura(99, 99)} < ${MAX_APERTURA_LOTE}`);
   }
 
   // -------------------------------------------------------------------------
@@ -335,7 +365,7 @@ async function main() {
       r.ok === true, r.msg ?? '');
   }
 
-  resumen('lote: compra multiple, tope de 20 y la lista de lo que salió');
+  resumen('lote: compra multiple, tope de apertura y la lista de lo que salió');
 }
 
 export default main();
