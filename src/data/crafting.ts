@@ -593,8 +593,20 @@ export function attemptForge(
     /** 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. */
     nanoUsed?: number;
     maxTier?: number;
+    /**
+     * El dado. Entra para que un banco pueda comprobar la REGLA en vez de medir
+     * si ha salido la cara: sin él, probar el potencial medio o el rango de
+     * afijos es imposible, porque cada comprobación acaba siendo una tirada.
+     *
+     * Antes eran seis `Math.random()` sueltos en la función —el acierto, el
+     * nombre, el número de afijos y los dos pasos de la mezcla— y eso convertía
+     * la forja, que es la regla más fina del juego, en lo único que no se podía
+     * comprobar. Los demases generadores ya lo tenían así.
+     */
+    rng?: () => number;
   }
 ): ForgeResult {
+  const rng = options.rng ?? Math.random;
   const maxTier = options.maxTier ?? Infinity; // Forja infinita: el precio frena solo
 
   if (materials.length !== 2) {
@@ -619,7 +631,7 @@ export function attemptForge(
   const nanoUsed = options.nanoUsed ?? 0;
   const chance = successChance(tier, options.craftLuck, options.stonesUsed, affixLuck, nanoUsed);
 
-  const roll = Math.random();
+  const roll = rng();
   if (roll > chance) {
     // Fallo: esquirlas proporcionales al tier y a los materiales
     const baseShards = 8 + tier * 6;
@@ -642,7 +654,7 @@ export function attemptForge(
     materials.reduce((acc, m) => acc + potencialDe(m), 0) / materials.length
   )));
   const newTier = tier + 1;
-  const name = forgeCollectorName(potential, newTier);
+  const name = forgeCollectorName(potential, newTier, rng);
 
   // El daño sale del potencial y de la base del tier nuevo. Una sola función, y
   // la misma que usa la tienda, así que potencial y daño no pueden separarse.
@@ -653,10 +665,10 @@ export function attemptForge(
   // potencial y la rareza no ZEJohinting nada, así que un Divino podía salir con
   // un afijo y un Común con tres.
   const rarity = collectorRarity(newTier, potential);
-  const affixes = pickAffixes(materials, rarity, nanoUsed > 0);
+  const affixes = pickAffixes(materials, rarity, nanoUsed > 0, rng);
 
   const collector: CollectorItem = {
-    id: `forged_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    id: `forged_${Date.now()}_${rng().toString(36).substring(2, 8)}`,
     name,
     type: 'collector',
     details: `Daño base: +${damage}`,
@@ -707,20 +719,60 @@ export const AFIX_MIN_POR_RARIDAD: Record<string, number> = {
 export const AFIX_MAX = 6;
 
 /**
+ * Cuántos afijos puede llevar un item forjado: el suelo y el techo.
+ *
+ * **SON DOS NÚMEROS Y NO UNO, Y POR QUÉ ES LO QUE PEDÍAS.** Con un solo número,
+ * el item forjado lleva siempre los mismos afijos que le tocan por rareza, y los
+ * dos materiales que pones solo sirven para decidir *cuáles*. Se podían haber
+ * gastado en cualquier otra cosa. Con dos, los padres deciden también *cuántos*:
+ * dos materiales con muchos afijos dan un item que puede llevar más, y esa es la
+ * recompensa de buscar buenos materiales en vez de la primera pareja que se vea.
+ *
+ * **EL SUELO ES EL DE LA RAREZA, Y NO SE NEGOCIA.** `AFIX_MIN_POR_RARIDAD` es una
+ * regla del juego ("más rareza, más afijos") y esta función no la puede desbordar
+ * hacia abajo: un Divino no sale con dos afijos porque sus padres fueran pobres.
+ *
+ * **LA NANOPIRTÍCULA SUMA UNO AL SUELO Y AL TECHO**, porque es su segundo efecto y
+ * el que justifica pagar 90.000 por ella: sube lo que se puede llegar, no solo lo
+ * que se garantiza.
+ *
+ * **UN `Divino` TIENE EL TECHO PEGADO AL SUELO** —los 6 afijos—, así que el dado
+ * no tira nada y el item sale siempre completo. Es lo que hace que "más rareza, más
+ * afijos" tenga final, y no es casualidad: la rareza la pone el potencial en la
+ * forja, así que un Divino sale de fundir dos materiales con potencial 5.
+ */
+export function rangoDeAfijosForjados(
+  materials: CollectorItem[], rarity: string, nanoparticula: boolean
+): { minimo: number; maximo: number } {
+  const suelo = (AFIX_MIN_POR_RARIDAD[rarity] ?? 0) + (nanoparticula ? 1 : 0);
+  // Lo que arrastra el linaje: la MEDIA de los dos padres, no el mayor ni la
+  // suma. Con la suma, un solo material perfecto bastaría y el otro sería
+  // decorativo, que es justo lo que la forja no debe ser: los dos importan.
+  const linea = materials.reduce((a, m) => a + (m.affixes?.length ?? 0), 0) / Math.max(1, materials.length);
+  const tope = Math.min(AFIX_MAX, suelo + Math.floor(linea));
+  return { minimo: Math.max(0, Math.min(suelo, AFIX_MAX)), maximo: Math.max(0, tope) };
+}
+
+/**
  * Reparte los afijos del item forjado.
  *
- * **La rareza da el mínimo** y el tope es 6 para todos, así que lararety de un
- * Divino con un afijo —que era lo que pasaba antes— ya no puede salir. La
- * nanopartícula sube el mínimo en uno: es su segundo efecto y el que justifica
- * pagar 90.000 por ella.
+ * **La rareza da el suelo y el linaje da el techo** (`rangoDeAfijosForjados()`),
+ * y entre los dos se tira un dado. Con un solo número fijo, un Divino podía salir
+ * con un afijo —que era lo que pasaba antes— y los dos materiales solo decidían
+ * *cuáles*, no *cuántos*. Ahora el suelo de un Divino son 6, que es el tope
+ * entero, y un Común puede llegar a llevar afijos si sus padres los traían.
+ *
+ * **Y EL DADO VA ANTES DE ELEGIR CUÁLES**, que es el orden que hace que la mezcla
+ * tenga sentido: si se eligieran primero, el número sería un efecto secundario de
+ * qué afijos entraron y el techo del linaje no se llenaría nunca.
  *
  * **La mezcla es en dos pasos, y ese orden es lo que la hace tener sentido:**
  *
  * 1. Primero se cogen afijos **de los dos materiales**, al azar entre los que
  *    tienen entre los dos. Es la herencia: los afijos buenos se transmiten de
  *    verdad, y por eso buscar un item con buenos afijos tiene recompensa.
- * 2. Si aún faltan para llegar al mínimo de la rareza, se rellenan **al azar de
- *    todo el catálogo**, con los raros pesando menos.
+ * 2. Si aún faltan para llegar al número que salió del dado, se rellenan **al azar
+ *    de todo el catálogo**, con los raros pesando menos.
  *
  * El paso 1 va primero a propósito. Si rellenara de catálogo y luego heredara,
  * muchas veces no quedaría hueco para heredar y el paso 1 casi no se vería.
@@ -728,12 +780,25 @@ export const AFIX_MAX = 6;
  * Con dos materiales no se puede pasar de 12 afijos distintos, pero el tope de 6
  * hace esa cuenta irrelevante.
  */
-function pickAffixes(materials: CollectorItem[], rarity: string, nanoparticula: boolean): string[] {
-  const minimo = Math.min(
-    AFIX_MAX,
-    (AFIX_MIN_POR_RARIDAD[rarity] ?? 0) + (nanoparticula ? 1 : 0)
-  );
-  if (minimo <= 0) return [];
+function pickAffixes(
+  materials: CollectorItem[], rarity: string, nanoparticula: boolean,
+  rng: () => number = Math.random
+): string[] {
+  const { minimo, maximo } = rangoDeAfijosForjados(materials, rarity, nanoparticula);
+
+  // **EL DADO VA ANTES DE ELEGIR CUÁLES, Y POR QUÉ.** Cuántos afijos lleva lo
+  // decide el linaje y lo tira el azar; cuáles lleva lo decide la mezcla. Si se
+  // eligieran primero y se rellenara después, el número sería un efecto
+  // secundario de qué afijos entraron, y con dos materiales muchas veces no
+  // quedarían huecos: el techo del linaje no se llenaría nunca.
+  //
+  // `minimo + Math.floor(rng() * (maximo - minimo + 1))` con `+1` para que el techo
+  // sea alcanzable: sin el `+1` un `Divino` con el techo pegado al suelo daría
+  // `0` y se quedaría sin afijos.
+  const objetivo = maximo <= minimo
+    ? minimo
+    : minimo + Math.floor(rng() * (maximo - minimo + 1));
+  if (objetivo <= 0) return [];
 
   const picked: string[] = [];
   const usados = new Set<string>();
@@ -747,8 +812,8 @@ function pickAffixes(materials: CollectorItem[], rarity: string, nanoparticula: 
       }
     }
   }
-  while (picked.length < minimo && heredables.length > 0) {
-    const i = Math.floor(Math.random() * heredables.length);
+  while (picked.length < objetivo && heredables.length > 0) {
+    const i = Math.floor(rng() * heredables.length);
     const id = heredables[i];
     picked.push(id);
     usados.add(id);
@@ -757,10 +822,10 @@ function pickAffixes(materials: CollectorItem[], rarity: string, nanoparticula: 
 
   // 2 · Relleno del catálogo completo, con los afijos raros pesando menos.
   const restantes = AFFIXES.filter(a => !usados.has(a.id));
-  while (picked.length < minimo && restantes.length > 0) {
+  while (picked.length < objetivo && restantes.length > 0) {
     const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
     const total = weights.reduce((a, b) => a + b, 0);
-    let roll = Math.random() * total;
+    let roll = rng() * total;
     let idx = 0;
     for (; idx < restantes.length - 1; idx++) {
       roll -= weights[idx];

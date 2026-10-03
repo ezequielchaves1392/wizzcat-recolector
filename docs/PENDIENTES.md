@@ -105,8 +105,29 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       `potentialValueMult()` devolvía 1 para cualquier potencial ausente, que es el precio
       de un ★1, mientras el item se pintaba y pegaba como un ★3. El número del diálogo y
       el del daño eran de dos juegos distintos.
-- [ ] **G5 · La forja: exactamente 2 del mismo tier.** Y el potencial del nuevo es el
-      **promedio** de los dos, y los afijos salen de los dos padres más algún aleatorio.
+- [x] **G5 · La forja: exactamente 2 del mismo tier, potencial medio y afijos por
+      linaje.** Lo que faltaba de tu lista era **solo la cantidad de afijos**: el motor ya
+      exigía 2 exactos, distintos y del mismo tier, y ya sacaba el potencial de la **media**
+      de los dos. Lo que no existía era la parte de "sumando algún afijo aleatorio
+      adicional".
+  - **Con un número fijo, los dos materiales solo decidían _cuáles_ afijos.** El item
+       forjado llevaba los que le tocaban por rareza, y los padres solo servían para elegir
+       de la lista. Se podían haber gastado en cualquier otra cosa. Ahora
+       `rangoDeAfijosForjados()` da un **suelo** (el de la rareza, que no se negocia) y un
+       **techo** (lo que arrastra el linaje), y se tira el dado entre los dos: dos
+       materiales con buenos afijos pueden dar un item con más afijos.
+  - **El techo es la MEDIA de los dos, no el mejor.** Con el mejor, un solo material
+       perfecto bastaría y el otro sería decorativo, que es justo lo que la forja no debe
+       ser: los dos importan. Y **la nanopartícula sube los dos lados**, no solo lo
+       garantizado: es lo que justifica pagar 90.000 por ella.
+  - **Y la forja no tenía banco.** `stateCheck` la rozaba seis veces para el techo de nivel y
+       nada más, así que las reglas más finas del juego no las comprobaba nadie. Hay
+       `forjaCheck`, con 33 pruebas.
+  - **Para poder comprobarlo hizo falta quitarle el azar.** `attemptForge()` tiraba
+       `Math.random()` seis veces sueltas —el acierto, el nombre, el número de afijos y los
+       dos pasos de la mezcla—, y eso convertía la forja en lo único que **no se podía
+       probar**: cualquier medición acababa siendo "esta vez salió". Ahora acepta `rng`, como
+       `rollPotentialFrom()`, `forgeCollectorName()` y los dos generadores ya hacían.
 - [ ] **G6 · Los botones de forja y de sus compras solo cuando están desbloqueados.**
 
 ### Lote 3 · PRESTIGIO, VAULT Y LA PASIVA OFFLINE
@@ -882,7 +903,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **26 bancos, 1891
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1925
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
