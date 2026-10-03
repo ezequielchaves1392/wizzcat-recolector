@@ -90,8 +90,14 @@ async function main() {
     check('partida nueva: la capacidad por defecto es 15', s(g).warehouseCapacity === 15,
       'cap=' + s(g).warehouseCapacity);
     check('partida nueva: 1 hueco de companero', s(g).maxCompanionSlots === 1, 'slots=' + s(g).maxCompanionSlots);
-    check('partida nueva: nace sin nada equipado', s(g).equippedCollectorId === null, String(s(g).equippedCollectorId));
-    check('partida nueva: no hay companion activo', s(g).activeCompanions.length === 0,
+    // **NACE TODO EQUIPADO.** El jugador nuevo ve su recolector y su compañero sin
+    // puesta ninguna, con ingreso a cero y sin ningún botón que pulsara: todo lo
+    // que había que hacer era adivinarlo. Ahora los dos nacen puestos, así que el
+    // primer clic ya cobra y la pantalla enseña cómo se ve funcionando.
+    check('partida nueva: nace con el recolector EQUIPADO',
+      s(g).equippedCollectorId === 'collector_blaster_001', String(s(g).equippedCollectorId));
+    check('partida nueva: y con el companion ACTIVO',
+      s(g).activeCompanions.join(',') === 'companion_base_001',
       s(g).activeCompanions.join(','));
 
     const g2 = await reload();

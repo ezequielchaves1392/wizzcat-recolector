@@ -28,7 +28,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe } from '../data/crafting';
+import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -65,7 +65,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
   // selección. Sin esto, el yunque mostraría un recolector que ya no existe y el
   // botón de forjar fallaría al ejecutarse.
   ui.selected = ui.selected.filter(id => collectors.some(w => w.id === id));
-  if (ui.selected.length > 3) ui.selected = ui.selected.slice(0, 3);
+  if (ui.selected.length > MATERIALES_POR_FUSION) ui.selected = ui.selected.slice(0, MATERIALES_POR_FUSION);
   if (!tiers.includes(ui.tier)) ui.tier = tiers[0] ?? 1;
 
   const stonesItem = ((state.warehouse as any[]) || []).find(w => w.buffId === 'calibrationStone');
@@ -84,10 +84,10 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
 
   const matTier = selectedCollectors[0]?.tier ?? 0;
   const affixLuck = selectedCollectors.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0);
-  const chance = selectedCollectors.length === 3 && matTier
+  const chance = selectedCollectors.length === MATERIALES_POR_FUSION && matTier
     ? successChance(matTier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0)
     : 0;
-  const ready = selectedCollectors.length === 3;
+  const ready = selectedCollectors.length === MATERIALES_POR_FUSION;
 
   // --- Fragmentos -------------------------------------------------------
 
@@ -143,10 +143,10 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
 
     <section class="card-glass rounded-2xl p-3 md:p-4 mb-3">
       ${sectionHead('Yunque de fusión', 'anvil', `
-        <span class="text-[9px] font-mono text-[var(--text-muted)] hidden sm:inline">3 del mismo tier → 1 del siguiente</span>
+        <span class="text-[9px] font-mono text-[var(--text-muted)] hidden sm:inline">2 del mismo tier → 1 del siguiente</span>
       `)}
 
-      <div class="forge-anvil">${[0, 1].map(slot).join('')}</div>
+      <div class="forge-anvil">${Array.from({ length: MATERIALES_POR_FUSION }, (_, i) => slot(i)).join('')}</div>
 
       <div class="mt-3">
         <div class="flex items-center justify-between gap-2 mb-1.5">
@@ -174,7 +174,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
           </p>
         ` : `
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5">
-            Selecciona 3 recolectores del mismo tier.
+            Selecciona 2 recolectores del mismo tier.
           </p>
         `}
       </div>
@@ -228,7 +228,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
         class="w-full mt-3 rounded-xl font-['Orbitron'] font-bold text-[12px] tracking-wide cursor-pointer
                ${ready ? 'btn-primary' : 'btn-ghost opacity-40 cursor-not-allowed'}"
         style="min-height:52px">
-        ${ready ? 'FORJAR' : `FALTAN ${2 - selectedCollectors.length} MATERIALES`}
+        ${ready ? 'FORJAR' : `FALTAN ${MATERIALES_POR_FUSION - selectedCollectors.length} MATERIALES`}
       </button>
       <p class="text-[9px] text-[var(--text-muted)] text-center mt-2 leading-relaxed">
         El nuevo sale con el potencial promedio de los dos.
@@ -238,12 +238,12 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
 
     <section class="card-glass rounded-2xl p-3 md:p-4">
       ${sectionHead('Materiales', 'layers', `
-        <span class="text-[10px] font-mono text-[var(--text-muted)]">${ui.selected.length}/3</span>
+        <span class="text-[10px] font-mono text-[var(--text-muted)]">${ui.selected.length}/${MATERIALES_POR_FUSION}</span>
       `)}
 
       ${collectors.length === 0
         ? emptyState('collector', 'No tienes recolectores',
-            'Compra recolectores en la tienda o abre cajas. Necesitas 3 del mismo tier para fusionar.')
+            'Compra recolectores en la tienda o abre cajas. Necesitas ' + MATERIALES_POR_FUSION + ' del mismo tier para fusionar.')
         : `
           <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
             ${tiers.map(t => `
@@ -377,7 +377,11 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
           return;
         }
         sfx.pick();
-        ui.selected.push(btn.dataset.id!);
+        // El tope va AQUÍ y no solo en el saneado del redibujo. Antes no había
+        // ninguno al añadir: se podían elegir tres, el botón se activaba, y el
+        // motor rechazaba la fusión porque exige dos. El jugador veía un tercer
+        // material que ni siquiera tenía hueco en el yunque.
+        ui.selected = [...ui.selected, btn.dataset.id!].slice(0, MATERIALES_POR_FUSION);
         redraw();
         break;
       }
@@ -424,8 +428,8 @@ function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
   const sel = ui.selected
     .map(id => collectors.find(w => w.id === id))
     .filter(Boolean) as any[];
-  if (sel.length !== 3) {
-    showToast('Selecciona 3 recolectores del mismo tier.', 'info');
+  if (sel.length !== MATERIALES_POR_FUSION) {
+    showToast(`Selecciona ${MATERIALES_POR_FUSION} recolectores del mismo tier.`, 'info');
     return;
   }
 

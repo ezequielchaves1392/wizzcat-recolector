@@ -3,9 +3,23 @@
 //
 // Reglas de diseño que sostienen el sistema:
 //
-//  1. FUSIÓN: 3 recolectores del mismo tier T -> 1 recolector de tier T+1. Tres en vez de
-//     dos porque con dos el jugador solo tiene una decisión binaria; con tres
-//     puede elegir CUALES tres, y eso importa cuando hay afijos en juego.
+//  1. FUSIÓN: **2** recolectores del mismo tier T -> 1 recolector de tier T+1.
+//     El número vive en `MATERIALES_POR_FUSION`, y la página de la forja lo lee de
+//     ahí en vez de escribirlo.
+//
+//     **AQUÍ ESTABA EN 3, Y EL MOTOR NUNCA LLEGÓ A TENERLO.** La receta se pasó a
+//     dos y solo se actualizó la comprobación del motor; en la página quedaron
+//     cinco restos, con lo que **la forja no se podía usar**: los dos huecos del
+//     yunque se llenaban y el botón se quedaba inactivo para siempre. El número de
+//     materiales de una receta no se escribe en dos sitios. Está escrito aquí el
+//     motivo por el que se quedó en 2, porque sigue siendo la decisión viva:
+//
+//     La razón original de pedir tres era que con dos el jugador solo tiene una
+//     decisión binaria, y con tres elige **cuáles** tres. **Esa razón ya no se
+//     sostiene**: desde que los afijos los deciden los padres **en cantidad además
+//     de en cuáles** (`rangoDeAfijosForjados()`), elegir dos materiales buenos es
+//     una decisión con peso, no una moneda. Y tres materiales además de tres
+//     confirmaciones y un yunque de tres huecos es más fricción de la que vale.
 //
 //  2. AUTORÍA: todo recolector crafteado registra quién la forjó. Es lo que hace que
 //     dos recolectores del mismo tier no sean el mismo objeto. Un recolector de otro
@@ -578,6 +592,29 @@ export interface ForgeResult {
 }
 
 /**
+ * CUÁNTOS MATERIALES ENTRAN EN UNA FUSIÓN.
+ *
+ * **ESTE NÚMERO ESTABA ESCRITO A MANO EN SEIS SITIOS, Y CINCO DECÍAN 3.**
+ *
+ * La receta se cambió de 3 materiales a 2 y solo se actualizó la comprobación del
+ * motor. En la página de la forja quedaron cuatro restos: el tope de la selección,
+ * la condición de "puedo forjar", el contador `x/3` y el texto "selecciona 3".
+ * Con eso **la forja no se podía usar**: los dos huecos del yunque se llenaban,
+ * `ready` pedía tres y el botón se quedaba inactivo para siempre. Si se llegaba a
+ * tres, el motor rechazaba la fusión con "se necesitan 2". Y el propio modal de
+ * confirmación decía "Dos recolectores de tier N", así que la página se contradecía
+ * a sí misma en la misma frase.
+ *
+ * **POR QUÉ ES UNA CONSTANTE Y NO UN 2 SUELTO.** Porque el número que decide cuántos
+ * huecos hay, cuántos puedes seleccionar, cuándo se activa el botón y qué comprueba
+ * el motor no puede estar escrito en dos sitios: es la misma regla, y cuando se
+ * cambiaron las dos copias se olvidó una. Aquí vive porque es **la que impone el
+ * motor**: si algún día se cambia la receta, el sitio que se cambia es este y el
+ * resto lo lee.
+ */
+export const MATERIALES_POR_FUSION = 2;
+
+/**
  * Intenta fusionar 2 recolectores del mismo tier.
  * - Si tiene éxito: devuelve el nuevo recolector, los 2 materiales se consumen.
  * - Si falla: se consumen los materiales, se devuelven esquirlas.
@@ -609,13 +646,13 @@ export function attemptForge(
   const rng = options.rng ?? Math.random;
   const maxTier = options.maxTier ?? Infinity; // Forja infinita: el precio frena solo
 
-  if (materials.length !== 2) {
-    return { success: false, error: 'Se necesitan 2 recolectores del mismo tier.' };
+  if (materials.length !== MATERIALES_POR_FUSION) {
+    return { success: false, error: `Se necesitan ${MATERIALES_POR_FUSION} recolectores del mismo tier.` };
   }
   // F24 · Dos POSICIONES no son dos MATERIALES. Sin esto, mandar el mismo id dos
   // veces cuenta como dos: se "fusiona" un solo recolector y sale otro,
   // ahorrándose un material. El que cuenta es el motor, no la vista.
-  if (new Set(materials.map(m => m.id)).size !== 2) {
+  if (new Set(materials.map(m => m.id)).size !== MATERIALES_POR_FUSION) {
     return { success: false, error: 'Selecciona 2 recolectores distintos.' };
   }
   if (tier < 1 || tier >= maxTier) {

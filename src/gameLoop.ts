@@ -299,13 +299,20 @@ export async function createGameLoop(
    */
   const habiaColaAlArrancar = user ? hayPendientes(user.uid) : false;
 
-  // El potencial de los items de partida: **3**, el punto medio.
+  // El potencial de los items de partida: **1**.
   //
-  // Lo eligen las dos fábricas de abajo y por eso es una constante y no un 3
-  // escrito en cuatro sitios. Con un 3 suelto en cada sitio, el día que se
+  // Lo eligen las dos fábricas de abajo y por eso es una constante y no un 1
+  // escrito en cuatro sitios. Con un 1 suelto en cada sitio, el día que se
   // cambiara habría cuatro que cambiar y bastaría con olvidar uno para tener un
-  // item con ★3 y el daño de ★1, que es el bug que esta tanda arregla.
-  const POTENCIAL_BASE = 3;
+  // item con ★1 y el daño de ★3, que es el bug que G4 arregló.
+  //
+  // **★1 Y NO ★3, Y ES UNA DECISIÓN DE ENTRADA, NO UN AZAR.** El potencial es la
+  // escala que hace que buscar un item bueno sea una búsqueda: si el item de
+  // partida ya viniera en el punto medio, el jugador empezaría con un ★3 sin haber
+  // hecho nada y no tendría nada que mejorar hacia abajo. Con ★1 tiene **todo el
+  // recorrido por delante** y el primer ★3 que encuentre en una caja se sentirá
+  // como una mejora de verdad.
+  const POTENCIAL_BASE = 1;
 
   // El compañero inicial es un T1 real: mismo poder que compra el jugador, para
   // que la decisión "comprar otro T1 o guardar" tenga sentido desde el segundo 1.
@@ -443,9 +450,15 @@ export async function createGameLoop(
     keysByTier: { 0: 3, 1: 0, 2: 0, 3: 0 } as Record<number, number>,
     crystalsByTier: { 1: 5 } as Record<number, number>,
     crystalTotal: 5,
-    equippedCollectorId: null as string | null,
+    // **LOS DOS ITEM DE PARTIDA VAN EQUIPADOS DE ORIGEN.** Antesepersiana
+    // equiparlos, y el efecto era que un jugador nuevo veía su recolector y su
+    // compañero en el almacén, sin puesta ninguna, sin ingreso y sin un botón que
+    // pulsara: el primer minuto era un contador a cero esperando a que el jugador
+    // adivinara que tenía que hacer clic en el arma. Equipado de origen, el primer
+    // clic ya cobra y la pantalla enseña cómo se ve cuando está funcionando.
+    equippedCollectorId: 'collector_blaster_001' as string | null,
     companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number; potential?: number }>,
-    activeCompanions: [] as string[],
+    activeCompanions: ['companion_base_001'] as string[],
     warehouse: [
       // Las dos fichas salen de las fábricas de arriba, no de números escritos.
       // Antes esta era la única copia "escrita a mano" que sobrevivía al
@@ -3773,9 +3786,14 @@ const AFK_THRESHOLD_MS = 60000;
         afkCards: 0,
         afkExpiresAt: 0,
         crates: { ...contadorDeCajasVacio(), 1: 2 },
-        equippedCollectorId: null,
+        // **EQUIPADOS, COMO EN EL ESTADO INICIAL.** El Ascenso reconstruye la partida de
+        // partida, y si aquí no se equipan los dos items, **ascender desequipa todo**:
+        // el jugador empieza con su arma puesta, Recycla, y se queda sin ingreso y
+        // sin saber por qué. Son el mismo estado inicial, así que se escriben con
+        // las mismas reglas.
+        equippedCollectorId: 'collector_blaster_001',
         companions: [baseCompanion],
-        activeCompanions: [],
+        activeCompanions: ['companion_base_001'],
         warehouse: [
           // **LAS DOS FICHAS SALEN DE LAS FÁBRICAS DE ARRIBA, IGUAL QUE EN EL
           // ESTADO INICIAL.** El recolector estaba escrito a mano aquí, con

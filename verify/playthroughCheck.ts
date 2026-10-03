@@ -79,34 +79,80 @@ async function main() {
     check('nacimiento: almacén de 15 y una sola ranura de compañero',
       g.getCapacity() === 15 && g.getCompanionSlots() === 1,
       `cap=${g.getCapacity()} slots=${g.getCompanionSlots()}`);
-    check('nacimiento: NADA equipado, que es lo que el jugador ve',
-      s(g).equippedCollectorId === null && s(g).activeCompanions.length === 0,
+    // **G-2 · LOS DOS ITEMS DE PARTIDA NACEN EQUIPADOS, Y ESTO ES LO QUE CAMBIÓ.**
+    //
+    // Antes el jugador nuevo veía su recolector y su compañero en el almacén, sin
+    // puesta ninguna, con ingreso a cero y sin ningún botón que pulsara. Todo lo
+    // que había que hacer era adivinarlo. La regla ahora es que nacen equipados:
+    // el primer clic ya cobra, y la pantalla enseña cómo se ve funcionando.
+    check('nacimiento: el recolector y el compañero nacen EQUIPADOS',
+      s(g).equippedCollectorId === 'collector_blaster_001'
+        && s(g).activeCompanions.join(',') === 'companion_base_001',
       `equipo=${s(g).equippedCollectorId} companeros=${s(g).activeCompanions.join(',')}`);
-    check('nacimiento: y sin ingreso pasivo', s(g).passiveIncome === 0, 'pasivo=' + s(g).passiveIncome);
-    const g2 = await recargar();
+    check('nacimiento: y por eso el primer clic ya hace daño, sin que nadie toque nada',
+      g.getClickDamage() > 0, 'danio=' + g.getClickDamage());
+    check('nacimiento: y el compañero queda activo, que es lo que da ingreso',
+      s(g).activeCompanions.length === 1, 'activos=' + s(g).activeCompanions.join(','));
+
+    // El ingreso pasivo se calcula en el primer tick, no al construir el estado.
+    // En el navegador eso son 500 ms y no se nota; aquí los `setInterval` están
+    // anulados, así que se comprueba **después de recargar**, que es cuando el
+    // cálculo ocurre de verdad. Lo que importa no es el instante, es que el
+    // compañero activo produce.
+    const g2 = await recargar(g);
+    check('nacimiento: y siguen equipments después de recargar',
+      s(g2).equippedCollectorId === 'collector_blaster_001'
+        && s(g2).activeCompanions.join(',') === 'companion_base_001',
+      `equipo=${s(g2).equippedCollectorId} companeros=${s(g2).activeCompanions.join(',')}`);
     check('nacimiento: y recargar no inventa nada',
-      nanites(g2) === 0 && deType(g2, 'crate') === 1, ids(g2).join(','));
+      deType(g2, 'crate') === 1, ids(g2).join(','));
+    check('nacimiento: y una vez calculado, el compañero da ingreso desde el primer segundo',
+      s(g2).passiveIncome > 0, 'pasivo=' + s(g2).passiveIncome);
   }
 
   // =========================================================================
   //  2. CLICKEAR. El primer minuto real, y el que más veces se ha roto.
   // =========================================================================
   {
-    // Sin recolector equipado el click NO da nada, pero CUENTA. Un jugador que
-    // entra y ve su contador de clicks subir sin ganar nanitas tiene que poder
-    // entenderlo: no está roto, es que no tiene con qué recolectar.
-    for (let i = 0; i < 3; i++) g.click();
-    check('click: sin recolector no se gana nada', nanites(g) === 0, 'nanitas=' + nanites(g));
-    check('click: pero el click se cuenta igualmente', s(g).totalClicks === 3, 'clics=' + s(g).totalClicks);
-
-    // El número que anuncia `getClickDamage()` es el que entra. No se recalcula
-    // aquí: si hiciera la cuenta, el banco mediría su propia aritmética.
+    // El click del arma de partida entra entero, y el número que anuncia
+    // `getClickDamage()` es el que llega. No se recalcula aquí: si el banco hiciera
+    // la cuenta, mediría su propia aritmética.
     const danio = g.getClickDamage();
-    check('click: sin nada equipado el daño es cero', danio === 0, 'danio=' + danio);
+    const antesDeClicar = nanites(g);
+    for (let i = 0; i < 3; i++) g.click();
+    check('click: el click con el arma de partida da daño desde el primer segundo',
+      nanites(g) - antesDeClicar === danio * 3,
+      `ganado=${nanites(g) - antesDeClicar} esperado=${danio * 3}`);
+    check('click: y el click se cuenta igualmente',
+      s(g).totalClicks === 3, 'clics=' + s(g).totalClicks);
 
     const colector = wh(g).find((w: any) => w.type === 'collector')!;
+
+    // **ESTE CASO SIGUE TENIENDO CONTENIDO, PERO CAMBIADO DE FORMA.** La prueba
+    // anterior nació de que el arma llegaba sin equipar y había que equiparla. Ahora
+    // nace equipada, así que "equiparla" no hace nada —que es lo correcto— y lo que
+    // queda por comprobar es la regla de los dos lados: **sin arma el click no cobra,
+    // con arma cobra**, y en las dos el click se cuenta. Si esto desapareciera, el
+    // botón sería algo que a veces hace algo, sin forma de saber por qué.
+    // `equipCollector` es un CONMUTADOR: llamarlo con el mismo id lo desequipa.
+    // No hay una función aparte de "desequipar", y esa es la vía que usa el
+    // jugador: el mismo botón del detalle.
+    const desequipar: any = g.equipCollector(colector.id);
+    check('click: se puede quitar el arma con el mismo botón, y el estado lo dice',
+      desequipar === true && s(g).equippedCollectorId === null,
+      `ok=${desequipar} equipo=${s(g).equippedCollectorId}`);
+
+    const sinArma = nanites(g);
+    g.click();
+    check('click: sin recolector no se gana nada',
+      nanites(g) === sinArma, `nanitas=${nanites(g)} antes=${sinArma}`);
+    check('click: pero el click se cuenta igualmente', s(g).totalClicks > 0,
+      'clics=' + s(g).totalClicks);
+    check('click: y sin arma el daño anunciado es cero', g.getClickDamage() === 0,
+      'danio=' + g.getClickDamage());
+
     const equipado = g.equipCollector(colector.id);
-    check('click: se puede equipar el recolector de partida', equipado === true, String(equipado));
+    check('click: y se puede volver a equipar', equipado === true, String(equipado));
     check('click: el equipado queda dicho en el estado',
       s(g).equippedCollectorId === colector.id, String(s(g).equippedCollectorId));
 
@@ -114,29 +160,30 @@ async function main() {
     check('click: equipado, el daño es mayor que cero', announced > 0, 'danio=' + announced);
 
     const antes = nanites(g);
+    const producidoAntes = s(g).totalNanitesProduced;
     for (let i = 0; i < CLICKS; i++) g.click();
     const ganado = nanites(g) - antes;
     check('click: N clicks dan N veces el daño anunciado',
       ganado === announced * CLICKS, `ganado=${ganado} esperado=${announced * CLICKS}`);
-    check('click: el total produzido lleva la cuenta', s(g).totalNanitesProduced === ganado,
-      `producido=${s(g).totalNanitesProduced} ganado=${ganado}`);
+    // En RELACIÓN, no en absoluto: ahora el compañero da ingreso desde el primer
+    // segundo, así que el total producido ya no empieza en cero y una igualdad
+    // contra el saldo mediría el ingreso pasivo junto con los clics.
+    check('click: el total producido lleva la cuenta, en relación a antes',
+      s(g).totalNanitesProduced - producidoAntes === ganado,
+      `producido=${s(g).totalNanitesProduced - producidoAntes} ganado=${ganado}`);
 
-    // **HAY QUE VOLCAR ANTES DE RECARGAR, Y NO ES UN DETALLE.**
-    //
-    // `reload()` lee el documento tal y como esté, sin forzar un guardado. Y
-    // mientras el bucle de clicks corre, el `setTimeout(1200)` del arranque —
-    // el que sube la cola heredada— se cuela y guarda a medio camino: se quedó
-    // con 13 de los 20 clicks y el documento tenía 104 en vez de 160.
-    //
-    // O sea que la prueba no fallaba por el saldo: **fallaba por una carrera**, y
-    // pasaba por suerte según cuánto tardara el bucle. Es la tercera prueba
-    // intermitente de esta tanda y la razón de que se arreglen así y no "hasta
-    // que deje de fallar".
-    await g.flush();
-    await new Promise((r) => setTimeout(r, 30));
-    const g2 = await reload();
+    // `recargar()` y no `reload()` a secas: el motivo —que hay que volcar antes y
+    // esperar a que asiente, porque si no se lee la partida anterior— está escrito
+    // en el kit, en el sitio donde se puede volver a leer.
+    const saldoAntesDeRecargar = nanites(g);
+    const g2 = await recargar(g);
+    // **SE COMPARA EL SALDO, NO EL GANADO DE LOS CLICS.** El saldo ya no es
+    // "lo que gané clickando": el compañero de partida da ingreso desde el
+    // primer segundo, así que al recargar hay más de lo que entró en el bucle.
+    // Comparar contra `ganado` medía el ingreso pasivo como si fuera un error.
     check('click: y el saldo del jugador sobrevive a la recarga',
-      nanites(g2) === ganado, `nanitas=${nanites(g2)} ganado=${ganado}`);
+      nanites(g2) === saldoAntesDeRecargar,
+      `nanitas=${nanites(g2)} antes=${saldoAntesDeRecargar} ganado=${ganado}`);
     check('click: el recolector sigue equipado tras recargar',
       s(g2).equippedCollectorId === colector.id, String(s(g2).equippedCollectorId));
     check('click: y sigue haciendo daño', g2.getClickDamage() === announced,
@@ -185,16 +232,29 @@ async function main() {
   // =========================================================================
   {
     const g5 = await recargar();
-    check('compañero: se nace con uno pero inactivo',
-      s(g5).activeCompanions.length === 0 && s(g5).passiveIncome === 0,
-      `activos=${s(g5).activeCompanions.length} pasivo=${s(g5).passiveIncome}`);
+    // **NACE ACTIVO, Y LA PRUEBA SE DA LA VUELTA.** Antes el compañero venía inactivo
+    // y esta comprobación nacía de eso. Ahora nace equipado, así que lo que queda por
+    // comprobar es la regla de los dos lados igual que con el arma: **activo da
+    // ingreso, inactivo no lo da**. Si esto desapareciera, el compañero sería un
+    // objeto decorativo en la ranura.
+    check('compañero: se nace con uno, y ACTIVO',
+      s(g5).activeCompanions.length === 1 && s(g5).passiveIncome > 0,
+      `activos=${s(g5).activeCompanions.join(',')} pasivo=${s(g5).passiveIncome}`);
 
     const comp = wh(g5).find((w: any) => w.type === 'companion')!;
-    const pasivo0 = s(g5).passiveIncome;
-    const ok = g5.equipCompanion(comp.id);
-    check('compañero: se activa', ok === true, String(ok));
-    check('compañero: y a partir de ahí hay ingreso pasivo',
-      s(g5).passiveIncome > pasivo0, `pasivo=${s(g5).passiveIncome}`);
+    const pasivoConEl = s(g5).passiveIncome;
+
+    // `equipCompanion` es un conmutador: el mismo companion, otra vez, lo quita.
+    const quitado: any = g5.equipCompanion(comp.id);
+    check('compañero: se puede quitar con el mismo botón',
+      quitado === true && s(g5).activeCompanions.length === 0,
+      `ok=${quitado} activos=${s(g5).activeCompanions.join(',')}`);
+    check('compañero: y sin él se acaba el ingreso pasivo',
+      s(g5).passiveIncome === 0, `pasivo=${s(g5).passiveIncome}`);
+
+    check('compañero: y se vuelve a activar',
+      g5.equipCompanion(comp.id) === true && s(g5).passiveIncome === pasivoConEl,
+      `pasivo=${s(g5).passiveIncome} antes=${pasivoConEl}`);
     check('compañero: con 1 ranura no cabe un segundo',
       g5.equipCompanion('inexistente') === false, 'aceptó un id que no existe');
 
@@ -205,14 +265,9 @@ async function main() {
       s(g6).passiveIncome === s(g5).passiveIncome,
       `${s(g5).passiveIncome} -> ${s(g6).passiveIncome}`);
 
-    // Desequipar lo quita y el ingreso baja: una ranura que no se puede vaciar
-    // es una decisión del jugador que no existe.
-    const fuera = g6.equipCompanion(comp.id);
-    check('compañero: se puede quitar', fuera === true, String(fuera));
-    check('compañero: y al quitarlo se acaba el ingreso pasivo',
-      s(g6).activeCompanions.length === 0 && s(g6).passiveIncome === 0,
-      `activos=${s(g6).activeCompanions.length} pasivo=${s(g6).passiveIncome}`);
-    g6.equipCompanion(comp.id);
+    // El conmutador ya está comprobado más arriba, con su ingreso y sin él: una ranura
+    // que no se puede vaciar es una decisión del jugador que no existe, y repetirlo
+    // después de recargar solo añadiría una recarga.
   }
 
   // =========================================================================
@@ -601,7 +656,16 @@ async function main() {
     const blaster = wh(g19).find((w: any) => w.type === 'collector');
     check('ascensión: queda un recolector con el que empezar',
       Boolean(blaster), 'items=' + ids(g19).join(','));
-    g19.equipCollector(blaster!.id);
+    // **NO HAY QUE EQUIPARLO: LA ASCENSIÓN YA LO DEJA PUESTO.** Antes sí había que
+    // equiparlo a mano, y por eso la prueba llamaba a `equipCollector()`. Con el arma
+    // equipada de origen, esa llamada es un conmutador y lo **quitaba**: el banco se
+    // quedaba con daño cero y el fallo parecía un bug de la Ascensión cuando lo
+    // había causado él mismo. Si esto no estuviera equipado, sería un bloqueo
+    // real —el jugador no podría ganar su primer nanita—, así que el que se
+    // comprueba es lo contrario: que sale equipado.
+    check('ascensión: y sale ya equipado, sin que el jugador toque nada',
+      s(g19).equippedCollectorId === 'collector_blaster_001',
+      `equipo=${s(g19).equippedCollectorId}`);
     check('ascensión: y con él se vuelve a hacer daño',
       g19.getClickDamage() > 0, 'danio=' + g19.getClickDamage());
     g19.click();

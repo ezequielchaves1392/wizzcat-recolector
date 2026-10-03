@@ -905,7 +905,28 @@ function subirNTier(crateType: CrateType, pasos: number): any {
   };
 }
 
-/** El tier que le "toca" a cada caja, que es la referencia del salto de +1. */
+/**
+ * PESO DE LOS OBJETOS DE TIER EN LA TABLA DE UNA CAJA.
+ *
+ * **ESTOS DOS NÚMEROS SON LA RESPUESTA A "AUMENTAR EL DROP DE ARMAS Y COMPAÑEROS",
+ * Y POR QUÉ ESTÁN ESCRITOS COMO CONSTANTES.**
+ *
+ * Subir un peso **no** sube su probabilidad en el mundo: los pesos se suman y la
+ * probabilidad de cada uno es `peso / suma`. Subir el del arma sube la del arma y
+ * baja la de todo lo demás, que es exactamente lo que se pidió —más armas y
+ * compañeros, menos nanitas y menos cristales—, pero **es fácil cambiarlo sin
+ * querer**: subir el del arma sube también la del salto, porque comparten tabla.
+ * Con un número suelto en la línea de `weight:` nadie ve esa relación.
+ *
+ * Con el total en torno a 160-200, 28 y 30 dejan a los dos objetos de tier en
+ * torno al 17 % cada uno, y el resto se reparte entre nanitas, cristales, llave,
+ * caja siguiente, salto y expansor. **Subir la T10 por encima de eso no es una
+ * mejora: es cambiar la caja.** `saltoCheck` mide los pesos de cada caja, así que
+ * el número exacto de aquí está medido, no estimado.
+ */
+const PESO_RECOLECTOR = 28;
+const PESO_COMPANERO = 30;
+
 /**
  * F31 · LOS COMPAÑEROS EXCLUSIVOS, REPARTIDOS POR CAJA.
  *
@@ -1065,7 +1086,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
   // estrellas**: el potencial era una escala de calidad solo del recolector, y
   // en el almacén la mitad de los objetos de tier no la traían.
   tabla.push({
-    id: 'companion', weight: 22,
+    id: 'companion', weight: PESO_COMPANERO,
     build: () => {
       const potential = rollPotentialFrom();
       const p = poderDeCompanero(tier, potential);
@@ -1085,20 +1106,23 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     }
   });
 
-  // El recolector entra en la T3. Antes la caja común solo daba un dron y su
-  // salto; a partir de la T3 hay dos objetos de tier en la tabla, que es cuando
-  // una caja empieza a merecer el nombre de caja de tier y no de caja de
-  // material. Y ya no es un sobrecargado: es un recolector normal de su tier con
-  // el potencial tirado, que es lo que hace que buscar el ★5 sea una búsqueda.
-  if (tier >= 3) {
-    tabla.push({
-      id: 'collector', weight: 20,
-      build: () => {
-        const w = makeCrateCollector(tier, tope);
-        return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier, potential: w.item.potential, item: w.item };
-      }
-    });
-  }
+  // El recolector del tier de la caja. **Entra en TODAS las cajas, T1 incluida.**
+  //
+  // **AQUÍ ESTABA EN `if (tier >= 3)`, Y POR ESO UNA CAJA T1 NO PODÍA DAR UN ARMA
+  // T1.** La razón que había escrita —que la caja de los primeros niveles es una
+  // caja de material y la de "objetos de tier" empieza en la T3— era una decisión
+  // vieja, y su consecuencia era que el jugador que solo puede comprar cajas T1
+  // **no tenía forma de conseguir el material para la forja**: ni en la T1 ni en
+  // la T2. La forja necesita dos del mismo tier, y la T1 era la única forma
+  // segura de llegar. No se puede comprar en la tienda, así que la caja era la
+  // única puerta, y estaba cerrada.
+  tabla.push({
+    id: 'collector', weight: PESO_RECOLECTOR,
+    build: () => {
+      const w = makeCrateCollector(tier, tope);
+      return { kind: 'collector', amount: 1, name: w.name, label: w.name, details: w.details, rarity: w.rarity, icon: 'collector', tier, potential: w.item.potential, item: w.item };
+    }
+  });
 
   // La llave de la caja, la suya. Sale de `CRATE_KEY_TIER` y el nombre del
   // `label` sale de `KEY_DEFS`, así que la ruleta no puede anunciar una llave que

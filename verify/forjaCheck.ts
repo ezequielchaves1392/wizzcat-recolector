@@ -24,7 +24,7 @@ import { forjaDesbloqueada, motivoDeForjaCerrada, FORGE_NODE_ID, TREE_BY_ID } fr
 import { rutasVisibles, rutaVisible, ROUTES } from '../src/ui/router';
 import {
   attemptForge, rangoDeAfijosForjados, danioDeRango,
-  AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel
+  AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION
 } from '../src/data/crafting';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
@@ -343,6 +343,45 @@ async function main() {
     check('G6: y quitando la Forja la barra de abajo sigue dentro del tope',
       barrasAbajo({ blueprint: 1 }).length <= 5 && barrasAbajo({}).length < barrasAbajo({ blueprint: 1 }).length,
       `con nodo=${barrasAbajo({ blueprint: 1 }).length} sin nodo=${barrasAbajo({}).length} (tope 5)`);
+  }
+
+
+// -------------------------------------------------------------------------
+  //  6b · LA PÁGINA Y EL MOTOR NO PUEDEN DISCREPAR
+  // -------------------------------------------------------------------------
+  //  **ESTE BLOQUE ES EL QUE FALTA Y POR ESO TUVO QUE EXISTIR.** La receta cambió
+  //  de 3 materiales a 2 y solo se actualizó el motor; en la página quedaron cinco
+  //  restos. Con ellos la forja **no se podía usar**: los dos huecos del yunque se
+  //  llenaban, `ready` pedía tres, y el botón se quedaba inactivo para siempre. Si
+  //  se llegaba a tres materiales, el motor los rechazaba con "se necesitan 2".
+  //
+  //  Lo terrible no es que estuviera roto: es que **no se rompía de forma ruidosa**.
+  //  El botón se quedaba gris, que es exactamente lo que parece un botón que aún
+  //  no cumples sus requisitos. El jugador leería "me falta un tercer material" y
+  //  no encontraría dónde cogerlo.
+  {
+    check('forja: la receta son 2 materiales, y la constante lo dice',
+      MATERIALES_POR_FUSION === 2, `MATERIALES_POR_FUSION=${MATERIALES_POR_FUSION}`);
+
+    // Lo que de verdad importa: que el motor acepte exactamente lo que la página
+    // deja seleccionar, y rechace lo que ya no deja.
+    const dos = [collector('a', 3), collector('b', 3)];
+    const r = conRoll(0.001, () => attemptForge(dos, 3, 'X', opts()));
+    check('forja: el motor acepta los 2 materiales que la página deja elegir',
+      r.success === true, r.error ?? 'los rechazó');
+
+    const tres = [collector('a', 3), collector('b', 3), collector('c', 3)];
+    const r3 = attemptForge(tres, 3, 'X', opts());
+    check('forja: y rechaza los 3 que la página ya no deja elegir',
+      !r3.success && /necesitan 2/.test(r3.error ?? ''),
+      r3.error ?? 'los aceptó');
+
+    // Y el mensaje va con el número de la regla, no con un 2 escrito dentro del
+    // texto: si algún día se cambia la receta, el texto tiene que seguir diciendo
+    // la verdad sin que nadie lo edite.
+    check('forja: el mensaje del motor dice el número de la regla, no uno escrito',
+      (r3.error ?? '').includes(String(MATERIALES_POR_FUSION)),
+      `"${r3.error}" con MATERIALES_POR_FUSION=${MATERIALES_POR_FUSION}`);
   }
 
   // -------------------------------------------------------------------------

@@ -19,6 +19,26 @@ import { KEY_DEFS, KEY_TIERS, CRYSTAL_DEFS, type KeyTier } from '../src/data/ite
 export type Row = { name: string; ok: boolean; detail: string };
 
 /**
+ * LA ÚLTIMA PARTIDA QUE ARRANCÓ ESTE BANCO.
+ *
+ * Para que `recargar()` sepa a quién hay que volcar sin que el banco tenga que
+ * pasar el nombre: los bloques de los bancos de recorrido son de ámbito, así que
+ * la partida del apartado anterior **no está disponible** desde el siguiente, y un
+ * valor por defecto que no mire fuera del bloque es la única opción que no obliga
+ * a la prueba a saber más de la que le corresponde.
+ *
+ * Y hay una trampa que esto **no** tapa: un banco que no sigue la cadena —que
+ * sigue desde una partida más antigua— tiene que pasarle el juego a mano. Está
+ * escrito en `recargar()`.
+ */
+let juegoVivo: { flush: () => void } | null = null;
+
+function anotarJuego(g: any) {
+  juegoVivo = g ?? null;
+  return g;
+}
+
+/**
  * NOTA · POR QUÉ AQUÍ NO HAY UN "APAGA RELOJES".
  *
  * Se probó: envolver `setTimeout` y cancelar los de medio segundo o más, para
@@ -99,26 +119,6 @@ export async function reload() {
 }
 
 /**
- * EL ÚLTIMO JUEGO QUE ARRANCÓ ESTE BANCO.
- *
- * Para que `recargar()` sepa a quién tiene que volcar. Los bancos de recorrido
- * —`playthroughCheck` sobre todo— declaran su partida **dentro de cada bloque**, y
- * esos bloques son de ámbito: el `g5` de un apartado no existe en el siguiente
- * aunque se llamen igual. Por eso `recargar()` no recibe el juego que hay que
- * guardar: si lo recibiera, habría que acertar con el nombre, y un nombre mal
- * puesto guarda la partida equivocada en silencio —que es peor que no guardar,
- * porque el banco pasa y está midiendo otra cosa.
- *
- * Se anota aquí, en un solo sitio, cuando arranca un juego.
- */
-let juegoVivo: { flush: () => void } | null = null;
-
-function anotarJuego(g: any) {
-  juegoVivo = g ?? null;
-  return g;
-}
-
-/**
  * Recargar **con lo que tiene el juego guardado de verdad**, no con lo que se
  * alcance a escribir.
  *
@@ -133,12 +133,28 @@ function anotarJuego(g: any) {
  * temporizador volcaba por ellos. Al quitarlo, empezaron a fallar **solo y de vez
  * en cuando**, que es la peor forma de fallar: entrena a ignorar el banco entero.
  *
- * Sin argumentos a propósito: volca el juego del apartado anterior, que es el que
- * acaba de mutar el estado.
+ * **EL ARGUMENTO ES OPCIONAL, Y CUANDO HACE FALTA ES PORQUE EL BANCO NO SIGUE LA
+ * CADENA.**
+ *
+ * Por defecto vuelca "la última partida que arrancó", que es lo correcto en un
+ * banco de recorrido: cada apartado **empieza** recargando, así que la última
+ * partida es justo la que va a modificar. Y como los bloques son de ámbito, el
+ * nombre de la partida anterior ni siquiera está disponible: eso es lo que hace
+ * que el valor por defecto sea la única opción que no mira fuera del bloque.
+ *
+ * Pero hay bancos que **no** siguen la cadena: `playthroughCheck` continúa el
+ * apartado 2 desde la partida del minuto cero, no desde la recarga del apartado 1,
+ * porque el minuto cero es el objeto del banco entero. Ahí el valor por defecto
+ * volcaría una partida intacta y **pisaría con ella todo lo que el apartado ha
+ * hecho**. Ahí se pasa el juego a mano, y por eso el parámetro existe.
+ *
+ * Con eso el fallo es explícito —si te olvidas del argumento en un banco que no
+ * sigue la cadena, las comprobaciones fallan— en vez de silencioso.
  */
-export async function recargar(): Promise<any> {
-  if (juegoVivo) {
-    juegoVivo.flush();
+export async function recargar(g?: { flush: () => void }): Promise<any> {
+  const juego = g ?? juegoVivo;
+  if (juego) {
+    juego.flush();
     await new Promise((r) => setTimeout(r, 30));
   }
   return await reload();

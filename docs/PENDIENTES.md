@@ -176,6 +176,45 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 - [ ] **F49 · Mejora automática de cristales** hasta agotarlos.
 - [ ] **F50 · Precisión de los contadores.** Con pocas nanitas el número no se mueve.
 
+### Lote A · BUGS Y VERDADES (encargo del 3 de octubre)
+
+- [x] **A1 · La forja NO SE PODÍA USAR.** El más gordo del encargo y no se veía desde el código:
+      la página pedía **3 materiales** y el motor exige **2**. Con eso los dos huecos del yunque
+      se llenaban, `ready` nunca se cumplía y **el botón FORJAR se quedaba inactivo para
+      siempre**. Si se llegaba a seleccionar un tercero —no había tope al añadir—, el motor
+      rechazaba la fusión con "se necesitan 2". Y el propio modal decía "Dos recolectores de
+      tier N", así que la página se contradecía en la misma frase.
+      **No se rompía de forma ruidosa**: un botón gris es exactamente lo que parece un botón que
+      aún no cumples sus requisitos, y el jugador leería "me falta un tercer material" sin
+      encontrar dónde cogerlo.
+      Ahora el número es `MATERIALES_POR_FUSION`, en el módulo que lo impone, y lo leen los seis
+      sitios de la página. **Una receta no se escribe en dos sitios.**
+- [x] **A2 · Una caja T1 no podía dar un arma T1.** La entrada de recolector estaba detrás de un
+      `if (tier >= 3)`. La consecuencia no era "la caja T1 es más pobre": el jugador que **solo
+      puede comprar cajas T1 no tenía forma de conseguir material para la forja**, porque no se
+      compra en la tienda y la caja era la única puerta. Y la forja son dos del mismo tier.
+- [x] **A3 · Más armas y compañeros en las cajas.** `PESO_RECOLECTOR` y `PESO_COMPANERO`, con
+      nombre propio. Subir un peso sube su probabilidad y **baja la de todo lo demás**, que es lo
+      pedido, pero también sube la del salto: comparten tabla. Con un número suelto en `weight:`
+      nadie ve esa relación.
+- [x] **A4 · El jugador nuevo nace con los dos items PUESTOS y en ★1.** Antes los veía en el
+      almacén sin poner, con ingreso a cero y sin ningún botón que pulsara: todo era adivinarlo.
+      **★1 y no ★3, y es una decisión de entrada**: si el item de partida viniera en el punto
+      medio, el jugador empezaría con un ★3 sin haber hecho nada y no tendría nada que mejorar
+      hacia abajo. La **Ascensión también los deja puestos**, porque reconstruye la partida de
+      partida: si no, ascender desequiparía todo sin avisar.
+
+### Lo que queda de este encargo, en orden
+
+| Lote | Qué | Por qué aquí |
+|---|---|---|
+| **B** | 3a forja abierta desde el inicio + 3e fusión de compañeros | 3a **deshace** el requisito que G6 acaba de montar. Hay que quitarlo limpio, no dejar media regla. 3e depende de 3a. |
+| **C** | 1b nav persistente + 1c sin botón de retroceso | UI pura. Riesgo cero para la economía. |
+| **D** | 3b cristales unificados + 3c recompensa por fallo | 3c depende de 3b. Migración de guardado: los cristales hoy son por tier. |
+| **E** | 1a quitar llaves | El más caro: toca botín, tienda, reventa, el tope que se puso en `b349393` y 220 pruebas de `llaveCheck`. Solo, con todo lo demás verde. |
+
+---
+
 ### Lote 7 · INFORMACIÓN
 
 - [ ] **F51 · Explicar los afijos.** Incluye la pregunta concreta: "¿cuántos afijos puede
@@ -937,7 +976,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1939
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1952
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

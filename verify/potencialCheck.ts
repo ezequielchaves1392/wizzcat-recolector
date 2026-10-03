@@ -25,8 +25,9 @@ import { KEY_TIERS } from '../src/data/items';
 import { KEY_DEFS } from '../src/data/items';
 import {
   RARITY_RANK, RARITY_TEXT, RARITY_BORDER, RARITY_GLOW, raritySlug,
-  CRATE_LOOT
+  CRATE_LOOT, tablaDePesos
 } from '../src/components/crateLoot';
+import { CRATE_TIERS } from '../src/data/store';
 import { poderDeCompanero, generateCompanionByTier } from '../src/data/generators';
 import { rangoDePoder } from '../src/data/tiers';
 import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX } from '../src/data/crafting';
@@ -191,9 +192,15 @@ async function main() {
     const g4 = await reload();
     const inicial = (g4.getState().companions as any[])[0];
     const suItem = (wh(g4) as any[]).find((w: any) => w.id === 'companion_base_001');
-    check('potencial: el compañero de partida es un T1 de verdad',
-      !!inicial && inicial.potential === 3 && inicial.power === poderDeCompanero(1, 3),
-      `pot=${inicial?.potential} power=${inicial?.power} esperado=${poderDeCompanero(1, 3)}`);
+    // **★1, QUE ES EL SUELO DEL RANGO, Y POR ESO EL PODER ES 5 Y NO 6.** El
+    // compañero de partida pasó de ★3 a ★1 para que el jugador empiece con todo
+    // el recorrido por delante: si naciera en el punto medio no tendría nada que
+    // mejorar. El poder sale de `poderDeCompanero(1, 1)`, o sea el suelo del
+    // rango del T1, y el número no se escribe: si la escala del T1 cambiara, esta
+    // comprobación sigue siendo la cuenta y no una memorización del 6 de antes.
+    check('potencial: el compañero de partida es un T1 de verdad, y ★1',
+      !!inicial && inicial.potential === 1 && inicial.power === poderDeCompanero(1, 1),
+      `pot=${inicial?.potential} power=${inicial?.power} esperado=${poderDeCompanero(1, 1)}`);
     check('potencial: y el item del almacén dice lo mismo que la ficha',
       !!inicial && !!suItem
         && suItem.potential === inicial.potential
@@ -233,6 +240,34 @@ async function main() {
     check('potencial: la caja T3 sigue teniendo entrada de recolector',
       CRATE_LOOT[3].some((e: any) => e.id === 'collector'),
       CRATE_LOOT[3].map((e: any) => e.id).join(','));
+
+    // **Y AHORA LAS DIEZ, Y POR QUÉ ESTO NO ES UN ADORNO.**
+    //
+    // La entrada de recolector estaba detrás de un `if (tier >= 3)`, así que una
+    // caja T1 **no podía dar un arma T1**. La consecuencia no era "la caja T1 es
+    // más pobre": era que el jugador que solo puede comprar cajas T1 **no tenía
+    // forma de conseguir material para la forja**, porque no se compra en la tienda
+    // y la caja era la única puerta. Y la forja son dos del mismo tier.
+    const sinArma = CRATE_TIERS.filter((t: any) =>
+      !CRATE_LOOT[t].some((e: any) => e.id === 'collector'));
+    check('potencial: TODAS las cajas dan recolectores, la T1 incluida',
+      sinArma.length === 0,
+      `sin entrada de recolector: ${sinArma.join(',')} · ` +
+      `ids de la T1: ${CRATE_LOOT[1].map((e: any) => e.id).join(',')}`);
+
+    // Y no solo tiene la entrada: el peso es el que decide la probabilidad real, y
+    // una entrada con peso cero es una entrada que no sale nunca. Este es el banco
+    // que lo mide, porque `tablaDePesos` es la misma que usa el sorteo.
+    const pesosT1 = tablaDePesos(1);
+    const pesoArmaT1 = pesosT1[CRATE_LOOT[1].findIndex((e: any) => e.id === 'collector')];
+    const pesoCompT1 = pesosT1[CRATE_LOOT[1].findIndex((e: any) => e.id === 'companion')];
+    const totalT1 = pesosT1.reduce((a: number, b: number) => a + b, 0);
+    check('potencial: y el arma de la T1 sale con un peso de verdad, no con un cero',
+      (pesoArmaT1 ?? 0) > 0 && (pesoCompT1 ?? 0) > 0,
+      `arma=${pesoArmaT1} compañero=${pesoCompT1} de ${totalT1}`);
+    check('potencial: y arma y compañero pesan más que la caja siguiente',
+      (pesoArmaT1 ?? 0) > (pesosT1[CRATE_LOOT[1].findIndex((e: any) => e.id === 'nextCrate')] ?? 0),
+      `arma=${pesoArmaT1} siguiente=${pesosT1[CRATE_LOOT[1].findIndex((e: any) => e.id === 'nextCrate')]}`);
   }
 
   // -------------------------------------------------------------------------

@@ -542,7 +542,12 @@ async function main() {
   }
   {
     // Y lo que el jugador quiere de verdad al empezar: el Blaster y el Dron de
-    // partida, con el tipo que el juego reconoce y equipables.
+    // partida, con el tipo que el juego reconoce y **ya puestos**.
+    //
+    // Antes esta comprobación los equipaba a mano, que es como nació. Ahora nacen
+    // equipado, y llamar a `equipCollector()` sería un conmutador que los
+    // **quitaría**: el banco se quedaría con daño cero y el fallo parecería un
+    // problema del motor. Por eso ahora se mira el estado en vez de llamar.
     globalThis.__MEM_DB__ = {};
     const g = await createGameLoop(USER, () => {});
     const s = g.getState();
@@ -550,11 +555,16 @@ async function main() {
     const dron = (s.warehouse as any[]).find((w: any) => w.type === 'companion');
     check('partida nueva: el Blaster es un recolector', !!blaster, ids(g).join(','));
     check('partida nueva: el Dron es un compañero', !!dron, ids(g).join(','));
-    check('partida nueva: se pueden equipar los dos',
-      g.equipCollector(blaster.id) === true && g.equipCompanion(dron.id) === true,
-      `blaster=${blaster.id} dron=${dron.id}`);
+    check('partida nueva: los dos nacen puestos, sin que el jugador toque nada',
+      s.equippedCollectorId === blaster.id && s.activeCompanions.includes(dron.id),
+      `equipo=${s.equippedCollectorId} companeros=${s.activeCompanions.join(',')}`);
     check('partida nueva: el click del Blaster hace daño', g.getClickDamage() > 0, 'daño=' + g.getClickDamage());
-    check('partida nueva: el Dron da ingreso pasivo', s.passiveIncome > 0, 'pasivo=' + s.passiveIncome);
+    // El ingreso pasivo se calcula en el primer tick, que en el navegador son 500 ms.
+    // Aquí los `setInterval` están anulados, así que se comprueba tras una recarga,
+    // que es cuando el cálculo ocurre de verdad.
+    const gNuevo = await reload();
+    check('partida nueva: el Dron da ingreso pasivo',
+      gNuevo.getState().passiveIncome > 0, 'pasivo=' + gNuevo.getState().passiveIncome);
   }
 
   // --- El botón de vender y el cargo, el mismo número --------------------
