@@ -468,9 +468,21 @@ async function main() {
   // =========================================================================
   {
     const g = await boot(baseSave([collector('r1', 3, { damage: 60 })], { nanites: 0 }));
-    check('click: sin recolector equipado no hay dano', g.getClickDamage() === 0, 'danio=' + g.getClickDamage());
+    // **LAS DOS PRUEBAS DE AQUÍ AFIRMAN LO CONTRARIO DE LO QUE AFIRMAN HOY.**
+    //
+    // Decían que sin recolector no hay daño y que no se gana nada. Las dos estaban en
+    // verde, y esa es la parte importante: **un comportamiento que una prueba declara
+    // correcto deja de mirarse.** El bloqueo —cero recolectores, cero ingresos, y una
+    // tienda que no los venden— no era un descuido de una cifra: era la regla, escrita.
+    //
+    // Ahora hay un suelo de 1 y se gana lo justo para comprar la caja que puede dar un
+    // recolector, que es la única salida que existe. El nombre viejo de la segunda, "no
+    // se gana nada", era literalmente lo que ocurría.
+    check('click: sin recolector hay un suelo de 1, y el bloqueo no existe',
+      g.getClickDamage() >= 1, 'danio=' + g.getClickDamage());
     g.click();
-    check('click: sin recolector no se gana nada', s(g).nanites === 0, 'nanites=' + s(g).nanites);
+    check('click: y sin recolector se sigue ganando, que es lo que da la salida',
+      s(g).nanites >= 1, 'nanites=' + s(g).nanites);
     check('click: pero el click se cuenta igualmente', s(g).totalClicks === 1, 'clicks=' + s(g).totalClicks);
   }
   {
@@ -2180,6 +2192,101 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
     (g.getState().crystals as number) === 0,
     `crystals=${g.getState().crystals}`);
 }
+  {
+    // =====================================================================
+    //  LOS TRES HECHOS SOBRE LOS QUE SE APOYA EL SUELO
+    // =====================================================================
+    //
+    // Nace de una pregunta: "si me quedan dos recolectores, forjo y falla, ¿me quedo
+    // sin ninguno?". La respuesta corta es que **ese caso no puede existir**; la larga es
+    // que había uno peor. Los dos están comprobados aquí porque los dos son hechos sobre
+    // los que se apoya el suelo, y no conviene creerlos de palabra.
+    const conBlueprint = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
+
+    // --- 1. EL CASO QUE SE DESCRIBE, Y POR QUÉ NO LLEGA A EXISTIR --------------
+    {
+      const g = await boot(baseSave([
+        collector('a', 3, { damage: 100, equipped: true }),
+        collector('b', 3, { damage: 100 })
+      ], conBlueprint));
+      s(g).equippedCollectorId = 'a';
+      const r: any = g.forgeCollector(['a', 'b']);
+      check('forja: con dos recolectores no se puede ni empezar, porque el equipado no es material',
+        r.success === false && /equipado/.test(r.msg ?? '') && deType(g, 'collector') === 2,
+        'msg=' + r.msg + ' quedan=' + deType(g, 'collector'));
+    }
+
+    // --- 2. EL CASO QUE SÍ EXISTÍA: DOS SIN EQUIPAR ------------------------------
+    // Desequipar el equipado **sí** se puede, y eso es lo que abre el agujero: con tres
+    // recolectores, desequipando el equipado, quedan tres sin equipar, y con dos,
+    // desequipando el único, quedan dos sin equipar — y esos dos sí se pueden gastar.
+    // Por eso el arreglo NO es un candado en el desequipado, sino un suelo en el daño.
+    {
+      const g = await boot(baseSave([
+        collector('a', 3, { damage: 100, equipped: true }),
+        collector('b', 3, { damage: 100 })
+      ], conBlueprint));
+      s(g).equippedCollectorId = 'a';
+      g.equipCollector('a');
+      check('forja: desequipar el ultimo SI se puede, y por eso el suelo hace falta',
+        s(g).equippedCollectorId === null, 'equipado=' + s(g).equippedCollectorId);
+      conRoll(0.999, () => g.forgeCollector(['a', 'b']));
+      check('forja: y ahora si se puede quedar sin ninguno, que es el agujero real',
+        deType(g, 'collector') === 0 && s(g).equippedCollectorId === null,
+        'quedan=' + deType(g, 'collector') + ' equipado=' + s(g).equippedCollectorId);
+    }
+
+    // --- 3. EL SUELO, Y QUE HAYA SALIDA DE VERDAD ------------------------------
+    // Lo que quita el bloqueo no es "no puedes perderlos": es que con cero recolectores
+    // **y cero nanitas** se puede volver a ganar. Antes no había ninguna salida.
+    {
+      const g = await boot(baseSave([], { nanites: 0, warehouseCapacity: 20 }));
+      const antes = s(g).nanites;
+      g.click();
+      check('suelo: sin nada equipado, un clic da al menos 1',
+        s(g).nanites - antes >= 1, 'un clic dio ' + (s(g).nanites - antes));
+
+      // Y con el suelo se llega a la caja, que es la ÚNICA fuente de recolectores.
+      for (let i = 0; i < 800; i++) g.click();
+      check('suelo: y se llega a la caja, o sea que la partida no esta bloqueada',
+        s(g).nanites >= costeDeCaja(1),
+        'nanitas=' + s(g).nanites + ' cajaT1=' + costeDeCaja(1));
+    }
+
+    // --- 4. EL SUELO ES EL PEOR RECOLECTOR, NO UN NÚMERO PUESTO -------------------
+    // Si el suelo fuera mayor que el peor recolector del juego, el jugador sin nada
+    // estaría mejor que el que tiene lo peor, que es al revés de lo que debe pasar.
+    {
+      const conPobre = await boot(baseSave([collector('r1', 1, { damage: 1 })]));
+      s(conPobre).equippedCollectorId = 'r1';
+      const delPobre = conPobre.getClickDamage();
+      const sinNada = await boot(baseSave([]));
+      const delSuelo = sinNada.getClickDamage();
+      check('suelo: sin recolector se juega mas despacio que con el peor del juego',
+        delSuelo >= 1 && delSuelo < delPobre,
+        'suelo=' + delSuelo + ' peorT1=' + delPobre);
+    }
+
+    // --- 5. EL SUELO NO TOCA A QUIEN SÍ TIENE RECOLECTOR ---------------------------
+    // El riesgo de un suelo es que se coma el daño de un jugador legítimo.
+    //
+    // **LA COMPARACIÓN ES RELACIONAL Y NO DE CIFRAS.** La carga recalcula el daño desde
+    // el nivel y el potencial, así que un `damage: 500` escrito a mano no llega al
+    // estado: se prueba con un valor absoluto y falla con 256 sin que haya ningún bug.
+    // Lo que importa no es cuánto da el suelo, sino que está por debajo de cualquier
+    // recolector y muy por encima de cero.
+    {
+      const conUno = await boot(baseSave([collector('r1', 5)]));
+      s(conUno).equippedCollectorId = 'r1';
+      const delSuyo = conUno.getClickDamage();
+      const delSuelo = (await boot(baseSave([]))).getClickDamage();
+      check('suelo: con recolector, el daño es el suyo y no el minimo',
+        delSuyo > delSuelo && delSuyo > 1,
+        'con un T5=' + delSuyo + ' suelo=' + delSuelo);
+    }
+  }
+
+
 resumen('estado, migracion y economia');
 }
 

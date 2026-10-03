@@ -553,8 +553,12 @@ async function main() {
     const g2 = await reload();
     check('renombre: el id viejo del documento no resucita el equipado',
       g2.getState().equippedCollectorId === null, 'equippedCollectorId=' + g2.getState().equippedCollectorId);
-    check('renombre: sin equipado, el click no hace daño', g2.getClickDamage() === 0,
-      'daño=' + g2.getClickDamage());
+    // Aquí lo que se comprueba es que **el id viejo del documento no resucita un
+    // equipado fantasma**, y eso sigue igual. Lo que cambia es el daño: sin ningún
+    // equipado hay un suelo de 1, porque con cero la partida no tenía salida.
+    check('renombre: sin equipado el click da el suelo, y no un 0 que bloquea',
+      g2.getClickDamage() >= 1 && g2.getState().equippedCollectorId === null,
+      'daño=' + g2.getClickDamage() + ' equipado=' + g2.getState().equippedCollectorId);
   }
   {
     // Id guardado que ya no apunta a nada: se descarta en vez de dejar el

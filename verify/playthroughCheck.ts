@@ -143,11 +143,18 @@ async function main() {
 
     const sinArma = nanites(g);
     g.click();
-    check('click: sin recolector no se gana nada',
-      nanites(g) === sinArma, `nanitas=${nanites(g)} antes=${sinArma}`);
+    // **ANTES: "sin recolector no se gana nada" y "el daño anunciado es cero".** Las dos
+    // describe un estado en el que el juego no tiene salida —sin recolectores, cero
+    // ingresos y una tienda que no los vende—, y las dos estaban en verde.
+    //
+    // Ahora el suelo es 1: se gana, y lo justo para comprar la caja que puede devolver un
+    // recolector. El clic sigue contándose, que es lo de siempre.
+    check('click: sin recolector se gana el suelo, y con eso hay salida',
+      nanites(g) > sinArma && nanites(g) - sinArma >= 1,
+      `nanitas=${nanites(g)} antes=${sinArma}`);
     check('click: pero el click se cuenta igualmente', s(g).totalClicks > 0,
       'clics=' + s(g).totalClicks);
-    check('click: y sin arma el daño anunciado es cero', g.getClickDamage() === 0,
+    check('click: y sin arma el daño anunciado es el suelo, no cero', g.getClickDamage() >= 1,
       'danio=' + g.getClickDamage());
 
     const equipado = g.equipCollector(colector.id);

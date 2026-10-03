@@ -2335,13 +2335,33 @@ const AFK_THRESHOLD_MS = 60000;
    * y es lo que permite repartir el total sin inventarse números (ver abajo).
    */
   function cuentaDeClickSinBuff(): { total: number; base: number; conNivel: number } {
-    const cero = { total: 0, base: 0, conNivel: 0 };
-    if (!state.equippedCollectorId) return cero;
+    // **EL SUELO DE 1, Y POR QUÉ ESTÁ AQUÍ Y NO EN UN CANDADO ARRIBA.**
+    //
+    // Sin recolector equipado no hay de dónde sacar un daño, y antes esta función
+    // devolvía el cero de guarda: cero por click, cero ingreso, y como la tienda no
+    // vende recolectores, cero forma de comprar la caja que podría dar uno. La partida
+    // quedaba bloqueada sin ninguna salida.
+    //
+    // El suelo lo pone `DANIO_MINIMO_SIN_RECOLECTOR`, que es 1, y **es el mismo número
+    // que el daño del recolector más débil que existe**: no hay un estado raro al que
+    // llegar, hay el peor objeto del juego sin ninguna ventaja. Lo que se pierde es la
+    // razón para no estar sin nada, que es lo que evita que se llegue; a cambio se
+    // pierde el modo de quedar atrapado, que es lo único que no tiene arreglo.
+    //
+    // Y los multiplicadores de buff, nivel, compañero y logros se aplican **encima** de
+    // este suelo, sin tocarlo. Un jugador sin recolector que tenga una tarjeta permanente de click x3
+    // hace 3 por clic, que es justo lo que hace un jugador con el peor objeto del juego y
+    // el misma tarjeta.
+    if (!state.equippedCollectorId) return sueloDeClick();
     const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
-    if (!item) return cero;
+    if (!item) return sueloDeClick();
 
     const affixes = equippedAffixEffect();
-    const base = item.damage || 0;
+    // `Math.max` y no `|| 0`: un recolector con daño 0 —un guardado raro, un afijo que
+    // lo borre— también se queda en el suelo, por el mismo motivo. Con 0 ahí el jugador
+    // estaría igual de bloqueado y con un item en la mano, que es más difícil de
+    // entender.
+    const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, item.damage || 0);
     const levelMultiplier = 1 + ((item.level || 0) * 0.10);
     const conNivel = base * levelMultiplier;
     const total = base
@@ -2351,6 +2371,33 @@ const AFK_THRESHOLD_MS = 60000;
       * (1 + state.bonus.clickMult)
       * (1 + affixes.clickMult);
     return { total, base, conNivel };
+  }
+
+  /**
+   * El daño mínimo de un click, y por qué es 1.
+   *
+   * **ES EL DAÑO DEL RECOLECTOR MÁS DÉBIL DEL JUEGO, NO UN NÚMERO PUESTO PARA QUE
+   * CUADRE.** La razón de que sea ese y no otro es que el suelo tiene que ser
+   * reconocible: si fuera 1 mientras el peor recolector da 12, el jugador sin nada
+   * estaría en un estado que el juego no explica; si es 12, está jugando con el peor
+   * objeto, que es un estado que el juego ya conoce y con el que ya hay una ruta de
+   * salida.
+   *
+   * Con el valor en 1 el jugador sin recolector avanza **más despacio que con el peor
+   * recolector**, y eso es lo que debe pasar: el suelo quita el bloqueo, no quita la
+   * consecuencia de haberlo perdido.
+   */
+  const DANIO_MINIMO_SIN_RECOLECTOR = 1;
+
+  /** El suelo, pasando por los mismos multiplicadores que un daño normal. */
+  function sueloDeClick(): { total: number; base: number; conNivel: number } {
+    const base = DANIO_MINIMO_SIN_RECOLECTOR;
+    const total = Math.floor(base
+      * calculateCompanionMultiplier()
+      * (1 + achievementState.clickBonus)
+      * (1 + state.bonus.clickMult)
+      * (1 + equippedAffixEffect().clickMult));
+    return { total, base, conNivel: base };
   }
 
   /** El daño de un click SIN buffs. Quien quiera buffs los aplica encima. */

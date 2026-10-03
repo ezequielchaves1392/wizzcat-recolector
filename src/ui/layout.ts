@@ -228,6 +228,23 @@ export function renderLayoutHTML(
             +0 por click
           </div>
 
+          <!--
+            EL AVISO DE "NO TIENES RECOLECTOR", Y POR QUÉ NO BASTA CON VER "+1 POR CLICK".
+
+            El suelo de 1 del motor evita que la partida se bloquee, pero un "+1" solo, sin
+            decir por qué, es indistinguible de un bug: el jugador ve un número que no
+            cuadra con nada y no tiene forma de saber que le falta un equipo.
+
+            Así que se dice, y se dice en el sitio donde se va a notar: **junto al botón
+            que falla de verdad**. Un aviso que aparece lejos del problema que explica es un
+            aviso que no se lee.
+          -->
+          ${!state?.equippedCollectorId ? `
+            <p class="text-[10px] font-mono text-amber-400/90 text-center leading-snug max-w-[22rem]">
+              No tienes ningún recolector equipado. Cada clic te da 1 mientras tanto: abre
+              una caja del Mercado para conseguir uno.
+            </p>` : ''}
+
           <!-- Acceso rápido a la ascensión: el techo del juego tiene que ser
                alcanzable desde donde se pasa el 95% del tiempo -->
           <button data-nav="prestigio"

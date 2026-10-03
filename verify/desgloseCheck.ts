@@ -168,11 +168,20 @@ async function main() {
   {
     const g = await boot(baseSave([], { nanites: 0 }));
     const d = g.getClickDamageBreakdown?.();
-    check('sin recolector equipado el desglose es todo cero, no undefined',
-      d && d.total === 0 && d.base === 0 && d.porNivel === 0 && d.porBonos === 0,
+    // **ANTES AFIRMABA QUE EL DESGLOSE ERA TODO CERO Y QUE LA VISTA NO PINTABA NADA.**
+    // Era el mismo bloqueo que en el resto de bancos, y aquí tenía una consecuencia
+    // visible que no se había visto: **la vista esconde las líneas de desglose cuando el
+    // total es cero**, así que un jugador sin recolector se encontraba con un número
+    // muerto y sin una sola línea que lo explicara.
+    //
+    // Con el suelo, el total es 1 y las líneas vuelven. Y la comprobación sigue valiendo
+    // para lo que estaba mirando: que el desglose **no venga undefined** cuando no hay
+    // recolector, que era el punto real de la prueba.
+    check('sin recolector el desglose viene relleno, con la base del suelo',
+      !!d && d.total >= 1 && d.base >= 1 && d.porNivel === 0 && d.porBonos === 0,
       `desglose=${JSON.stringify(d)}`);
-    check('y por eso la vista no pinta ninguna línea de desglose',
-      d?.total === 0, `total=${d?.total}`);
+    check('y por eso la vista vuelve a pintar sus lineas',
+      (d?.total ?? 0) >= 1, `total=${d?.total}`);
   }
 
   resumen('desglose: las partes suman el total');
