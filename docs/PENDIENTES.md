@@ -1055,6 +1055,35 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 
       número habría que acertarlo por etiqueta y el día que se añadiera una ruta el nav
       volvería a moverse.
 
+- [x] **El título con su icono a la izquierda, sin la descripción, y la cabecera con la misma
+      forma en las ocho pantallas.** Lo que se veía al pasar de la Base al Mercado eran
+      **doce píxeles**, y medido resultó que el nav no era lo que se movía —eso ya estaba
+      clavado en `x = 679` en las ocho—: lo que se movía era todo lo que hay entre el borde
+      izquierdo y la franja de saldos. El grupo de la izquierda medía **352 px en la base y
+      364 en las seis páginas**.
+      La causa era un hueco: la fila lleva separaciones, y la base pintaba **cinco** hijos —
+      con el envoltorio de acciones vacío pero presente, porque pasaba `actions` con un
+      espacio en vez de no pasar nada— y las páginas cuatro. Cinco hijos son cuatro
+      separaciones y cuatro son tres, y el `flex-1` se queda con el hueco que sobra: una
+      separación más son doce píxeles más. **Con el envoltorio siempre presente las ocho
+      filas tienen cinco hijos y el grupo mide lo mismo por construcción.** Un envoltorio
+      vacío con ancho cero no empuja nada.
+      El título y su icono se quedan a la izquierda, en el mismo sitio que el nombre en la
+      base. **Centrarlos fue el primer intento y era un error de sitio:** ese hueco no es un
+      hueco, es donde van los buffs, y los buffs son de ancho indeterminado —una fila que
+      crece con cada carta activa—. Un título anclado al centro se movería cada vez que
+      hubiera un buff distinto, que es la misma clase de fallo que ya se arregló con el nav.
+      Y sin la descripción, que además desaparece **del tipo**, no solo de la pantalla:
+      dejarlo como una opción sin efecto es la forma de que el siguiente lo escriba, no vea
+      nada y pierda el rato. No se pierde nada: la única descripción que decía algo era la
+      del mercado —el descuento del árbol— y esa ya sale en el panel de la ficha.
+      Los iconos de la cabecera salen ahora de una constante cada uno. Los nueve median
+      14×14, o sea que **no eran de distinto tamaño**: era que a 14 px al lado de un número
+      de 11 px los tres glifos de los saldos no tienen el mismo peso. El de los saldos sube
+      a 16 px.
+      Medido a 390, 768, 1024, 1100, 1280 y 1440: cero desbordamiento y el título nunca se
+      sale de la fila.
+
 - [x] **Nanitas, cristales y núcleos en la cabecera, y en ningún otro sitio.** La franja
       de la cabecera es la única que se refresca en cada tick, así que es la única que no
       puede quedarse congelada. Se fue de la franja de la tienda, de la del perfil, de la

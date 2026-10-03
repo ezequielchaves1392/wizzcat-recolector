@@ -118,19 +118,7 @@ export function renderLayoutHTML(
         mobileBuffsId: 'buffs-hud-mobile',
         // Sin estado no hay recursos: es el caso de la pantalla de acceso y del
         // navTest, que montan este layout sin partida detrás.
-        resources: state ?? false,
-        // Los controles de la esquina son de la CABECERA, no de la base: el audio, el
-        // tema y el ranking son el mismo interruptor en el mismo sitio en las siete
-        // pantallas, que es lo mismo que se le pidió a los saldos y por el mismo motivo.
-        //
-        // **LA BASE ES LA ÚNICA QUE SALE**, porque es la única donde hay una sesión que
-        // cerrar. Ese botón es la única diferencia entre las siete cabeceras, y es una
-        // diferencia de verdad: en un sector no hay nada que cerrar.
-        // Y `actions` se queda aquí sin nada que poner, porque la base no tiene
-        // acciones propias: su único contenido es la pantalla de juego.
-        actions: `
-
-          `
+        resources: state ?? false
       })}
 
       <!-- ===================== ZONA DE JUEGO ===================== -->

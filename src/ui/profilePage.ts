@@ -345,7 +345,6 @@ export function renderProfilePage(
 
   const root = mountInto(container, pageShell({
     title: 'Perfil',
-    subtitle: 'Identidad, cosméticos y logros',
     icon: 'user',
     route: 'perfil',
     state,

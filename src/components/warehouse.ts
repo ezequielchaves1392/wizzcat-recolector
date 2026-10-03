@@ -303,7 +303,6 @@ function draw(
 
   const root = mountInto(container, pageShell({
     title: 'Almacén',
-    subtitle: 'Arrastra para reordenar · toca para inspeccionar',
     icon: 'warehouse',
     route: 'almacen',
     state

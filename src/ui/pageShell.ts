@@ -57,7 +57,18 @@ import { formatNumber } from '../utils/format';
 
 export interface PageShellOptions {
   title: string;
-  subtitle?: string;
+  /**
+   * **YA NO HAY SUBTÍTULO, Y POR QUÉ ESTÁ QUITADO DE LA INTERFAZ Y NO SOLO DE LA PANTALLA.**
+   *
+   * La cabecera pintaba una segunda línea con una frase de presentación —"Todo se paga con
+   * nanitas", "Fusión, autoría y potencial"— y lo que se pidió fue quitarla. Dejarla en el
+   * tipo sería dejarla como una opción que ya no tiene efecto: el siguiente que escriba
+   * `subtitle:` la pondría, no vería nada, y perdería el rato. Por eso desaparece del tipo.
+   *
+   * **NADA SE PIERDE CON ELLO.** Las siete descripciones eran de presentación, no de juego:
+   * la única que decía algo era la del mercado —el descuento del árbol aplicado— y esa ya
+   * aparece en el panel de detalle de la ficha, en la fila "Descuento".
+   */
   icon?: string;
   /**
    * Qué ruta está pintando esta página.
@@ -176,7 +187,6 @@ export function pageShell(opts: PageShellOptions, body: string): string {
         // El botón del ranking en móvil: en escritorio ya está en el nav, y por eso el
         // nav de escritorio lo tiene filtrado. Es la misma regla que en la base.
         title: opts.title,
-        subtitle: opts.subtitle,
         icon: opts.icon as any,
         resources: opts.state ?? false,
         actions: opts.actions

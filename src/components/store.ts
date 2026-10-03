@@ -479,7 +479,6 @@ export function renderStoreTab(
 
   const root = mountInto(container, pageShell({
     title: 'Mercado',
-    subtitle: discount > 0 ? `Descuento del árbol aplicado: −${Math.round(discount * 100)}%` : 'Todo se paga con nanitas',
     icon: 'store',
     route: 'tienda',
     state

@@ -58,6 +58,30 @@ import { THEMES, getSavedTheme } from '../theme';
 import { formatNumber } from '../utils/format';
 
 // --------------------------------------------------------------------------
+//  EL TAMAÑO DE LOS ICONOS DE LA CABECERA
+// --------------------------------------------------------------------------
+
+/**
+ * Los iconos de la cabecera, en un número cada uno, y no repetidos.
+ *
+ * **EL PROBLEMA QUE ESTO ARREGLA ES DE PESO VISUAL, NO DE TAMAÑO.** Medido en el
+ * navegador: los tres glifos de la franja de saldos y los seis del nav estaban todos a
+ * `w-3.5`, o sea 14 px, y medían 14x14 los nueve. O sea que el problema no era que
+ * fueran de tamaños distintos: era que **a 14 px, al lado de un número de 11 px en
+ * monoespaciada, los tres glifos no tienen el mismo peso**. El rayo, que es un trazo
+ * corto, se leía casi relleno; la gema, que es una silueta, se leía más fina; y el
+ * círculo con sus cuatro radios, que es lo que más líneas tiene, se leía como un
+ * dibujo más pequeño que las otras dos. Tres estilos, no tres iconos.
+ *
+ * Por eso el de los saldos sube a 16 px y el del título se queda en 20: cada uno tiene
+ * su función y su escala, pero las dos salen de una constante y no de un literal
+ * repetido por el fichero. Añadir un cuarto saldo con otro tamaño sería tocar aquí y en
+ * un solo sitio.
+ */
+const ICONO_DE_SALDO = '[&>span>svg]:w-4 [&>span>svg]:h-4';
+const ICONO_DE_TITULO = '[&>span>svg]:w-5 [&>span>svg]:h-5';
+
+// --------------------------------------------------------------------------
 //  LOS RECURSOS
 // --------------------------------------------------------------------------
 
@@ -71,7 +95,7 @@ import { formatNumber } from '../utils/format';
  * los va a necesitar.
  *
  * Y el motivo de que estén **solo aquí** está en la razón de que esta función
- * exista: si un saldo se enseña en dos sitios, el jugador acaba de Treating uno de
+ * exista: si un saldo se enseña en dos sitios, el jugador acaba tomando uno de
  * los dos como el bueno, y basta con que los dos se actualicen con distinta
  * frecuencia para que se note. La cabecera se repinta en cada tick y es el mismo
  * nodo en las siete pantallas, así que un saldo tiene una única cifra en todo el
@@ -95,7 +119,7 @@ const RECURSOS: Array<{ clave: string; nombre: string; icono: IconName }> = [
  *
  * **EL `min-w` ES LO QUE SOSTIENE LA GEOMETRÍA DE LA CABECERA.** Sin él, un saldo
  * de 4 cifras empuja a los de al lado y la anchura de la franja cambia cada vez que
- * el jugador compra, lo que rattling el nav un poco. Con el ancho reservado, la
+ * el jugador compra, lo que empuja el nav un poco. Con el ancho reservado, la
  * franja mide lo mismo siempre y el nav se queda clavado.
  */
 export function resourceBarHTML(state: any): string {
@@ -106,7 +130,7 @@ export function resourceBarHTML(state: any): string {
                      border-[var(--border-color)]"
               style="background: color-mix(in srgb, var(--accent) 10%, transparent)"
               data-res="${r.clave}" title="${r.nombre}">
-          <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5" aria-hidden="true">${ic(r.icono)}</span>
+          <span class="accent-text ${ICONO_DE_SALDO}" aria-hidden="true">${ic(r.icono)}</span>
           <span class="font-mono text-[11px] text-[var(--text-main)] min-w-[2.75rem] text-right"
                 data-res-val="${r.clave}">${formatNumber(saldoDe(state, r.clave))}</span>
         </span>`).join('')}
@@ -126,7 +150,7 @@ function saldoDe(state: any, clave: string): number {
  * nanitas vivía en cuatro identificadores distintos (`#nanites-counter`,
  * `#page-nanites-val`, `#wh-nanites-val`, `#store-nanites`, `#profile-nanites`) y
  * quien lo refrescaba llevaba una lista escrita a mano con los cinco dentro. Añadir
- * un contador obligaba a tocar dos ficheros, y olvidar el segundo Symptoms en un
+ * un contador obligaba a tocar dos ficheros, y olvidar el segundo síntoma deja un
  * saldo congelado, que es el peor tipo de fallo: no lanza error, la cifra simplemente
  * deja de moverse.
  *
@@ -155,7 +179,6 @@ export interface AppHeaderOptions {
   route: Route;
   /** El título. En la base sale del propio router si no se pasa. */
   title?: string;
-  subtitle?: string;
   icon?: IconName;
   /** Nombre y avatar del jugador. **Solo la base**: es el sector de la identidad. */
   identityHTML?: string;
@@ -365,23 +388,65 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
       <div class="flex items-center gap-2 md:gap-3 min-h-[3.5rem]">
 
         <div class="flex items-center gap-2 min-w-0 flex-1">
-          ${opts.icon ? `<span class="accent-text flex-shrink-0 hidden sm:block [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(opts.icon)}</span>` : ''}
-          ${titulo ? `
-          <div class="min-w-0">
-            <h1 id="page-title"
-                class="font-['Orbitron'] font-bold text-[15px] md:text-lg accent-text truncate leading-tight">
-              ${titulo}
-            </h1>
-            ${opts.subtitle ? `<p class="text-[10px] md:text-[11px] text-[var(--text-muted)] font-mono truncate mt-0.5 hidden sm:block">${opts.subtitle}</p>` : ''}
-          </div>` : ''}
           ${opts.identityHTML ? `<div id="nav-identity" class="flex-shrink-0 hidden sm:flex items-center">${opts.identityHTML}</div>` : ''}
+
+          <!--
+            EL ICONO Y EL TÍTULO VAN A LA IZQUIERDA, EN EL MISMO SITIO QUE EL NOMBRE.
+
+            La primera versión de esto los centró en el hueco que sobra, y se veía bien
+            pero era un error de sitio. Ese hueco **no es un hueco**: es donde van los
+            buffs, y los buffs son de ancho indeterminado —una fila que crece con cada
+            carta activa y que se desplaza—. Si el título se centrara en el espacio
+            restante, se movería cada vez que hubiera un buff distinto, que es la misma
+            clase de fallo que ya se arregló con el nav: un elemento anclado a la
+            derecha que se mueve según lo que haya al otro lado.
+
+            Así que el título se ancla a la **izquierda**, que es una esquina fija, igual
+            que el nombre en la base. Y por eso no hace falta un contenedor que agrupe
+            icono y título: la base nunca tiene las dos cosas a la vez —su título está
+            vacío a propósito y en su lugar está la identidad—, así que van sueltos, como
+            estaban.
+
+            Lo que sí se conserva del arreglo anterior es lo de las acciones, que es otra
+            cosa y no se toca aquí.
+          -->
+          ${opts.icon ? `<span class="accent-text flex-shrink-0 hidden sm:block ${ICONO_DE_TITULO}">${ic(opts.icon)}</span>` : ''}
+          ${titulo ? `
+          <h1 id="page-title"
+              class="font-['Orbitron'] font-bold text-[15px] md:text-lg accent-text truncate leading-tight min-w-0">
+            ${titulo}
+          </h1>` : ''}
+
           ${opts.buffsHudId ? `
             <div id="${opts.buffsHudId}"
                  class="hidden xl:flex items-center gap-1.5 flex-nowrap min-w-0 flex-grow overflow-x-auto py-0.5"></div>` : ''}
         </div>
 
         ${opts.resources !== false ? resourceBarHTML(opts.resources) : ''}
-        ${opts.actions ? `<div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions}</div>` : ''}
+
+        <!--
+          EL ENVOLTORIO DE LAS ACCIONES SE PINTA SIEMPRE, Y ESTO ES LO QUE ARREGLA EL
+          DESPLAZAMIENTO QUE SE HA VISTO ENTRE LA BASE Y EL MERCADO.
+
+          Antes solo se pintaba cuando había acciones, y lo medido fue: el grupo de la
+          izquierda **352 px en la base y 364 en las seis páginas** —doce píxeles—, y la
+          franja de saldos doce píxeles más a la derecha en unas que en otras. El nav no se
+          movía: eso ya estaba bien. Lo que se movía era todo lo que hay entre el borde
+          izquierdo y la franja.
+
+          La causa era tan poco útil como un hueco: la fila lleva separaciones, y la base
+          pintaba cinco hijos —con el envoltorio de acciones vacío pero presente, porque la
+          base pasaba actions con un espacio en vez de no pasar nada— y las páginas cuatro.
+          Cinco hijos son cuatro separaciones y cuatro son tres, y el flex-1 se queda con el
+          hueco que sobra: una separación más son doce píxeles más de grupo de la izquierda.
+
+          Con el envoltorio siempre presente las siete filas tienen cinco hijos, cuatro
+          separaciones, y el grupo de la izquierda mide lo mismo por construcción y no por
+          casualidad. **Un hueco vacío no es la diferencia entre dos cabeceras; solo lo era
+          porque el hueco estaba antes que el que de verdad las distingue, y ese es el de
+          las acciones reales.** Un envoltorio vacío con ancho cero no empuja nada.
+        -->
+        <div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions ?? ''}</div>
 
         ${navDesktopHTML(opts.route)}
 

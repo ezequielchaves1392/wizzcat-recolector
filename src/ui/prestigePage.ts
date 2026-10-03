@@ -262,7 +262,6 @@ export function renderPrestigePage(
 
   const root = mountInto(container, pageShell({
     title: 'Ascensión',
-    subtitle: 'Núcleos y árbol de pasivas',
     icon: 'recycle',
     route: 'prestigio',
     state,

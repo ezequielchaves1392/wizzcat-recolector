@@ -60,7 +60,6 @@ export function renderRankings(
 
   const root = mountInto(container, pageShell({
     title: 'Ranking global',
-    subtitle: 'La tabla general y los cuatro criterios por separado',
     icon: 'trophy',
     route: 'ranking',
     // EL ESTADO, QUE ANTES NO PASABA, Y POR QUÉ ESTA PÁGINA ERA LA EXCEPCIÓN.

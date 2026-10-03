@@ -322,7 +322,6 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
 
   const root = mountInto(container, pageShell({
     title: 'Forja',
-    subtitle: 'Fusión, autoría y potencial',
     icon: 'anvil',
     route: 'forja',
     state,
