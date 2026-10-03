@@ -436,8 +436,18 @@ export function renderStoreTab(
   const detail = ui.detail ? detailSheet(ui.detail, cost, state, game) : '';
 
   const body = `
+    <!--
+      LA FRANJA DE LA TIENDA, Y POR QUÉ NO EMPIEZA POR LAS NANITAS.
+
+      Lo que queda son dos cosas y ninguna es un saldo: cuántas ranuras quedan y cuánto
+      descuenta el árbol. La de nanitas estaba y se ha ido a la cabecera.
+
+      **LO QUE JUSTIFICABA TENERLA AQUÍ, Y POR QUÉ YA NO SOBRA.** El botón de la carta
+      enseña lo que cuesta, así que para decidir esa compra el saldo no hace falta: la
+      carta ya dice si te llega o no. Y cuando sí hace falta —comparar dos cartas— el
+      número de arriba es el mismo.
+    -->
     ${statStrip([
-      { label: 'Nanitas', value: formatNumber(state.nanites), glyph: '◆', valueId: 'store-nanites' },
       { label: 'Almacén', value: `${countOccupiedSlots(state.warehouse)}/${game.getCapacity?.() ?? state.warehouseCapacity}` },
       { label: 'Descuento', value: discount > 0 ? `−${Math.round(discount * 100)}%` : '—', tone: discount > 0 ? 'text-emerald-400' : undefined }
     ])}
@@ -472,8 +482,7 @@ export function renderStoreTab(
     subtitle: discount > 0 ? `Descuento del árbol aplicado: −${Math.round(discount * 100)}%` : 'Todo se paga con nanitas',
     icon: 'store',
     route: 'tienda',
-    state,
-    hideNanites: true
+    state
   }, body));
 
   wireNav(root, { go });

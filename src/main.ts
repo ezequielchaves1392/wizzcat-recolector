@@ -30,6 +30,7 @@ import {
   setAudioSuspended, installAudioUnlock, onAudioStateChange
 } from './utils/audio';
 import { renderLayoutHTML } from './ui/layout';
+import { updateResourceBar } from './ui/appHeader';
 import { miniIdentity } from './ui/identity';
 import { ic, icSafe } from './ui/icons';
 
@@ -605,7 +606,9 @@ function renderRoute(route: Route) {
       renderProfilePage(app, activeGameInstance, () => go('prestigio'), go);
       break;
     case 'ranking':
-      renderRankings(app, activeUser, go);
+      // El estado va aparte: `activeUser` es el usuario de Firebase y no lleva la partida.
+  // La firma lo dice y el comentario de `renderRankings` explica por qué.
+  renderRankings(app, activeUser, go, activeGameInstance?.getState?.());
       break;
     case 'prestigio':
       renderPrestigePage(app, activeGameInstance, go);
@@ -634,7 +637,7 @@ function renderBase(onNavigate: (r: Route) => void) {
   }, {
     name: activeGameInstance?.getDisplayName?.() ?? user.displayName ?? 'Operativo',
     cosmetics: activeGameInstance?.getState?.()?.cosmetics
-  });
+  }, activeGameInstance?.getState?.());
   // La cabecera se reconstruye: la marca de la identidad parcheada ya no vale.
   lastIdentityKey = '';
 
@@ -868,14 +871,31 @@ function updateUI(state: any, isAfk: boolean = false) {
   // y se quedaban congelados: en el almacén, que es donde se vende y se sube de
   // nivel, el precio se decidía contra una cifra vieja mientras el ingreso
   // pasivo seguía subiendo; en el mercado, directamente no se podía saber si
-  // algo era asequible. Se recorren por id en vez de buscar clases para que
-  // añadir otro contador sea añadir una entrada a la lista.
+  // algo era asequible.
+
+  //
+  // AHORA ES UNA FRANJA EN LA CABECERA, Y NO UNA LISTA DE CINCO IDENTIFICADORES.
+  //
+  // Antes, el saldo de nanitas se pintaba en cinco sitios con cinco ids distintos y
+  // `updateUI` llevaba la lista escrita a mano. Añadir un contador obligaba a tocar
+  // dos ficheros, y olvidar el segundo se colgaba de un saldo congelado: no lanza error,
+  // la cifra simplemente deja de moverse, y eso es el peor tipo de fallo porque
+  // parece un saldo que no cambia por diseño.
+  //
+  // Ahora `updateResourceBar()` busca por atributo `data-res-val`, así que **la lista
+  // está en el HTML que se pinta** y no puede quedar desfasada, porque no hay lista que
+  // desfasar. Y los tres saldos viajan juntos, que es lo que hace falta para decidir
+  // una compra sin leer dos sitios.
+  updateResourceBar(state);
+
+  // La cifra grande de la base sigue siendo un nodo propio, y por un motivo que no es
+  // nostalgia: **es la métrica principal del incrementador**, el número que crece cuando
+  // el jugador hace clic, y por eso va a 32 px en el centro de la pantalla en vez de en
+  // una franja. La cabecera es donde se consultan los saldos; la base sigue teniendo su
+  // cifra protagonista. Lo que ya no hay es una *segunda* etiqueta de "NANITAS" al lado
+  // de la misma cifra, que era lo que obligaba a leer el mismo saldo dos veces.
   const nanitesValue = formatNumber(state.nanites || 0);
   if (nanitesCounter) nanitesCounter.textContent = nanitesValue;
-  for (const id of ['#page-nanites-val', '#wh-nanites-val', '#store-nanites', '#profile-nanites']) {
-    const el = document.querySelector(id);
-    if (el) el.textContent = nanitesValue;
-  }
 
   const now = Date.now();
   const passiveBuffRemaining = Math.max(0, state.buffs.passiveBoostExpiresAt - now);

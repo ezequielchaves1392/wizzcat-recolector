@@ -26,15 +26,33 @@ import { ic, type IconName } from './icons';
 
 /** La fila de navegación de escritorio, la que vive en la cabecera. */
 export function navDesktopHTML(activeRoute: Route): string {
+  // **EL ACTIVO LLEVA EL MISMO BORDE QUE LOS OTROS, Y POR QUÉ ESO ES LO IMPORTANTE.**
+  //
+  // El nav está anclado por su borde derecho —que es el padding de la cabecera, el mismo
+  // número en las siete pantallas—, así que si su anchura cambia, el borde izquierdo se
+  // mueve. Y la anchura sí cambiaba: medido en el navegador, el nav medía **512 px con
+  // un botón activo y 514 px sin ninguno**.
+  //
+  // La causa no es el peso de la letra, que fue lo primero que se sospechó: es que
+  // `.btn-ghost` lleva `border: 1px solid` y el botón activo usa `accent-bg`, que no
+  // lleva borde. Dos píxeles de borde en los seis botones inactivos, que es exactamente
+  // la diferencia medida.
+  //
+  // La arreglo con `border border-transparent` en el activo: mismo grosor, mismo ancho y
+  // mismo sitio. **Y NO CON UN `min-w`.** Reservar un ancho mínimo también funcionaría y
+  // sería peor, porque el número habría que acertarlo para cada etiqueta y el día que
+  // se añadiera una ruta o se cambiara una palabra, el nav volvería a moverse. Con el
+  // bordeparecido no hay ningún número que mantener: los dos estados miden lo mismo por
+  // construcción.
   return `
           <nav class="hidden lg:flex items-center gap-0.5 flex-shrink-0" aria-label="Navegación">
             ${HEADER_ROUTES.map(r => {
               const active = activeRoute === r.id;
               return `
                 <button data-nav="${r.id}"
-                  class="h-9 px-3 rounded-lg text-[11px] font-mono cursor-pointer transition flex items-center gap-1.5
-                         ${active ? 'accent-bg text-slate-950 font-bold'
-                                  : 'btn-ghost text-[var(--text-muted)]'}"
+                  class="h-9 px-3 rounded-lg text-[11px] font-mono font-bold cursor-pointer transition flex items-center gap-1.5 border
+                         ${active ? 'accent-bg text-slate-950 border-transparent'
+                                  : 'btn-ghost text-[var(--text-muted)] opacity-75 hover:opacity-100'}"
                   aria-label="${r.title}"
                   ${active ? 'aria-current="page"' : ''}>
                   <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(r.icon as IconName)}</span>

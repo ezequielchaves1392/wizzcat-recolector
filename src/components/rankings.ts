@@ -43,7 +43,18 @@ let tableroActivo: BoardKind = 'definitivo';
 export function renderRankings(
   container: HTMLElement,
   currentUser: any,
-  go?: (r: any) => void
+  go?: (r: any) => void,
+  /**
+   * El estado de la partida, para la franja de recursos de la cabecera.
+   *
+   * **POR QUÉ ENTRA COMO ARGUMENTO Y NO SE SACA DE `currentUser`.** Porque
+   * `currentUser` es el usuario de autenticación, y ese objeto no lleva la partida: no
+   * tiene `getState()` ni `state`, y no los tendrá. Cuando se añadió la franja se
+   * intentó deducirlo de ahí y el resultado fue una cabecera sin saldos en la única
+   * pantalla donde se nota más, porque es la única que se abre para mirar y no para
+   * gastar.
+   */
+  state?: any
 ) {
   const meId = currentUser?.uid ?? currentUser?.userId;
 
@@ -51,7 +62,12 @@ export function renderRankings(
     title: 'Ranking global',
     subtitle: 'La tabla general y los cuatro criterios por separado',
     icon: 'trophy',
-    route: 'ranking'
+    route: 'ranking',
+    // EL ESTADO, QUE ANTES NO PASABA, Y POR QUÉ ESTA PÁGINA ERA LA EXCEPCIÓN.
+    //
+    // La única de las seis que no lo pasaba, y por eso era la única con la cabecera a
+    // medias: medido, **0 de 3 saldos** aquí contra 3 de 3 en las otras cinco.
+    state
   }, `
     <div class="flex flex-col gap-2" id="rank-body">
       ${skeleton()}

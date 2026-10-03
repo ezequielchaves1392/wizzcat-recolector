@@ -33,7 +33,8 @@ import { ic, type IconName } from './icons';
 import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
 import { THEMES } from '../theme';
 import { routeTitle, type Route } from './router';
-import { navDesktopHTML, navMobileHTML } from './navBars';
+import { navMobileHTML } from './navBars';
+import { appHeaderHTML } from './appHeader';
 import { miniIdentity, type IdentityCosmetics } from './identity';
 
 export interface LayoutCallbacks {
@@ -57,7 +58,22 @@ export function renderLayoutHTML(
   savedTheme: string,
   activeRoute: Route,
   cb: LayoutCallbacks,
-  identity?: NavIdentity
+  identity?: NavIdentity,
+  /**
+   * El estado de la partida, para la franja de recursos de la cabecera.
+   *
+   * **ES EL ÚNICO MOTIVO POR EL QUE ESTE PARÁMETRO EXISTE.** La franja se pinta una
+   * vez, al montar el layout, y de ahí en adelante la refresca `updateResourceBar()` en
+   * cada tick; lo que hace falta al pintar es el valor inicial, y ese solo lo sabe el
+   * motor.
+   *
+   * Y es opcional a propósito: las pantallas de acceso y las del `navTest` montan este
+   * mismo layout **sin partida**, y si fuera obligatorio habría que inventar un estado
+   * falso para ellas. Con que no venga, la cabecera se pinta sin recursos y el
+   * `updateResourceBar` no encuentra nada que actualizar —que es lo que devuelve, y lo
+   * que permite que nadie se entere—.
+   */
+  state?: any
 ): string {
   const options = THEMES.map(t =>
     `<option value="${t.value}" ${t.value === savedTheme ? 'selected' : ''}>${t.label}</option>`
@@ -67,42 +83,43 @@ export function renderLayoutHTML(
     <div class="fixed inset-0 app-bg flex flex-col font-sans select-none overflow-hidden">
 
       <!-- ===================== CABECERA ===================== -->
-      <header
-        class="relative z-20 card-glass flex-shrink-0 px-3 md:px-5 py-2.5 md:py-3
-               border-x-0 border-t-0 md:mx-4 md:mt-2 md:rounded-2xl md:border"
-        style="padding-top: max(0.625rem, env(safe-area-inset-top))">
+      <!--
+        LA CABECERA DE LA BASE, Y POR QUÉ DEJA DE SER UNA CABECERA PROPIA.
 
-        <div class="flex items-center justify-between gap-3">
-          <!-- Identidad: avatar con marco + nombre + título (F16). Se repinta
-               en caliente al equipar, sin reconstruir la
-               cabecera: por eso lleva id propio y ningún listener dentro. -->
-          <div class="flex items-center gap-2.5 min-w-0 flex-1">
-            <div class="min-w-0">
-              <div class="label-caps leading-none" id="page-title">${routeTitle(activeRoute)}</div>
-              <div id="nav-identity" class="mt-0.5">
-                ${miniIdentity(identity?.name ?? user.displayName ?? 'Operativo', identity?.cosmetics, {
-                  hideDefaultTitle: true,
-                  nameClass: 'font-[\'Orbitron\'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight mt-0.5'
-                })}
-              </div>
-            </div>
-          </div>
+        Este bloque era el segundo sitio del juego que pintaba una franja de arriba.
+        Las seis páginas tienen la suya en pageShell.ts, y las dos se parecían pero
+        no eran iguales: esta metía la identidad con avatar dentro de un flex-1 —que es
+        más alta que un título de una línea— y las páginas no tenían ninguno. Medido con
+        getBoundingClientRect() en las siete pantallas: **esta medía 111 px y las otras
+        seis 71**.
 
-          <!-- Navegación de escritorio. Ahora la misma que pintan las páginas: -->
-          ${navDesktopHTML(activeRoute)}
+        No era una cuestión de gusto. El nav va centrado verticalmente en la fila, así
+        que 40 px de diferencia son 20 px de nav desplazado; y como el flex-1 estaba en
+        un sitio y no en el otro, el nav caía también a distinta distancia del borde. El
+        mismo HTML del nav en las siete pantallas, y aun así se movía al cambiar de
+        sector, que es justo lo que el jugador ve: "aquí no está donde estaba".
 
-          <!-- HUD de buffs: fila con scroll, nunca agranda la cabecera -->
-          <div id="active-buffs-hud"
-               class="hidden xl:flex items-center gap-1.5 flex-nowrap min-w-0 overflow-x-auto py-0.5"></div>
-
-          <!-- Controles -->
-          <div class="flex items-center gap-1.5 flex-shrink-0">
-            <button data-nav="ranking" title="Ranking"
-              class="lg:hidden w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer"
-              aria-label="Ranking">
-              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('trophy')}</span>
-            </button>
-
+        Ahora llama a appHeaderHTML(), que fija la altura de la fila, pone el nav al
+        final y el flex-1 en el grupo de la izquierda. Lo único que aquí es distinto son
+        tres cosas: el título sale del router, la identidad se pasa como HTML y los
+        controles van en actions.
+      -->
+      ${appHeaderHTML({
+        route: activeRoute,
+        // El título de la base lo decide la ruta, y por eso no se pasa: es el único sitio
+        // donde eso se escribe, y no un texto repetido en dos ficheros.
+        identityHTML: miniIdentity(identity?.name ?? user.displayName ?? 'Operativo', identity?.cosmetics, {
+          hideDefaultTitle: true,
+          nameClass: 'font-[\'Orbitron\'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight'
+        }),
+        // El HUD de buffs vive en el grupo de la izquierda porque se puede desplazar y
+        // encogerse; en actions, que no encoge, aplastaría al nav.
+        buffsHudId: 'active-buffs-hud',
+        mobileBuffsId: 'buffs-hud-mobile',
+        // Sin estado no hay recursos: es el caso de la pantalla de acceso y del
+        // navTest, que montan este layout sin partida detrás.
+        resources: state ?? false,
+        actions: `
             <!--
               AUDIO: los dos interruptores son independientes y cada uno lleva
               su PROPIO icono. Antes los dos pintaban el altavoz, así que en
@@ -130,48 +147,8 @@ export function renderLayoutHTML(
               <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isMusicEnabled() ? 'music' : 'mute')}</span>
               <span class="hidden md:inline font-mono">${isMusicEnabled() ? 'Música' : 'Off'}</span>
             </button>
-
-            <button id="mute-btn" data-audio="sfx"
-              aria-pressed="${isSfxEnabled()}"
-              aria-label="${isSfxEnabled() ? 'Silenciar efectos' : 'Activar efectos'}"
-              title="${isSfxEnabled() ? 'Silenciar efectos' : 'Activar efectos'}"
-              class="w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center
-                     gap-1.5 cursor-pointer text-[11px] transition
-                     ${isSfxEnabled() ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-70'}">
-              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isSfxEnabled() ? 'sound' : 'mute')}</span>
-              <span class="hidden md:inline font-mono">${isSfxEnabled() ? 'SFX' : 'Off'}</span>
-            </button>
-
-            <select id="theme-selector" aria-label="Tema visual"
-              class="hidden md:block app-bg border border-[var(--border-color)] rounded-lg px-2.5 h-9
-                     text-[11px] font-mono text-[var(--text-main)] cursor-pointer hover:border-[var(--accent)]
-                     transition-colors">
-              ${options}
-            </select>
-
-            <!--
-              El ancho fijo evita que la etiqueta se descentre cuando los botones
-              de audio alternan entre "Música" y "Off", y hace que el botón
-              "Salir" no parezca moverse respecto al resto de la cabecera.
-
-              items-center es lo que lo centra de verdad: antes era inline-flex
-              a secas, y el nodo de texto, al ser un ítem anónimo de flex, se
-              estiraba a la altura completa y la línea se pegaba arriba.
-            -->
-            <button id="logout-btn" data-logout title="Cerrar sesión"
-              class="hidden md:inline-flex h-9 w-24 shrink-0 items-center justify-center gap-1.5 rounded-lg
-                     text-[11px] font-mono cursor-pointer
-                     border border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">
-              <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('logout')}</span>
-              <span>Salir</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Buffs en móvil: bajo la cabecera, siempre visible -->
-        <div id="buffs-hud-mobile"
-             class="xl:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>
-      </header>
+            </button>`
+      })}
 
       <!-- ===================== ZONA DE JUEGO ===================== -->
       <main

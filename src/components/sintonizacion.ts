@@ -1,5 +1,23 @@
 // ==========================================================================
-//  LA HOJA DE SINTONIZACIÓN
+//  LA HOJA DE SINTONIZACIÓN, PARA RECOLECTORES Y PARA COMPAÑEROS
+// ==========================================================================
+//
+//  **UNA SOLA HOJA PARA LOS DOS, Y POR QUÉ NO SON DOS.** Antes el botón del
+//  compañero y el del recolector acababan en sitios distintos: el del recolector
+//  abría esta hoja —coste, saldo, probabilidad y una ruleta— y el del compañero un
+//  `showConfirmModal` con dos frases y un aviso. Dos caminos para la misma acción, con
+//  dos formas de Lehrsenlo, y el jugador tenía que aprender una hoja nueva cada vez
+//  que cambiaba de tipo de objeto.
+//
+//  Ahora los dos botones abren esto. Lo que cambia entre un objetivo y otro son **tres
+//  cosas y solo tres**: de dónde sale el item, cuál es su techo de niveles y a qué
+//  método del motor se llama. El resto —el coste, la probabilidad, el saldo, la ruleta,
+//  los mensajes— es literalmente el mismo código, y por eso no puede desincronizarse.
+//
+//  Y el motivo de que la ruleta sea la misma no es pereza: es que **el resultado ya
+//  está decidido cuando se llama al motor**. La ruleta no elige el premio, lo enseña. Si
+//  un caminoAnimase el premio, el jugador descubriría en veinte tiradas que la ruleta no
+//  es la fuente de verdad, y a partir de ahí ninguna otra cifra del juego le creería.
 // ==========================================================================
 //  POR QUÉ ESTE FICHERO SE LLAMA ASÍ Y NO COMO EL ANTERIOR.
 //
@@ -31,11 +49,54 @@ import { formatNumber } from '../utils/format';
 import { showTuningRoulette, tuningRoll } from './tuningRoulette';
 import { rarityClass } from './crateLoot';
 import { previewUpgradeChance, previewUpgradeCost } from '../gameLoop';
-import { collectorMaxLevel } from '../data/crafting';
+import { collectorMaxLevel, nivelMaximoDeCompanio, costeDeNivel } from '../data/crafting';
 import { CRISTAL_NOMBRE } from '../data/items';
 
+/** Qué se está sintonizando. El único sitio donde se diferencian las dos ramas. */
+export type ObjetivoDeSintonizacion =
+  | { tipo: 'recolector' }
+  | { tipo: 'companero'; item: any };
+
 /**
- * Abre la hoja de sintonización del recolector equipado.
+ * La frase que explica cuánto cuesta, y por qué está en una función.
+ *
+ * **ESTABA ESCRITA PARA UN CASO Y LEÍA MAL EN OTRO.** Decía "un T{n} cuesta mucho más
+ * que un T1", y para un item de T1 salía **"un T1 cuesta mucho más que un T1"** — que no
+ * es una frase, es una contradicción, y se leía en la primera sintonización de la
+ * partida, que es la primera vez que el jugador ve esta hoja.
+ *
+ * Los dos casos necesitan texto distinto, no el mismo con otro número:
+ *
+ * · **T1** no tiene con qué compararse: es el más barato. Se dice eso y se da su precio,
+ *   que es lo único que el jugador puede usar para decidir si sube o ahorra.
+ * · **T2 en adelante** sí tiene comparación, y es la que explica la regla: el coste sale
+ *   del precio de la caja de ese nivel, así que el número que aparece arriba es una
+ *   cantidad que el jugador ya conoce de la tienda.
+ *
+ * Y los dos números salen de `costeDeNivel()`, la misma función que cobra el motor: la
+ * nota no puede enseñar un precio distinto del que se paga (R3).
+ */
+function notaDeCoste(tier: number): string {
+  const delItem = formatNumber(costeDeNivel(tier, 0));
+  if (tier <= 1) {
+    return `Este es el item más barato del juego: ${delItem} por nivel, y el coste sube en cada nivel.`;
+  }
+  // El segundo número es el del T1 con la misma función, no con la del precio de la caja:
+  // son el mismo número —`costeDeNivel(tier, 0)` **es** `costeDeCaja(tier)` por
+  // construcción— y usar dos llamadas distintas para decir la misma regla es invites a que
+  // un día dejen de coincidir sin que nadie lo note.
+  return `Un T${tier} cuesta ${delItem} por nivel, contra ${formatNumber(costeDeNivel(1, 0))} de un T1: el coste sale del precio de la caja de ese nivel.`;
+}
+
+/**
+ * Abre la hoja de sintonización del objetivo dado.
+ *
+ * **EL TERCER ARGUMENTO ES LO ÚNICO QUE HA HECHO FALTA.** Sin él la función era la del
+ * recolector y se llamaba sin argumentos; ahora recibe a quién va dirigido y, si no se
+ * pasa, sigue siendo el recolector equipado. El valor por defecto está para que los
+ * llamadores del recolector no tengan que escribir `{ tipo: 'recolector' }` en un sitio
+ * donde ya se sabe que es un recolector: un argumento obligatorio que siempre vale lo
+ * mismo es ruido.
  *
  * **LO QUE ESTA HOJA ENSEÑA Y DE DÓNDE SALE CADA NÚMERO.** Los tres salen del
  * motor, nunca se recalculan aquí: el techo, el coste y la probabilidad. Copiar una
@@ -47,21 +108,46 @@ import { CRISTAL_NOMBRE } from '../data/items';
  * nombre, ni la comprobación de que exista una pila compatible. Es la mitad de lo
  * que había antes.
  */
-export function showSintonizacion(game: any, redraw: () => void) {
+export function showSintonizacion(
+  game: any,
+  redraw: () => void,
+  objetivo: ObjetivoDeSintonizacion = { tipo: 'recolector' }
+) {
   const state = game.getState();
-  const equipo = (state.warehouse as any[]).find((w: any) => w.id === state.equippedCollectorId);
 
-  if (!equipo) {
-    showToast('Equipa un recolector primero.', 'info');
-    return;
+  // **DE DÓNDE SALE EL ITEM, Y POR QUÉ ES LO ÚNICO QUE SE RESUELVE AQUÍ.**
+  // El recolector es el equipado, y se busca por su id; el compañero es el que el
+  // jugador está mirando, y viene dado. No hay una función común para esto porque no
+  // hay un item común: lo común es la acción.
+  let equipo: any;
+  if (objetivo.tipo === 'companero') {
+    equipo = objetivo.item;
+    if (!equipo) {
+      showToast('El compañero ya no está en el almacén.', 'info');
+      return;
+    }
+  } else {
+    equipo = (state.warehouse as any[]).find((w: any) => w.id === state.equippedCollectorId);
+    if (!equipo) {
+      showToast('Equipa un recolector primero.', 'info');
+      return;
+    }
   }
+
+  const esCompanero = objetivo.tipo === 'companero';
 
   // El techo lo decide el recolector, con la MISMA regla que usa el game loop.
   // Aquí había un 35 a pelo: el máximo absoluto, que solo corresponde a un
   // recolector forjado de potencial 5. Con un recolector de la tienda (techo 20)
   // la hoja se abría en el nivel 20 y la sintonización se le rechazaba. Dos
   // números distintos para la misma regla en la misma partida.
-  const tope = collectorMaxLevel(equipo.maxLevel);
+  // **EL TECHO, Y SON DOS REGLAS DISTINTAS.** El recolector lo fija su `maxLevel`; el
+  // compañero, su potencial —cada estrella da tres niveles— con el mismo suelo. No se
+  // unifican porque no son la misma regla, y usar la del recolector para el compañero
+  // le dejaría niveles de más o le quitaría de golpe.
+  const tope = esCompanero
+    ? nivelMaximoDeCompanio(equipo.potential, equipo.maxLevel)
+    : collectorMaxLevel(equipo.maxLevel);
   const nivel = equipo.level || 0;
   if (nivel >= tope) {
     showToast('El recolector ya está al nivel máximo.', 'info');
@@ -119,7 +205,13 @@ export function showSintonizacion(game: any, redraw: () => void) {
           <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${CRISTAL_NOMBRE}</span>
           <span class="block text-[9px] font-mono ${alcanza ? 'text-[var(--text-muted)]' : 'text-rose-400'} mt-0.5">
             ${alcanza
-              ? `Sube el nivel y el daño del recolector. Sube el nivel del ingreso de un compañero.`
+              ? (esCompanero
+                  // **EL QUE PROMETE ES EL EFECTO REAL DE SUBIR ESE OBJETO, Y NO UN
+                  // TEXTO ÚNICO.** El recolector sube daño y el compañero sube el ingreso
+                  // del recolector, así que decir lo mismo en los dos sería mentir en uno
+                  // de los dos. Es la única línea de la hoja que cambia por tipo.
+                  ? 'Sube el nivel y el ingreso que da al recolector.'
+                  : 'Sube el nivel y el daño del recolector.')
               : `Te faltan ${formatNumber(coste - tienes)}. Salen de las cajas T${tierItem}.`}
           </span>
         </span>
@@ -132,9 +224,9 @@ export function showSintonizacion(game: any, redraw: () => void) {
       </button>
 
       <p class="text-[10px] font-mono text-[var(--text-muted)] mt-3 leading-relaxed">
-        Un T${tierItem} cuesta mucho más que un T1, y el coste sube en cada nivel. La
+        ${notaDeCoste(tierItem)} La
         probabilidad <strong>baja</strong> con el nivel y no hay forma de comprarse más:
-        si fallas, pierdes el cristal y el recolector no baja de nivel.
+        si fallas, pierdes el cristal y ${esCompanero ? 'el compañero' : 'el recolector'} no baja de nivel.
       </p>
     </div>
   `;
@@ -154,14 +246,19 @@ export function showSintonizacion(game: any, redraw: () => void) {
       // SIN ARGUMENTO DE CRISTAL, a propósito. El motor lee el recurso del
       // estado, así que esta vista no puede proponer un gasto que no vaya a
       // pasar (R3).
-      const res = game.upgradeEquippedCollector();
+      // **LA TERCERA Y ÚLTIMA DIFERENCIA ENTRE LOS DOS CAMINOS.** Todo lo de arriba —el
+      // texto, el saldo, la ruleta, los mensajes— es el mismo código; aquí solo se decide
+      // a quién se llama. Y se decide con una condición y no con dos manejadores, para
+      // que un cambio futuro en la hoja llegue a los dos sin poder olvidarse del segundo.
+      const res = esCompanero
+        ? game.upgradeCompanion(equipo.id)
+        : game.upgradeEquippedCollector();
       // `tuningRoll()` decide qué niveles enseña la ruleta, y el porqué de que
       // el de antes se lea ANTES de la llamada está en su JSDoc.
       const roll = tuningRoll(res, nivelAntes, equipo.level || 0);
-      // Y SI EL MOTOR NO TIRÓ EL DADO, NO HAY RULETA. Un rechazo —no hay saldo,
-      // ya está en el techo, no hay recolector— no es un fallo de la tirada: no se
-      // ha gastado nada y no ha pasado nada. Girar igualmente sería una ruleta
-      // mintiendo.
+      // Y SI EL MOTOR NO TIRÓ EL DADO, NO HAY RULETA. Un rechazo —no hay saldo, ya
+      // está en el techo, no hay item— no es un fallo de la tirada: no se ha gastado
+      // nada y no ha pasado nada. Girar igualmente sería una ruleta mintiendo.
       //
       // Es un camino raro —la hoja desactiva el botón cuando no llega, y el
       // techo se comprueba al abrir—, pero "raro" no es "imposible": el estado

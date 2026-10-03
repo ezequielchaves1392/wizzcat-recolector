@@ -51,7 +51,8 @@
 
 import { ic } from './icons';
 import type { Route } from './router';
-import { navDesktopHTML, navMobileHTML } from './navBars';
+import { navMobileHTML } from './navBars';
+import { appHeaderHTML } from './appHeader';
 import { formatNumber } from '../utils/format';
 
 export interface PageShellOptions {
@@ -69,10 +70,17 @@ export interface PageShellOptions {
   route: Route;
   /** Contenido extra del encabezado a la derecha, antes del contador. */
   actions?: string;
-  /** Estado de la partida, para pintar el contador de nanitas. */
+  /**
+   * Estado de la partida, para la franja de recursos de la cabecera.
+   *
+   * `hideNanites` ya no existe, y no porque se haya olvidado quitarlo: **ya no hay
+   * ningún contador de nanitas en la página que pueda esconderse.** El almacén lo
+   * pedía con `hideNanites: true` para no tener dos cifras de nanitas a la vez, y la
+   * razón por la que se escondía —que en la cabecera hubiera otro— es la que ha
+   * desaparecido. Dejar el flag sería dejar un interruptor que no hace nada, y el día
+   * que alguien lo tocara creería que controla algo.
+   */
   state?: any;
-  /** Oculta el contador (no hace falta en ninguna página hoy, pero queda). */
-  hideNanites?: boolean;
   /** Clases extra del cuerpo. */
   bodyClass?: string;
 }
@@ -150,41 +158,27 @@ export function wireNav(root: HTMLElement, cb: { go?: (r: Route) => void }) {
 }
 
 export function pageShell(opts: PageShellOptions, body: string): string {
-  // El contador de nanitas viaja en el encabezado de todas las páginas: es el
-  // número que hace falta para decidir cualquier compra, y estaba solo en la
-  // base y en la tienda.
-  const nanites = opts.state && !opts.hideNanites
-    ? `<span id="page-nanites"
-             class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border flex-shrink-0 tabular
-                    border-[var(--border-color)]"
-             style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
-         <span class="accent-text not-italic text-[11px]" aria-hidden="true">◆</span>
-         <span class="font-mono text-[11px] text-[var(--text-main)]" id="page-nanites-val">${formatNumber(opts.state.nanites || 0)}</span>
-       </span>`
-    : '';
-
   // Sin barra inferior el cuerpo se apoya en el borde inferior de la pantalla.
   // El safe-area sigue estando: en iPhone el gesto de subir descarta el contenido
   // que quede justo en el borde, y sin ese margen el último botón de la página
   // queda debajo del gesto.
+  // **LA CABECERA DE LAS SEIS PÁGINAS, Y LA MISMA FUNCIÓN QUE LA DE LA BASE.**
+  //
+  // Aquí solo hay una diferencia con la de la base y son tres campos: el título, el icono
+  // y las acciones. El resto —la altura de la fila, la posición del nav, el sitio de los
+  // recursos— sale de `appHeaderHTML()`, y es justamente esa parte la que hace que el
+  // nav no se mueva. Antes cada pantalla pintaba su propio `<header>`, y el de la base
+  // medía 111 px contra los 71 de estas seis.
   return `
     <div class="fixed inset-0 app-bg flex flex-col font-sans select-none overflow-hidden">
-      <header
-        class="card-glass flex-shrink-0 flex items-center gap-2 px-3 md:px-5 py-2.5 md:py-3
-               border-x-0 border-t-0 md:mx-4 md:mt-2 md:rounded-2xl md:border"
-        style="padding-top: max(0.625rem, env(safe-area-inset-top))">
-
-        ${opts.icon ? `<span class="accent-text flex-shrink-0 hidden sm:block [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(opts.icon as any)}</span>` : ''}
-        <div class="min-w-0">
-          <h1 class="font-['Orbitron'] font-bold text-[15px] md:text-lg accent-text truncate leading-tight">
-            ${opts.title}
-          </h1>
-          ${opts.subtitle ? `<p class="text-[10px] md:text-[11px] text-[var(--text-muted)] font-mono truncate mt-0.5 hidden sm:block">${opts.subtitle}</p>` : ''}
-        </div>
-        ${navDesktopHTML(opts.route)}
-        ${nanites}
-        ${opts.actions ? `<div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions}</div>` : ''}
-      </header>
+      ${appHeaderHTML({
+        route: opts.route,
+        title: opts.title,
+        subtitle: opts.subtitle,
+        icon: opts.icon as any,
+        resources: opts.state ?? false,
+        actions: opts.actions
+      })}
 
       <main class="relative z-10 flex-grow min-h-0 w-full max-w-[68rem] mx-auto
                   px-3 md:px-4 pt-2 md:pt-3 overflow-y-auto overscroll-contain

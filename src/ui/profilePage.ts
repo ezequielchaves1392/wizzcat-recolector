@@ -212,10 +212,19 @@ export function renderProfilePage(
   };
 
   const body = `
+    <!--
+      LOS DOS SALDOS QUE ESTABAN AQUÍ, Y POR QUÉ NO.
+
+      "Nanitas" y "Núcleos" salían en la franja y salen también en la cabecera, con el
+      mismo número. El perfil es donde más se nota: es la pantalla que se abre para
+      mirar cómo va la partida, y tener el saldo en la franja y en la cabecera a la vez
+      convierte una mirada en una comprobación de cuál de los dos está al día.
+
+      Lo que queda no es saldo y no está en ningún otro sitio: cuántos logros hay y
+      cuántas piezas se han forjado.
+    -->
     ${statStrip([
-      { label: 'Nanitas', value: formatNumber(state.nanites), glyph: '◆', valueId: 'profile-nanites' },
       { label: 'Logros', value: `${unlocked.length}/${achievements.length}`, tone: 'text-amber-300' },
-      { label: 'Núcleos', value: formatNumber(state.cores), tone: 'text-purple-300' },
       { label: 'Forjadas', value: String(state.forgedCount) }
     ])}
 
@@ -341,10 +350,6 @@ export function renderProfilePage(
     route: 'perfil',
     state,
     // La píldora de nanitas de la cabecera se retiraba: el perfil ya trae su
-    // propia cifra en la franja de estadísticas, con el mismo rombo delante de
-    // la etiqueta, y tener las dos era leer el mismo saldo dos veces. El valor
-    // sigue vivo porque la franja lleva `valueId` y `updateUI` la refresca.
-    hideNanites: true
   }, body));
 
   // --- Eventos ---

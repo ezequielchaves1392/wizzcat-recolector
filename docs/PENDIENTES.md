@@ -1033,6 +1033,59 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1825
 pruebas**, todas en verde._
 
+### La chrome, y por qué se ha medido
+
+- [x] **El nav no se mueve al cambiar de sector.** Medido antes y después en las siete
+      pantallas con `getBoundingClientRect()`: **la fila de la cabecera medía 56 px y el
+      nav se clavaba en `x = 449` con el borde derecho en 963**, idéntico en las siete.
+      Antes la cabecera de la base medía **111 px** y las otras seis **71**, porque eran
+      dos cabeceras distintas escritas en dos sitios: la de la base metía la identidad con
+      avatar —más alta que un título— y las páginas no llevaban su `flex-1`. El nav era
+      el mismo HTML en las siete y aun así se movía, porque lo que lo colocaba era lo que
+      hubiera a su izquierda.
+      Ahora las dos llaman a `appHeaderHTML()`, que fija la altura de la fila, pone el
+      nav **al final** y el `flex-1` en el grupo de la izquierda. Lo último es lo que lo
+      deja clavado: el borde derecho del nav es el padding de la cabecera, que es el mismo
+      número en las siete, y su anchura depende solo de las etiquetas.
+
+      **Y HABÍA UN SEGUNDO MOTIVO, DE 2 PX, QUE NO SE VE EN EL CÓDIGO.** El botón activo
+      usaba `accent-bg`, que no lleva borde, y los otros usan `btn-ghost`, que lleva
+      `border: 1px solid`. Medido: el nav medía **512 px con un botón activo y 514 px sin
+      ninguno**. Arreglado con `border border-transparent` en el activo, y **no con un
+      `min-w`**: reservar un ancho mínimo también funcionaría y sería peor, porque el
+      número habría que acertarlo por etiqueta y el día que se añadiera una ruta el nav
+      volvería a moverse.
+
+- [x] **Nanitas, cristales y núcleos en la cabecera, y en ningún otro sitio.** La franja
+      de la cabecera es la única que se refresca en cada tick, así que es la única que no
+      puede quedarse congelada. Se fue de la franja de la tienda, de la del perfil, de la
+      del prestigio y de la del almacén —que era la peor, porque en el almacén el saldo
+      estaba **en la cabecera y en el cuerpo de la misma pantalla**.
+      **La excepción, y es una sola: la cifra grande de la base.** El número de nanitas a
+      32 px en el centro se queda, porque es la métrica protagonista del incrementador y
+      no un saldo que se consulta. Lo que no se queda es la etiqueta "NANITAS" al lado de
+      la franja, que sí era la misma cifra otra vez por otro nombre.
+      Y el refresco dejó de ser una lista de cinco identificadores escritos a mano en
+      `updateUI`: ahora `updateResourceBar()` busca por atributo, así que **la lista
+      está en el HTML que se pinta** y no puede quedar desfasada.
+
+- [x] **El ranking era la única pantalla sin saldos: 0 de 3.** No pasaba el estado a la
+      cáscara porque su segundo argumento es el usuario de Firebase, y **ese objeto no
+      lleva la partida**: no tiene `getState()` ni `state`. El intento de deducirlo de
+      ahí no daba `undefined` por accidente, daba `undefined` siempre. El estado entra
+      ahora como argumento explícito, que es lo que toca cuando no se puede resolver por
+      dentro.
+
+- [x] **El botón del compañero abre la MISMA hoja que el del recolector.** Antes caían
+      en sitios distintos: el del recolector abría la hoja de sintonización —coste, saldo,
+      probabilidad y ruleta— y el del compañero un `showConfirmModal` con dos frases. La
+      misma acción, dos maneras, y había que aprender la segunda cada vez que cambiabas de
+      tipo de objeto. Ahora `showSintonizacion()` recibe a quién va dirigido y lo que
+      cambia son **tres cosas**: de dónde sale el item, cuál es su techo y a qué método
+      del motor se llama. El resto es el mismo código, y por eso no puede desincronizarse.
+      `subirNivelDeCompanio()` está borrada entera.
+      La hoja también gana la **ruleta** para los compañeros, que no tenían.
+
 ### El sistema que se ha quitado entero
 
 - [x] **El cristal es un recurso, y ya no tiene diez niveles.** Era un item del almacén con

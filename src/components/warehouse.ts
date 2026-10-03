@@ -238,19 +238,20 @@ function draw(
         ${sectionHead('Almacén', 'warehouse', `
           <div class="flex items-center gap-2.5">
             <!--
-              El contador de nanitas vive aquí y no en la cabecera de la página.
-              En el almacén la decisión es siempre local —vender, ampliar, usar
-              una llave— y el número que la acompaña queda en la misma línea que
-              las ranuras, no en una esquina a la que hay que llegar con la
-              vista. Arriba quedaba demasiado lejos de donde se decide.
+              AQUÍ SOLO QUEDA EL CONTADOR DE RANURAS, Y ANTES TAMBIÉN ESTABA EL DE NANITAS.
+
+              Lo que justificaba tener el saldo pegado a las ranuras —"en el almacén la
+              decisión es local y arriba quedaba demasiado lejos"— era cierto, pero la
+              solución que se tomó fue poner el saldo en un segundo sitio en vez de
+              acercar el que ya había. El resultado era que la misma cifra se leía en dos
+              lugares de la misma pantalla, y como solo se refrescaba uno, eran dos
+              números distintos. No hacía falta elegir bien: no había dos.
+
+              Ahora el saldo está en la franja de la cabecera, que es el mismo sitio en las
+              siete pantallas y el único que se refresca en cada tick. Aquí queda lo que
+              no es un saldo: cuántas ranuras quedan, que no está en ningún otro sitio y
+              es lo que decide si un item se puede meter.
             -->
-            <span id="wh-nanites"
-                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-lg border tabular flex-shrink-0
-                         border-[var(--border-color)]"
-                  style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
-              <span class="accent-text not-italic text-[11px]" aria-hidden="true">◆</span>
-              <span class="font-mono text-[11px] text-[var(--text-main)]" id="wh-nanites-val">${formatNumber(state.nanites || 0)}</span>
-            </span>
             <span class="text-[10px] font-mono tabular ${occupied >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
               ${occupied}/${capacity} ranuras
             </span>
@@ -305,9 +306,7 @@ function draw(
     subtitle: 'Arrastra para reordenar · toca para inspeccionar',
     icon: 'warehouse',
     route: 'almacen',
-    state,
-    // El contador va junto a las ranuras, dentro del cuerpo de la página.
-    hideNanites: true
+    state
   }, body));
 
   wireNav(root, { go });
@@ -677,14 +676,22 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         break;
 
       case 'upgrade-companion': {
-        // **SIN SELECTOR DE CRISTAL, Y POR QUÉ NO HAY UNO.** En el recolector lo hay
-        // porque había diez cristales y había que elegir; el del compañero es
-        // **el de su tier**, por la misma regla F26, y no llega como argumento. Un
-        // selector aquí sería una pregunta sobre multiplicadores que no cambia
-        // nada, que es exactamente lo que F26 vino a quitar.
+        // **ABRE LA MISMA HOJA QUE EL RECOLECTOR, Y POR QUÉ.**
+        //
+        // Antes este botón caía en `subirNivelDeCompanio()`, que pintaba un
+        // `showConfirmModal` con dos frases: coste, saldo, "si falla no baja de nivel".
+        // El del recolector abría la hoja de sintonización, con la misma información y
+        // además la ruleta. Dos acciones que hacen lo mismo, enseñando dos cosas, y el
+        // jugador tenía que aprender la segunda cada vez que cambiaba de tipo de objeto.
+        //
+        // **Lo que sí se conserva de la versión vieja: que el compañero no necesita
+        // selectors.** En el recolector lo hubo porque había diez cristales y había que
+        // elegir; el del compañero nunca lo tuvo —la regla de que sea del mismo nivel
+        // la aplicaba el motor— y un selector aquí sería una pregunta sobre
+        // multiplicadores que no cambia nada.
         const comp: any = item;
         if (!comp) return;
-        subirNivelDeCompanio(game, comp, redraw);
+        showSintonizacion(game, redraw, { tipo: 'companero', item: comp });
         break;
       }
 
@@ -1510,58 +1517,23 @@ function useConsumable(game: any, item: any, redraw: () => void) {
  * de multiplicar aquí: es la misma cuenta que hace `sellItem`, y por eso el
  * número que ve el jugador y el que se cobra no pueden separarse (R3).
  */
-/**
- * Sube el nivel de un compañero: confirmar, llamar al motor y enseñar el resultado.
+/*
+ * BORRADA: `subirNivelDeCompanio()`.
  *
- * **ES LA MISMA SECUENCIA QUE LA DEL RECOLECTOR**, y por eso son las dos un sitio.
- * El resultado ya está decidido cuando se llama a `game.upgradeCompanion()`: la
- * animación solo lo enseña. Si la ruleta eligiera el premio, el jugador descubriría
- * en veinte tiradas que la ruleta no es la fuente de verdad, y a partir de ahí
- * ninguna otra cifra del juego le creería.
+ * Era la mitad del botón del compañero que no iba a la hoja de sintonización: le
+ * pintaba su propio `showConfirmModal` con dos frases y, al confirmar, un `showToast`
+ * con el resultado. El recolector tenía la hoja, con la misma información y además
+ * la ruleta, así que la misma acción se hacía de dos maneras distintas.
+ *
+ * **LO QUE SE LLEVÓ Y LO QUE NO.** El coste, el saldo, el texto del fallo y la
+ * secuencia los tiene ahora `showSintonizacion()`, que es el mismo código para los dos
+ * objetivos. Y se conserva lo que esta función tenía de bueno y la hoja no: **que el
+ * compañero sube el ingreso del recolector**, que es un efecto distinto al del
+ * recolector y no se puede decir con el mismo texto.
+ *
+ * Lo que no se ha repetido es el aviso de "si falla no baja de nivel", porque la hoja lo
+ * dice siempre, en la misma línea, para los dos.
  */
-function subirNivelDeCompanio(game: any, item: any, redraw: () => void) {
-  const nivel = Math.max(0, Math.floor(Number(item.level) || 0));
-  const tope = nivelMaximoDeCompanio(item.potential, item.maxLevel);
-  if (nivel >= tope) {
-    showToast(`${item.name} ya está al nivel máximo.`, 'info');
-    return;
-  }
-
-  // **EL COSTE LLEVA EL TIER Y EL SALDO ES UN NÚMERO DEL ESTADO.** Antes eran dos
-  // búsquedas en el almacén —la pila del cristal del nivel correcto— y ahora no hay
-  // ninguna: el cristal es un recurso y está en `state.crystals`. **Y EL COSTE HA
-  // CRECIDO**, porque un T8 cuesta mucho más que un T1; el botón lo enseña con la
-  // misma función que lo cobra, así que el número no puede separarse (R3).
-  const tier = Math.max(1, Math.floor(Number(item.tier) || 1));
-  const coste = costeDeNivelDeCompanio(tier, nivel);
-  const tiene = game.getState().crystals ?? 0;
-
-  showConfirmModal(
-    `Sube a ${item.name} del nivel ${nivel} al ${nivel + 1}. ` +
-    `Cuesta ${formatNumber(coste)} de ${CRISTAL_NOMBRE} y tienes ${formatNumber(tiene)}. ` +
-    `Si falla, **no baja de nivel**: se pierde el cristal.`,
-    () => {
-      sfx.use();
-      const r: any = game.upgradeCompanion(item.id);
-      if (!r?.rolled) {
-        // Sin tirada no hay ruleta: el motor ha rechazado antes de gastar, y enseñarle
-        // una ruleta para un "no tienes cristales" sería una mentira animada.
-        sfx.error();
-        showToast(r?.msg ?? 'No se puede subir ahora mismo.', 'error');
-        redraw();
-        return;
-      }
-      sfx.forgeSuccess();
-      showToast(r.msg, r.success ? 'success' : 'error');
-      redraw();
-    },
-    {
-      sublabel: `Nivel ${nivel} → ${nivel + 1}  ·  techo ${tope}`,
-      confirmText: 'Subir',
-      danger: false
-    }
-  );
-}
 function sellItem(game: any, item: any, redraw: () => void) {
   const qty = stackUnits(item);
   const total = game.getSellTotal?.(item.id)

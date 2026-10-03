@@ -371,13 +371,17 @@ switch (vista) {
     renderPrestigePage(app, fakeGame, ir);
     break;
   case 'ranking':
-    renderRankings(app, { uid: 'me' }, ir);
+    renderRankings(app, { uid: 'me' }, ir, MOCK);
     break;
   default:
+    // El estado va porque la cabecera pinta la franja de recursos desde él. Sin esto,
+    // el `preview` salía con la cabecera vacía de saldos y no se podía revisar cómo se
+    // ven —que es la mitad de lo que se escribe aquí—, y el fallo era invisible: se
+    // veía "no hay recursos", no "falta el argumento".
     app.innerHTML = renderLayoutHTML(MOCK, 'cyber-dark', 'base', {
       onNavigate: noop, onLogout: noop,
       onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
-    });
+    }, undefined, MOCK);
 
     // Los interruptores de audio se conectan aquí también. En el juego lo hace
     // `renderBase` con un listener delegado en `#app`; el preview pinta la

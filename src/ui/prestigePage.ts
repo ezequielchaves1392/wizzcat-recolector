@@ -138,8 +138,18 @@ export function renderPrestigePage(
   };
 
   const body = `
+    <!--
+      "Núcleos" sale de aquí y va a la cabecera. Es el mismo razonamiento que en el perfil,
+      y aquí es más grave: **esta es la pantalla donde se gastan**, así que el saldo se
+      necesita delante de cada nodo del árbol. Leyéndolo arriba, a la altura de la
+      cabecera, el gesto de comprobar "cuántos tengo" es el mismo que en la base y que en
+      el almacén.
+
+      Y lo que se queda, "Al reiniciar", **no es el saldo**: es lo que vas a conseguir,
+      que es otra pregunta. Y las otras dos —reinicios y porcentaje del árbol— no son
+      recursos.
+    -->
     ${statStrip([
-      { label: 'Núcleos', value: formatNumber(state.cores) },
       { label: 'Al reiniciar', value: `+${formatNumber(pending)}`, tone: 'text-emerald-400' },
       { label: 'Reinicios', value: String(state.resets) },
       { label: 'Árbol', value: `${Math.round(completion * 100)}%` }
