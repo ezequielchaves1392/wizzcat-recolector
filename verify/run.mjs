@@ -76,6 +76,18 @@ for (const banco of [
   // vuelo escribe en la cola un instante después de que el banco siguiente ya
   // la hubiera limpiado, y hereda un saldo de hace dos segundos.
   await new Promise((r) => setTimeout(r, 0));
+
+  // **Y SE CANCELAN LOS TEMPORIZADORES DE LA BANDA DEL GUARDADO DIFERIDO.** Este es
+  // el sitio correcto y el único: entre bancos no hay nada que mirar, y el
+  // `setTimeout(saveToFirebase, 1200)` del banco anterior se quedaría colgado
+  // hasta un segundo después de que empiece el siguiente, escribiendo en
+  // `__MEM_DB__` con el estado de una partida que ya no existe. Ha roto
+  // comprobaciones de "el inventario viene bien" y "el saldo sobrevive", y
+  // siempre de forma intermitente, que es lo peor que puede hacer una prueba.
+  //
+  // Cancelar TODO lo largo se probó y rompió `toastCheck`: un aviso vive 3000 ms
+  // y se quedaba en pantalla para siempre. La banda está en `entorno.mjs`.
+  globalThis.cancelarRelojesColision?.();
 }
 // Sin `process.exit()`: el código de salida ya está en `process.exitCode` y Node
 // termina solo cuando no queda nada pendiente, que es cuando stdout está vacío.

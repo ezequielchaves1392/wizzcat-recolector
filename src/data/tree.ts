@@ -184,6 +184,36 @@ export const TREE_BY_ID: Record<string, TreeNode> = Object.fromEntries(
 
 export const TREE_TIERS = [0, 1, 2, 3, 4];
 
+/**
+ * EL NODO DE LA FORJA, POR SU ID, Y LA REGLA DE SI SE PUEDE USAR.
+ *
+ * **LA REGLA ESTABA COPIADA EN DOS SITIOS Y VA A ESTAR EN TRES.** El motor la
+ * comprobaba para no forjar, y la tienda la comprobaba para avisar de que las
+ * piedras no servían de nada. G6 mete una tercera copia —el botón de la forja— y
+ * una copia más es exactamente como estas dos dejaron de estar de acuerdo: un día
+ * alguien renombra el nodo, el motor deja de bloquear la forja y la tienda sigue
+ * diciendo que está cerrada.
+ *
+ * **POR QUÉ `?? 0` Y NO `|| 1`.** Un guardado viejo puede traer el `nodeLevels` sin
+ * este id, y `undefined || 1` daría uno —la forja abierta— a quien no la tiene.
+ * Con `?? 0` la ausencia es un cero, que es lo que es: no lo has comprado.
+ *
+ * Y el mensaje va aquí y no en la vista, porque lo usan tres sitios y la razón de
+ * que se diga una cosa y no tres.
+ */
+export const FORGE_NODE_ID = 'blueprint';
+
+export function forjaDesbloqueada(nodeLevels: Record<string, number> | undefined): boolean {
+  return (nodeLevels?.[FORGE_NODE_ID] ?? 0) > 0;
+}
+
+/** Por qué no se puede usar la forja, en una frase. `null` si sí se puede. */
+export function motivoDeForjaCerrada(nodeLevels: Record<string, number> | undefined): string | null {
+  return forjaDesbloqueada(nodeLevels)
+    ? null
+    : `Necesitas el nodo "${TREE_BY_ID[FORGE_NODE_ID]?.name ?? FORGE_NODE_ID}" del árbol para usar la Forja.`;
+}
+
 export const TREE_CATEGORY_META: Record<string, { label: string; color: string; icon: string }> = {
   automatizacion: { label: 'Automatización', color: 'text-cyan-400', icon: 'bolt' },
   multiplicador: { label: 'Multiplicadores', color: 'text-purple-400', icon: 'sparkle' },

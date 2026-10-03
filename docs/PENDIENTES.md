@@ -128,7 +128,22 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
        dos pasos de la mezcla—, y eso convertía la forja en lo único que **no se podía
        probar**: cualquier medición acababa siendo "esta vez salió". Ahora acepta `rng`, como
        `rollPotentialFrom()`, `forgeCollectorName()` y los dos generadores ya hacían.
-- [ ] **G6 · Los botones de forja y de sus compras solo cuando están desbloqueados.**
+- [x] **G6 · Los botones de forja y de sus compras, solo cuando están desbloqueados.** La
+      Forja desaparece de **las dos barras** —la de abajo y la de escritorio—, entrar por la
+      ruta se **nega diciendo por qué**, y la sección de la tienda **deja de pintar las
+      tarjetas**: antes se podían **comprar** piedras de calibración sin tener la forja, y
+      el dinero se iba a un inventario donde nadie podía gastarlo.
+  - **La regla estaba escrita a mano en dos sitios** —el motor y la tienda— y esto iba a ser
+       el tercero. Con tres copias de "¿tengo el nodo?" es como dos de ellas dejan de estar de
+       acuerdo. Ahora vive en `data/tree.ts`, junto al nodo, y los tres la llaman: por eso el
+       banco puede comprobar que el motor y la interfaz dicen lo mismo.
+  - **Ocultar el botón no es negarse a entrar.** El `data-nav` puede venir de un enlace, de
+       otra página o de la pila de navegación, así que si la ruta siguiera respondiendo el
+       botón escondido no valdría para nada: habría una pantalla inservible a un clic. Es la
+       misma regla preguntada dos veces, y en el router —no en la barra— para que las dos
+       barras no se separen.
+  - **El cartel se queda, las tarjetas no.** Una categoría que desaparece sin más no se
+       diferencia de una que nunca existió.
 
 ### Lote 3 · PRESTIGIO, VAULT Y LA PASIVA OFFLINE
 
@@ -758,6 +773,25 @@ versiones.**
       el día que algo se rompa de verdad nadie va a mirar si era el código o la suerte.
       _Las dos se caían **antes** de este lote; comprobado con `git stash` sobre el código
       original, 1 fallo en 4 corridas._
+- [x] **Cuarta prueba intermitente, y era la peor de las cuatro: apoyada en un temporizador.**
+      `playthroughCheck` mutaba el estado —equipar un compañero, comprar una llave— y
+      recargaba a secas. Recargar lee el documento **tal y como esté**, y lo anterior todavía
+      no había llegado al servidor. Lo que tapaba eso era un accidento: el juego programaba un
+      `setTimeout(saveToFirebase, 1200)` al arrancar que **se disparaba siempre** (G6 lo
+      arregló) y volcaba la partida por el banco sin que nadie lo supiera. Al quitarlo,
+      `playthroughCheck` empezó a fallar solo y de vez en cuando. Hay `recargar(g)` en `kit.ts`
+      para que la disciplina quede en un sitio.
+- [ ] **El resto de bancos que mutan y recargan tienen el mismo agujero.** Solo se han
+      arreglado los de `playthroughCheck`. **`reload()` a secas sigue siendo una trampa** y
+      cualquiera que la use después de cambiar algo está midiendo la partida anterior. Cuando
+      se toque un banco, esta comprobación es lo primero que hay que hacer, no el último.
+- [x] **Cada carga de página programaba un guardado inútil, que se colaba en medio de todo.**
+      `if (hayPendientes(uid)) setTimeout(saveToFirebase, 1200)` se comprobaba **después** del
+      guardado de carga, y ese guardado acaba de anotar la cola: la condición **era cierta
+      siempre**. Ahora la pregunta "¿venía cola de la sesión anterior?" se hace **antes de
+      cargar**, que es cuando es verdad. Consecuencias: una escritura de sobra en cada carga,
+      y un temporizador de 1,2 s que nadie había pedido cayendo entre dos pulsaciones del
+      jugador y guardando el estado a medias.
 - [ ] **Quedan bancos que tiran dados.** `potencialCheck`, `saltoCheck`, `botinCheck` y el
       resto hacen tiradas reales. No he desmontado todas. **El patrón a seguir es el de G3:
       medir pesos y tablas, que son deterministas, y dejar las tiradas para lo que de verdad
@@ -903,7 +937,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1925
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **27 bancos, 1939
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

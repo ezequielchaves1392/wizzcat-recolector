@@ -43,6 +43,7 @@ import { showToast } from '../utils/toast';
 import { showConfirmModal } from '../utils/modal';
 import { rarityClass, raritySlug, RARITY_TEXT } from './crateLoot';
 import { countOccupiedSlots } from '../data/stacking';
+import { forjaDesbloqueada, motivoDeForjaCerrada } from '../data/tree';
 
 interface Category {
   id: string;
@@ -459,20 +460,39 @@ export function renderStoreTab(
       `).join('')}
     </div>
 
-    ${category.id === 'forja' && !((state.nodeLevels?.blueprint) > 0) ? `
-      <div class="rounded-xl border p-3 mb-2.5 text-[10px] leading-relaxed"
-           style="border-color: color-mix(in srgb, #f59e0b 40%, transparent);
-                  background: color-mix(in srgb, #f59e0b 8%, transparent)">
-        Puedes comprar estas piedras antes de desbloquear la forja, pero no
-        sirven de nada hasta que tengas el nodo <span class="text-amber-400">Planos Viejos</span>.
-      </div>
-    ` : ''}
+    ${(() => {
+      // G6 · UNA SECCIÓN CERRADA NO SE PINTA, SE DICE QUE ESTÁ CERRADA.
+      //
+      // Aquí lo que había era al revés: las tarjetas de la forja salían siempre y
+      // lo único que avisaba era un cartel de encima diciendo que no servían de
+      // nada. Se podía **comprar** una Piedra de Calibración sin tener la forja,
+      // y era dinero que se iba a un inventario donde nadie podía gastarlo.
+      //
+      // El cartel se queda porque sin él la sección desaparecería sin que el
+      // jugador supiera por qué: una categoría que no aparece no se diferencia de
+      // una que nunca existió. Lo que desaparece son **las tarjetas y sus
+      // botones**, que es lo que pediste.
+      const cerrada = category.id === 'forja' && !forjaDesbloqueada(state.nodeLevels);
+      return `
+        ${cerrada ? `
+          <div class="rounded-xl border p-3 mb-2.5 text-[10px] leading-relaxed"
+               style="border-color: color-mix(in srgb, #f59e0b 40%, transparent);
+                      background: color-mix(in srgb, #f59e0b 8%, transparent)">
+            <span class="text-amber-400 font-bold">Forja cerrada.</span>
+            ${motivoDeForjaCerrada(state.nodeLevels)}
+            Las piedras y las nanopartículas no se venden hasta abrirla.
+          </div>
+        ` : ''}
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-      ${category.items.map(card).join('')}
-    </div>
+        ${cerrada ? '' : `
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            ${category.items.map(card).join('')}
+          </div>
+        `}
 
-    ${detail}
+        ${cerrada ? '' : detail}
+      `;
+    })()}
   `;
 
   const root = mountInto(container, pageShell({

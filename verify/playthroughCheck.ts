@@ -33,8 +33,17 @@
 //    apartado continúa la anterior. Un banco que reinicia en cada apartado no
 //    comprueba el camino: comprueba once caminos.
 //
-//  · Cada apartado acaba en `reload()`. R13: lo que solo vive en memoria no está
+//  · Cada apartado acaba en `recargar()`. R13: lo que solo vive en memoria no está
 //    guardado, y el jugador no va a notar el fallo hasta que refresque.
+//
+//    Y es `recargar()` y no `reload()` a secas, por un motivo que costó tres
+//    pruebas intermitentes: `reload()` lee el documento **tal y como esté**, y el
+//    apartado anterior haEquipado un compañero o comprado algo que todavía no ha
+//    llegado al servidor. Este juego programaba además un guardado diferido de
+//    1,2 s al arrancar que se disparaba siempre —G6 lo arregló— y **varios bancos
+//    se estaban apoyando en él sin saberlo**: mutaban, recargaban, y aquel
+//    temporizador voltaba por ellos. Al quitarlo, empezó a fallar solo y de vez en
+//    cuando, que es lo peor que puede hacer una prueba: entrena a ignorar el banco.
 //
 //  · No se reimplementa ninguna regla del juego (R2). Las cifras se piden al game
 //    loop con `getClickDamage()`, `getSellTotal()`, `getCapacity()`. Si el banco
@@ -47,7 +56,7 @@ import { danioDeRango } from '../src/data/crafting';
 import { CRATE_TYPES, type CrateType } from '../src/data/store';
 import { KEY_DEFS, type KeyTier } from '../src/data/items';
 import {
-  boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find,
+  boot, reload, recargar, bootNew, check, resumen, s, wh, ids, nanites, deType, find,
   baseSave, collector, crystal, consumable, guardado
 } from './kit';
 
@@ -74,7 +83,7 @@ async function main() {
       s(g).equippedCollectorId === null && s(g).activeCompanions.length === 0,
       `equipo=${s(g).equippedCollectorId} companeros=${s(g).activeCompanions.join(',')}`);
     check('nacimiento: y sin ingreso pasivo', s(g).passiveIncome === 0, 'pasivo=' + s(g).passiveIncome);
-    const g2 = await reload();
+    const g2 = await recargar();
     check('nacimiento: y recargar no inventa nada',
       nanites(g2) === 0 && deType(g2, 'crate') === 1, ids(g2).join(','));
   }
@@ -138,7 +147,7 @@ async function main() {
   //  3. COMPRAR. Lo que se enseña tiene que ser lo que se cobra (R3).
   // =========================================================================
   {
-    const g3 = await reload();
+    const g3 = await recargar();
     const barato = 'keyT1';
 
     // Sin nanitas no se compra, y sobre todo: no se COBRA. Un "no compres" que
@@ -165,7 +174,7 @@ async function main() {
     check('tienda: sin nanitas pero con sitio, cabe igual',
       g3.canBuyStoreItem(barato) === true, 'dice que no cabe con 3 de 15 ranuras');
 
-    const g4 = await reload();
+    const g4 = await recargar();
     check('tienda: la compra sobrevive a la recarga',
       deType(g4, 'key') === 1, 'llaves=' + deType(g4, 'key'));
     check('tienda: y la cartera vacía también sobrevive', nanites(g4) === 0, 'nanitas=' + nanites(g4));
@@ -175,7 +184,7 @@ async function main() {
   //  4. COMPAÑEROS: la otra mitad del ingreso
   // =========================================================================
   {
-    const g5 = await reload();
+    const g5 = await recargar();
     check('compañero: se nace con uno pero inactivo',
       s(g5).activeCompanions.length === 0 && s(g5).passiveIncome === 0,
       `activos=${s(g5).activeCompanions.length} pasivo=${s(g5).passiveIncome}`);
@@ -189,7 +198,7 @@ async function main() {
     check('compañero: con 1 ranura no cabe un segundo',
       g5.equipCompanion('inexistente') === false, 'aceptó un id que no existe');
 
-    const g6 = await reload();
+    const g6 = await recargar();
     check('compañero: el activo sigue activo tras recargar',
       s(g6).activeCompanions.includes(comp.id), s(g6).activeCompanions.join(','));
     check('compañero: y el ingreso pasivo sobrevive',
@@ -210,7 +219,7 @@ async function main() {
   //  5. EL ALMACÉN: ranuras, pilas y no perder nada
   // =========================================================================
   {
-    const g7 = await reload();
+    const g7 = await recargar();
     const cap = g7.getCapacity();
     check('almacén: la capacidad es la que se anuncia', cap === 15, 'cap=' + cap);
 
@@ -246,7 +255,7 @@ async function main() {
     check('almacén: y al usarlo suben 5 ranuras',
       g7.getCapacity() === capTrasComprar + 5,
       `${capTrasComprar} -> ${g7.getCapacity()}`);
-    const g8 = await reload();
+    const g8 = await recargar();
     check('almacén: la ampliación sobrevive a la recarga',
       g8.getCapacity() === antesCap + 5, 'cap=' + g8.getCapacity());
 
@@ -316,7 +325,7 @@ async function main() {
       `cobrado=${nanites(g10) - antes}(total=${total})`);
     check('venta: y la pila desaparece del almacén', !find(g10, 'r3'), ids(g10).join(','));
 
-    const g11 = await reload();
+    const g11 = await recargar();
     check('venta: no se resucita al recargar', !find(g11, 'r3'), ids(g11).join(','));
     check('venta: y la cartera es la que quedó',
       nanites(g11) === antes + total, `nanitas=${nanites(g11)}`);
@@ -399,7 +408,7 @@ async function main() {
     // para `queueCheck`: esperar es responsabilidad de quien acaba de mutar.
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
-    const g13 = await reload();
+    const g13 = await recargar();
     check('caja: el botín sobrevive a la recarga',
       s(g13).cratesOpened === 1, 'abiertas=' + s(g13).cratesOpened);
     // Lo que se comprueba aquí es la dirección del daño: el MATERIAL NO AUMENTA.
@@ -527,7 +536,7 @@ async function main() {
     check('buff: y al cancelar vuelve el daño', g15.getClickDamage() === danio,
       `${danio} -> ${g15.getClickDamage()}`);
 
-    const g16 = await reload();
+    const g16 = await recargar();
     check('buff: el buff cancelado no sobrevive a la recarga',
       g16.getClickDamage() === danio, 'danio=' + g16.getClickDamage());
     check('buff: y el item cancelado no vuelve', !find(g16, 'u1'), ids(g16).join(','));
@@ -575,7 +584,7 @@ async function main() {
       (s(g18).nodeLevels?.core_sink ?? 0) === 2, JSON.stringify(s(g18).nodeLevels));
     check('ascensión: el contador de reinicios sube', s(g18).resets === 3, 'reinicios=' + s(g18).resets);
 
-    const g19 = await reload();
+    const g19 = await recargar();
     check('ascensión: el reinicio sobrevive a la recarga',
       nanites(g19) === 0 && s(g19).cores === 3 + info.pending && s(g19).resets === 3,
       `nanitas=${nanites(g19)} nucleos=${s(g19).cores} reinicios=${s(g19).resets}`);

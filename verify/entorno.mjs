@@ -167,6 +167,49 @@ export function instalarEntorno() {
   globalThis.window = { ...listeners() };
   globalThis.performance ??= { now: () => Date.now() };
   globalThis.setInterval = () => 0;
+
+  /**
+   * Los temporizadores largos, apuntados para poder cancelarlos ENTRE BANCOS.
+   *
+   * `createGameLoop()` programa un `setTimeout(saveToFirebase, 1200)` al arrancar
+   * cuando cree que hay cola heredada. En el juego está bien. En un banco es una
+   * bomba **entre bancos**, porque todos comparten proceso: el temporizador del
+   * banco N cae dentro del N+1, y su `saveToFirebase()` escribe en `__MEM_DB__` con
+   * el estado de una partida que ya no existe. Lo que se rompe es siempre una
+   * comprobación de "el inventario viene bien" o "el saldo sobrevive", y siempre
+   * de forma intermitente — que es lo peor que puede hacer una prueba, porque
+   * entrena a ignorar el banco entero.
+   *
+   * **SE CANCELA ENTRE BANCOS Y NO DENTRO.** Cancelarlos dentro de `boot()` se
+   * probó y rompió `toastCheck`: el desvanecido de un aviso también dura segundos,
+   * y se quedaba en pantalla para siempre, así que las pruebas de la pila
+   * contaban avisos de un banco anterior. Entre bancos no hay nada que mirar, y sin
+   * embargo cancela justo lo que sobra.
+   */
+  const relojOriginal = globalThis.setTimeout;
+  const relojesColision = new Set();
+  // **UNA BANDA, Y LOS DOS NÚMEROS QUE LA DEFINEN.** Abajo de 1000 ms no hay nada
+  // que cancelar (la transición de un aviso dura 300), y entre 1000 y 2000 solo vive
+  // el guardado diferido del arranque, que son 1200 ms. Un aviso se retira a los
+  // 3000 —muy por encima de la banda—, así que sobrevive y `toastCheck` puede
+  // esperar a que la pila se vacíe sola, que es lo que lleva haciendo.
+  //
+  // La banda es fea y por eso está escrita con los dos números al lado. **Si algún
+  // día `VIDA_MS` de `src/utils/toast.ts` baja de 2000, `toastCheck` falla ruido**,
+  // y eso es justo lo que tiene que pasar: es mejor un banco rojo que un banco que
+  // mida los avisos de otro.
+  const DESDE_MS = 1000;
+  const HASTA_MS = 2000;
+  globalThis.setTimeout = (fn, ms, ...args) => {
+    const id = relojOriginal(fn, ms, ...args);
+    if (typeof ms === 'number' && ms >= DESDE_MS && ms < HASTA_MS) relojesColision.add(id);
+    return id;
+  };
+
+  globalThis.cancelarRelojesColision = () => {
+    for (const id of relojesColision) clearTimeout(id);
+    relojesColision.clear();
+  };
 }
 
 /**

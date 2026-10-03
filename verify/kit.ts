@@ -19,6 +19,23 @@ import { KEY_DEFS, KEY_TIERS, CRYSTAL_DEFS, type KeyTier } from '../src/data/ite
 export type Row = { name: string; ok: boolean; detail: string };
 
 /**
+ * NOTA · POR QUÉ AQUÍ NO HAY UN "APAGA RELOJES".
+ *
+ * Se probó: envolver `setTimeout` y cancelar los de medio segundo o más, para
+ * quitar de en medio el `setTimeout(saveToFirebase, 1200)` que `createGameLoop()`
+ * programa al arrancar. Ese temporizador sí era un problema —se colaba en mitad de
+ * lo que un banco estaba midiendo y hacía que `playthroughCheck` fuera intermitente—
+ * pero **cancelarlo a pelo rompía `toastCheck`**, porque el desvanecido de los
+ * avisos también dura segundos y se quedaba en pantalla para siempre.
+ *
+ * El arreglo bueno no es silenciar el reloj: es que **el temporizador no se cree**.
+ * La pregunta "¿venía cola de la sesión anterior?" se hace ahora antes de cargar,
+ * no después, así que sin cola heredada no hay nada que subir y el guardado
+ * diferido no se programa. Arreglado en el juego y no en el banco, que es donde
+ * un arreglo así tiene que estar.
+ */
+
+/**
  * Filas de las comprobaciones del banco EN CURSO.
  *
  * `kit.ts` se comparte entre bancos (Vite lo mete en un chunk comun), asi que
@@ -65,7 +82,7 @@ export async function boot(save?: any, extra?: { onAchievement?: (a: any) => voi
   limpiarCola();
   globalThis.__MEM_DB__ = {};
   if (save) globalThis.__MEM_DB__[DB] = JSON.parse(JSON.stringify(save));
-  return await createGameLoop(USER, () => {}, undefined, extra?.onAchievement);
+  return anotarJuego(await createGameLoop(USER, () => {}, undefined, extra?.onAchievement));
 }
 
 /**
@@ -78,7 +95,53 @@ export async function boot(save?: any, extra?: { onAchievement?: (a: any) => voi
  * quiera una recarga sin cola llama a `boot()`.
  */
 export async function reload() {
-  return await createGameLoop(USER, () => {});
+  return anotarJuego(await createGameLoop(USER, () => {}));
+}
+
+/**
+ * EL ÚLTIMO JUEGO QUE ARRANCÓ ESTE BANCO.
+ *
+ * Para que `recargar()` sepa a quién tiene que volcar. Los bancos de recorrido
+ * —`playthroughCheck` sobre todo— declaran su partida **dentro de cada bloque**, y
+ * esos bloques son de ámbito: el `g5` de un apartado no existe en el siguiente
+ * aunque se llamen igual. Por eso `recargar()` no recibe el juego que hay que
+ * guardar: si lo recibiera, habría que acertar con el nombre, y un nombre mal
+ * puesto guarda la partida equivocada en silencio —que es peor que no guardar,
+ * porque el banco pasa y está midiendo otra cosa.
+ *
+ * Se anota aquí, en un solo sitio, cuando arranca un juego.
+ */
+let juegoVivo: { flush: () => void } | null = null;
+
+function anotarJuego(g: any) {
+  juegoVivo = g ?? null;
+  return g;
+}
+
+/**
+ * Recargar **con lo que tiene el juego guardado de verdad**, no con lo que se
+ * alcance a escribir.
+ *
+ * `reload()` a secas lee el documento tal y como esté, y `flush()` es una promesa
+ * suelta: cuando ha vuelto, la escritura puede no haber llegado. Quien muta el
+ * estado y recarga tiene ese hueco, y lo que lee no es la partida que dejó sino
+ * la anterior.
+ *
+ * **ESTO NO ERA COSA TEÓRICA.** El juego programaba un `setTimeout(saveToFirebase,
+ * 1200)` al arrancar que —por un error que G6 arregló— se disparaba SIEMPRE, y
+ * varios bancos se apoyaban en él sin saberlo: mutaban, recargaban, y el
+ * temporizador volcaba por ellos. Al quitarlo, empezaron a fallar **solo y de vez
+ * en cuando**, que es la peor forma de fallar: entrena a ignorar el banco entero.
+ *
+ * Sin argumentos a propósito: volca el juego del apartado anterior, que es el que
+ * acaba de mutar el estado.
+ */
+export async function recargar(): Promise<any> {
+  if (juegoVivo) {
+    juegoVivo.flush();
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  return await reload();
 }
 
 /**
@@ -100,7 +163,7 @@ function limpiarCola() {
 /** Arranca una partida nueva (documento inexistente). */
 export async function bootNew() {
   globalThis.__MEM_DB__ = {};
-  return await createGameLoop(USER, () => {});
+  return anotarJuego(await createGameLoop(USER, () => {}));
 }
 
 // --------------------------------------------------------------------------

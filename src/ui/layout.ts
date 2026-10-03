@@ -32,7 +32,7 @@
 import { ic, type IconName } from './icons';
 import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
 import { THEMES } from '../theme';
-import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
+import { rutasVisibles, routeTitle, type Route } from './router';
 import { miniIdentity, type IdentityCosmetics } from './identity';
 
 export interface LayoutCallbacks {
@@ -56,14 +56,31 @@ export function renderLayoutHTML(
   savedTheme: string,
   activeRoute: Route,
   cb: LayoutCallbacks,
-  identity?: NavIdentity
+  identity?: NavIdentity,
+  /** Estado de la partida, para saber qué rutas están abiertas (G6). */
+  state?: any
 ): string {
   const options = THEMES.map(t =>
     `<option value="${t.value}" ${t.value === savedTheme ? 'selected' : ''}>${t.label}</option>`
   ).join('');
 
+  /**
+   * G6 · LAS DOS BARRAS SALEN DE LA MISMA LISTA.
+   *
+   * Antes las dos filtraban `BOTTOM_BAR_ROUTES` y `HEADER_ROUTES` por separado, y
+   * por eso una condición de "esto aún no está abierto" escrita aquí solo habría
+   * ocultado el botón en una de las dos: en escritorio la Forja seguía estando.
+   * `rutasVisibles()` es la que contesta, y contesta una sola vez.
+   *
+   * Y el `flex-1` de cada botón es lo que reparte el ancho: con cinco entradas y
+   * con cuatro, cada una ocupa lo que le toca. Por eso no hace falta nada más
+   * para que la barra no deje un hueco donde estaba la Forja.
+   */
+  const barraAbajo = rutasVisibles(state, r => r.inBottomBar);
+  const barraArriba = rutasVisibles(state, r => r.inHeader);
+
   const navBtn = (route: Route) => {
-    const def = BOTTOM_BAR_ROUTES.find(r => r.id === route)!;
+    const def = barraAbajo.find(r => r.id === route)!;
     const active = activeRoute === route;
     return `
       <button data-nav="${route}"
@@ -109,7 +126,7 @@ export function renderLayoutHTML(
 
           <!-- Navegación de escritorio -->
           <nav class="hidden lg:flex items-center gap-0.5 flex-shrink-0" aria-label="Navegación">
-            ${HEADER_ROUTES.map(r => {
+            ${barraArriba.map(r => {
               const active = activeRoute === r.id;
               return `
                 <button data-nav="${r.id}"
@@ -367,7 +384,7 @@ export function renderLayoutHTML(
         style="padding-bottom: max(0.25rem, env(safe-area-inset-bottom))"
         aria-label="Navegación principal">
         <div class="flex items-stretch gap-0.5 relative">
-          ${BOTTOM_BAR_ROUTES.map(r => navBtn(r.id)).join('')}
+          ${barraAbajo.map(r => navBtn(r.id)).join('')}
         </div>
       </nav>
 

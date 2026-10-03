@@ -12,6 +12,7 @@ import { SECRET_ACHIEVEMENTS } from './data/achievements';
 export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
+import { motivoDeForjaCerrada } from './data/tree';
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
@@ -284,6 +285,19 @@ export async function createGameLoop(
   // durante la carga y lee este estado (TDZ si se declarase más abajo).
   // `unlocked` se sincroniza con state.unlockedAchievements en cada rebuild.
   const achievementState = createAchievementState();
+
+  /**
+   * ¿Venía cola de la sesión anterior?
+   *
+   * Se pregunta **aquí**, antes de cargar, y no junto al `setTimeout` que la
+   * sube. La razón está escrita allí: para entonces el guardado de carga ya ha
+   * anotado su propia entrada y la pregunta daría cierto siempre, que es lo que
+   * pasaba. Esta línea es la que dice lo que su nombre dice.
+   *
+   * Y se declara antes de la carga por el mismo motivo que `achievementState`:
+   * `recalculatePassiveIncome` se llama durante la carga y `user` aún no está.
+   */
+  const habiaColaAlArrancar = user ? hayPendientes(user.uid) : false;
 
   // El potencial de los items de partida: **3**, el punto medio.
   //
@@ -2480,8 +2494,25 @@ const AFK_THRESHOLD_MS = 60000;
   // La subida de la cola heredada del arranque anterior. Va después de los
   // listeners para que el resto de la inicialización esté montado cuando llegue
   // la respuesta, y con un margen corto para no competir con el guardado de
-  // carga, que acaba de occurrir.
-  if (user && hayPendientes(user.uid)) {
+  // carga, que acaba de ocurrir.
+  //
+  // **EL "¿QUEDÓ ALGO?" SE PREGUNTÓ ANTES, ARRIBA DEL TODO, Y NO AQUÍ.**
+  //
+  // Preguntarlo aquí era mentira: el guardado de carga acaba de llamar a
+  // `anotarPendiente()`, así que la cola está escrita cuando se llega a esta línea
+  // y su confirmación es una promesa que aún no ha resuelto. La condición no decía
+  // "quedó algo de la sesión anterior", decía "acabamos de guardar" — y por eso
+  // era **cierta en cada carga de página** y programaba un guardado inútil para
+  // escribir lo mismo que ya estaba escrito.
+  //
+  // **Y ESO NO ERA COSA DE NADA: SE COLABA EN MEDIO DE LO QUE ESTÁ PASANDO.** Es
+  // un `setTimeout` de 1,2 s que nadie ha pedido, así que puede caer entre dos
+  // pulsaciones del jugador: su `anotarPendiente()` se queda con el estado de ese
+  // instante y el documento queda guardado a medias. Un banco que recargaba sin
+  // volcar antes leyó ese documento a medias y dio un saldo que no correspondía a
+  // ningún momento — y por eso era una prueba intermitente, que es la peor clase
+  // de prueba: entrena a ignorar el banco entero.
+  if (habiaColaAlArrancar) {
     setTimeout(() => { void saveToFirebase(); }, 1200);
   }
 
@@ -3825,8 +3856,13 @@ const AFK_THRESHOLD_MS = 60000;
      */
     forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
       handleUserActivity();
-      if ((state.nodeLevels.blueprint || 0) < 1) {
-        return { success: false, msg: 'Necesitas el nodo "Planos Viejos" para craftear.' };
+      // G6 · La regla es de `data/tree.ts`, no de aquí. Estaba escrita a mano en el
+      // motor y otra vez en la tienda, y G6 iba a añadir una tercera copia en el
+      // botón de navegación. Tres copias de "¿tengo el nodo?" es exactamente como
+      // dos de ellas dejan de estar de acuerdo.
+      const cerrada = motivoDeForjaCerrada(state.nodeLevels);
+      if (cerrada) {
+        return { success: false, msg: cerrada };
       }
       if (materialIds.length !== 2) {
         return { success: false, msg: 'Selecciona exactamente 2 recolectores.' };
