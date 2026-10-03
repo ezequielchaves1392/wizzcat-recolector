@@ -694,6 +694,8 @@ export interface ForgeResult {
   collector?: CollectorItem;
   /** Esquirlas ganadas por el fallo. */
   shards?: number;
+  /** Cristales de consuelo que deja el fallo. Los mismos en las dos fusiones. */
+  crystals?: number;
   chanceUsed?: number;
   error?: string;
 }
@@ -723,35 +725,64 @@ export const MATERIALES_POR_FUSION = 2;
 
 
 
-/**
- * EL POTENCIAL DE UN COMPAÑERO: LA POSICIÓN DENTRO DEL RANGO DE SU TIER.
- *
- * **QUÉ SIGNIFICA, DE LA MISMA MANERA QUE EN EL RECOLECTOR.** El potencial va de
- * 1 a 5 y dice **hasta dónde llega este item dentro de lo que su tier puede
- * dar**: ★1 es el suelo del rango y ★5 es el techo. Dos compañeros del mismo
- * tier se comparan con un número, que es lo que hace que buscar uno sea una
- * decisión.
- *
- * **Y POR QUÉ AQUÍ NO ES UN MULTIPLICADOR, COMO EN EL RECOLECTOR.** Porque el
- * poder del compañero **es el rango**: su carta se paga por él, y el rango del
- * tier es lo que fija el precio. Con `danioDeRango()` —base × (1 + 0,2 × p)— el
- * techo de cada tier se multiplicaría otra vez por el potencial, y medido eso
- * da un compañero T10 hasta **once veces** más fuerte que el de ahora con la
- * misma carta: el precio por punto se desploma y el T10 vuelve a ser la trampa
- * que `balanceCheck` ya cazó una vez. Con la regla de la posición, **la
- * esperanza del dado no cambia** (potencial 3 cae en el punto medio, que es lo
- * que `rand(min, max)` daba de media) y lo que cambia es la **diferencia entre
- * dos compañeros del mismo tier**, que es justo lo que el potencial debe hacer.
- *
- * Y el orden entre tiers sigue siendo estricto: el techo del T9 (346) es menor
- * que el suelo del T10 (373), así que subir de tier siempre mejora, con
- * potencial o sin él.
- */
-export function poderDeCompanero(tier: number, potential: number): number {
-  const [min, max] = rangoDePoder(tier);
-  const p = potencialNormalizado(potential);
-  return Math.round(min + ((max - min) * (p - 1)) / 4);
-}
+/**
+
+ * EL POTENCIAL DE UN COMPAÑERO: LA POSICIÓN DENTRO DEL RANGO DE SU TIER.
+
+ *
+
+ * **QUÉ SIGNIFICA, DE LA MISMA MANERA QUE EN EL RECOLECTOR.** El potencial va de
+
+ * 1 a 5 y dice **hasta dónde llega este item dentro de lo que su tier puede
+
+ * dar**: ★1 es el suelo del rango y ★5 es el techo. Dos compañeros del mismo
+
+ * tier se comparan con un número, que es lo que hace que buscar uno sea una
+
+ * decisión.
+
+ *
+
+ * **Y POR QUÉ AQUÍ NO ES UN MULTIPLICADOR, COMO EN EL RECOLECTOR.** Porque el
+
+ * poder del compañero **es el rango**: su carta se paga por él, y el rango del
+
+ * tier es lo que fija el precio. Con `danioDeRango()` —base × (1 + 0,2 × p)— el
+
+ * techo de cada tier se multiplicaría otra vez por el potencial, y medido eso
+
+ * da un compañero T10 hasta **once veces** más fuerte que el de ahora con la
+
+ * misma carta: el precio por punto se desploma y el T10 vuelve a ser la trampa
+
+ * que `balanceCheck` ya cazó una vez. Con la regla de la posición, **la
+
+ * esperanza del dado no cambia** (potencial 3 cae en el punto medio, que es lo
+
+ * que `rand(min, max)` daba de media) y lo que cambia es la **diferencia entre
+
+ * dos compañeros del mismo tier**, que es justo lo que el potencial debe hacer.
+
+ *
+
+ * Y el orden entre tiers sigue siendo estricto: el techo del T9 (346) es menor
+
+ * que el suelo del T10 (373), así que subir de tier siempre mejora, con
+
+ * potencial o sin él.
+
+ */
+
+export function poderDeCompanero(tier: number, potential: number): number {
+
+  const [min, max] = rangoDePoder(tier);
+
+  const p = potencialNormalizado(potential);
+
+  return Math.round(min + ((max - min) * (p - 1)) / 4);
+
+}
+
 
 /**
  * Un compañero del tier pedido, con el potencial que se le diga.
@@ -926,19 +957,54 @@ export function tiraDeForja(
   tier: number,
   materials: Array<{ affixes?: string[]; rarity?: string }>,
   options: IntentosDeForja
-): { acierto: boolean; chance: number; shards: number } {
+): { acierto: boolean; chance: number; shards: number; crystals: number } {
   // Los compañeros no tienen afijos, así que aquí aportan cero. No es que se les
   // dé un trato peor: es que no tienen la entrada que suma esto.
   const afixLuck = materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0);
   const nanoUsed = options.nanoUsed ?? 0;
   const chance = successChance(tier, options.craftLuck, options.stonesUsed, afixLuck, nanoUsed);
   const rng = options.rng ?? Math.random;
-  if (rng() <= chance) return { acierto: true, chance, shards: 0 };
+  if (rng() <= chance) return { acierto: true, chance, shards: 0, crystals: 0 };
 
   // Fallo: esquirlas proporcionales al tier **y a la rareza de los materiales**.
   const matBonus = materials.reduce((a, m) => a + (RARITY_WEIGHT[m.rarity as Rarity] ?? 0) * 4, 0);
   const baseShards = 8 + tier * 6;
-  return { acierto: false, chance, shards: Math.round((baseShards + matBonus) * (1 + options.shardBonus)) };
+  return {
+    acierto: false,
+    chance,
+    shards: Math.round((baseShards + matBonus) * (1 + options.shardBonus)),
+    crystals: cristalesDeConsuelo(tier)
+  };
+}
+
+/**
+ * CRISTALES QUE DEJA UN FALLO DE FORJA, Y POR QUÉ SON ESTOS Y NO OTROS.
+ *
+ * **EL MOTIVO ES QUE EL FALLO NO PUEDE SER UN CALLEJÓN SIN SALIDA.** Un fallo
+ * cuesta los dos materiales del yunque, y eso es un objetivo de tier: en los
+ * niveles altos es el equivalente a miles de nanitas. Sin más, la racha mala vacía
+ * el almacén y el jugador deja de intentar; con algo que se lleva, la racha mala
+ * **cuesta pero no empobrece**, y se sigue intentando.
+ *
+ * **POR QUÉ SUBE CON EL TIER.** Porque el coste del fallo también sube: dos T10
+ * duelen mucho más que dos T1, y una compensación plana haría que el fallo fuera
+ * una pesadilla solo al principio y gratis al final. Lineal, sin curva: una curva
+ * sería inventarse una economía que nadie ha pedido.
+ *
+ * **Y POR QUÉ NO ES TANTA COMO DA UNA CAJA.** Una caja de tier `n` da entre 3n y 5n
+ * cristales, más el multiplicador de rareza: para el T10 son unas decenas. Aquí el
+ * fallo da `2 + n`, o sea un orden de magnitud menos en los niveles altos. La
+ * diferencia es deliberada: **abrir cajas tiene que seguir siendo la forma buena
+ * de conseguir cristales**, y la forja es la que se usa cuando ya tienes el
+ * material. Si igualaramos las dos fuentes, las cajas dejarían de tener sentido y
+ * con ellas el 30 % del botín que ellas dan.
+ *
+ * El número está aquí y no en el motor porque es **la mitad de la regla del
+ * fallo**, igual que las esquirlas. Y en un solo sitio para las dos fusiones: si
+ * el recolector y el compañero dieran distinto, sería dos reglas.
+ */
+function cristalesDeConsuelo(tier: number): number {
+  return 2 + Math.max(1, Math.floor(tier));
 }
 /**
  * Intenta fusionar 2 recolectores del mismo tier.
@@ -958,7 +1024,9 @@ export function attemptForge(
   if (error) return { success: false, error };
 
   const tira = tiraDeForja(tier, materials, options);
-  if (!tira.acierto) return { success: false, shards: tira.shards, chanceUsed: tira.chance };
+  if (!tira.acierto) {
+    return { success: false, shards: tira.shards, crystals: tira.crystals, chanceUsed: tira.chance };
+  }
 
   // Éxito: construir el recolector
   // F33 · El potencial es la MEDIA de los dos materiales, y es el potencial lo
@@ -1045,7 +1113,7 @@ export function attemptForgeCompanion(
   materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number }>,
   tier: number,
   options: IntentosDeForja
-): { success: boolean; companion?: any; error?: string; shards?: number; chanceUsed?: number } {
+): { success: boolean; companion?: any; error?: string; shards?: number; crystals?: number; chanceUsed?: number } {
   const rng = options.rng ?? Math.random;
   const maxTier = options.maxTier ?? Infinity;
 
@@ -1053,7 +1121,9 @@ export function attemptForgeCompanion(
   if (error) return { success: false, error };
 
   const tira = tiraDeForja(tier, materials, options);
-  if (!tira.acierto) return { success: false, shards: tira.shards, chanceUsed: tira.chance };
+  if (!tira.acierto) {
+    return { success: false, shards: tira.shards, crystals: tira.crystals, chanceUsed: tira.chance };
+  }
 
   const newTier = tier + 1;
 

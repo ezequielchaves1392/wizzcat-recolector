@@ -4174,13 +4174,30 @@ const AFK_THRESHOLD_MS = 60000;
       // Fallo: se pierden los 2 y se ganan esquirlas
       consumeMaterialesDeForja(materialIds);
       state.shards += result.shards || 0;
+      // **EL FALLO DEJA CRISTALES, Y POR AQUÍ.**
+      //
+      // Un fallo cuesta los dos materiales del yunque, que es un objeto de tier:
+      // en los niveles altos son miles de nanitas. **Sin nada más, la racha mala
+      // vacía el almacén y el jugador deja de intentar**; con una compensación que
+      // se lleva, cuesta pero no empobrece.
+      //
+      // Y **suben con el tier a propósito**, porque el coste del fallo también sube.
+      // El número está en `cristalesDeConsuelo()` (`data/crafting.ts`), que es la
+      // mitad de la regla del fallo, y es **la misma función para las dos fusiones**.
+      //
+      // Se entregan por `grantCrystals()`, la misma vía que usan las cajas: así el
+      // almacén sigue siendo la fuente de verdad y los contadores se derivan, en
+      // vez de escribir un contador suelto que se desincroniza al recargar.
+      const consuelo = result.crystals || 0;
+      if (consuelo > 0) grantCrystals(mat.tier!, consuelo);
       onUpdate(state, isAfk);
       saveToFirebase();
       return {
         success: false,
         shards: result.shards,
+        crystals: consuelo,
         chance: result.chanceUsed,
-        msg: `Fallo en la forja: +${result.shards} esquirlas`
+        msg: `Fallo en la forja: +${result.shards} esquirlas y +${consuelo} cristales`
       };
     },
 
@@ -4242,13 +4259,20 @@ const AFK_THRESHOLD_MS = 60000;
 
       consumeMaterialesDeForja(materialIds);
       state.shards += result.shards || 0;
+      // **LO MISMO QUE EN EL RECOLECTOR, Y POR LA MISMA RAZÓN.** El fallo de una
+      // fusión de compañeros también cuesta dos objetos de tier, así que también
+      // tiene que dejar algo. Y lo deja la misma función, para que las dos
+      // compensaciones no puedan separarse.
+      const consuelo = result.crystals || 0;
+      if (consuelo > 0) grantCrystals(mat.tier!, consuelo);
       onUpdate(state, isAfk);
       saveToFirebase();
       return {
         success: false,
         shards: result.shards,
+        crystals: consuelo,
         chance: result.chanceUsed,
-        msg: `Fallo en la forja: +${result.shards} esquirlas`
+        msg: `Fallo en la forja: +${result.shards} esquirlas y +${consuelo} cristales`
       };
     },
 

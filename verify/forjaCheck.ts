@@ -19,7 +19,7 @@
 //  afijos—, así que una prueba que tire una vez mide el azar, no la regla.
 // ==========================================================================
 
-import { boot, bootNew, check, resumen, wh, ids, baseSave, collector, companion, ficha, consumable, crystal, conRoll } from './kit';
+import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, crystal, conRoll } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { successChance, baseSuccessChance } from '../src/data/crafting';
 import { poderDeCompanero } from '../src/data/crafting';
@@ -544,6 +544,110 @@ async function main() {
       rPow.companion?.power === poderDeCompanero(4, 5),
       `power=${rPow.companion?.power} esperado=${poderDeCompanero(4, 5)}`);
   }
+// =========================================================================
+//  EL FALLO DE FORJA DEJA CRISTALES
+// =========================================================================
+//  Lo que se comprueba, y por qué:
+//
+//  · Que el fallo **entrega** cristales, y no solo los anuncia. El mensaje dice
+//    "+N cristales": si no se entregues, el juego le está mintiendo al jugador en
+//    el momento en que más caro sale.
+//  · Que entrega **los del tier que se estaba forjando**, no los de otro. Es la
+//    misma regla F26 que el resto del juego: el cristal va con el nivel.
+//  · Que **suben con el tier**, porque el coste del fallo también sube. Un fallo
+//    en T1 no puede costar lo mismo que uno en T10.
+//  · Y que **las dos fusiones dan lo mismo**, que es la comprobación que más fácil
+//    se rompe el día que alguien copia una de las dos ramas.
+// =========================================================================
+
+const falloCon = async (extra: any = {}) => {
+  const g = await boot(baseSave([
+    collector('a', 3, { potential: 3, damage: 100 }),
+    collector('b', 3, { potential: 3, damage: 100 })
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystalsByTier: {}, upgradeCrystals: 0, ...extra }));
+  const r: any = conRoll(0.999, () => g.forgeCollector(['a', 'b']));
+  const cristales = (wh(g) as any[]).filter((w: any) => w.type === 'crystal')
+    .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+  return { g, r, cristales };
+};
+
+// --- 1. El fallo entrega cristales, y el mensaje lo dice -------------------------
+{
+  const { r, cristales } = await falloCon();
+  check('consuelo: el fallo entrega cristales de verdad',
+    cristales > 0, `cristales=${cristales}`);
+  check('consuelo: y el mensaje lo anuncia, que es la mitad de la promesa',
+    /cristales/.test(r.msg ?? '') && cristales === (r.crystals ?? -1),
+    `msg="${r.msg}" crystals=${r.crystals} entregados=${cristales}`);
+}
+
+// --- 2. Son del tier que se estaba forjando, y suben con él ----------------------
+{
+  const porTier: string[] = [];
+  let bien = true;
+  for (const tier of [1, 4, 7]) {
+    const { cristales } = await falloCon({
+      warehouseCapacity: 40
+    });
+    const g = await boot(baseSave([
+      collector(`a${tier}`, tier, { potential: 3, damage: 100 }),
+      collector(`b${tier}`, tier, { potential: 3, damage: 100 })
+    ], { nanites: 0, warehouseCapacity: 40, shards: 0 }));
+    const r: any = conRoll(0.999, () => g.forgeCollector([`a${tier}`, `b${tier}`]));
+    const pila = (wh(g) as any[]).find((w: any) => w.type === 'crystal');
+    const n = pila?.stackCount || 0;
+    porTier.push(`T${tier}:${n}@cristal${pila?.tier ?? '-'}`);
+    if (!pila || pila.tier !== tier) bien = false;
+    if (n !== 2 + tier) bien = false;
+    void cristales;
+  }
+  check('consuelo: el cristal es del TIER que se forja, no de otro',
+    bien, porTier.join(' '));
+}
+
+// --- 3. Las dos fusiones dan lo mismo --------------------------------------------
+//
+// **LA COMPROBACIÓN QUE MÁS FÁCIL SE ROMPE.** Las dos ramas de fallo son código
+// duplicado a propósito —el recolector y el compañero devuelven objetos distintos—,
+// así que el día que alguien edita una y no la otra, el jugador forja un
+// compañero y recibe otra recompensa sin que nada se entere.
+{
+  const gRec = await boot(baseSave([
+    collector('a', 5, { potential: 3, damage: 100 }),
+    collector('b', 5, { potential: 3, damage: 100 })
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0 }));
+  const rRec: any = conRoll(0.999, () => gRec.forgeCollector(['a', 'b']));
+  const rec = (wh(gRec) as any[]).find((w: any) => w.type === 'crystal')?.stackCount ?? 0;
+
+  const gCom = await boot(baseSave([
+    companion('c1', 5, { potential: 3 }),
+    companion('c2', 5, { potential: 3 }),
+    ficha('c1', 5, { potential: 3 }),
+    ficha('c2', 5, { potential: 3 })
+  ], {
+    nanites: 0, warehouseCapacity: 40, shards: 0,
+    companions: [ficha('c1', 5, { potential: 3 }), ficha('c2', 5, { potential: 3 })]
+  }));
+  const rCom: any = conRoll(0.999, () => gCom.forgeCompanion(['c1', 'c2']));
+  const com = (wh(gCom) as any[]).filter((w: any) => w.type === 'crystal')
+    .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+
+  check('consuelo: un fallo da lo MISMO en las dos fusiones',
+    rec === com && rRec.crystals === rCom.crystals && rec > 0,
+    `recolector=${rec} companero=${com}`);
+}
+
+// --- 4. Y el acierto no da nada, que si no es una ruleta más ----------------------
+{
+  const g = await boot(baseSave([
+    collector('a', 3, { potential: 3, damage: 100 }),
+    collector('b', 3, { potential: 3, damage: 100 })
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0 }));
+  conRoll(0.001, () => g.forgeCollector(['a', 'b']));
+  const cristales = (wh(g) as any[]).filter((w: any) => w.type === 'crystal').length;
+  check('consuelo: el acierto NO da cristales de consuelo, que solo compensan el fallo',
+    cristales === 0, `pilas de cristal=${cristales}`);
+}
   resumen('la forja: dos del mismo tier, potencial medio y afijos por linaje');
 }
 
