@@ -32,9 +32,15 @@ interface Scenario {
   gapAntesDe?: string;
 }
 
-const key = (id: string, n = 1): Item => ({
-  id, name: 'Llave de Cifrado', type: 'key', details: 'x', rarity: 'Común',
-  tier: 0, sellPrice: 480, stackable: true, stackCount: n
+// **ESTE ERA EL ITEM DE LLAVE Y AHORA ES UN CRISTAL, Y NO POR COSMÉTICA.**
+// Los escenarios de este fichero sirven para una cosa: comprobar que arrastrar
+// una pila grande que está al final de la rejilla la deja donde toca. Las llaves
+// dejaron de apilarse cuando dejaron de ser moneda, así que el escenario se
+// apoya en el cristal, que es el objeto que de verdad llena un hueco con una cifra
+// de tres dígitos. El resto del escenario no cambia.
+const pila = (id: string, n = 1): Item => ({
+  id, name: 'Cristal de Afino', type: 'crystal', details: 'x1', rarity: 'Común',
+  tier: 1, sellPrice: 180, stackable: true, stackCount: n
 });
 const coll = (id: string, name = 'Dron Explorador'): Item => ({
   id, name, type: 'collector', details: '+5', rarity: 'Común',
@@ -47,16 +53,16 @@ const comp = (id: string): Item => ({
 
 const SCENARIOS: Scenario[] = [
   {
-    // El caso del jugador: 3 celdas, 19 llaves apiladas y 18 huecos detras.
-    nombre: 'pila de 19 llaves al final',
-    warehouse: [coll('dron'), comp('blaster'), ...Array.from({ length: 19 }, (_, i) => key('k' + i))],
+    // El caso del jugador: 3 celdas, 19 cristales apilados y 18 huecos detras.
+    nombre: 'pila de 19 cristales al final',
+    warehouse: [coll('dron'), comp('blaster'), ...Array.from({ length: 19 }, (_, i) => pila('k' + i))],
     capacity: 21,
     from: 0,
     to: 3
   },
   {
     nombre: 'pila al final',
-    warehouse: [coll('dron'), comp('blaster'), ...Array.from({ length: 19 }, (_, i) => key('k' + i))],
+    warehouse: [coll('dron'), comp('blaster'), ...Array.from({ length: 19 }, (_, i) => pila('k' + i))],
     capacity: 21,
     from: 2,
     to: 3
@@ -77,7 +83,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     nombre: 'pila en medio',
-    warehouse: [coll('a'), key('p1'), key('p2'), coll('b')],
+    warehouse: [coll('a'), pila('p1'), pila('p2'), coll('b')],
     capacity: 12,
     from: 1,
     to: 3
@@ -92,7 +98,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     nombre: 'pila sobre la celda de al lado',
-    warehouse: [coll('a'), key('p1'), key('p2'), coll('b')],
+    warehouse: [coll('a'), pila('p1'), pila('p2'), coll('b')],
     capacity: 12,
     from: 0,
     to: 1
@@ -109,7 +115,7 @@ const SCENARIOS: Scenario[] = [
     // a un hueco mas adelante. Como el guardado es una lista, "un hueco mas
     // adelante" solo puede significar "ponlo al final", y ya estaba al final.
     nombre: 'ultima celda ocupada -> hueco',
-    warehouse: [comp('blaster'), key('k1', 5), coll('dron')],
+    warehouse: [comp('blaster'), pila('k1', 5), coll('dron')],
     capacity: 12,
     from: 2,
     to: 5
@@ -142,7 +148,7 @@ const SCENARIOS: Scenario[] = [
     // Al meterla en un hueco tienen que entrar TODOS: si entrara solo el que
     // pintaba la celda, la pila se partiria y la mitad se quedaria fuera.
     nombre: 'pila dentro de un hueco',
-    warehouse: [key('p1', 3), key('p2', 4), coll('a'), coll('z')],
+    warehouse: [pila('p1', 3), pila('p2', 4), coll('a'), coll('z')],
     capacity: 12,
     gaps: ['z'],
     from: 0,
@@ -154,7 +160,7 @@ const SCENARIOS: Scenario[] = [
     // falta 3 celdas de hueco para empujar el item hasta ahi. Es lo que pedia el
     // jugador: que el item caiga en la celda que senala, no "al final".
     nombre: 'soltar en la celda 5',
-    warehouse: [coll('dron'), comp('blaster'), key('k1', 5)],
+    warehouse: [coll('dron'), comp('blaster'), pila('k1', 5)],
     capacity: 12,
     from: 0,
     to: 5
@@ -162,7 +168,7 @@ const SCENARIOS: Scenario[] = [
   {
     // Mas alla del tope del tablero: se recorta en vez de inventar una posicion.
     nombre: 'soltar mas alla del tablero',
-    warehouse: [coll('dron'), comp('blaster'), key('k1', 5)],
+    warehouse: [coll('dron'), comp('blaster'), pila('k1', 5)],
     capacity: 12,
     from: 0,
     to: 9
@@ -173,7 +179,7 @@ const SCENARIOS: Scenario[] = [
     // Antes solo llegaba a la 5, por un tope de "un hueco por celda" que se
     // invento sin motivo.
     nombre: 'lejos: 3 celdas y 18 libres',
-    warehouse: [coll('dron'), comp('blaster'), key('k1', 5)],
+    warehouse: [coll('dron'), comp('blaster'), pila('k1', 5)],
     capacity: 21,
     from: 0,
     to: 17
@@ -181,7 +187,7 @@ const SCENARIOS: Scenario[] = [
   {
     // Y el ultimo item, que es el que antes rechazaba.
     nombre: 'el ultimo item, lejos',
-    warehouse: [coll('dron'), comp('blaster'), key('k1', 5)],
+    warehouse: [coll('dron'), comp('blaster'), pila('k1', 5)],
     capacity: 21,
     from: 2,
     to: 17
@@ -189,7 +195,7 @@ const SCENARIOS: Scenario[] = [
   {
     // La ultima celda del tablero: el tope real.
     nombre: 'la ultima celda del tablero',
-    warehouse: [coll('dron'), comp('blaster'), key('k1', 5)],
+    warehouse: [coll('dron'), comp('blaster'), pila('k1', 5)],
     capacity: 21,
     from: 0,
     to: 20

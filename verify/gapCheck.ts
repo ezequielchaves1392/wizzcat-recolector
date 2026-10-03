@@ -27,7 +27,7 @@
 
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave, guardado,
-  collector, companion, crate, key
+  collector, companion, crate, crystal
 } from './kit';
 
 import { moveItemTo, moveIntoGap, moveToFreeCell, visibleStacksFor } from '../src/components/warehouse';
@@ -161,7 +161,7 @@ async function main() {
   {
     const items = [
       collector('a'), collector('b'), crate('p1', 1, 3), crate('p2', 1, 2),
-      key('k1', 1, 7), companion('m1')
+      crystal('k1', 1, 7), companion('m1')
     ];
     const g = await boot(baseSave(items));
     const original = new Set(ids(g));
@@ -195,7 +195,11 @@ async function main() {
     g.setWarehouseGaps(['c0', 'c5']);
     check('capacidad: los huecos no cuentan como ranura',
       wh(g).length === 10 && g.getCapacity() === 10, `${wh(g).length}/${g.getCapacity()}`);
-    const r = g.buyStoreItem('keyT1');
+    // **LO QUE SE COMPRA NO IMPORTA, Y POR QUÉ.** Antes era `keyT1`. Esa carta ya no
+    // existe, y el caso que se mide es de la ranura y no del objeto: con el
+    // almacen lleno la compra se rechaza igual. Se compra la caja T1, que es una
+    // compra de item y por tanto la única clase que puede quedarse sin hueco.
+    const r = g.buyStoreItem('crateT1');
     check('capacidad: con el almacen lleno y huecos, la compra se rechaza igual',
       r === false, JSON.stringify(r));
   }
@@ -204,7 +208,7 @@ async function main() {
     const items = Array.from({ length: 9 }, (_, i) => collector('c' + i));
     const g = await boot(baseSave(items, { warehouseCapacity: 10, nanites: 5000 }));
     g.setWarehouseGaps(['c0']);
-    const r = g.buyStoreItem('keyT1');
+    const r = g.buyStoreItem('crateT1');
     check('capacidad: y con hueco de sobra la compra SI entra', !!r && wh(g).length === 10,
       `${JSON.stringify(r)} ${wh(g).length}`);
   }
@@ -316,9 +320,9 @@ async function main() {
     // hueco no habría nada que colocar —el hueco está pegado a su derecha— y el
     // gesto se rechazaría, que es lo correcto pero no es lo que se quiere ver.
     const items: any[] = [collector('dron'), collector('blaster')];
-    for (let i = 0; i < 19; i++) items.push(key('k' + i));
+    for (let i = 0; i < 19; i++) items.push(crystal('k' + i));
     const g = await boot(baseSave(items, { warehouseCapacity: 21 }));
-    check('mockup: el almacen con 19 llaves da 3 celdas',
+    check('mockup: el almacen con 19 cristales da 3 celdas',
       visibleStacksFor(g, s(g), 'all', 'default').length === 3, ids(g).join(','));
 
     // El hueco se monta aqui con la API y no arrastrando, para poder colocar el
@@ -332,7 +336,7 @@ async function main() {
       rejilla(g).join(',') === '·,dron,blaster,k0', rejilla(g).join(','));
 
     // Y ahora el dron entra en el hueco de en medio, el que precede a la pila de
-    // llaves. Entra ahi y deja su hueco donde estaba, que es justo el dibujo.
+    // cristales. Entra ahi y deja su hueco donde estaba, que es justo el dibujo.
     g.setWarehouseGaps(['k0']);
     const r = moveIntoGap(g, 'dron', 'k0', 'all', 'default');
     check('mockup: soltar dentro del hueco mete el item ahi',

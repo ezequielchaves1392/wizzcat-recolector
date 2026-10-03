@@ -14,7 +14,7 @@
 import { createGameLoop } from '../src/gameLoop';
 import { countOccupiedSlots } from '../src/data/stacking';
 import { CRATE_TYPES, CRATE_TIERS, type CrateType } from '../src/data/store';
-import { KEY_DEFS, KEY_TIERS, CRYSTAL_DEFS, type KeyTier } from '../src/data/items';
+import { CRYSTAL_DEFS } from '../src/data/items';
 
 export type Row = { name: string; ok: boolean; detail: string };
 
@@ -253,13 +253,13 @@ export const ficha = (id: string, tier = 3, over: any = {}) => ({
  * nombres escritas aquí que **no eran las del juego**. Eso son tres copias de
  * datos que el juego ya tiene en `data/items.ts`, y ya se habían separado: el
  * nombre de un cristal en un banco no era el nombre de un cristal en el juego, y
- * con la regla de F26 eso importa —porque un bank que fabrica un cristal que el
- * juego norecognize mide el fallo equivocado.
+ * con la regla de F26 eso importa —porque un banco que fabrica un cristal que el
+ * juego no reconoce mide el fallo equivocado.
  *
- * Ahora las tres leen `CRATE_TYPES`, `KEY_DEFS` y `CRYSTAL_DEFS`, y la caja
- * escribe el mismo `Caja T{n}` que escribe el juego. Una fábrica que fabrica
- * algo que el juego no fabrica produce bancos que pasan probando un objeto
- * equivocado, y eso es peor que un banco que falla.
+ * Ahora las dos que fabrican algo que el juego fabrica leen `CRATE_TYPES` y
+ * `CRYSTAL_DEFS`, y la caja escribe el mismo `Caja T{n}` que escribe el juego. Una
+ * fábrica que fabrica algo que el juego no fabrica produce bancos que pasan
+ * probando un objeto equivocado, y eso es peor que un banco que falla.
  */
 export const crate = (id: string, tier = 1, stack = 1, over: any = {}) => ({
   id, name: CRATE_TYPES[tier as CrateType].name, type: 'crate', details: 'x',
@@ -282,10 +282,24 @@ export const distintos = (n: number, tipo = 'collector') =>
       ? collector(`r${i}`, 1, { name: `Recolector ${i}` })
       : collector(`r${i}`, 1, { name: `Cosa ${i}` }));
 
-export const key = (id: string, tier = 1, stack = 1, over: any = {}) => ({
-  id, name: KEY_DEFS[tier as KeyTier].name, type: 'key', details: 'x',
-  rarity: KEY_DEFS[tier as KeyTier].rarity,
-  tier, sellPrice: 480, stackable: true, stackCount: stack, ...over
+/**
+ * Una llave, tal y como la dejaría una partida guardada antes de quitarlas.
+ *
+ * **EL NOMBRE VA ESCRITO A MANO, Y POR QUÉ ESO ES LO CORRECTO AQUÍ.** El resto de
+ * las fábricas leen el nombre de `data/`, porque lo que fabrican lo fabrica el
+ * juego hoy y el nombre tiene que ser el de hoy. Una llave **no la fabrica nadie**:
+ * es un item de una partida vieja, y lo que hay que comprobar es que la redención
+ * lo entienda. Si el nombre saliera de `KEY_DEFS`, el banco estaría probando el
+ * objeto contra la definición que lo nombra, y la prueba no diría nada.
+ *
+ * El nombre literal es exactamente lo que se encuentra en el almacén de una
+ * partida de antes, y `keyTierFromName()` —que sigue en el juego solo para esto— es
+ * lo que lo resuelve.
+ */
+export const key = (id: string, name = 'Llave de Cifrado', stack = 1, over: any = {}) => ({
+  id, name, type: 'key', details: 'x',
+  rarity: 'Común' as any,
+  sellPrice: 480, stackable: true, stackCount: stack, ...over
 });
 
 export const crystal = (id: string, tier = 1, stack = 1, over: any = {}) => ({
@@ -320,8 +334,6 @@ export function baseSave(items: any[], extra: any = {}) {
   // juego, así que un banco no puede probar una caja que el juego no recognises.
   const crates: Record<number, number> = {};
   for (const t of CRATE_TIERS) crates[t] = 0;
-  const keysByTier: Record<number, number> = {};
-  for (const t of KEY_TIERS) keysByTier[t] = 0;
   const crystalsByTier: Record<number, number> = {};
   let upgradeCrystals = 0;
   let afkCards = 0;
@@ -331,8 +343,6 @@ export function baseSave(items: any[], extra: any = {}) {
       const m = /caja t(\d+)/.exec((w.name || '').toLowerCase());
       if (!m) continue;
       crates[Number(m[1])] = (crates[Number(m[1])] ?? 0) + (w.stackCount || 1);
-    } else if (w.type === 'key') {
-      keysByTier[w.tier ?? 1] = (keysByTier[w.tier ?? 1] ?? 0) + (w.stackCount || 1);
     } else if (w.type === 'crystal') {
       crystalsByTier[w.tier ?? 1] += w.stackCount || 1;
       if ((w.tier ?? 1) === 1) upgradeCrystals += w.stackCount || 1;
@@ -347,8 +357,6 @@ export function baseSave(items: any[], extra: any = {}) {
     totalNanitesProduced: 0,
     warehouse: items,
     crates,
-    keys: KEY_TIERS.reduce((s, t) => s + (keysByTier[t] ?? 0), 0),
-    keysByTier,
     crystalsByTier,
     upgradeCrystals,
     afkCards,

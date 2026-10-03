@@ -38,7 +38,7 @@ import { MATERIALES_POR_FUSION } from './data/crafting';
 //  hay ninguna decisión nueva que revisar — solo dónde vive cada cosa.
 // ==========================================================================
 import {
-  STORE_ITEMS, CRATE_TYPES, CRATE_TIERS, MAX_CRATE_TIER, costeDeCaja,
+  STORE_ITEMS, CRATE_TYPES, CRATE_TIERS, MAX_CRATE_TIER, costeDeCaja, COSTE_POR_TIER,
   CONSUMABLES, COLLECTOR_BASE_COSTS,
   COMPANION_SLOT_COSTS, RANURA_POR_CARTA, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP,
   expansorPorBuff, type CrateType
@@ -87,11 +87,17 @@ export function previewUpgradeCost(level: number): number {
 // reventa del material salía de `def.cost`, y al salir de `STORE_ITEMS` se han
 // quedado sin uso. Se borran en vez de dejarlos, porque un tipo importado que
 // no lee nadie es la señal de que la regla se movió y nadie lo anotó.
+//
+// **`keyTierFromName` SIGUE IMPORTADO, Y SOLO PARA LA REDENCIÓN.** No queda ni una
+// regla de llaves en el juego, pero una partida guardada antes de quitarlas tiene
+// llaves en el almacén, y hay que saber cuántas para redimirlas. Es el único sitio
+// donde sobrevive algo del sistema, y por eso el motivo va aquí y no dentro de la
+// migración: si algún día se borra la redención, este import se puede borrar con
+// ella —y no antes.
 import {
-  KEY_DEFS, KEY_TIER_ORDER, CRYSTAL_DEFS, CRATE_KEY_TIER, STORE_KEY_TIER,
+  CRYSTAL_DEFS,
   MAX_CRYSTAL_TIER, crystalTierFromName,
-  crystalSuccessChance, crystalPowerFromName, keyTierFromName, keyOpens,
-  type KeyTier
+  crystalSuccessChance, crystalPowerFromName, keyTierFromName
 } from './data/items';
 
 
@@ -100,26 +106,40 @@ import {
 
 // Las migraciones se anotan de más nueva a más vieja.
 //
+// La 9 es la de la **redención de las llaves**. Una partida guardada antes de
+// quitarlas tiene llaves en el almacén, y en el mejor de los casos muchas: la
+// tienda las vendía y cada caja soltaba una o dos. Se **venden solas** por lo que
+// valían, porque borrarlas es robarle al jugador algo que pagó y dejarlas es
+// llenar el almacén de objetos que no sirven para nada. El precio sale del mismo
+// sitio del que salía el precio viejo —un tercio del par caja+llave—, así que no
+// es una aproximación. Está al final de este bloque, con su motivo.
+//
 // La 8 es la del `potential` en los recolectores. Antes el potencial solo
 // vivía en los items forjados y lo tiraba la rareza; ahora es la escala 1..5
 // que decide el daño de TODO recolector, y los items viejos lo reciben deducido
 // de su propio daño para que ninguno cambie de estadísticas al migrar.
 //
 // La 7 es la del renombre `weapon` -> `collector`. La 6 no avisó de nada: el
-// código pasó a esperar 'collector' y las partidas que ya existían se quedaron
-// con 'weapon' guardado, que no es un tipo que reconozca nadie. Por eso esa
-// versión no sube por el formato del documento sino por un cambio de NOMBRES
-// dentro de él, y por eso las migraciones de abajo se aplican solo al cruzarla.
-//
-// La 7 es la del renombre `weapon` -> `collector`. La 6 no avisó de nada: el
-// código pasó a esperar 'collector' y las partidas que ya existían se quedaron
+// código pasa a esperar 'collector' y las partidas que ya existían se quedaron
 // con 'weapon' guardado, que no es un tipo que reconozca nadie. Por eso esa
 // versión no sube por el formato del documento sino por un cambio de NOMBRES
 // dentro de él, y por eso su migración se aplica solo al cruzarla.
 //
 // Una partida sin `saveVersion` (o con 0) se trata como anterior a la 7: es lo
 // que quiere decir no haber pasado nunca por este código.
-const SAVE_VERSION = 8;
+//
+// **ESTE NÚMERO ESTÁ EXPORTADO PORQUE HAY UN BANCO QUE LO COMPARA, Y POR QUÉ ESO
+// IMPORTA MÁS DE LO QUE PARECE.** `sellCheck` comprueba que la migración **se
+// escribe**: que el documento guardado trae la versión nueva y no la que tenía
+// antes. Eso solo se puede comprobar contra la constante. Contra un número escrito
+// a mano significa que **cada vez que sube la versión hay que acordarse de ir a
+// editar el banco**, y no es un problema teórico: ha pasado en las últimas
+// versiones, y el banco dio rojo con un `saveVersion=9` en el documento mientras la
+// constante valía 9 y la aserción comparaba contra 8.
+//
+// Un número que hay que ir a cambiar a mano en dos sitios es un número que algún
+// día se cambia en uno y se olvida del otro.
+export const SAVE_VERSION = 9;
 
 /**
  * Tope de seguridad de celdas de hueco guardadas.
@@ -432,7 +452,6 @@ export async function createGameLoop(
       banner: 'banner_none',
       unlocked: ['title_default', 'frame_none', 'banner_none'] as string[]
     },
-    keys: 3,
     upgradeCrystals: 5,
     warehouseCapacity: 15,
     maxCompanionSlots: 1,
@@ -448,7 +467,6 @@ export async function createGameLoop(
     // Contadores DERIVADOS del almacén. Los calcula `syncMaterialCounters()`.
     // Se guardan porque el árbol de pasivas los lee y porque las partidas
     // viejas los traen; nunca son la fuente de verdad.
-    keysByTier: { 0: 3, 1: 0, 2: 0, 3: 0 } as Record<number, number>,
     crystalsByTier: { 1: 5 } as Record<number, number>,
     crystalTotal: 5,
     // **LOS DOS ITEM DE PARTIDA VAN EQUIPADOS DE ORIGEN.** Antesepersiana
@@ -587,15 +605,13 @@ function precioUnitarioTienda(itemKey: string): number {
  * las dos cosas salen de aquí: la lista y el nombre.
  */
 function esCartaEnLote(itemKey: string): boolean {
-  return STORE_KEY_TIER[itemKey] !== undefined
-    || itemKey === 'upgradeCrystal'
+  return itemKey === 'upgradeCrystal'
     || itemKey === 'crateT1'
     || !!CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
 }
 
 /** Cómo llama la vista a una unidad de esta carta: "elige cuántas **cajas**". */
 function nombreDeUnidad(itemKey: string): string {
-  if (STORE_KEY_TIER[itemKey] !== undefined) return 'llave';
   if (itemKey === 'upgradeCrystal') return 'cristal';
   if (itemKey === 'crateT1') return 'caja';
   return 'unidad';
@@ -817,9 +833,6 @@ function previewStoreItem(itemKey: string): any {
   // El nivel de la llave sale de la carta, igual que en `buyStoreItem`. Con
   // `STORE_MATERIAL_TIER` fijo aquí, la preview anunciaba nivel 0 mientras la
   // compra creaba nivel 1: botón encendido y compra rechazada (R3).
-  if (STORE_KEY_TIER[itemKey] !== undefined) {
-    return { type: 'key', name: KEY_DEFS[STORE_KEY_TIER[itemKey]].name, stackable: true };
-  }
   if (itemKey === 'upgradeCrystal') return { type: 'crystal', name: CRYSTAL_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
   // F31 · Una sola carta de caja, `crateT1`. Antes el `if` era "cualquier cosa que
   // acabe en Crate y cuyo nombre sea una caja conocida", lo que servía para cuatro
@@ -857,18 +870,19 @@ function consumeWarehouseItem(itemId: string, amount = 1): number {
 }
 
 /**
- * Añade N llaves o N cristales del nivel indicado.
+ * Añade N cristales del nivel indicado.
  *
  * Si el almacén tiene hueco se mete un item apilado; si está lleno, el botín
  * se pierde. Se avisa por consola porque es el momento donde el jugador pierde
  * algo sin haberlo decidido, y no hay dónde ponerlo en un aviso en pantalla.
+ *
+ * **ESTE ERA EL PUNTO DE ENTRADA DE LAS LLAVES Y AHORA ES EL DE LOS CRISTALES
+ * SOLOS.** No se ha creado una función nueva al quitar las llaves: se ha quitado
+ * una mitad de la que ya existía. La otra mitad, el cristal, es la que compra la
+ * tienda y la que sueltan las cajas, así que sigue teniendo dos llamadores.
  */
-function grantKeys(tier: KeyTier, amount: number) {
-  grantMaterial('key', tier, amount);
-}
-
 function grantCrystals(tier: number, amount: number) {
-  grantMaterial('crystal', tier, amount);
+  grantMaterial(tier, amount);
 }
 
 /**
@@ -887,34 +901,38 @@ function desbloquearCosmetico(cosmeticId: string): boolean {
   return true;
 }
 
-function grantMaterial(kind: 'key' | 'crystal', tier: number, amount: number) {
+function grantMaterial(tier: number, amount: number) {
   if (amount <= 0) return;
 
-  const item = createMaterialItem(kind, tier);
+  const item = createMaterialItem(tier);
   item.stackCount = amount;
 
   if (!addToWarehouse(item)) {
-    console.warn('[inventario] Sin hueco en el almacén: se pierden ' + amount + ' x ' + kind + ' T' + tier + '.');
+    console.warn('[inventario] Sin hueco en el almacén: se pierden ' + amount + ' x cristal T' + tier + '.');
   }
 }
 
 /**
- * Crea un item de llave o cristal listo para el almacén.
+ * Crea un item de cristal listo para el almacén.
  *
- * Los tres viven aquí y no en `data/items.ts` porque necesitan un id único y
- * un precio de reventa, y el precio depende de `STORE_ITEMS`, que está en este
- * archivo. La tabla de niveles y probabilidades sí está en `data/items.ts`.
+ * Vive aquí y no en `data/items.ts` porque necesita un id único y un precio de
+ * reventa, y el precio depende de `STORE_ITEMS`, que está en este archivo. La
+ * tabla de niveles y probabilidades sí está en `data/items.ts`.
+ *
+ * **LO QUE ESTA FUNCIÓN YA NO PIDE ES EL TIPO, Y POR QUÉ.** Antes tenía un
+ * `kind: 'key' | 'crystal'` y una rama por tipo, con el prefijo del id y el
+ * `type` del item saliendo de ahí. Con un solo tipo eso son dos sitios donde
+ * escribir la misma palabra dos veces, y el día que saliera un tercero habría
+ * que acordarse de las dos. El `'crystal'` va escrito.
  */
-function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
-  const esLlave = kind === 'key';
-  const def = esLlave ? KEY_DEFS[tier as KeyTier] : CRYSTAL_DEFS[tier];
-  const prefijo = esLlave ? 'key' : 'crystal';
-  const sellPrice = precioReventaMaterial(kind, tier);
+function createMaterialItem(tier: number): any {
+  const def = CRYSTAL_DEFS[tier];
+  const sellPrice = precioReventaMaterial();
 
   return {
-    id: `${prefijo}_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: `crystal_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     name: def.name,
-    type: esLlave ? 'key' : 'crystal',
+    type: 'crystal',
     details: def.details,
     rarity: def.rarity,
     // El nivel viaja en el item para poder ordenar y filtrar sin releer el
@@ -927,7 +945,7 @@ function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
 }
 
 /**
- * Lo que se recupera al vender una llave o un cristal.
+ * Lo que se recupera al vender un cristal.
  *
  * Una cuarta parte del precio de la carta de la tienda, que es la MISMA cuenta
  * que ya usan las cajas, los consumibles y las cartas de compañero y recolector
@@ -935,33 +953,24 @@ function createMaterialItem(kind: 'key' | 'crystal', tier: number): any {
  * que se gastan. Por eso comparten la regla, y por eso comprar y vender nunca
  * sale rentable.
  *
- * POR QUÉ NO SALE DE `KEY_DEFS` NI DE `CRYSTAL_DEFS`, QUE ES DONDE ESTÁN LOS
- * PRECIOS. Porque en esas tablas `cost` es `null` para todo lo que no se vende
- * en la tienda, y el material que suelta una caja es justo eso. Con un número
- * inventado en el `??` pasaba esto:
+ * POR QUÉ NO SALE DE `CRYSTAL_DEFS`, QUE ES DONDE ESTÁN LOS PRECIOS. Porque en esa
+ * tabla `cost` es `null` para todo lo que no se vende en la tienda, y el material
+ * que suelta una caja es justo eso. Con un número inventado en el `??` pasaba esto:
  *
- *   - Llave comprada por 250, revendida por 1.200.  +950 por operación.
  *   - Cristal comprado por 60, revendido por 4.320.  +4.260 por operación.
  *
- * Ninguno de los dos es un desajuste de balance: es una máquina de imprimir
- * nanitas comprando y vendiendo en bucle, sin límite y sin ganar nada. Y ningún
- * banco lo veía, porque `buyCheck` comprueba que el botón y el cargo coincidan —
- * que es otra cosa— y no que vender un item sea una pérdida.
+ * Eso no es un desajuste de balance: es una máquina de imprimir nanitas
+ * comprando y vendiendo en bucle, sin límite y sin ganar nada. Y ningún banco lo
+ * veía, porque `buyCheck` comprueba que el botón y el cargo coincidan —que es otra
+ * cosa— y no que vender un item sea una pérdida.
  *
  * El precio de venta tampoco sale de aquí, y a propósito: el juego ya sabe lo
  * que el jugador pagó, porque lo acaba de restar. Lo que no puede saber es de
  * dónde vino un item que no compró, y por eso la reventa es una propiedad del
- * item y no un recuerdo de su procedencia. Una llave de la tienda y una llave de
- * una caja son el mismo objeto y valen lo mismo al venderlo.
+ * item y no un recuerdo de su procedencia.
  */
-function precioReventaMaterial(kind: 'key' | 'crystal', tier: number): number {
-  // La reventa sale del precio DEL NIVEL. Antes el cálculo usaba el precio de la
-  // carta de llave, que era uno solo para las cuatro; con cuatro llaves distintas
-  // eso cobra cuatro veces el mismo cuarto y se convierte en la máquina de
-  // imprimir nanitas que este comentario lleva tres versiones avisando.
-  const precio = kind === 'key'
-    ? KEY_DEFS[(tier ?? 0) as KeyTier].cost
-    : STORE_ITEMS.upgradeCrystal.cost;
+function precioReventaMaterial(): number {
+  const precio = STORE_ITEMS.upgradeCrystal.cost;
   if (!precio) return 0;
   return Math.floor(precio / 4);
 }
@@ -969,9 +978,9 @@ function precioReventaMaterial(kind: 'key' | 'crystal', tier: number): number {
 /**
  * Cuenta el almacén por tipo de material y reconstruye los contadores.
  *
- * Los contadores `state.keys` y `state.upgradeCrystals` ya no son la fuente de
- * verdad —lo es el almacén—, pero se siguen manteniendo porque el árbol de
- * pasivas y las compras los leen, y porque las partidas viejas los traen.
+ * Los contadores `state.upgradeCrystals` y `state.crystalsByTier` ya no son la
+ * fuente de verdad —lo es el almacén—, pero se siguen manteniendo porque el árbol
+ * de pasivas y las compras los leen, y porque las partidas viejas los traen.
  *
  * Convivir con un valor desincronizado es exactamente el bug que había con las
  * cajas, así que aquí NO hay conversión de "huérfanos a items": si el contador
@@ -979,23 +988,17 @@ function precioReventaMaterial(kind: 'key' | 'crystal', tier: number): number {
  * siempre.
  */
 function syncMaterialCounters() {
-  const keyByTier: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
   const crystalByTier: Record<number, number> = {};
   let crystalTotal = 0;
 
   state.warehouse.forEach((w: any) => {
-    if (w.type === 'key') {
-      const t = typeof w.tier === 'number' ? w.tier : keyTierFromName(w.name || '');
-      keyByTier[t] = (keyByTier[t] || 0) + (w.stackCount || 1);
-    } else if (w.type === 'crystal') {
+    if (w.type === 'crystal') {
       const t = typeof w.tier === 'number' ? w.tier : 1;
       crystalByTier[t] = (crystalByTier[t] || 0) + (w.stackCount || 1);
       crystalTotal += (w.stackCount || 1);
     }
   });
 
-  state.keys = keyByTier[0] + keyByTier[1] + keyByTier[2] + keyByTier[3];
-  state.keysByTier = keyByTier;
   state.crystalsByTier = crystalByTier;
 
   // El cristal básico es el único que se compra, así que es el que se gasta en
@@ -1005,9 +1008,60 @@ function syncMaterialCounters() {
 
   // Rellena el campo `tier` de los items guardados antes de que existiera.
   state.warehouse.forEach((w: any) => {
-    if (w.type === 'key' && typeof w.tier !== 'number') w.tier = keyTierFromName(w.name || '');
     if (w.type === 'crystal' && typeof w.tier !== 'number') w.tier = crystalTierFromName(w.name || '');
   });
+}
+
+/**
+ * LA REDENCIÓN DE LAS LLAVES, Y POR QUÉ NO SE BORRAN.
+ *
+ * Una partida guardada antes de este cambio tiene llaves en el almacén, y en el
+ * mejor de los casos tiene **muchas**: la tienda las vendía, las cajas soltaban
+ * una o dos por apertura, y la mayoría de los jugadores tenía un montón.
+ *
+ * **BORRARLAS ES ROBAR.** El jugador compró cada una de esas llaves con nanitas,
+ * se guardó, y un cambio de código le las convierte en nada. No hay forma de
+ * argumentar que es "el cambio del juego": desde su punto de vista ayer valían y
+ * hoy no, y no ha hecho nada para que pase.
+ *
+ * **Y TAMPOCO ES DEJARLAS.** Un item que el juego ya no reconoce no es un objeto
+ * neutro: ocupa una ranura de la rejilla, aparece en el almacén, y no hay ningún
+ * botón que lo haga nada. Es basura que ocupa sitio y que el jugador no puede
+ * tirar más que vendiendo por una suma que ya no existe.
+ *
+ * Así que se venden solas, y por lo que valían.
+ *
+ * ---------------------------------------------------------------------------
+ * EL PRECIO, Y POR QUÉ ES UN TERCIO DEL TECHO DE REVENTA Y NO EL DE LA CAJA
+ * ---------------------------------------------------------------------------
+ * Antes, abrir una caja costaba **la caja más la llave**. Y el techo de reventa de
+ * lo que salía de un cofre era, por construcción, **la caja más la llave**: eso
+ * es lo que impedía que un objeto de tier fuera más caro vendido que el cofre
+ * entero. O sea que la llave era **un tercio de ese par**.
+ *
+ * Cuando se quitaron las llaves, **la caja pasó a costar el par entero** — por eso
+ * quitar las llaves no movió un nanito de la economía — y el tope de reventa se
+ * quedó igual. Así que un tercio del tope es, exactamente, lo que la llave valía
+ * dentro de la economía que la creó.
+ *
+ * **ES GENEROSO PARA LOS NIVELES ALTOS Y CORRECTO PARA LOS BAJOS, Y ESO ES LO
+ * QUE PASA.** La llave T1 costaba 225 y el tope de la T1 son 675: un tercio son
+ * 225 clavados. En la T10 la llave costaba 48.463 y el tope es 145.388, y un
+ * tercio son 48.463 clavados también, porque **el número se deriva del mismo
+ * sitio del que salía el precio**. No es una aproximación: es la misma regla.
+ *
+ * Y el jugador no pierde nada con el cambio, porque la caja que ahora compra
+ * cuesta esos mismos nanitas de más. Compra caja y llave por 900; después, caja
+ * sola por 900.
+ */
+function redencionDeUnaLlave(tier: number): number {
+  // El tope de reventa es el precio de la caja, que es las tres cuartas partes
+  // del valor del objeto de su tier. Se usa `COSTE_POR_TIER` y no el precio de la
+  // caja porque la caja **subió** al quitar la llave: el precio viejo de la llave
+  // sale de la caja vieja, no de la nueva.
+  const costeDelObjeto = COSTE_POR_TIER[Math.min(COSTE_POR_TIER.length, Math.max(1, Math.floor(tier))) - 1];
+  const parAntiguo = costeDelObjeto * 3 / 4;
+  return Math.max(1, Math.round(parAntiguo / 3));
 }
 
   let isAfk = false;
@@ -1111,7 +1165,6 @@ const AFK_THRESHOLD_MS = 60000;
       state.unlockedAchievements = data.unlockedAchievements ?? [];
       state.totalInfraestructure = data.totalInfraestructure ?? 0;
       state.cratesOpened = data.cratesOpened ?? 0;
-      state.keys = data.keys ?? 3;
       state.upgradeCrystals = data.upgradeCrystals ?? 5;
       state.warehouseCapacity = data.warehouseCapacity ?? 15;
       state.maxCompanionSlots = data.maxCompanionSlots ?? 1;
@@ -1233,35 +1286,38 @@ const AFK_THRESHOLD_MS = 60000;
             warehouseNeedsMigration = true;
           }
         }
-        // El nivel de llave y de cristal no existía antes. Sin él no se puede
-        // saber qué cofre abre cada llave ni cuánto mejora cada cristal, así que
-        // se deduce del nombre una sola vez.
-        if ((w.type === 'key' || w.type === 'crystal') && typeof w.tier !== 'number') {
-          w.tier = w.type === 'key'
-            ? keyTierFromName(w.name || '')
-            : crystalTierFromName(w.name || '');
+        // El nivel de cristal no existía antes. Sin él no se puede saber cuánto
+        // mejora cada cristal, así que se deduce del nombre una sola vez.
+        //
+        // **LO DE LAS LLAVES SE HA IDO DE AQUÍ, Y POR QUÉ ESTABA.** Se rellenaba su
+        // `tier` para poder contarlas por nivel en la migración de los contadores,
+        // que venía justo detrás y las convertía en items. Ese par de migraciones se
+        // han ido juntas: ahora las llaves se redimen, y para eso solo hace falta el
+        // precio, no el nivel.
+        if (w.type === 'crystal' && typeof w.tier !== 'number') {
+          w.tier = crystalTierFromName(w.name || '');
           warehouseNeedsMigration = true;
         }
       });
 
       /**
-       * MIGRACIÓN: contadores de llaves y cristales a items del almacén.
+       * MIGRACIÓN: contadores de cristales a items del almacén.
        *
-       * Antes eran contadores sueltos. Si el contador dice 7 llaves y el almacén
-       * está vacío, esas 7 llaves existen en la partida y hay que
-       * materializarlas: si no, el jugador las pierde en el guardado siguiente,
+       * Antes eran contadores sueltos. Si el contador dice 7 cristales y el
+       * almacén está vacío, esos 7 cristales existen en la partida y hay que
+       * materializarlos: si no, el jugador los pierde en el guardado siguiente,
        * cuando `syncMaterialCounters` ajustaría el contador a cero.
        *
        * Aquí se hace al revés que con las cajas, a propósito. Con las cajas el
        * almacén era la fuente y el contador podía quedar inflado, así que se
-       * ajustaba el contador. Con las llaves el saldo es real y no se puede
+       * ajustaba el contador. Con el material el saldo es real y no se puede
        * volver a contarlo, porque detrás no hay ningún item.
        *
-       * Llaves y cristales se materializan con la MISMA función, y ya no puede
-       * ser de otra manera: las llaves se guardaban de una en una, una ranura
-       * por llave, y los cristales de golpe en una sola pila. Un jugador con 19
-       * llaves de Cifrado tenía 19 ranuras ocupadas por un item que la rejilla
-       * pintaba en una sola celda.
+       * **LO QUE ESTA FUNCIÓN CONTABA ANTES Y AHORA NO: LAS LLAVES.** Contaba por
+       * tipo, así que tenía una regla para las llaves y otra para los cristales, y
+       * las dos se materializaban con la misma llamada. Con las llaves fuera, esta
+       * migración es de un tipo solo y su nombre de "material" describe exactamente
+       * lo que queda: el cristal.
        */
       let materialNeedsMigration = false;
 
@@ -1280,61 +1336,93 @@ const AFK_THRESHOLD_MS = 60000;
        * contador y lo que ya está: los huérfanos. El bucle de arriba acaba de
        * resolver el `tier` de los items viejos, así que aquí ya se puede contar.
        */
-      const yaEnAlmacen = (kind: 'key' | 'crystal', tier: number): number => {
+      const yaEnAlmacen = (tier: number): number => {
         let total = 0;
         for (const w of state.warehouse as any[]) {
-          if (w.type !== kind) continue;
-          const t = typeof w.tier === 'number'
-            ? w.tier
-            : (kind === 'key' ? keyTierFromName(w.name || '') : crystalTierFromName(w.name || ''));
+          if (w.type !== 'crystal') continue;
+          const t = typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '');
           if (t !== tier) continue;
           total += w.stackable ? (w.stackCount || 1) : 1;
         }
         return total;
       };
 
-      const meterMaterial = (kind: 'key' | 'crystal', tier: number, cantidad: number) => {
-        const huerfanos = Math.max(0, cantidad - yaEnAlmacen(kind, tier));
+      const meterMaterial = (tier: number, cantidad: number) => {
+        const huerfanos = Math.max(0, cantidad - yaEnAlmacen(tier));
         if (huerfanos <= 0) return;
-        const item = createMaterialItem(kind, tier);
+        const item = createMaterialItem(tier);
         item.stackCount = huerfanos;
-        // `addToWarehouse` y no `push`: las huerfanas van a la pila de llaves que
-        // ya hubiera, y solo abren una nueva si de verdad no cabe en ninguna.
+        // `addToWarehouse` y no `push`: los huérfanos van a la pila de cristales
+        // que ya hubiera, y solo abren una nueva si de verdad no cabe en ninguna.
         if (!addToWarehouse(item)) return;
         materialNeedsMigration = true;
       };
-      // `data.keys` es el TOTAL de llaves del guardado, no las de nivel 0. Pasar
-      // ese total al nivel 0 y luego restar lo que hay en el nivel 0 compara un
-      // total contra una parte, y siempre sobra: con una llave de nivel 1 en el
-      // almacén —que es justo la que crea la tienda, aunque se venda como "Llave
-      // de Cifrado"— la resta daba 0 y se materializaba una llave de nivel 0 de
-      // más en cada recarga. El nivel 0 usa su propio cubo cuando el guardado lo
-      // trae, y el total solo como reserva para las partidas viejas, que no
-      // tenían cubos.
-      meterMaterial('key', 0, data.keysByTier ? (data.keysByTier[0] ?? 0) : (data.keys ?? 3));
-      meterMaterial('key', 1, data.keysByTier?.[1] ?? 0);
-      meterMaterial('key', 2, data.keysByTier?.[2] ?? 0);
-      meterMaterial('key', 3, data.keysByTier?.[3] ?? 0);
 
-      meterMaterial('crystal', 1, data.upgradeCrystals ?? 5);
-      meterMaterial('crystal', 2, data.crystalsByTier?.[2] ?? 0);
-      meterMaterial('crystal', 3, data.crystalsByTier?.[3] ?? 0);
-      meterMaterial('crystal', 4, data.crystalsByTier?.[4] ?? 0);
+      meterMaterial(1, data.upgradeCrystals ?? 5);
+      meterMaterial(2, data.crystalsByTier?.[2] ?? 0);
+      meterMaterial(3, data.crystalsByTier?.[3] ?? 0);
+      meterMaterial(4, data.crystalsByTier?.[4] ?? 0);
       if (materialNeedsMigration) warehouseNeedsMigration = true;
+
+      /**
+       * MIGRACIÓN: las llaves se redimen, y no se borran.
+       *
+       * Una partida guardada antes de quitarlas tiene llaves en el almacén, y en el
+       * mejor de los casos muchas. **Borrarlas sería robarle al jugador algo que
+       * pagó**; dejarlas sería llenar el almacén de objetos que ocupan una ranura y
+       * no sirven para nada, sin ningún botón que los toque.
+       *
+       * Así que se venden solas, por lo que valían. El precio y su motivo están en
+       * `redencionDeUnaLlave()`, unas líneas más arriba, y sale del mismo sitio del
+       * que salía el precio viejo: **un tercio del par caja+llave**. No es una
+       * aproximación, es la misma regla.
+       *
+       * **Y POR QUÉ ESTÁ AQUÍ Y NO EN UN `if (savedVersion < 9)`:** porque es
+       * idempotente por construcción. Las llaves desaparecen del almacén, así que
+       * la segunda carga no encuentra ninguna y no vuelve a pagar nada. Una
+       * migración que se apoya en un número de versión depende de que el número se
+       * lea bien; una que se apoya en "ya no hay nada que redimir" no depende de
+       * nada. La versión sube igualmente, para que el cambio quede anotado.
+       *
+       * Va **DESPUÉS** de materializar los contadores de material y **ANTES** de
+       * partir las pilas. En ese orden, lo único que toca son items que ya no
+       * sirven: si se hiciera antes, la partición de pilas contaría llaves que están
+       * a punto de convertirse en nanitas.
+       */
+      {
+        const llaves = (state.warehouse as any[]).filter((w: any) => w.type === 'key');
+        if (llaves.length > 0) {
+          let importe = 0;
+          for (const llave of llaves) {
+            const tier = typeof llave.tier === 'number' ? llave.tier : keyTierFromName(llave.name || '');
+            importe += redencionDeUnaLlave(tier) * (llave.stackable ? (llave.stackCount || 1) : 1);
+          }
+          // El saldo va al contador y **no** a `totalNanitesProduced`: redimir no es
+          // jugar, y sumarlo al total haría subir un logro que mide cuánto ha
+          // trabajado el jugador.
+          state.nanites += importe;
+          state.warehouse = (state.warehouse as any[]).filter((w: any) => w.type !== 'key');
+          warehouseNeedsMigration = true;
+          console.info(
+            `[inventario] Las llaves ya no abren nada: ${llaves.length} pila(s) ` +
+            `convertida(s) en ${importe} nanitas.`
+          );
+        }
+      }
 
       /**
        * MIGRACIÓN: fusionar las pilas repetidas de las partidas ya jugadas.
        *
-       * Cada botín de llave, cristal, caja o consumible se guardaba como un item
-       * NUEVO en vez de sumar sus unidades a la pila que ya había. Una partida
-       * con 19 llaves de Cifrado tenía 19 entradas: la rejilla las agrupaba en
-       * una celda con un "19" y el contador pedía 19 ranuras por ellas. El
-       * almacén se llenaba de botín que el jugador nunca había decidido guardar.
+       * Cada botín de cristal, caja o consumible se guardaba como un item NUEVO en
+       * vez de sumar sus unidades a la pila que ya había. Una partida con 19
+       * cristales de Afino tenía 19 entradas: la rejilla las agrupaba en una celda
+       * con un "19" y el contador pedía 19 ranuras por ellas. El almacén se llenaba
+       * de botín que el jugador nunca había decidido guardar.
        *
        * Esas entradas pasan aquí a ser una sola pila con `stackCount: 19`, que
        * es exactamente lo que el jugador ya veía en la celda. No se pierde
        * ninguna unidad: se suman, y `syncMaterialCounters` sigue leyendo el
-       * mismo total de llaves.
+       * mismo total de cristales.
        *
        * Va DESPUÉS de materializar los contadores, no antes. `addToWarehouse` ya
        * suma a la pila existente, así que fusionar antes sería deshacer lo que
@@ -1554,14 +1642,6 @@ const AFK_THRESHOLD_MS = 60000;
         totalClicks: 0,
         totalInfraestructure: 0,
         cratesOpened: 0,
-        keys: state.keys,
-        // Los cubos por nivel TIENEN que guardarse, y antes no se guardaban. Al
-        // cargar, la migración reparte el material con `data.keysByTier`: `data.keys`
-        // es el TOTAL de llaves, y meter un total en el cubo del nivel 0 compara un
-        // total contra una parte y siempre sobra, así que en CADA recarga se
-        // materializaba una llave y un cristal de más. El reparto por niveles solo
-        // vivía mientras la partida no se recargara, que es justo cuando no sirve.
-        keysByTier: state.keysByTier,
         crystalsByTier: state.crystalsByTier,
         upgradeCrystals: state.upgradeCrystals,
         warehouseCapacity: state.warehouseCapacity,
@@ -2363,11 +2443,6 @@ const AFK_THRESHOLD_MS = 60000;
         totalClicks: state.totalClicks,
         totalInfraestructure: state.totalInfraestructure,
         cratesOpened: state.cratesOpened,
-        keys: state.keys,
-        // Los mismos cubos por nivel que en el reinicio, y por el mismo motivo: sin
-        // ellos, la migración de carga mete un TOTAL en el cubo del nivel 0 y
-        // materializa una llave de más en cada recarga.
-        keysByTier: state.keysByTier,
         crystalsByTier: state.crystalsByTier,
         upgradeCrystals: state.upgradeCrystals,
         warehouseCapacity: state.warehouseCapacity,
@@ -3682,18 +3757,18 @@ const AFK_THRESHOLD_MS = 60000;
       // cabe, hay que DEVOLVER el dinero antes de salir: un "no compres" que
       // descuenta las nanitas es peor que un bug visible, porque el jugador
       // pierde el saldo sin ver por qué.
-      if (STORE_KEY_TIER[itemKey] !== undefined || itemKey === 'upgradeCrystal') {
-        // Llaves y cristales son items del almacén. Antes eran solo contadores:
-        // el jugador no los veía, no los podía ordenar y no ocupaban ranura.
+      if (itemKey === 'upgradeCrystal') {
+        // El cristal es un item del almacén. Antes era solo un contador: el
+        // jugador no lo veía, no lo podía ordenar y no ocupaba ranura.
         //
-        // El nivel de la llave lo dice la CARTA (`keyT2` → nivel 2), no una
-        // constante del motor. Con una constante única, la carta se llamaba
-        // "Llave de Cifrado" y entregaba la Reforzada: el nombre, el precio y
-        // el item eran tres cosas distintas y ninguna se deducía de las otras
-        // dos (B7).
-        const esLlave = STORE_KEY_TIER[itemKey] !== undefined;
-        const tier = esLlave ? STORE_KEY_TIER[itemKey] : STORE_MATERIAL_TIER;
-        const item = createMaterialItem(esLlave ? 'key' : 'crystal', tier);
+        // **LO QUE AQUÍ HABÍA Y NO ES ESTO.** Esta rama era la de "llave o
+        // cristal", y el nivel lo decidía la carta (`keyT2` → nivel 2) porque
+        // con una constante única la carta se llamaba "Llave de Cifrado" y
+        // entregaba la Reforzada: el nombre, el precio y el item eran tres
+        // cosas distintas y ninguna se deducía de las otras dos (B7). Con una
+        // sola carta el problema se va solo, porque ya no hay dos cartas que
+        // puedan mentir la una sobre la otra.
+        const item = createMaterialItem(STORE_MATERIAL_TIER);
         // F14 · el lote entra de una vez: `addToWarehouse` lo funde con la
         // pila que haya. Las unidades no piden ranura nueva (una pila es una
         // ranura), así que la pregunta de espacio de arriba sigue valiendo.
@@ -3813,18 +3888,24 @@ const AFK_THRESHOLD_MS = 60000;
     },
 
     /**
-     * Abre una caja del almacén consumiendo la llave correcta.
+     * Abre una caja del almacén. Sin llave: se busca el item, se comprueba que
+     * sea una caja y se consume.
      *
-     * ANTES: `openCrateBox(crateType)` solo miraba `state.keys`. El almacén no
-     * participaba: el botón de la vista restaba una unidad del item Y el juego
-     * restaba una del contador, sin que nadie se enterara. Resultado: la caja
-     * se quedaba en la rejilla y el contador bajaba, o al revés.
+     * **EL HISTORIAL DE ESTA FUNCIÓN DICE POR QUÉ HAY QUE LEERLA ANTES DE TOCARLA.**
      *
-     * AHORA: se pasa el ID de la caja y el de la llave. El game loop busca
-     * ambos items, valida que la llave sirva para ese cofre, y los consume a
-     * los dos en la misma operación. Si algo falla, no se toca nada.
+     * La primera versión era `openCrateBox(crateType)` y solo miraba
+     * `state.keys`. El almacén no participaba: el botón de la vista restaba una
+     * unidad del item **y** el juego restaba una del contador, sin que nadie se
+     * enterara. La caja se quedaba en la rejilla y el contador bajaba, o al revés.
+     *
+     * La segunda versión tomaba los dos IDs —caja y llave— y validaba que la llave
+     * sirviera para ese cofre. Ese par es el que se quita ahora.
+     *
+     * **LO QUE NO SE TOCA ES EL ORDEN: LA CAJA SE CONSUME ANTES DE SORTEAR.** Si el
+     * sorteo fallara por una excepción, el jugador ya habría perdido la caja sin
+     * recibir nada, y eso es peor que un bug visible.
      */
-    openCrateBox: (crateId: string, keyId: string): { ok: boolean; msg?: string; reward?: any; crateType?: CrateType } => {
+    openCrateBox: (crateId: string): { ok: boolean; msg?: string; reward?: any; crateType?: CrateType } => {
       handleUserActivity();
 
       const caja = state.warehouse.find((w: any) => w.id === crateId && w.type === 'crate');
@@ -3833,24 +3914,7 @@ const AFK_THRESHOLD_MS = 60000;
       const crateType = getCrateTypeFromName(caja.name || '') as CrateType | null;
       if (!crateType) return { ok: false, msg: 'No se reconoce el tipo de esta caja.' };
 
-      const llave = state.warehouse.find((w: any) => w.id === keyId && w.type === 'key');
-      if (!llave) return { ok: false, msg: 'Ya no tienes esa llave.' };
-
-      const llaveTier = (typeof llave.tier === 'number' ? llave.tier : keyTierFromName(llave.name || '')) as KeyTier;
-      const necesaria = CRATE_KEY_TIER[crateType];
-
-      if (!keyOpens(llaveTier, necesaria)) {
-        return {
-          ok: false,
-          msg: `${llave.name} no abre ${CRATE_TYPES[crateType].name}. Necesitas ${KEY_DEFS[necesaria].name}.`
-        };
-      }
-
-      // Se consumen los dos items ANTES de sortear. Si el sorteo fallara por
-      // una excepción, el jugador ya habria perdido la caja sin recibir nada:
-      // peor que un bug visible.
       consumeWarehouseItem(caja.id, 1);
-      consumeWarehouseItem(llave.id, 1);
       syncWarehouseGaps();
       state.cratesOpened += 1;
 
@@ -3872,7 +3936,6 @@ const AFK_THRESHOLD_MS = 60000;
         // rúnica de la legendaria entraba en la misma celda que la de Cifrado de
         // la común y no había forma de separarlas ni de recuperarlas.
         crystals: (n, materialTier) => { grantCrystals(materialTier, n); },
-        keys: (n, keyTier) => { grantKeys(keyTier, n); },
         hasSpace: () => countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity(),
         // El cosmético no es un item: no pasa por `addItem` ni por el almacén.
         // Se desbloquea aquí y lo persiste el `saveToFirebase` de más abajo, que
@@ -4039,7 +4102,6 @@ const AFK_THRESHOLD_MS = 60000;
         totalClicks: keptClicks,
         totalInfraestructure: 0,
         cratesOpened: keptCratesOpened,
-        keys: 3,
         upgradeCrystals: 5,
         warehouseCapacity: 15,
         maxCompanionSlots: keptCompanionSlots,

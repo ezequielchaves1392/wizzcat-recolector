@@ -48,10 +48,16 @@ export const MAX_APERTURA_LOTE = 20;
 /**
  * Cuántas cajas se pueden abrir de golpe con lo que hay encima.
  *
- * Son tres mínimos y **los tres hacen falta, por motivos distintos**: las cajas
- * que tienes, las llaves que tienes y el tope de una apertura. Sin los dos
- * primeros el motor se queda a medias; sin el tercero, el diálogo ofrecería 45
- * aperturas y escondería el final de la lista detrás de un scroll.
+ * Antes eran **tres** mínimos —cajas, llaves y tope— y los tres hacían falta. Con
+ * las llaves fuera son **dos**, y el que queda es el mismo de antes: las cajas que
+ * tienes, y el tope de una apertura. Sin el primero el motor se queda a medias; sin
+ * el segundo, el diálogo ofrecería 45 aperturas y escondería el final de la lista
+ * detrás de un scroll.
+ *
+ * **LO QUE NO SE HACE ES DEJAR EL PARÁMETRO DE LAS LLAVES COMO UN CERO FIJO.** Sería
+ * `Math.min(cajas, 0, 20)`, o sea devolver siempre 0: la firma se queda igual, el
+ * diálogo no abre nada y no hay ningún error. Un parámetro que ya no significa nada
+ * es una puerta, y el que venga detrás le pasará el número que se le ocurra.
  *
  * **POR QUÉ VIVE AQUÍ Y NO EN LA VISTA.** Antes era un `Math.min` suelto dentro
  * del manejador de clic del almacén, y eso quiere decir que **ningún banco podía
@@ -59,12 +65,11 @@ export const MAX_APERTURA_LOTE = 20;
  * único sitio del proyecto donde las pruebas no llegan. Es R2 en la forma más
  * silenciosa: la regla no estaba duplicada, estaba escondida.
  */
-export function maximoDeApertura(cajas: number, llaves: number): number {
+export function maximoDeApertura(cajas: number): number {
   return Math.max(
     0,
     Math.min(
       Math.floor(cajas) || 0,
-      Math.floor(llaves) || 0,
       MAX_APERTURA_LOTE
     )
   );
@@ -73,7 +78,6 @@ export function maximoDeApertura(cajas: number, llaves: number): number {
 const LOOT_UNITS: Record<string, string> = {
   nanites: 'Nanitas',
   crystals: 'Cristales',
-  keys: 'Llaves',
   crate: 'Cajas',
   consumable: 'Unidades'
 };
@@ -91,7 +95,7 @@ export interface ResumenFila {
  * La clave con la que dos premios se suman.
  *
  * **LO QUE SE SUMA Y LO QUE NO, Y POR QUÉ.** Se suman las monedas y los
- * materiales —nanitas, cristales, llaves, cajas y consumibles— porque son
+ * materiales —nanitas, cristales, cajas y consumibles— porque son
  * intercambiables entre sí y al jugador le importa la cantidad, no cuántas veces
  * le salieron. **Los objetos no se suman**: dos Drones Explorador son dos drones,
  * y escribirlos como "×2" hidingaría que hay dos celdas ocupadas y dos compañeros
@@ -106,7 +110,6 @@ function claveDeFila(premio: CrateReward, i: number): string {
   switch (premio.kind) {
     case 'nanites': return 'nanites';
     case 'crystals': return `crystals:${premio.materialTier ?? 1}`;
-    case 'keys': return `keys:${premio.keyTier ?? 1}`;
     case 'crate': return `crate:${premio.name}`;
     case 'consumable': return `consumable:${premio.name}`;
     // Los objetos llevan su índice, así que nunca se suman entre sí: cada uno es

@@ -14,15 +14,16 @@
 //       tier el expansor T3 —que era el único que salía de las cajas altas—
 //       dejó de servir a los 30 ranuras y era botín muerto.
 //
-//  Y que la leyenda de una caja y la de una llave **digan la regla y no la
-//  lista**, porque enumerar era justo lo que se quedaba viejo.
+//  Y que la leyenda de una caja **diga la regla y no la lista**, porque enumerar
+//  era justo lo que se quedaba viejo. Antes esta sección comparaba las diez
+//  llaves con las diez cajas; ya no hay llaves, así que la mitad que queda es la
+//  que de verdad puede quedarse vieja sin que nadie la revise: **un texto que
+//  sigue leyéndose bien y describe algo que el juego ya no hace.**
 // ==========================================================================
 
-import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, key, collector, companion, ficha, crystal, consumable, conRoll } from './kit';
+import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, collector, companion, ficha, crystal, consumable, conRoll } from './kit';
 import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_TYPES, EXPANSOR_TIERS, CONSUMABLES } from '../src/data/store';
-import { KEY_TIERS } from '../src/data/items';
-import { KEY_DEFS } from '../src/data/items';
 import {
   RARITY_RANK, RARITY_TEXT, RARITY_BORDER, RARITY_GLOW, raritySlug,
   CRATE_LOOT, tablaDePesos
@@ -150,14 +151,14 @@ async function main() {
     // T2 aunque salga de una caja T1. Comparar todos los compañeros contra el rango
     // de la caja que los soltó daría un falso positivo justo con la sorpresa, que
     // es la única entrada que puede salir de un tier.
-    const g = await boot(baseSave([crate('c1', 1, 40), key('k1', 1, 40)],
+    const g = await boot(baseSave([crate('c1', 1, 40)],
       { nanites: 0, warehouseCapacity: 60 }));
     let n = 0;
     let conPot = 0;
     let fueraDeRango = 0;
     const tiersVistos = new Set<number>();
     for (let i = 0; i < 40; i++) {
-      const r: any = g.openCrateBox('c1', 'k1');
+      const r: any = g.openCrateBox('c1');
       if (!r.ok || !r.reward || r.reward.kind !== 'companion') continue;
       n++;
       const it = r.reward.item;
@@ -272,14 +273,14 @@ async function main() {
   //  4. EL RECOLECTOR DE CAJA ES UN RECOLECTOR NORMAL
   // -------------------------------------------------------------------------
   {
-    const g = await boot(baseSave([crate('c3', 3, 40), key('k3', 3, 40)],
+    const g = await boot(baseSave([crate('c3', 3, 40)],
       { nanites: 0, warehouseCapacity: 60 }));
     let n = 0;
     let sinPot = 0;
     let sobrecargados = 0;
     let fueraDeDano = 0;
     for (let i = 0; i < 40; i++) {
-      const r: any = g.openCrateBox('c3', 'k3');
+      const r: any = g.openCrateBox('c3');
       if (!r.ok || !r.reward || r.reward.kind !== 'collector') continue;
       n++;
       const it = r.reward.item;
@@ -370,25 +371,49 @@ async function main() {
   //  6. LAS LEYENDAS DICEN LA REGLA, NO LA LISTA
   // -------------------------------------------------------------------------
   {
-    const textos = KEY_TIERS.map(t => KEY_DEFS[t].details);
-    check('leyenda: ninguna llave nombra una caja',
-      !textos.some(d => /Caja T/.test(d)), textos.join(' | '));
-    check('leyenda: las diez llaves dicen la regla de su tier',
-      textos.every(d => d.includes('su tier')),
-      textos.join(' | '));
-    check('leyenda: y solo la T10 dice que no hay nada más abajo',
-      textos.filter(d => d.includes('menor')).length === 9,
-      `${textos.filter(d => d.includes('menor')).length} de 9`);
-
-    // Y las diez cajas dicen lo MISMO, que es la prueba de que la leyenda no es
-    // una copia del botín: si un día una caja cambia su texto, se ve aquí.
-    const deCajas = KEY_TIERS.map(t => CRATE_TYPES[t].details);
+    // **LO QUE ESTA SECCIÓN COMPROBABA ANTES Y YA NO PUEDE COMPROBAR.**
+    //
+    // Comparaba las diez llaves con las diez cajas: que una leyenda no nombrara
+    // una caja, que cada una dijera la regla de su nivel y que solo la T10
+    // avisara de que no hay nada más abajo. Eso era una comparación **entre dos
+    // cartas**, y la otra carta ya no existe. Lo que queda de verdad no es una
+    // comparación: es una regla sobre lo que el juego **hace**, y por eso se
+    // escribe contra el botín y no contra otra leyenda.
+    //
+    // La regla es: **la leyenda dice lo que hay que hacer, y no hay llave que
+    // mentionar.** Una leyenda que dijera "se abre con la llave de su tier"
+    // sería la forma peor de quedarse vieja: se leería bien, no daría ningún
+    // error, y estaría describiendo algo que el juego ya no hace.
+    const deCajas = CRATE_TIERS.map(t => CRATE_TYPES[t].details);
     check('leyenda: las diez cajas dicen la MISMA regla',
-      new Set(deCajas).size === 1 && deCajas[0].includes('llave'),
-      `${new Set(deCajas).size} textos distintos`);
+      new Set(deCajas).size === 1, `${new Set(deCajas).size} textos distintos: ${deCajas.join(' | ')}`);
+    check('leyenda: y la regla que dice es la de abrirse sola',
+      /se abre sola/i.test(deCajas[0]), deCajas[0]);
+    check('leyenda: y ninguna caja habla de una llave que ya no existe',
+      !deCajas.some(d => /llave/i.test(d)), deCajas.join(' | '));
     check('leyenda: y no enumera el botín',
-      !/cristal|compa|recolector|Nanitas|llave de la T/i.test(deCajas[0]),
+      !/cristal|compa|recolector|Nanitas|llave/i.test(deCajas[0]),
       deCajas[0]);
+
+    // **Y LA MITAD QUE NO SE PODRÍA VER A SIMPLE VISTA: EL BOTÍN.** La leyenda de
+    // la caja se escribe en `data/store.ts` y la de cada premio, en la entrada de
+    // la tabla de botín. Las dos son textos que el jugador lee, y **una entrada
+    // de botín con la explicación de la llave pasada también se leería bien**.
+    //
+    // Por eso se construye el botín de las diez cajas —la misma función que
+    // construye lo que de verdad cae— y se pregunta a cada premio por su texto.
+    // No es una búsqueda en el código: pregunta a lo que el juego entrega.
+    const sospechosos: string[] = [];
+    for (const tier of CRATE_TIERS) {
+      for (const entrada of CRATE_LOOT[tier]) {
+        const construido: any = entrada.build({ ownedCosmetics: [] });
+        if (!construido) continue;
+        const texto = `${construido.name ?? ''} ${construido.details ?? ''}`.trim();
+        if (/llave/i.test(texto)) sospechosos.push(`T${tier}/${entrada.id}: "${texto}"`);
+      }
+    }
+    check('leyenda: y ningún premio de las diez cajas habla de una llave',
+      sospechosos.length === 0, sospechosos.join(' | ') || 'el botín entero de las diez');
   }
 
   // -------------------------------------------------------------------------

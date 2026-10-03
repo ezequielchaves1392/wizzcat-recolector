@@ -23,9 +23,8 @@ import { TREE_BY_ID, nodeCost } from '../src/data/tree';
 // escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
 // texto de la tarjeta y en estas dos aserciones.
 import { COMPANION_SLOT_BUY, RANURA_POR_CARTA } from '../src/data/store';
-import { KEY_DEFS } from '../src/data/items';
 import {
-  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, key, distintos
+  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, crystal, consumable, distintos
 } from './kit';
 
 async function main() {
@@ -35,22 +34,22 @@ async function main() {
   {
     const g = await boot(baseSave([], { nanites: 10_000 }));
     const antes = nanites(g);
-    // `keyT0` y no `key`: la tienda vendía una sola carta para las cuatro llaves,
-    // y esa carta entregaba la Reforzada mientras se llamaba Cifrado (B7). Ahora
-    // hay cuatro cartas y el test usa la más barata. El detalle de que cada
-    // carta entregue su llave lo comprueba `llaveCheck`.
-    const item = g.buyStoreItem('keyT1');
+    // `crateT1` y no una carta de llave: ya no hay ninguna. La compra simple se
+    // mide con la caja, que es el único producto de tienda que ocupa pila y en
+    // lote, y con el que se comprueba el contador derivado que antes se medía
+    // sobre las llaves.
+    const item = g.buyStoreItem('crateT1');
 
-    check('tienda: devuelve el item comprado', !!item && item.type === 'key', JSON.stringify(item?.id));
-    check('tienda: cobra el precio de carta', nanites(g) === antes - STORE_ITEMS.keyT1.cost,
-      `cobrado=${antes - nanites(g)} precio=${STORE_ITEMS.keyT1.cost}`);
-    check('tienda: la llave entra en el almacen', deType(g, 'key') === 1, ids(g).join(','));
-    check('tienda: el contador de llaves sube a 1', s(g).keys === 1, 'keys=' + s(g).keys);
+    check('tienda: devuelve el item comprado', !!item && item.type === 'crate', JSON.stringify(item?.id));
+    check('tienda: cobra el precio de carta', nanites(g) === antes - STORE_ITEMS.crateT1.cost,
+      `cobrado=${antes - nanites(g)} precio=${STORE_ITEMS.crateT1.cost}`);
+    check('tienda: la caja entra en el almacen', deType(g, 'crate') === 1, ids(g).join(','));
+    check('tienda: el contador derivado sube a 1', s(g).crates[1] === 1, 't1=' + s(g).crates[1]);
     check('tienda: el item devuelto es el que esta en el almacen', !!item?.id && !!find(g, item.id));
 
     const g2 = await reload();
-    check('tienda: la compra sobrevive a la recarga', deType(g2, 'key') === 1 && s(g2).keys === 1,
-      `items=${deType(g2, 'key')} keys=${s(g2).keys}`);
+    check('tienda: la compra sobrevive a la recarga', deType(g2, 'crate') === 1 && s(g2).crates[1] === 1,
+      `items=${deType(g2, 'crate')} t1=${s(g2).crates[1]}`);
   }
 
   // =========================================================================
@@ -85,11 +84,12 @@ async function main() {
   const cartas = (Object.keys(STORE_ITEMS) as (keyof typeof STORE_ITEMS)[])
     .filter(k => !RANURA_POR_CARTA[k as string]) as string[];
 
-  // El precio de la llave, leído de la tabla. Estaba escrito a mano en cuatro
-  // aserciones (250) y en un titular ("1000/250 = 4"), y con F31 la llave T1
-  // dejó de costar 250. Un banco que falla porque cambió un precio no está
-  // mirando el bug que dice mirar.
-  const KEY_UNIT = (STORE_ITEMS as Record<string, { cost: number }>).keyT1.cost;
+  // El precio de la caja, leído de la tabla. El mismo número estaba escrito a mano
+  // en cuatro aserciones y en un titular ("1000/250 = 4"), y cuando la curva de
+  // balance se rehizo estas pruebas fallaron sin que hubiera ningún bug: el test
+  // tenía su propia copia de la tabla de precios. Y la caja T1 dejó de costar 250
+  // al quitarse la llave, porque ahora vale el par entero.
+  const UNIT_CAJA = (STORE_ITEMS as Record<string, { cost: number }>).crateT1.cost;
 
   // POR QUÉ EL COSTE SE LEE DE `STORE_ITEMS` Y NO SE ESCRIBE AQUÍ. Estaba en la
   // lista, a mano en cada fila, y cuando la curva de balance se rehizo estas
@@ -151,15 +151,18 @@ async function main() {
     //
     // Y es un caso no determinista a propósito: se abren muchas cajas T1 y se
     // comprueba que **los** compañeros que salgan cumplen el invariante. Un banco
-    // con un solo companion fijado no miraría nada.
-    const g = await boot(baseSave([crate('c1', 1, 60), key('k1', 1, 60)],
+    // con un solo compañero fijado no miraría nada.
+    //
+    // Y sin llave: la caja se abre sola, así que la partida de la prueba solo
+    // necesita la caja. Antes llevaba también la llave que la abría.
+    const g = await boot(baseSave([crate('c1', 1, 60)],
       { nanites: 200_000, warehouseCapacity: 200 }));
 
     let vistos = 0;
     let sinFicha = 0;
     let sinPasivo = 0;
     for (let i = 0; i < 60; i++) {
-      const r: any = g.openCrateBox('c1', 'k1');
+      const r: any = g.openCrateBox('c1');
       if (!r || r.ok === false) break;
       if (r.reward?.kind !== 'companion' || !r.reward?.item?.id) continue;
       vistos++;
@@ -331,17 +334,19 @@ async function main() {
       JSON.stringify(wh(g).map((w: any) => `${w.id}:${w.stackCount}`)));
   }
   {
-    // Las llaves NO tienen tope: son moneda. 150 llaves siguen siendo una ranura,
-    // y es justo lo contrario de las cajas a propósito.
-    const g = await boot(baseSave([key('k1', 1, 150)],
+    // El tipo SIN tope de pila ya no es la llave: es el consumible. Lo que se
+    // comprueba es el mismo invariante —una pila enorme sigue siendo una ranura—
+    // con el objeto que hoy lo cumple. La caja es justo lo contrario a propósito,
+    // y por eso los dos casos se comprueban en bloques distintos.
+    const g = await boot(baseSave([consumable('u1', 'afk', 150)],
       { nanites: 200_000, warehouseCapacity: 2 }));
-    check('capacidad: 150 llaves siguen siendo una sola ranura',
-      ranuras(g) === 1 && (find(g, 'k1')?.stackCount ?? 0) === 150,
-      `ranuras=${ranuras(g)} unidades=${find(g, 'k1')?.stackCount}`);
+    check('capacidad: 150 consumibles siguen siendo una sola ranura',
+      ranuras(g) === 1 && (find(g, 'u1')?.stackCount ?? 0) === 150,
+      `ranuras=${ranuras(g)} unidades=${find(g, 'u1')?.stackCount}`);
   }
   {
     // =====================================================================
-    //  LA CAJA SE COMPRA EN LOTE, COMO LAS LLAVES
+    //  LA CAJA SE COMPRA EN LOTE
     // =====================================================================
     //
     // **ESTO ESTABA ROTO Y NO LANZABA NINGÚN ERROR.** La lista de "qué se compra
@@ -465,10 +470,10 @@ async function main() {
     // F31 · Antes eran dos cajas DISTINTAS: la segunda necesitaba ranura nueva y
     // con el almacén lleno se rechazaba. Ahora solo se vende una caja, y dos cajas
     // iguales se funden en una pila —que sí entra—, así que el caso se mide con
-    // un item de otra clase: la llave sí necesita ranura propia.
+    // un item de otra clase: el cristal sí necesita ranura propia.
     const g = await boot(baseSave([], { nanites: 200_000, warehouseCapacity: 1 }));
     const r1 = g.buyStoreItem('crateT1');
-    const r2 = g.buyStoreItem('keyT1');
+    const r2 = g.buyStoreItem('upgradeCrystal');
     check('capacidad: el primer item entra', r1 !== false);
     check('capacidad: el segundo se rechaza al llenarse', r2 === false && ranuras(g) === 1,
       'ranuras=' + ranuras(g));
@@ -658,7 +663,9 @@ async function main() {
   {
     // Abrir una caja con el almacen lleno: si el botin cabe, entra; si no cabe,
     // no se cuela. Con una capacidad de 1 no hay forma de que quepa nada.
-    const g = await boot(baseSave([crate('c1'), { ...crate('k1'), type: 'key', name: KEY_DEFS[1].name, tier: 1 }],
+    // El segundo item es un cristal porque la llave que ponía aquí ya no existe:
+    // al cargar una partida vieja se redime y desaparece.
+    const g = await boot(baseSave([crate('c1'), crystal('x1')],
       { warehouseCapacity: 1 }));
     check('capacidad: la partida respeta la capacidad al cargar', wh(g).length <= 1, 'items=' + wh(g).length);
   }
@@ -723,13 +730,13 @@ async function main() {
     // Y el caso que de verdad estaba roto, con los números a la vista.
     //
     // Comprar y vender en bucle, diez veces. Con el bug anterior el saldo
-    // crecía sin límite: +950 por llave y +4.260 por cristal.
+    // crecía sin límite: +4.260 por cristal era el más gordo.
     const g = await boot(baseSave([], { nanites: 10_000, warehouseCapacity: 40 }));
     const antes = nanites(g);
     for (let i = 0; i < 10; i++) {
-      const k = g.buyStoreItem('keyT1');
-      if (!k || !find(g, (k as any).id)) continue;
-      g.sellItem((k as any).id);
+      const cj = g.buyStoreItem('crateT1');
+      if (!cj || !find(g, (cj as any).id)) continue;
+      g.sellItem((cj as any).id);
       const c = g.buyStoreItem('upgradeCrystal');
       if (!c || !find(g, (c as any).id)) continue;
       g.sellItem((c as any).id);
@@ -744,12 +751,12 @@ async function main() {
     // F14: COMPRAR POR CANTIDAD. El lote cobra N veces el unitario —lo mismo
     // que N compras de una— y entrega las N de una vez, en la pila que haya.
     //
-    // La llave T1 vale lo que diga la tabla, y el banco no lo escribe: si el precio
+    // La caja T1 vale lo que diga la tabla, y el banco no lo escribe: si el precio
     // redondeo que discutir, y la cuenta es exacta a propósito.
     const g = await boot(baseSave([], { nanites: 10_000 }));
-    const r = g.buyStoreItem('keyT1', 10);
+    const r = g.buyStoreItem('crateT1', 10);
     check('lote: comprar 10 cobra 10 veces el unitario',
-      r !== false && nanites(g) === 10_000 - KEY_UNIT * 10,
+      r !== false && nanites(g) === 10_000 - UNIT_CAJA * 10,
       `nanites=${nanites(g)}`);
     check('lote: y llegan las 10 a una sola pila',
       !!r && find(g, (r as any).id)?.stackCount === 10,
@@ -757,30 +764,30 @@ async function main() {
     check('lote: y ocupan una sola ranura',
       ranuras(g) === 1, 'ranuras=' + ranuras(g));
     check('lote: el total que enseña el diálogo es el que se cobra',
-      g.getBulkCost('keyT1', 10) === KEY_UNIT * 10,
-      `bulk=${g.getBulkCost('keyT1', 10)}`);
+      g.getBulkCost('crateT1', 10) === UNIT_CAJA * 10,
+      `bulk=${g.getBulkCost('crateT1', 10)}`);
     const g2 = await reload();
     check('lote: el lote sobrevive a la recarga',
-      nanites(g2) === 10_000 - KEY_UNIT * 10,
+      nanites(g2) === 10_000 - UNIT_CAJA * 10,
       `nanites=${nanites(g2)}`);
   }
   {
     // Con pila previa se funde con ella: 3 que había + 7 que llegan.
     const g = await boot(baseSave([], { nanites: 10_000 }));
-    g.buyStoreItem('keyT1', 3);
-    const pila = wh(g).find((w: any) => w.type === 'key');
-    g.buyStoreItem('keyT1', 7);
+    g.buyStoreItem('crateT1', 3);
+    const pila = wh(g).find((w: any) => w.type === 'crate');
+    g.buyStoreItem('crateT1', 7);
     check('lote: el segundo lote se suma a la pila, no abre otra',
       pila && find(g, pila.id)?.stackCount === 10 && ranuras(g) === 1,
       `pila=${pila && find(g, pila.id)?.stackCount} ranuras=${ranuras(g)}`);
     check('lote: y se cobraron las 10 en total',
-      nanites(g) === 10_000 - KEY_UNIT * 10, `nanites=${nanites(g)}`);
+      nanites(g) === 10_000 - UNIT_CAJA * 10, `nanites=${nanites(g)}`);
   }
   {
     // Sin nanitas para el total no hay compra parcial: o las N o ninguna, y
     // sin cobrar. Un lote a medias sería una pila pagada sin precio cerrado.
     const g = await boot(baseSave([], { nanites: 1_000 }));
-    const r = g.buyStoreItem('keyT1', 10);
+    const r = g.buyStoreItem('crateT1', 10);
     check('lote: sin saldo para el total se rechaza entero',
       r === false && nanites(g) === 1_000 && wh(g).length === 0,
       `ok=${r} nanites=${nanites(g)} items=${wh(g).length}`);
@@ -789,20 +796,21 @@ async function main() {
     // Cantidad no válida: 0, negativos y NaN no cobran nada. Y en lo no
     // apilable el número ni se mira: una ranura de escuadrón siempre es una.
     //
-    // F31 · Antes esta aserción usaba una carta de tier, que ya no existe. Se
-    // mide con la ranura, que es el otro caso de "vale una sola vez".
+    // F31 · Antes esta aserción usaba una carta de llave. Se mide con la caja,
+    // que sigue siendo la otra clase de "vale una vez" entre las que se compran
+    // en lote.
     const g = await boot(baseSave([], { nanites: 10_000, maxCompanionSlots: 1 }));
     const antes = nanites(g);
     check('lote: 0 se rechaza sin cobrar',
-      g.buyStoreItem('keyT1', 0) === false && nanites(g) === antes,
+      g.buyStoreItem('crateT1', 0) === false && nanites(g) === antes,
       `nanites=${nanites(g)}`);
     check('lote: un negativo se rechaza sin cobrar',
-      g.buyStoreItem('keyT1', -5) === false && nanites(g) === antes,
+      g.buyStoreItem('crateT1', -5) === false && nanites(g) === antes,
       `nanites=${nanites(g)}`);
     check('lote: NaN se rechaza sin cobrar',
-      g.buyStoreItem('keyT1', NaN) === false && nanites(g) === antes,
+      g.buyStoreItem('crateT1', NaN) === false && nanites(g) === antes,
       `nanites=${nanites(g)}`);
-    // F31 · Ya no hay carta de tier que comprar, así que el caso "no apilable" se
+    // Ya no hay carta de tier que comprar, así que el caso "no apilable" se
     // mide con la ranura, que también vale una sola vez. Con una ranura ya
     // comprada la segunda se rechaza, así que la partida arranca con una.
     const t = g.buyStoreItem('companionSlot2', 10);
@@ -812,9 +820,11 @@ async function main() {
   }
   {
     // El tope del diálogo sale del motor: lo que alcanza con el saldo.
-    const g = await boot(baseSave([], { nanites: 1_000 }));
+    // El saldo se pone para que quepan varias unidades y el tope sea el del
+    // dinero: con 1 000 y una caja de 675 el tope sería 1 y no miraría nada.
+    const g = await boot(baseSave([], { nanites: 5_000 }));
     check('lote: el tope es lo que alcanza con el saldo',
-      g.getBulkMax('keyT1') === Math.floor(1_000 / KEY_UNIT), `max=${g.getBulkMax('keyT1')}`);
+      g.getBulkMax('crateT1') === Math.floor(5_000 / UNIT_CAJA), `max=${g.getBulkMax('crateT1')}`);
     check('lote: lo no apilable no tiene tope que preguntar',
       g.getBulkMax('companionSlot1') === 1, `max=${g.getBulkMax('companionSlot1')}`);
   }

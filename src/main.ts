@@ -865,8 +865,8 @@ function updateUI(state: any, isAfk: boolean = false) {
 
   // El saldo de nanitas vive en varios sitios según la vista, y solo se
   // refrescaba el de la base. Los otros se pintaban una vez al montar la página
-  // y se quedaban congelados: en el almacén, que es donde se vende y se usan
-  // llaves, el precio se decidía contra una cifra vieja mientras el ingreso
+  // y se quedaban congelados: en el almacén, que es donde se vende y se sube de
+  // nivel, el precio se decidía contra una cifra vieja mientras el ingreso
   // pasivo seguía subiendo; en el mercado, directamente no se podía saber si
   // algo era asequible. Se recorren por id en vez de buscar clases para que
   // añadir otro contador sea añadir una entrada a la lista.

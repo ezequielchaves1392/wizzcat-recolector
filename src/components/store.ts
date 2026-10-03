@@ -35,9 +35,6 @@ import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
 import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, type CrateType } from '../data/store';
-// Para las cuatro cartas de llave: el nivel sale de `STORE_KEY_TIER` y el
-// nombre, la rareza y el texto de `KEY_DEFS`. Ver `rarityOf` y `descFor`.
-import { STORE_KEY_TIER, KEY_DEFS, KEY_TIERS, cratesOpenedBy } from '../data/items';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { showConfirmModal } from '../utils/modal';
@@ -59,13 +56,10 @@ interface Category {
  * el recorte que hace F31, y es el más grande del lote: mientras la carta del T8
  * esté a la venta, la caja alta es un adorno y abrir cofres no progresa nada.
  *
- * Lo que queda es lo que de verdad es el arranque y el sostenimiento: la caja
- * T1, las diez llaves, los expansores y las tarjetas. **Las diez llaves siguen
- * aquí**, y hay que leer bien por qué: la llave no es la puerta, la puerta es la
- * caja. Comprar la llave T9 es tenerla guardada para cuando la T9 llegue, que
- * llega abriendo la T8.
- *
- * Las dos listas de abajo están **generadas** con `KEY_TIERS`: con diez llaves,
+ * Lo que queda es lo que de verdad es el arranque y el sostenimiento: **la caja
+ * T1**, los expansores y las tarjetas. Las nueve cajas siguientes salen de abrir la
+ * anterior, así que la tienda solo tiene que vender la primera; y ya **no hay llave
+ * que compre por delante**, porque la caja se abre sola.
  */
 /**
  * Los expansores que están en la tienda, por orden de tier.
@@ -81,7 +75,6 @@ const EXPANSORES_EN_VENTA = EXPANSOR_TIERS
   .sort();
 
 const CATEGORIES: Category[] = [
-  { id: 'llaves', label: 'Llaves', icon: 'key', items: KEY_TIERS.map(t => `keyT${t}`) },
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1'] },
   // Los expansores que se venden salen de `EXPANSOR_TIERS`, no de una lista
   // escrita. Con diez expansores y solo dos a la venta, escribirlos aquí era
@@ -126,8 +119,6 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     detail: 'Las nueve cajas siguientes no están en la tienda: se sacan abriendo la anterior. Lo que trae cada una se ve cuando sale.'
   },
 
-  key: {
-    what: 'Una llave. Se gasta una por cada caja que abras.',
     // POR QUÉ AQUÍ NO SE DICE CÓMO ESTÁ HECHA LA TIRADA. Antes decía "con el
     // botín ya decidido antes de girar", que era verdad y no era lo que había que
     // contar: es hablar como si la ruleta no sorteara nada, y el jugador leía que
@@ -135,8 +126,6 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     // vive es al revés de lo que dice la frase: él no sabe qué va a salir hasta
     // que la casilla se para. Ese es el trompo, y es lo único que esta tarjeta
     // tiene que contar.
-    detail: 'Las cajas del almacén se aperturan aquí. Gastas la llave, la ruleta gira y te dice qué ha salido. Cada caja tiene su propia tabla de botín.'
-  },
   upgradeCrystal: {
     what: 'Cristal T1, para subir el nivel de un recolector T1.',
     detail: 'F26: cada recolector se sintoniza con el cristal de SU MISMO tier. Los otros nueve salen de las cajas de su nivel; aquí solo se vende el T1.'
@@ -246,10 +235,6 @@ const ui = {
 
 /** Icono del producto según su clave. */
 function iconFor(itemKey: string): IconName {
-  // F31 · Las llaves se resuelven por `STORE_KEY_TIER`, no por una entrada por
-  // carta: con diez llaves, una tabla de iconos escrita a mano tenía nueve
-  // entradas de más que nadie iba a notar que faltan.
-  if (STORE_KEY_TIER[itemKey] !== undefined) return 'key';
   if (itemKey === 'crateT1') return 'crate';
   const map: Record<string, IconName> = {
     upgradeCrystal: 'crystal',
@@ -266,10 +251,6 @@ function iconFor(itemKey: string): IconName {
 }
 
 function rarityOf(itemKey: string): string | null {
-  // La rareza de una llave sale de su definición, no de una tabla de aquí: si
-  // se escribiera aparte, añadir una llave obligaría a acordarse de tocarla en
-  // tres sitios y el olvido es silencioso.
-  if (STORE_KEY_TIER[itemKey] !== undefined) return KEY_DEFS[STORE_KEY_TIER[itemKey]].rarity;
   // F31 · Y la de la caja sale de ``CRATE_TYPES``, que es donde vive su nombre.
   // Antes era un objeto de cuatro pares en línea, aquí, que con diez cajas solo
   // habría acertado en cuatro.
@@ -301,13 +282,6 @@ function descFor(itemKey: string): { what: string; detail: string } {
   const expansor = expansorDeCarta(itemKey);
   if (expansor) return descDeExpansor(expansor);
   if (DESCRIPTIONS[itemKey]) return DESCRIPTIONS[itemKey];
-  // Las llaves tampoco tienen texto aquí, y por el mismo motivo que la rareza:
-  // el `details` de `KEY_DEFS` ya lo dice con el mismo criterio que la regla que
-  // decide si la abre. Escribirlo otra vez es la forma de volver a mentir.
-  if (STORE_KEY_TIER[itemKey] !== undefined) {
-    const def = KEY_DEFS[STORE_KEY_TIER[itemKey]];
-    return { what: `Abre ${cratesOpenedBy(def.tier).map(c => CRATE_TYPES[c].name).join(', ')}.`, detail: `Las cajas sueltan llaves de su propio nivel, así que se repone sola.` };
-  }
   return { what: '', detail: '' };
 }
 
@@ -367,8 +341,6 @@ export function renderStoreTab(
       note = `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
     } else if (itemKey === 'afkCard') {
       note = `${Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000)} min cada una · acumulable ×3`;
-    } else if (itemKey === 'key') {
-      note = `Tienes ${state.keys}`;
     } else if (itemKey === 'upgradeCrystal') {
       note = `Tienes ${state.upgradeCrystals}`;
     } else if (RANURA_POR_CARTA[itemKey]) {
@@ -455,8 +427,7 @@ export function renderStoreTab(
     ${statStrip([
       { label: 'Nanitas', value: formatNumber(state.nanites), glyph: '◆', valueId: 'store-nanites' },
       { label: 'Almacén', value: `${countOccupiedSlots(state.warehouse)}/${game.getCapacity?.() ?? state.warehouseCapacity}` },
-      { label: 'Descuento', value: discount > 0 ? `−${Math.round(discount * 100)}%` : '—', tone: discount > 0 ? 'text-emerald-400' : undefined },
-      { label: 'Llaves', value: String(state.keys) }
+      { label: 'Descuento', value: discount > 0 ? `−${Math.round(discount * 100)}%` : '—', tone: discount > 0 ? 'text-emerald-400' : undefined }
     ])}
 
     <div id="cat-tabs" class="relative flex gap-1 mb-3 overflow-x-auto pb-1" role="tablist">

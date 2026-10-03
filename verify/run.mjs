@@ -40,7 +40,7 @@ for (const banco of [
   'senalCheck',
   'balanceCheck',
   'desgloseCheck',
-  'llaveCheck',
+  'cajasCheck',
   'ranuraCheck',
   'tarjetaCheck',
   'saltoCheck',

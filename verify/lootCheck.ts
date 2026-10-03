@@ -17,7 +17,7 @@
 
 import {
   CRATE_LOOT, CRATE_META, rollCrateReward, buildRouletteStrip, makeRouletteTile,
-  isCountedLoot, lootAmountText, type CrateReward
+  isCountedLoot, lootAmountText, type CrateReward, type LootApplier
 } from '../src/components/crateLoot';
 import { COSMETICS_BY_ID, crateCosmetics } from '../src/data/cosmetics';
 import { formatNumber } from '../src/utils/format';
@@ -28,43 +28,53 @@ import { check, resumen } from './kit';
 // Record con claves numéricas devuelve strings, y una string no abre una caja.
 const CAJAS = Object.keys(CRATE_LOOT).map(Number) as CrateType[];
 
-/** Lo que se ha aplicado de verdad, para poder compararlo con lo que se enseña. */
-type Recuento = { nanitas: number; cristales: number; llaves: number; ids: string[] };
+/**
+ * Lo que se ha aplicado de verdad, para poder compararlo con lo que se enseña.
+ *
+ * Sin llaves: las cajas se abren solas, así que ya no hay una cuarta cifra que
+ * comprobar y `LootApplier` no tiene ni un `keys` que mandar.
+ */
+type Recuento = { nanitas: number; cristales: number; ids: string[] };
 
 /**
  * Un aplicador de mentira que lleva la cuenta de lo aplicado.
  *
- * Es la firma real de `LootApplier`, no una reimplementación: si esa firma
- * cambia, esto deja de compilar en vez de seguir pasando en verde.
+ * Es la firma real de `LootApplier`, no una reimplementación, y está **anotada**
+ * para que siga siéndolo: si esa firma cambia, esto deja de compilar en vez de
+ * seguir pasando en verde. Sin la anotación el chequeo de propiedades sobrantes
+ * no llegaba —el objeto se devolvía dentro de otro objeto y se pasaba como
+ * variable—, que es como una llave se quedó en este banco después de que el
+ * juego dejara de tenerlas: compilando, y sin mirar nada.
  */
 function crearApplier(tieneEspacio = true, yaTiene: string[] = []) {
-  const cuenta: Recuento = { nanitas: 0, cristales: 0, llaves: 0, ids: [] };
+  const cuenta: Recuento = { nanitas: 0, cristales: 0, ids: [] };
   const poseidos = new Set(yaTiene);
-  return {
-    cuenta,
-    poseidos,
-    applier: {
-      nanites: (n: number) => { cuenta.nanitas += n; },
-      crystals: (n: number) => { cuenta.cristales += n; },
-      keys: (n: number) => { cuenta.llaves += n; },
-      addItem: () => tieneEspacio,
-      hasSpace: () => tieneEspacio,
-      unlockCosmetic: (id: string) => {
-        if (poseidos.has(id)) return false;
-        poseidos.add(id);
-        cuenta.ids.push(id);
-        return true;
-      },
-      ownedCosmetics: () => [...poseidos]
-    }
+  const applier: LootApplier = {
+    nanites: (n: number) => { cuenta.nanitas += n; },
+    crystals: (n: number) => { cuenta.cristales += n; },
+    addItem: () => tieneEspacio,
+    hasSpace: () => tieneEspacio,
+    unlockCosmetic: (id: string) => {
+      if (poseidos.has(id)) return false;
+      poseidos.add(id);
+      cuenta.ids.push(id);
+      return true;
+    },
+    ownedCosmetics: () => [...poseidos]
   };
+  return { cuenta, poseidos, applier };
 }
 
-/** Cuánto se cobra de un premio, o `null` si no es una cantidad. */
+/**
+ * Cuánto se cobra de un premio, o `null` si no es una cantidad.
+ *
+ * Aquí no hay rama de llaves porque ya no existe ese premio: la quitó el que
+ * abrió las cajas sola. Dejarla habría sido código muerto que además no
+ * compila, porque `'keys'` ya no es un `LootKind`.
+ */
 function cobrado(premio: CrateReward, cuenta: Recuento): number | null {
   if (premio.kind === 'nanites') return cuenta.nanitas;
   if (premio.kind === 'crystals') return cuenta.cristales;
-  if (premio.kind === 'keys') return cuenta.llaves;
   return null;
 }
 
@@ -116,11 +126,20 @@ async function main() {
   {
     // Qué premios llevan cifra. Monedas y materiales siempre; los objetos de a
     // uno no, porque un "+1 Dron" es ruido y el nombre ya lo dice.
+    //
+    // **LA TERCERA FILA CAMBIÓ AL DESPAREZER LAS LLAVES, Y NO ES UN RELLENO.**
+    // Antes eran las llaves, que son una moneda y por lo tanto contaban siempre.
+    // Ahora la sustituye la **Piedra de Calibración cuando salen dos**, que es
+    // la única fila de la tabla que es un objeto y aun así lleva cifra: sale de
+    // `rand(1, 2)`, así que la mitad de las veces son dos y la casilla tiene que
+    // decir "+2 Piedras de Calibración". Medir el mismo número de filas deja la
+    // prueba con la misma cobertura de `isCountedLoot()`, que es lo que se
+    // comprueba aquí.
     const conCifra = (kind: string, amount: number) =>
       isCountedLoot({ kind, amount } as CrateReward);
-    check('botín: nanitas, cristales y llaves siempre enseñan su cantidad',
-      conCifra('nanites', 1) && conCifra('crystals', 1) && conCifra('keys', 1),
-      [conCifra('nanites', 1), conCifra('crystals', 1), conCifra('keys', 1)].join(','));
+    check('botín: nanitas, cristales y piedras de calibración por parejas enseñan su cantidad',
+      conCifra('nanites', 1) && conCifra('crystals', 1) && conCifra('consumable', 2),
+      [conCifra('nanites', 1), conCifra('crystals', 1), conCifra('consumable', 2)].join(','));
     check('botín: un objeto de a uno no enseña "+1"',
       !conCifra('companion', 1) && !conCifra('collector', 1) && !conCifra('cosmetic', 1),
       'companion, collector y cosmetic');

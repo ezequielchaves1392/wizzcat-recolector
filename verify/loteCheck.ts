@@ -12,10 +12,15 @@
 //  nanitas de veinte cajas son un número" y "el Espectro Azulado que salió en la
 //  séptima es un compañero, no un multiplicador" son reglas del juego, y una
 //  regla que vive dentro de un `innerHTML` no se puede comprobar.
+//
+//  Y hay un bloque entero que antes era "cada apertura gasta una llave": ya no hay
+//  llave que gastar, y lo que se comprueba ahora es su consecuencia —**el tope de
+//  reventa es un número solo y vale lo mismo que el par que era**, y ninguna
+//  apertura deja una llave en el almacén.
 // ==========================================================================
 
-import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, key, crystal, distintos } from './kit';
-import { STORE_ITEMS, costeDeCaja, costeDeLlave, CRATE_TYPES, type CrateType } from '../src/data/store';
+import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, crystal, distintos } from './kit';
+import { STORE_ITEMS, costeDeCaja, CRATE_TYPES, type CrateType } from '../src/data/store';
 import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
 import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
@@ -67,12 +72,15 @@ async function main() {
     // `endsWith('Crate')` que ya había fallado en el motor: con la caja de F31 la
     // tarjeta decía "elige cuántas **unidad**". Dos copias de una lista de
     // nombres de carta es exactamente cómo se rompe una de las dos en silencio.
+    //
+    // Y no se mira una carta de llave porque **ya no hay ninguna**: la lista de
+    // cartas en lote son el cristal, la caja y los consumibles, y una carta que
+    // no existe devolvería "unidad" sin decir por qué.
     check('compra: el nombre de unidad sale del motor y la caja dice "caja"',
       g.getBulkUnitName('crateT1') === 'caja'
-        && g.getBulkUnitName('keyT3') === 'llave'
         && g.getBulkUnitName('upgradeCrystal') === 'cristal'
         && g.getBulkUnitName('companionSlot1') === 'unidad',
-      `caja=${g.getBulkUnitName('crateT1')} llave=${g.getBulkUnitName('keyT3')} ` +
+      `caja=${g.getBulkUnitName('crateT1')} ` +
       `cristal=${g.getBulkUnitName('upgradeCrystal')} ranura=${g.getBulkUnitName('companionSlot1')}`);
   }
 
@@ -100,36 +108,42 @@ async function main() {
       MAX_APERTURA_LOTE >= 10 && Number.isFinite(MAX_APERTURA_LOTE),
       `lote=${MAX_APERTURA_LOTE}`);
 
-    // Y que abrir de verdad N cajas solo gaste N llaves y N cajas.
-    const g = await boot(baseSave([crate('c1', 1, 20), key('k1', 1, 20)],
+    // Y que abrir de verdad N cajas gaste N cajas. Y solo N cajas.
+    const g = await boot(baseSave([crate('c1', 1, 20)],
       { nanites: 0, warehouseCapacity: 40 }));
     const abiertas: CrateReward[] = [];
+    // Lo que queda de la pila después de cada apertura. Antes esta cuenta era la de
+    // las llaves; ahora, con la caja abierta sola, **el número que se puede medir
+    // es el de la pila**: si una apertura gastara dos cajas o cero, la pila bajaría
+    // de dos en dos o se quedaría quieta, y por eso se mira en cada vuelta y no
+    // solo al final.
+    const restantes: number[] = [];
     for (let i = 0; i < 20; i++) {
-      const res: any = g.openCrateBox('c1', 'k1');
+      const res: any = g.openCrateBox('c1');
       if (!res.ok) break;
       abiertas.push(res.reward);
+      restantes.push(wh(g).find((w: any) => w.id === 'c1')?.stackCount ?? 0);
     }
     check('lote: se pueden abrir 20 de una vez',
       abiertas.length === 20, `abiertas=${abiertas.length}`);
-    // Las llaves NO son 20 menos: la caja devuelve llaves, así que la cuenta buena
-    // es "quedan exactamente las que el botín ha devuelto". Esa es la
-    // comprobación que demuestra que **cada apertura gastó una llave**, y es la
-    // única que no depende de saber de antemano cuántas van a volver.
-    const devueltas = abiertas
-      .filter((r) => r.kind === 'keys')
-      .reduce((a, r) => a + (r.amount ?? 0), 0);
-    const llavesEnAlmacen = wh(g).filter((w: any) => w.type === 'key')
-      .reduce((a, w) => a + (w.stackCount || 1), 0);
-    check('lote: cada apertura gastó una llave (quedan solo las que volvió el botín)',
-      llavesEnAlmacen === devueltas,
-      `almacen=${llavesEnAlmacen} devueltas=${devueltas}`);
+    check('lote: y cada apertura se lleva exactamente una caja, ni dos ni ninguna',
+      restantes.length === 20 && restantes.every((n, i) => n === 19 - i),
+      `pila tras cada apertura: ${restantes.join(',')}`);
     check('lote: y la caja se consume entera',
       !wh(g).some((w: any) => w.id === 'c1'), ids(g).join(','));
     check('lote: el contador de cajas abiertas sube por cada una',
       s(g).cratesOpened === 20, `abiertas=${s(g).cratesOpened}`);
 
-    // Y el tope NO es "las cajas que tengo". Con 99 cajas y 99 llaves encima, el
-    // diálogo ofrece 20: el tope manda por encima de las dos cosas.
+    // Y lo que no puede pasar: **que veinte aperturas dejen una llave en el
+    // almacén**. La llave era una fila del botín y una segunda cosa que gastar en
+    // cada apertura; si alguna vez vuelve a aparecer en la tabla o en la redención,
+    // el almacén se llenaría de objetos que no abren nada y esta es la que lo ve.
+    check('lote: veinte aperturas no dejan ni una llave en el almacén',
+      wh(g).filter((w: any) => w.type === 'key').length === 0,
+      ids(g).filter((id) => /^k/.test(id)).join(',') || 'ninguna');
+
+    // Y el tope NO es "las cajas que tengo". Con 99 cajas encima, el diálogo
+    // ofrece 20: el tope manda por encima de lo que hay.
     //
     // **ESTA PRUEBA MEDÍA SU PROPIO MONTAJE, NO LA REGLA.** Abría cajas en bucle
     // y contaba cuántas salían, con la idea de que se pararía en el tope. Pero
@@ -141,18 +155,22 @@ async function main() {
     // La regla se mide ahora donde está: `maximoDeApertura()`, en
     // `crateSummary.ts`. Sacarla de la vista es lo que la ha hecho comprobable;
     // mientras viviera en un manejador de clic no había forma de preguntarle nada.
-    check('lote: con 99 cajas y 99 llaves, el tope sigue mandando',
-      maximoDeApertura(99, 99) === MAX_APERTURA_LOTE,
-      `diálogo=${maximoDeApertura(99, 99)} tope=${MAX_APERTURA_LOTE}`);
+    check('lote: con 99 cajas encima, el tope sigue mandando',
+      maximoDeApertura(99) === MAX_APERTURA_LOTE,
+      `diálogo=${maximoDeApertura(99)} tope=${MAX_APERTURA_LOTE}`);
     check('lote: y lo que hay de menos manda también',
-      maximoDeApertura(99, 8) === 8 && maximoDeApertura(8, 99) === 8,
-      `cajas99/llaves8=${maximoDeApertura(99, 8)} cajas8/llaves99=${maximoDeApertura(8, 99)}`);
-    check('lote: sin llaves no se abre ninguna, y no se ofrece un número negativo',
-      maximoDeApertura(99, 0) === 0 && maximoDeApertura(0, 99) === 0,
-      `sin llaves=${maximoDeApertura(99, 0)} sin cajas=${maximoDeApertura(0, 99)}`);
-    check('lote: una pila de 99 cabe de sobra en una apertura',
-      maximoDeApertura(99, 99) >= MAX_APERTURA_LOTE,
-      `${maximoDeApertura(99, 99)} < ${MAX_APERTURA_LOTE}`);
+      maximoDeApertura(8) === 8 && maximoDeApertura(1) === 1,
+      `ocho=${maximoDeApertura(8)} una=${maximoDeApertura(1)}`);
+    check('lote: sin cajas no se abre ninguna, y no se ofrece un número negativo',
+      maximoDeApertura(0) === 0 && maximoDeApertura(-5) === 0,
+      `cero=${maximoDeApertura(0)} negativo=${maximoDeApertura(-5)}`);
+    // Y lo que hay de menos **siempre es un número de cajas entero**. La función
+    // hace `Math.floor(cajas) || 0` por un motivo concreto: un `NaN` de la vista se
+    // convertiría en un "abre NaN cajas" que nadie sabe de dónde sale, y por eso
+    // cae a cero en vez de propagarse.
+    check('lote: un número de cajas que no sea entero se recorta, y un NaN cae a cero',
+      maximoDeApertura(3.9) === 3 && maximoDeApertura(NaN) === 0,
+      `tres coma nueve=${maximoDeApertura(3.9)} NaN=${maximoDeApertura(NaN)}`);
   }
 
   // -------------------------------------------------------------------------
@@ -163,9 +181,15 @@ async function main() {
       kind: 'nanites', amount, name: 'Nanitas', label: `+${amount} Nanitas`,
       details: 'Materia prima básica', rarity: 'Común', icon: 'bolt', exclusive: false
     });
-    const llave = (tier: number, amount: number): CrateReward => ({
-      kind: 'keys', amount, name: `Llave T${tier}`, label: `+${amount} Llaves T${tier}`,
-      details: 'x', rarity: 'Raro', icon: 'key', keyTier: tier as any, exclusive: false
+    // La caja siguiente. Sustituye a la llave como fila del mismo tipo —"algo que
+    // se agrupa porque es intercambiable"— y **agrupa por NOMBRE**, no por nivel:
+    // dos cajas T2 son la misma fila porque son la misma caja, y por eso el
+    // nombre sale de `CRATE_TYPES` y no se escribe aquí a mano. Una lista de
+    // nombres escrita en el banco sería una copia de la del juego, que es
+    // exactamente lo que este banco no puede tener.
+    const caja = (tier: number, amount: number): CrateReward => ({
+      kind: 'crate', amount, name: CRATE_TYPES[tier as CrateType].name, label: `+${amount}`,
+      details: 'x', rarity: CRATE_TYPES[tier as CrateType].rarity, icon: 'crate', exclusive: false
     });
     const cri = (tier: number, amount: number): CrateReward => ({
       kind: 'crystals', amount, name: `Cristal T${tier}`, label: `+${amount}`,
@@ -192,10 +216,19 @@ async function main() {
       dosCri.length === 2 && dosCri.find(f => f.reward.materialTier === 3)?.total === 10,
       JSON.stringify(dosCri.map(f => `T${f.reward.materialTier}:${f.total}`)));
 
-    const dosLlaves = resumenDePremios([llave(1, 1), llave(2, 3), llave(1, 2)]);
-    check('resumen: las llaves de distinto nivel NO se suman',
-      dosLlaves.length === 2 && dosLlaves.find(f => f.reward.keyTier === 1)?.total === 3,
-      JSON.stringify(dosLlaves.map(f => `T${f.reward.keyTier}:${f.total}`)));
+    // Y las cajas, que son la otra mitad de lo que se suma. Dos cajas T2 sí son la
+    // misma fila —el jugador quiere saber cuántas se lleva, no cuántas veces
+    // salieron— y una T3 es otra fila, porque mezclarlas daría "T2+T3" y una cifra
+    // que no existe en el almacén. Esta es la fila que la llave ocupaba, y lo que
+    // hay que comprobar es **las dos mitades**: que se una y que no se una.
+    const cajas = resumenDePremios([caja(2, 1), caja(3, 2), caja(2, 1)]);
+    check('resumen: las cajas del mismo nivel se suman',
+      cajas.length === 2 && cajas.find(f => f.reward.name === CRATE_TYPES[2].name)?.total === 2,
+      JSON.stringify(cajas.map(f => `${f.reward.name}:${f.total}`)));
+    check('resumen: pero las de distinto nivel NO, porque son otra caja',
+      cajas.find(f => f.reward.name === CRATE_TYPES[3].name)?.total === 2
+        && cajas.filter(f => f.reward.name === CRATE_TYPES[3].name).length === 1,
+      JSON.stringify(cajas.map(f => `${f.reward.name}:${f.total}`)));
 
     // Y los OBJETOS no se suman. Dos drones son dos drones, y escribirlos "×2"
     // escondería que hay dos celdas ocupadas y dos compañeros que elegir.
@@ -207,30 +240,31 @@ async function main() {
       JSON.stringify(dosDrones.map(f => f.reward.item?.id)));
 
     // El caso mixto: siete premios de una vez. Son **cinco** filas, y el número
-    // importa: dos nanitas se unen (1), tres cosas más (1+1+1) y los dos drones
-    // NO (2). Una versión anterior de esta prueba contaba cuatro y fallaba.
+    // importa: dos nanitas se unen (1), dos cajas T2 se unen (1), un cristal (1) y
+    // los dos drones NO (2). Una versión anterior de esta prueba contaba cuatro y
+    // fallaba.
     const mezcla = resumenDePremios([
-      nanita(900), nanita(700), cri(1, 3), llave(1, 1), dron('d1'), dron('d2'), llave(1, 1)
+      nanita(900), nanita(700), cri(1, 3), caja(2, 1), dron('d1'), dron('d2'), caja(2, 1)
     ]);
     check('resumen: siete premios dan cinco filas (2 nanitas juntas, 2 drones sueltos)',
       mezcla.length === 5, `filas=${mezcla.length} · ${JSON.stringify(mezcla.map(f => `${f.reward.kind}:${f.total}`))}`);
     check('resumen: las dos filas de 2 companion NO se han unido',
       mezcla.filter(f => f.reward.kind === 'companion').length === 2,
       `companions=${mezcla.filter(f => f.reward.kind === 'companion').length}`);
-    check('resumen: y las dos llaves del T1 sí',
-      mezcla.find(f => f.reward.kind === 'keys')?.total === 2,
-      `llaves=${mezcla.find(f => f.reward.kind === 'keys')?.total}`);
+    check('resumen: y las dos cajas T2 sí',
+      mezcla.find(f => f.reward.kind === 'crate')?.total === 2,
+      `cajas=${mezcla.find(f => f.reward.kind === 'crate')?.total}`);
     check('resumen: el total de nanitas es la suma de las dos filas',
       mezcla.find(f => f.reward.kind === 'nanites')?.total === 1600,
       `nanitas=${mezcla.find(f => f.reward.kind === 'nanites')?.total}`);
 
     // Y el caso real: veinte cajas de verdad dan muchas más filas que veinte, pero
-    // nanitas y llaves se agrupan.
-    const g = await boot(baseSave([crate('c1', 1, 20), key('k1', 1, 20)],
+    // nanitas y materiales se agrupan.
+    const g = await boot(baseSave([crate('c1', 1, 20)],
       { nanites: 0, warehouseCapacity: 40 }));
     const reales: CrateReward[] = [];
     for (let i = 0; i < 20; i++) {
-      const res: any = g.openCrateBox('c1', 'k1');
+      const res: any = g.openCrateBox('c1');
       if (res.ok && res.reward) reales.push(res.reward);
     }
     const filas = resumenDePremios(reales);
@@ -259,12 +293,20 @@ async function main() {
   //  4. LO QUE SE ABRE NO IMPRIMA DINERO (F31, punto de la petición)
   // -------------------------------------------------------------------------
   {
-    // El premio mayor de cada caja no puede venderse por más que la caja y la
-    // llave. Medido antes de poner el tope: el recolector sobrecargado de la T10
-    // se vendía por 457.800 con un par de 145.388, ×3,15.
+    // El premio mayor de cada caja no puede venderse por más que lo que cuesta
+    // abrirla. Medido antes de poner el tope: el recolector sobrecargado de la T10
+    // se vendía por 457.800 con un tope de 145.388, ×3,15.
+    //
+    // **EL TOPE ES UN NÚMERO Y NO UNA SUMA, Y ES EL MISMO NÚMERO.** Antes era
+    // `costeDeCaja(t) + costeDeLlave(t)`. Ahora la caja se abre sola y la paga
+    // ella sola, pero **su precio subió justo lo que costaba la llave**: los dos
+    // números coinciden en las diez. Por eso quitar las llaves no movió un nanito, y
+    // esta comprobación es la que lo fija: si alguien bajara el precio de la caja a
+    // la mitad "porque ya no hay llave", aquí empezaría a imprimir dinero sin que
+    // ninguna otra prueba se enterase.
     for (let t = 1; t <= 10; t++) {
       const caja = t as CrateType;
-      const par = costeDeCaja(t) + costeDeLlave(t);
+      const tope = costeDeCaja(t);
       const g = await boot(baseSave([], { nanites: 10_000_000, warehouseCapacity: 400 }));
       let peor = 0;
       let deQuien = '';
@@ -281,8 +323,8 @@ async function main() {
           if (precio > peor) { peor = precio; deQuien = entrada.id; }
         }
       }
-      check(`equilibrio: nada de la caja T${t} se vende por más que caja+llave`,
-        peor <= par, `peor=${peor} (${deQuien}) par=${par} ${peor > par ? `IMPRIME x${(peor / par).toFixed(2)}` : ''}`);
+      check(`equilibrio: nada de la caja T${t} se vende por más que abrirla`,
+        peor <= tope, `peor=${peor} (${deQuien}) tope=${tope} ${peor > tope ? `IMPRIME x${(peor / tope).toFixed(2)}` : ''}`);
     }
   }
 
@@ -292,15 +334,15 @@ async function main() {
   {
     for (let t = 1; t <= 10; t++) {
       const caja = t as CrateType;
-      const par = costeDeCaja(t) + costeDeLlave(t);
+      const tope = costeDeCaja(t);
       const nanites: any = CRATE_LOOT[caja].find(e => e.id === 'nanites')!;
       let peor = 0;
       for (let i = 0; i < 40; i++) {
         const p: CrateReward = resolveLootAmount(caja, nanites.build({ ownedCosmetics: [] }));
         peor = Math.max(peor, p.amount);
       }
-      check(`equilibrio: las nanitas de la caja T${t} no superan caja+llave`,
-        peor <= par, `peor=${peor} par=${par}`);
+      check(`equilibrio: las nanitas de la caja T${t} no superan el tope de la caja`,
+        peor <= tope, `peor=${peor} tope=${tope}`);
     }
   }
 
@@ -333,36 +375,47 @@ async function main() {
       `probabilidad=${(probabilidadDeSalto(1) * 100).toFixed(2)}%`);
 
     // Y ahora sí, con una caja T2 **puesta a mano**, se prueba el tramo entero:
-    // la T2 existe en el almacén y no se abre con la llave que no toca.
-    const g = await boot(baseSave([crate('c1', 1, 20), key('k1', 1, 20), crate('c2', 2, 1)],
+    // la T2 existe en el almacén y se abre sola.
+    const g = await boot(baseSave([crate('c1', 1, 20), crate('c2', 2, 1)],
       { nanites: 0, warehouseCapacity: 60 }));
     const siguiente = wh(g).find((w: any) => w.type === 'crate' && w.name === CRATE_TYPES[2].name);
-    check('cadena: la T2 abierta desde la T1 se reconoce como T2',
+    check('cadena: la T2 salida de la T1 se reconoce como T2',
       !!siguiente, `no hay ninguna caja T2 en el almacén: ${wh(g).map((w: any) => w.name).join(', ')}`);
 
-    // Y LA CADENA TIENE UN TRAMO QUE ESTA PARTIDA NO PUEDE HACER: la T2 pide
-    // llave T2, y la llave T2 solo sale de una T2. La primera versión de esta
-    // prueba abria la T2 con la llave T1 y fallaba; no es un bug, es
-    // que la escalera empieza en la T2, no en la T1.
-    //
-    // Asi que el tramo que si se puede comprobar con este botin es el
-    // del rechazo, y es el que importa: la caja T2 con la llave equivocada
-    // **no** se abre y lo dice.
-    const llaveT1 = wh(g).find((w: any) => w.type === 'key' && w.tier === 1);
+    // La escalera ya no tiene tramos. Antes esta caja solo se podía abrir con la
+    // llave T2, y la llave T2 solo salía de una T2, así que el tramo intermedio
+    // no lo podía hacer nadie y esta prueba acababa midiendo el rechazo de la
+    // llave equivocada. **Ahora el tramo entero son dos clics y nada más**, que es
+    // justo lo que hay que comprobar: la caja que salió de la T1 se abre sin
+    // tener que buscar nada, y el motor devuelve de qué nivel era.
     if (siguiente) {
-      const r: any = g.openCrateBox(siguiente.id, llaveT1?.id ?? 'nada');
-      check('cadena: la T2 no se abre con la llave T1, y lo dice',
-        r.ok === false && typeof r.msg === 'string' && r.msg.length > 0,
-        `ok=${r.ok} msg=${r.msg}`);
+      const r: any = g.openCrateBox(siguiente.id);
+      check('cadena: la T2 se abre sola, sin nada más en la mano',
+        r.ok === true && r.crateType === 2, `ok=${r.ok} nivel=${r.crateType} msg=${r.msg}`);
+      // Y lo que se gastó es **una** caja: la del salto. Si se cobrase también la
+      // que quedaba de la T1, la escalera seguiría costando un paso que ya no
+      // existe.
+      check('cadena: y abrir la T2 no toca la pila de T1 que quedaba',
+        wh(g).find((w: any) => w.id === 'c1')?.stackCount === 20,
+        `pila de T1=${wh(g).find((w: any) => w.id === 'c1')?.stackCount}`);
     }
+
+    // Y lo que sigue siendo verdad con y sin llaves: **abrir algo que no es una
+    // caja no lanza nada, se rechaza y lo dice.** Antes esta mitad la ocupaba la
+    // llave equivocada; el motivo de que siga aquí es el mismo, y es R4 —nunca
+    // fallar hacia el jugador— aplicado a la única entrada que queda.
+    const rFuera: any = g.openCrateBox('no-existe');
+    check('cadena: un id que no está en el almacén se rechaza y lo dice',
+      rFuera.ok === false && typeof rFuera.msg === 'string' && rFuera.msg.length > 0,
+      `ok=${rFuera.ok} msg=${rFuera.msg}`);
   }
   {
-    // Y el tramo bueno de la cadena, con la llave que toca: T2 con llave T2.
-    const g = await boot(baseSave([crate('c2', 2, 1), key('k2', 2, 1)],
+    // Y el tramo bueno de la cadena, que ya es el único: T2 y nada más.
+    const g = await boot(baseSave([crate('c2', 2, 1)],
       { nanites: 0, warehouseCapacity: 40 }));
-    const r: any = g.openCrateBox('c2', 'k2');
-    check('cadena: la T2 sí se abre con la llave T2',
-      r.ok === true, r.msg ?? '');
+    const r: any = g.openCrateBox('c2');
+    check('cadena: la T2 se abre sola, y sale un T2',
+      r.ok === true && r.crateType === 2, `ok=${r.ok} nivel=${r.crateType} msg=${r.msg ?? ''}`);
   }
 
   resumen('lote: compra multiple, tope de apertura y la lista de lo que salió');

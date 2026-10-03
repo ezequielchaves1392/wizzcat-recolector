@@ -8,7 +8,7 @@
 //  Los stubs de `firebase/*` se inyectan por alias en `verify/vite.config.ts`.
 // ==========================================================================
 
-import { createGameLoop } from '../src/gameLoop';
+import { createGameLoop, SAVE_VERSION } from '../src/gameLoop';
 import { danioDeRango, estrellasDe } from '../src/data/crafting';
 import * as factories from './kit';
 
@@ -58,12 +58,19 @@ const companion = (id: string, tier = 3) => ({
 });
 // F31 · ESTE BANCO TENÍA SUS PROPIAS FÁBRICAS DE ITEM, Y NO DEBERÍA.
 //
-// `crate`, `key` y `crystal` estaban definidas aquí **además** de las de `kit.ts`,
+// `crate` y `crystal` estaban definidas aquí **además** de las de `kit.ts`,
 // con tablas de nombres propias. Y las dos copias ya se habían separado: las
 // listas de aquí tenían cuatro nombres y el juego tenía diez. Un banco que
 // fabrica un `Cristal Singular` que el juego no fabrica mide un objeto que no
 // existe, que es la forma más tranquila de tener un banco en verde y falso.
-const { crate, key, crystal } = factories;
+//
+// **Y NO SE IMPORTA `key`, Y NO ES UN OLVIDO.** Quitar las llaves del juego no
+// quitó el tipo de una partida vieja: al cargar, cada item del almacén con
+// `type: 'key'` se convierte en nanitas y desaparece. Un banco que montara una
+// partida con `key(...)` y luego esperara encontrarla estaría midiendo la
+// redención, no la venta. Aquí ya no hay llaves: lo que se vende por unidades y
+// tiene contador derivado es el CRISTAL, y es lo que mide todo lo de abajo.
+const { crate, crystal } = factories;
 
 /**
  * Y la de consumible, que aquí tenía OTRA FIRMA: `(id, stack, over)` en vez de
@@ -106,7 +113,10 @@ function baseSave(warehouse: any[], extra: any = {}) {
   return {
     saveVersion: 7, nanites: 1000, warehouse, crates,
     companions: [], activeCompanions: [], equippedCollectorId: null,
-    keys: 0, upgradeCrystals: 0, warehouseCapacity: 30,
+    // Ni `keys` ni `keysByTier`: ya no existen en el estado. Escribirlos aquí no
+    // rompería nada —el motor los ignora y los borra al guardar—, pero un banco
+    // que pone un campo que el juego no tiene es un banco que mide otra partida.
+    upgradeCrystals: 0, warehouseCapacity: 30,
     ...extra
   };
 }
@@ -186,19 +196,24 @@ async function main() {
 
   // --- 4. Los otros cuatro tipos ----------------------------------------
   {
-    const g = await boot(baseSave([key('k1', 1, 3)]));
-    const r = g.sellItem('k1');
-    check('llave: desaparece', r.ok && deType(g, 'key') === 0, ids(g).join(','));
-    check('llave: contador de llaves a 0', g.getState().keys === 0, 'keys=' + g.getState().keys);
-    check('llave: paga 3 unidades', r.gained === 1440, 'ganado=' + r.gained);
-    const g2 = await reload();
-    check('llave: no revive al recargar', deType(g2, 'key') === 0, ids(g2).join(','));
-  }
-  {
-    const g = await boot(baseSave([crystal('x1', 1, 2)]));
+    // El material que se vende en lote, con contador DERIVADO del almacén. Antes
+    // este bloque era de las llaves y medía `state.keys`; ya no hay llaves que
+    // vender, así que lo que mide es el cristal —`crystalTotal` para el total y
+    // `upgradeCrystals` para el básico, que es el único que se gasta.
+    //
+    // El precio de reventa lo pone la fábrica de `kit.ts` (180), y el árbol de
+    // pasivas no está comprado en esta partida, así que 3 unidades son 3 × 180.
+    const g = await boot(baseSave([crystal('x1', 1, 3)]));
+    const antes = nanites(g);
     const r = g.sellItem('x1');
     check('cristal: desaparece', r.ok && deType(g, 'crystal') === 0, ids(g).join(','));
-    check('cristal: contador a 0', g.getState().upgradeCrystals === 0, 'crystals=' + g.getState().upgradeCrystals);
+    check('cristal: el contador derivado a 0',
+      g.getState().crystalTotal === 0 && g.getState().upgradeCrystals === 0,
+      `total=${g.getState().crystalTotal} basico=${g.getState().upgradeCrystals}`);
+    check('cristal: paga 3 unidades', r.gained === 540 && nanites(g) === antes + 540,
+      'ganado=' + r.gained);
+    const g2 = await reload();
+    check('cristal: no revive al recargar', deType(g2, 'crystal') === 0, ids(g2).join(','));
   }
   {
     const g = await boot(baseSave([consumable('u1', 2)]));
@@ -240,16 +255,18 @@ async function main() {
     check('último recolector: se rechaza', !r.ok && deType(g, 'collector') === 1, r.msg ?? '');
   }
   {
-    const g = await boot(baseSave([key('k1')]));
-    const r = g.sellItem('k1');
-    const r2 = g.sellItem('k1');
+    const g = await boot(baseSave([crystal('x1')]));
+    const r = g.sellItem('x1');
+    const r2 = g.sellItem('x1');
     check('vender dos veces el mismo id: la 2ª falla', r.ok && !r2.ok, r2.msg ?? '');
   }
 
   // --- 6. Abrir una caja: el otro camino que reutilizaba el contador ----
   {
-    const g = await boot(baseSave([crate('c1'), key('k1', 1)]));
-    const r = g.openCrateBox('c1', 'k1');
+    // Un solo argumento, y sin llave en la partida. La caja se abre sola; lo que
+    // sigue midiendo aquí es que abrirla consume LA CAJA y actualiza su contador.
+    const g = await boot(baseSave([crate('c1')]));
+    const r = g.openCrateBox('c1');
     check('abrir caja: ok', r.ok, r.msg ?? '');
     // **EL RECUENTO, NO "NO QUEDA NINGUNA CAJA".**
     //
@@ -262,16 +279,13 @@ async function main() {
     check('abrir caja: la caja se consume',
       !find(g, 'c1') && g.getState().crates[1] === 0,
       `sigue=${ids(g).join(',')} crates[1]=${g.getState().crates[1]}`);
-    // El botín es aleatorio y puede soltar llaves, así que se comprueba la
-    // llave concreta gastada, no el recuento de llaves del almacén.
-    check('abrir caja: la llave se consume', !find(g, 'k1'), ids(g).join(','));
     const g2 = await reload();
     check('abrir caja: no revive al recargar', g2.getState().crates[1] === 0, 'crates[1]=' + g2.getState().crates[1]);
   }
 
   // --- 7. Migración: el contador sí puede crear cajas, pero solo al cargar
   {
-    const g = await boot({ ...baseSave([]), crates: { common: 3, rare: 0, epic: 0, legendary: 0 }, keys: 0 });
+    const g = await boot({ ...baseSave([]), crates: { common: 3, rare: 0, epic: 0, legendary: 0 } });
     check('migración: contador huérfano se materializa', g.getState().crates[1] === 3,
       'crates[1]=' + g.getState().crates[1]);
     const g2 = await reload();
@@ -299,12 +313,12 @@ async function main() {
       'stackCount=' + wh(g).find((w: any) => w.type === 'crate')?.stackCount);
   }
   {
-    const g = await boot(baseSave([crate('c1'), crate('c2'), collector('r1'), collector('r2'), key('k1', 1, 5)],
+    const g = await boot(baseSave([crate('c1'), crate('c2'), collector('r1'), collector('r2'), crystal('x1', 1, 5)],
       { totalNanitesProduced: 5_000_000, totalCores: 1 }));
         const r = g.prestige();
     check('prestigio: se concede', r.success, r.msg ?? '');
-    check('prestigio: el almacén se vacía de lo reciclado', deType(g, 'crate') === 1 && deType(g, 'key') === 0,
-      'cajas=' + deType(g, 'crate') + ' llaves=' + deType(g, 'key'));
+    check('prestigio: el almacén se vacía de lo reciclado', deType(g, 'crate') === 1 && deType(g, 'crystal') === 0,
+      'cajas=' + deType(g, 'crate') + ' cristales=' + deType(g, 'crystal'));
     check('prestigio: las 2 cajas de partida nueva son reales',
       g.getState().crates[1] === 2 && deType(g, 'crate') === 1,
       'contador=' + g.getState().crates[1] + ' items=' + deType(g, 'crate'));
@@ -390,11 +404,11 @@ async function main() {
 
   // --- 10. Ciclo largo: vender 5 veces no acumula ni borra de más ----------
   {
-    const g = await boot(baseSave([crate('c1'), crate('c2'), crate('c3'), key('k1'), key('k2')]));
+    const g = await boot(baseSave([crate('c1'), crate('c2'), crate('c3'), crystal('x1'), crystal('x2')]));
     const antes = nanites(g);
-    for (const id of ['c1', 'c2', 'c3', 'k1', 'k2']) g.sellItem(id);
+    for (const id of ['c1', 'c2', 'c3', 'x1', 'x2']) g.sellItem(id);
     check('ciclo: almacén vacío', (g.getState().warehouse as any[]).length === 0, ids(g).join(','));
-    check('ciclo: nanites = 3 cajas + 2 llaves', nanites(g) === antes + 3 * 125 + 2 * 480,
+    check('ciclo: nanites = 3 cajas + 2 cristales', nanites(g) === antes + 3 * 125 + 2 * 180,
       'delta=' + (nanites(g) - antes));
     const g2 = await reload();
     check('ciclo: sigue vacío tras recargar', (g2.getState().warehouse as any[]).length === 0, ids(g2).join(','));
@@ -438,12 +452,18 @@ async function main() {
     // La migración no sirve de nada si no se guarda.
     const g2 = await reload();
     const guardado: any = (globalThis as any).__MEM_DB__[DB];
-    // F33 · `SAVE_VERSION` es 8 ahora (el `potential` del recolector), no 7. El
-    // resto del aserto no cambia: lo que se comprueba es que la migración se
-    // ESCRIBE, que es lo que la hacia util.
+    // **EL NÚMERO DE VERSIÓN SE COMPARA CONTRA LA CONSTANTE, Y ESO ES LO QUE HACE
+    // QUE ESTA LÍNEA NO HAYA QUE TOCAR EN CADA CAMBIO DE FORMATO.** Antes ponía un
+    // `=== 8` escrito a mano, con un comentario que recordaba subirlo. Ha dado rojo
+    // en las últimas versiones por lo mismo cada vez: la constante subía y el banco
+    // se quedaba.
+    //
+    // Lo que se comprueba NO es el número: es **que la migración se escribe**, que es
+    // lo que la hacía útil. El número es el instrumento, no el sujeto —y por eso lo
+    // que se lee es el del documento, que es el que la migración escribe.
     check('renombre: se guarda y no vuelve al estado viejo',
-      deType(g2, 'collector') === 1 && guardado.saveVersion === 8,
-      'saveVersion=' + guardado.saveVersion);
+      deType(g2, 'collector') === 1 && guardado.saveVersion === SAVE_VERSION,
+      `saveVersion=${guardado.saveVersion} esperado=${SAVE_VERSION}`);
   }
   // =========================================================================
   //  G4 · UN ITEM VIEJO INCOHERENTE SE ARREGLA AL CARGAR
@@ -569,12 +589,12 @@ async function main() {
 
   // --- El botón de vender y el cargo, el mismo número --------------------
   // `getSellPrice` es el UNITARIO. El botón "Vender" pintaba ese número sin
-  // multiplicar por las unidades de la pila, así que con 20 llaves decía
-  // "Vender · 480 ◆" y el cargo eran 9.600. `getSellTotal` es el número que
+  // multiplicar por las unidades de la pila, así que con 19 cristales decía
+  // "Vender · 180 ◆" y el cargo eran 3.420. `getSellTotal` es el número que
   // enseñan el botón y el modal, y tiene que ser el que entra en la cuenta.
-  for (const [id, unidades] of [['c1', 4], ['k1', 19], ['x1', 7], ['u1', 3]] as Array<[string, number]>) {
+  for (const [id, unidades] of [['c1', 4], ['x1', 19], ['u1', 3]] as Array<[string, number]>) {
     const g = await boot(baseSave([
-      crate('c1', 1, unidades), key('k1', 1, unidades),
+      crate('c1', 1, unidades),
       crystal('x1', 1, unidades), consumable('u1', unidades),
       collector('r1'), collector('r2')
     ]));
@@ -612,31 +632,38 @@ async function main() {
 
   // --- Venta por unidades: el caso que pidió el jugador -------------------
   //
-  // Una pila se puede querer a medias: 19 llaves y solo vas a abrir dos cajas.
+  // Una pila se puede querer a medias: 19 cristales y solo vas a sintonizar tres.
   // Antes la única palanca era vender la pila entera, y para un material de
   // consumo eso es una decisión equivocada por defecto.
+  //
+  // Todo lo de aquí se mide con CRISTALES, y antes se medía con llaves. No es un
+  // cambio de gusto: la llave ya no se vende porque al cargar se convierte en
+  // nanitas, así que una partida montada con `key(...)` entra al almacén y sale
+  // sin ninguna llave. El cristal es el material que queda con la misma forma:
+  // apilable, con tope de pintado y con contador DERIVADO del almacén.
+  // Su reventa es de 180 por unidad (la de `kit.ts`), sin bonificación comprada.
   {
     // Una parte de una pila: qué queda, qué se cobra y qué se guarda.
-    const g = await boot(baseSave([key('k1', 1, 10)]));
+    const g = await boot(baseSave([crystal('x1', 1, 10)]));
     const antes = nanites(g);
-    const r = g.sellItem('k1', 4);
-    const pila = find(g, 'k1');
+    const r = g.sellItem('x1', 4);
+    const pila = find(g, 'x1');
     check('parcial: devuelve cuántas se vendieron', r.ok && r.sold === 4, 'sold=' + r.sold);
     check('parcial: la pila conserva lo que sobra', !!pila && pila.stackCount === 6,
       'quedan=' + (pila ? pila.stackCount : 'no existe'));
-    check('parcial: cobra 4, no la pila', r.gained === 4 * 480 && nanites(g) === antes + 1920,
+    check('parcial: cobra 4, no la pila', r.gained === 4 * 180 && nanites(g) === antes + 720,
       'ganado=' + r.gained + ' nanitas=' + nanites(g));
-    check('parcial: el contador de llaves baja a 6', g.getState().keys === 6,
-      'keys=' + g.getState().keys);
+    check('parcial: el contador de cristales baja a 6', g.getState().crystalTotal === 6,
+      'crystalTotal=' + g.getState().crystalTotal);
 
     const g2 = await reload();
-    const pila2 = find(g2, 'k1');
+    const pila2 = find(g2, 'x1');
     check('parcial: las 6 que sobran sobreviven a la recarga',
       !!pila2 && pila2.stackCount === 6, 'quedan=' + (pila2 ? pila2.stackCount : 'no existe'));
-    check('parcial: y no se Readmite lo vendido', nanites(g2) === antes + 1920,
+    check('parcial: y no se readmite lo vendido', nanites(g2) === antes + 720,
       'nanitas=' + nanites(g2));
-    check('parcial: el contador tras recargar sigue en 6', g2.getState().keys === 6,
-      'keys=' + g2.getState().keys);
+    check('parcial: el contador tras recargar sigue en 6', g2.getState().crystalTotal === 6,
+      'crystalTotal=' + g2.getState().crystalTotal);
   }
   {
     // R3: el botón, el texto del modal y el cargo leen el MISMO número.
@@ -647,9 +674,9 @@ async function main() {
     // existe" en vez de "el número no cuadra". Cada cantidad necesita su partida.
     const desajustes: string[] = [];
     for (let n = 1; n <= 10; n++) {
-      const g = await boot(baseSave([key('k1', 1, 10)]));
-      const esperado = g.getSellTotal('k1', n);
-      const r = g.sellItem('k1', n);
+      const g = await boot(baseSave([crystal('x1', 1, 10)]));
+      const esperado = g.getSellTotal('x1', n);
+      const r = g.sellItem('x1', n);
       if (r.gained !== esperado) desajustes.push(`n=${n} cargo=${r.gained} anunciaba=${esperado}`);
     }
     check('parcial: el cargo es EXACTAMENTE el que anunciaba getSellTotal, en las 10 cantidades',
@@ -660,76 +687,76 @@ async function main() {
     // Un recorte devuelve menos de lo anunciado, y el botón se lo pregunta a la
     // MISMA función, así que no puede haber discrepancia; lo que no puede pasar
     // es cobrar por unidades que no estaban.
-    const g = await boot(baseSave([key('k1', 1, 3)]));
+    const g = await boot(baseSave([crystal('x1', 1, 3)]));
     const antes = nanites(g);
-    const r = g.sellItem('k1', 99);
+    const r = g.sellItem('x1', 99);
     check('parcial: pedir 99 en una pila de 3 se recorta a 3', r.ok && r.sold === 3,
       'sold=' + r.sold + ' ganado=' + r.gained);
-    check('parcial: y cobra lo de 3, no lo de 99', r.gained === 3 * 480 && nanites(g) === antes + 1440,
+    check('parcial: y cobra lo de 3, no lo de 99', r.gained === 3 * 180 && nanites(g) === antes + 540,
       'ganado=' + r.gained);
-    check('parcial: la pila se queda vacía', !find(g, 'k1'), ids(g).join(','));
-    check('parcial: y getSellTotal también se recorta', g.getSellTotal('k1', 99) === 0,
-      'total=' + g.getSellTotal('k1', 99));
+    check('parcial: la pila se queda vacía', !find(g, 'x1'), ids(g).join(','));
+    check('parcial: y getSellTotal también se recorta', g.getSellTotal('x1', 99) === 0,
+      'total=' + g.getSellTotal('x1', 99));
   }
   {
     // Una cantidad que no es una cantidad NO es una intención de compra. Se
     // rechaza SIN cobrar: es el único caso que `sellItem` rechaza de verdad.
-    const g = await boot(baseSave([key('k1', 1, 5)]));
+    const g = await boot(baseSave([crystal('x1', 1, 5)]));
     const antes = nanites(g);
     const malos = [0, -3, NaN, Infinity];
     const acepto: string[] = [];
     for (const n of malos) {
-      const r = g.sellItem('k1', n as number);
+      const r = g.sellItem('x1', n as number);
       if (r.ok) acepto.push(`${n} -> ok`);
     }
     check('parcial: 0, negativos, NaN e Infinity se rechazan',
       acepto.length === 0, acepto.join(' | ') || 'los 4 rechazados');
     check('parcial: y rechazar no cobra nada', nanites(g) === antes,
       `nanitas=${nanites(g)} antes=${antes}`);
-    check('parcial: y la pila sigue entera', find(g, 'k1')?.stackCount === 5,
-      'quedan=' + find(g, 'k1')?.stackCount);
+    check('parcial: y la pila sigue entera', find(g, 'x1')?.stackCount === 5,
+      'quedan=' + find(g, 'x1')?.stackCount);
 
     // Un decimal NO se rechaza: se redondea ABAJO a una unidad. No hay unidades
     // fraccionables, así que "vender 1,7" solo tiene una lectura posible y
     // quedarse con 1 es más útil que dejar el botón muerto. Y por debajo de 1 sí
     // es rechazo, porque ahí no queda ni una unidad entera.
-    const g3 = await boot(baseSave([key('k1', 1, 5)]));
+    const g3 = await boot(baseSave([crystal('x1', 1, 5)]));
     const a3 = nanites(g3);
-    const rDecimal = g3.sellItem('k1', 1.7);
+    const rDecimal = g3.sellItem('x1', 1.7);
     check('parcial: un decimal se redondea ABAJO y se vende 1, no 2',
-      rDecimal.ok && rDecimal.sold === 1 && nanites(g3) === a3 + 480,
+      rDecimal.ok && rDecimal.sold === 1 && nanites(g3) === a3 + 180,
       'sold=' + rDecimal.sold + ' ganado=' + rDecimal.gained);
-    const g4 = await boot(baseSave([key('k1', 1, 5)]));
+    const g4 = await boot(baseSave([crystal('x1', 1, 5)]));
     check('parcial: por debajo de 1 no queda ni una unidad y se rechaza',
-      g4.sellItem('k1', 0.5).ok === false, 'vendido 0.5');
+      g4.sellItem('x1', 0.5).ok === false, 'vendido 0.5');
 
     // Un texto llega si alguien tipa en vez de usar el campo. `Number('abc')`
     // es NaN, así que cae en el mismo rechazo; un número en texto, no.
-    const rTexto = g.sellItem('k1', '2' as any);
+    const rTexto = g.sellItem('x1', '2' as any);
     check('parcial: un "2" escrito como texto se acepta y son 2 unidades',
       rTexto.ok && rTexto.sold === 2, 'sold=' + rTexto.sold);
   }
   {
     // Vender la pila por partes tiene que sumar lo mismo que venderla de una vez.
-    const g1 = await boot(baseSave([key('k1', 1, 10)]));
+    const g1 = await boot(baseSave([crystal('x1', 1, 10)]));
     const a1 = nanites(g1);
-    g1.sellItem('k1', 3);
-    g1.sellItem('k1', 4);
-    const r3 = g1.sellItem('k1', 3);
+    g1.sellItem('x1', 3);
+    g1.sellItem('x1', 4);
+    const r3 = g1.sellItem('x1', 3);
 
-    const g2 = await boot(baseSave([key('k2', 1, 10)]));
+    const g2 = await boot(baseSave([crystal('x2', 1, 10)]));
     const a2 = nanites(g2);
-    const rTodo = g2.sellItem('k2');
+    const rTodo = g2.sellItem('x2');
 
     check('parcial: tres ventas suman lo mismo que una de la pila entera',
       nanites(g1) - a1 === nanites(g2) - a2,
       `por partes=${nanites(g1) - a1} de una vez=${nanites(g2) - a2}`);
-    check('parcial: y la tercera vació la pila', r3.sold === 3 && !find(g1, 'k1'), ids(g1).join(','));
+    check('parcial: y la tercera vació la pila', r3.sold === 3 && !find(g1, 'x1'), ids(g1).join(','));
     check('parcial: vender sin decir cantidad sigue vendiendo la pila entera',
-      rTodo.sold === 10 && !find(g2, 'k2'), 'sold=' + rTodo.sold);
+      rTodo.sold === 10 && !find(g2, 'x2'), 'sold=' + rTodo.sold);
   }
   {
-    // Una caja se puede vender a medias igual que una llave: son apilables por la
+    // Una caja se puede vender a medias igual que un cristal: son apilables por la
     // misma regla y el contador de cajas tiene que bajar en la misma proporción.
     const g = await boot(baseSave([crate('c1', 1, 8)]));
     const r = g.sellItem('c1', 5);

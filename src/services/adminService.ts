@@ -226,7 +226,6 @@ export async function fijarNanitas(uid: string, valor: number): Promise<number> 
 
 /** Campos numéricos editables aparte de las nanitas. */
 export const CAMPOS_EDITABLES = [
-  { campo: 'keys', etiqueta: 'Llaves' },
   { campo: 'upgradeCrystals', etiqueta: 'Cristales de mejora' },
   { campo: 'warehouseCapacity', etiqueta: 'Capacidad del almacén' },
   { campo: 'maxCompanionSlots', etiqueta: 'Huecos de compañero' },

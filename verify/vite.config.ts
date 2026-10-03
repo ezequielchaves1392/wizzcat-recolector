@@ -55,7 +55,7 @@ export default defineConfig({
         senalCheck: resolve(here, 'senalCheck.ts'),
         balanceCheck: resolve(here, 'balanceCheck.ts'),
         desgloseCheck: resolve(here, 'desgloseCheck.ts'),
-        llaveCheck: resolve(here, 'llaveCheck.ts'),
+        cajasCheck: resolve(here, 'cajasCheck.ts'),
         ranuraCheck: resolve(here, 'ranuraCheck.ts'),
         tarjetaCheck: resolve(here, 'tarjetaCheck.ts'),
         saltoCheck: resolve(here, 'saltoCheck.ts'),

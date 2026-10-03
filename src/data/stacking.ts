@@ -32,16 +32,22 @@
  * tenga. Dos recolectores son dos celdas aunque digan que son apilables: si se
  * fundieran, el jugador no podría elegir con cuál hacer clic.
  */
-export const STACKABLE_TYPES = ['consumable', 'crate', 'key', 'crystal'] as const;
+// **'key' SE HA IDO, Y POR QUÉ NO SE SUSTITUYE POR NADA.** El tipo sigue vivo en
+// el dominio y en las partidas viejas, porque una partida guardada antes de la
+// redención tiene llaves en el almacén hasta que se convierte en nanitas. Sacarlo
+// de aquí NO es borrarlo: es dejar de tratarlo como moneda. Lo que importa es que
+// un item de tipo 'key' que se colara en el almacén **no se fundiría** con otro,
+// porque `isStackable` ya no lo reconoce.
+export const STACKABLE_TYPES = ['consumable', 'crate', 'crystal'] as const;
 
 /**
  * Unidades que caben en la esquina de una celda antes de recortar el número.
  *
- * Es un tope DE PINTADO, no de almacenamiento. Llave, caja y cristal admiten 99
- * porque es lo que cabe en dos o tres dígitos de la esquina; el consumible, 20,
- * porque se lee en un vistazo y no interesa la cifra exacta.
+ * Es un tope DE PINTADO, no de almacenamiento. Caja y cristal admiten 99 porque
+ * es lo que cabe en dos o tres dígitos de la esquina; el consumible, 20, porque se
+ * lee en un vistazo y no interesa la cifra exacta.
  *
- * **DEBE COINCIDIR CON `TOPE_PILA` EN TODOS LOS TIPOS QUE ALSO LO TENGAN.**
+ * **DEBE COINCIDIR CON `TOPE_PILA` EN TODOS LOS TIPOS QUE TAMBIÉN LO TENGAN.**
  * Los dos topes existían y el de pintado se quedó en 20 cuando el de
  * almacenamiento cambió: las cajas se apilaban de 99 en 99 y la esquina pintaba
  * `"20+"`. Un tope por debajo del otro no es un detalle de estilo: es **la cifra
@@ -55,7 +61,7 @@ export const STACKABLE_TYPES = ['consumable', 'crate', 'key', 'crystal'] as cons
  * puede es ser **más alto**: eso sí que mentiría al revés.
  */
 export const MAX_STACK: Record<string, number> = {
-  consumable: 20, crate: 99, key: 99, crystal: 99
+  consumable: 20, crate: 99, crystal: 99
 };
 
 /**

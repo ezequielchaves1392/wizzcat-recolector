@@ -25,7 +25,7 @@
 
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
-  collector, companion, crate, key, crystal, consumable, ficha
+  collector, companion, crate, crystal, consumable, ficha
 } from './kit';
 
 async function main() {
@@ -159,12 +159,22 @@ async function main() {
       wh(g).map((w: any) => w.stackCount).join(','));
   }
   {
-    // El caso de una celda con VARIOS items detras de verdad: 19 llaves guardadas
-    // como items separados. `mergeStacks` las funde al cargar en una sola pila, y
-    // arrastrar esa celda tiene que moverla entera sin partirla.
-    const items = Array.from({ length: 19 }, (_, i) => key('k' + i));
+    // El caso de una celda con VARIOS items detras de verdad: 19 unidades del mismo
+    // material guardadas como items separados. `mergeStacks` las funde al cargar
+    // en una sola pila, y arrastrar esa celda tiene que moverla entera sin partirla.
+    //
+    // **ESTE ERA EL CASO DE LAS LLAVES Y AHORA ES DEL CRISTAL, Y NO ES SÓLO UN CAMBIO
+    // DE PALABRA.** Las llaves dejaron de apilarse cuando dejaron de ser moneda:
+    // `'key'` ya no está en `STACKABLE_TYPES`, así que 19 llaves en una partida vieja
+    // ya ni siquiera llegan a la pantalla —la redención las convierte en nanitas—.
+    // Con llaves, este bloque habría dado verde midiendo dos items que no se
+    // funden y habría dado verde midiendo dos items que no se funden, y el apilado real lo mide otro banco.
+    //
+    // El cristal es el objeto que de verdad llena una celda con tres dígitos, así que
+    // el escenario que se quiere probar es el suyo.
+    const items = Array.from({ length: 19 }, (_, i) => crystal('k' + i, 1));
     const g = await boot(baseSave([collector('z'), ...items]));
-    check('mover: 19 llaves separadas se funden en una celda', wh(g).length === 2,
+    check('mover: 19 unidades separadas se funden en una celda', wh(g).length === 2,
       'items=' + wh(g).length);
     g.moveItems([find(g, 'k0').id], 'z');
     check('mover: arrastrar esa celda mueve la pila entera, no la parte',
@@ -181,25 +191,29 @@ async function main() {
       collector('r1', 4, { level: 3, damage: 80, affixes: ['x'], potential: 3 }),
       companion('m1', 2),
       crate('c1', 6, 4),
-      key('k1', 1, 7),
+      crystal('x2', 2, 7),
       crystal('x1', 3, 2),
       consumable('u1', 'afk', 5)
     ];
     const g = await boot(baseSave(items, { nanites: 7777 }));
     const foto = JSON.stringify(wh(g).slice().sort((a, b) => a.id.localeCompare(b.id)));
     const contadores = JSON.stringify({
-      n: s(g).nanites, k: s(g).keys, c: s(g).crates,
+      // **EL CONTADOR DE LLAVES SE SALE DE ESTA FOTO, Y POR QUÉ NO SE SUSTITUYE.** La
+      // foto compara el estado antes y después de mover para probar que mover **no
+      // toca nada**. Con las llaves fuera, el contador ya no existe; lo que se mira
+      // es el que sí: el total de cristales, que es donde el almacén también cuenta.
+      n: s(g).nanites, cr: s(g).crystalTotal, c: s(g).crates,
       comp: s(g).companions, afk: s(g).afkCards
     });
 
-    g.moveItems(['r1', 'm1', 'c1', 'k1', 'x1', 'u1'], null);
+    g.moveItems(['r1', 'm1', 'c1', 'x1', 'x2', 'u1'], null);
 
     check('mover: no se crea ni se borra ningun item', wh(g).length === items.length,
       `${wh(g).length} vs ${items.length}`);
     check('mover: el contenido de los items es identico',
       JSON.stringify(wh(g).slice().sort((a, b) => a.id.localeCompare(b.id))) === foto);
     check('mover: nanitas y contadores intactos',
-      JSON.stringify({ n: s(g).nanites, k: s(g).keys, c: s(g).crates, comp: s(g).companions, afk: s(g).afkCards }) === contadores,
+      JSON.stringify({ n: s(g).nanites, cr: s(g).crystalTotal, c: s(g).crates, comp: s(g).companions, afk: s(g).afkCards }) === contadores,
       'cambiados');
   }
   {

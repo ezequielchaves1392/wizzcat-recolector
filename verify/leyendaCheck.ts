@@ -1,6 +1,6 @@
 import { check, resumen } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
-import { CRYSTAL_DEFS, KEY_DEFS, KEY_TIERS, crystalSuccessChance } from '../src/data/items';
+import { CRYSTAL_DEFS, crystalSuccessChance } from '../src/data/items';
 import { CRATE_TYPES, COMPANION_SLOT_BUY } from '../src/data/store';
 import { ACHIEVEMENTS } from '../src/achievements';
 import { CRATE_LOOT } from '../src/components/crateLoot';
@@ -169,10 +169,18 @@ async function main() {
   }
 
   // =========================================================================
-  //  6. LAS CAJAS: SU LEYENDA NO ENUMERA EL BOTÍN
+  //  6. LAS CAJAS: SU LEYENDA NO ENUMERA EL BOTÍN NI HABLA DE LLAVES
   // =========================================================================
   //  Ya estaba en `potencialCheck`, y es la regla de `data/store.ts`: la leyenda
   //  dice **qué la abre**, no qué trae.
+  //
+  //  **Y EL "QUÉ LA ABRE" ES LO QUE CAMBIÓ AL QUITARLAS.** El texto nuevo —"Se
+  //  abre sola."— está escrito al lado de la tabla, que es exactamente donde nace
+  //  el tipo de mentira que este banco existe para cazar. La caja ya no pide nada
+  //  para abrirse, así que su leyenda no puede seguir hablando de un requisito:
+  //  si un día alguien deja "se abre con la llave de su tier" en el texto, el
+  //  jugador leerá que tiene que buscar una llave que ya no existe, y no hay
+  //  ninguna otra prueba que se entere.
   {
     const textos = Object.keys(CRATE_TYPES).map(t => (CRATE_TYPES as any)[t].details);
     const enumera = textos.filter(d => /cristal|compa|recolector|arma|nanitas/i.test(d));
@@ -180,6 +188,21 @@ async function main() {
       enumera.length === 0, enumera[0] || `${textos.length} cajas`);
     check('leyenda: y las diez dicen la MISMA cosa, que es la prueba de que no es una copia',
       new Set(textos).size === 1, `${new Set(textos).size} textos distintos`);
+
+    // La comprobación nueva, y más fuerte que las dos de arriba: **ninguna de las
+    // diez cajas puede decir que se abre con una llave.** No basta con que el texto
+    // sea único —un único texto equivocado sigue siendo mentira para el jugador
+    // que lo lee—, así que se busca la palabra en las diez por separado.
+    //
+    // Y se mira también la tarjeta de la tienda, que es el otro sitio donde se
+    // escribía el requisito (apartado 7).
+    const conLlave: string[] = [];
+    for (const t of Object.keys(CRATE_TYPES)) {
+      const d = String((CRATE_TYPES as any)[t].details);
+      if (/llave/i.test(d)) conLlave.push(`T${t}: ${d}`);
+    }
+    check('leyenda: ninguna caja dice que se abra con una llave',
+      conLlave.length === 0, conLlave.join(' | ') || `${Object.keys(CRATE_TYPES).length} cajas`);
   }
 
   // =========================================================================
@@ -228,20 +251,23 @@ async function main() {
   }
 
   // =========================================================================
-  //  10. LAS LLAVES: SU LEYENDA ES SU ALCANCE
+  //  10. QUEDABA AQUÍ, Y SE HA IDO CON LAS LLAVES: SU LEYENDA ERA SU ALCANCE
   // =========================================================================
-  {
-    const malos: string[] = [];
-    for (const tier of KEY_TIERS) {
-      const def: any = (KEY_DEFS as any)[tier];
-      // Una llave de tier n abre n cajas. Todas menos la T1 tienen que decirlo.
-      if (tier > 1 && !def.details.includes('menor')) {
-        malos.push(`T${tier} abre ${tier} cajas y su leyenda no lo dice`);
-      }
-    }
-    check('leyenda: cada llave dice hasta dónde abre',
-      malos.length === 0, malos.join(' | ') || `${KEY_TIERS.length} llaves`);
-  }
+  //
+  //  Aquí se comprobaba que cada llave dijera hasta qué nivel abría —"una llave
+  //  T4 abre esta y las menores"— contra `KEY_DEFS` y `KEY_TIERS`. Con las
+  //  llaves fuera ya no hay a qué alcance aspirar, así que la regla entera se va con
+  //  ellas: no hay sustituto posible, porque el alcance de un objeto que ya no
+  //  existe no se puede deducir de nada.
+  //
+  //  **LO QUE LO SUSTITUYE ESTÁ EN EL APARTADO 6**, y es más fuerte por un motivo
+  //  concreto: aquí comparaba la leyenda de las llaves con la regla de las
+  //  llaves, dos cosas que iban juntas. Ahora las llaves no existen y su leyenda no
+  //  puede mentir porque no hay texto que leer. El texto que sí queda, el de las
+  //  cajas, es el que el jugador tiene delante y el que **todavía podría estar
+  //  hablando de llaves**, así que es el que hay que contrastar con la regla que
+  //  ahora hay: la caja se abre sola.
+  // =========================================================================
 
   resumen('leyendas: cada texto dice la regla que el juego aplica');
 }

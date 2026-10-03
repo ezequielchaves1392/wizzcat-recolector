@@ -7,7 +7,7 @@
 //    · ve la lista de operativos con su saldo y su fecha de guardado,
 //    · se le otorgan o se le fijan nanitas (el ranking se actualiza al momento),
 //    · se abre el inventario completo de un jugador y su JSON en crudo,
-//    · se editan algunos campos sueltos (llaves, cristales, núcleos…),
+//    · se editan algunos campos sueltos (cristales, núcleos…),
 //    · y se borra un jugador o la base de datos entera, con confirmación
 //      escrita a mano.
 //
@@ -181,7 +181,6 @@ const ICONO_TIPO: Record<string, any> = {
   collector: 'collector',
   companion: 'companion',
   crate: 'crate',
-  key: 'key',
   crystal: 'crystal',
   consumable: 'flask'
 };
@@ -190,7 +189,6 @@ const ETIQUETA_TIPO: Record<string, string> = {
   collector: 'Recolector',
   companion: 'Compañero',
   crate: 'Caja',
-  key: 'Llave',
   crystal: 'Cristal',
   consumable: 'Consumible'
 };
@@ -727,7 +725,6 @@ function pintarDetalle() {
         ${campo('Producidas', formatNumber(u.totalNanitesProduced))}
         ${campo('Clics', formatNumber(u.totalClicks))}
         ${campo('Núcleos', formatNumber(u.cores))}
-        ${campo('Llaves', formatNumber(Number(d.keys) || 0))}
         ${campo('Cristales', formatNumber(Number(d.upgradeCrystals) || 0))}
         ${campo('Cajas', `${cajas.common || 0}C · ${cajas.rare || 0}R · ${cajas.epic || 0}E · ${cajas.legendary || 0}L`)}
         ${campo('Almacén', `${u.items} / ${d.warehouseCapacity ?? '—'}`)}

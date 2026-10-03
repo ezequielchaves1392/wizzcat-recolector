@@ -99,7 +99,28 @@ export const CONSUMABLES_SIN_EXPANSOR = {
  * seguir la regla de "una caja por tier".
  */
 
-const DETALLES_DE_CAJA = 'Se abre con la llave de su tier o de un tier superior.';
+/**
+ * LA FRASE QUE DICEN LAS DIEZ CAJAS, Y POR QUÉ ESTA ES LA NUEVA.
+ *
+ * **LA VIEJA ERA "Se abre con la llave de su tier o de un tier superior", Y ERA
+ * MENTIRA DESDE HACE UN RATO.** No porque la regla fuera falsa —la llave de
+ * nivel alto sí abría las cajas de abajo, y eso era verdad— sino porque ya no hay
+ * llave que abra nada. El texto era correcto y el juego ya no, y esa es la forma
+ * peor de que un texto se quede viejo: **nadie lo revisa porque sigue leyéndose
+ * bien.**
+ *
+ * La de ahora es "Se abre sola", que es lo que hace y lo que el jugador tiene que
+ * hacer. Es más corta que la vieja, y no por brevedad: es que ya no tiene nada que
+ * decir. Cuando un texto se queda sin contenido, se le quita el contenido; no se
+ * le cambian cuatro palabras para que parezca nuevo.
+ *
+ * **Y ESTO LO HA ENCONTRADO UN BANCO, NO UN REPASO.** El banco nuevo mira el
+ * botín construido de las diez cajas y pregunta si alguno habla de una llave.
+ * Un repaso lee el código buscando llaves, y esta frase ya no tiene la palabra
+ * "llave" en ninguna forma que la búsqueda entendería: se lee bien y no dice nada
+ * raro. Un banco pregunta por lo que el juego **hace**, y por eso lo pilla.
+ */
+const DETALLES_DE_CAJA = 'Se abre sola.';
 export const CRATE_TYPES: Record<CrateType, { name: string; rarity: string; details: string }> = {
   1: { name: 'Caja T1', rarity: 'Común',     details: DETALLES_DE_CAJA },
   2: { name: 'Caja T2', rarity: 'Común',     details: DETALLES_DE_CAJA },
@@ -235,41 +256,40 @@ export function costeDeCaja(tier: number): number {
 //  jugador con una caja comprada. La alternativa —llaves altas solo de caja— es
 //  la que deja la tienda inservible para un jugador al que le faltan llaves, que
 //  es lo que B6 señalaba.
-export const CRATE_COSTS: readonly number[] = COSTE_POR_TIER.map(c => Math.round(c / 2));
-
-export const KEY_COSTS: readonly number[] = CRATE_COSTS.map(c => Math.round(c / 2));
-
 /**
- * F31 · LOS NOMBRES DE LAS DIEZ LLAVES, Y POR QUÉ ESTÁN AQUÍ Y NO EN `items.ts`.
+ * EL PRECIO DE LA CAJA, Y POR QUÉ ES `3/4` Y NO `1/2`.
  *
- * `KEY_DEFS` —que vive en `items.ts`— es quien tiene el nombre de cada llave, y
- * `STORE_ITEMS` —que vive aquí— es quien pinta la carta. Antes no había problema:
- * la carta escribía el nombre a mano, cuatro veces, y un banco comprueba que
- * nombre y nombre coincidan. Con diez llaves, escribir diez nombres en dos sitios
- * es escribir veinte.
+ * **EL MOTIVO POR EL QUE SE PUEDE BORRAR LAS LLAVES SIN MOVER UN NANITO.**
  *
- * **NO SE PUEDE ARREGLAR IMPORTANDO `KEY_DEFS` AQUÍ**, porque `items.ts` importa
- * este fichero: sería un ciclo. Así que el nombre **se queda en la capa de
- * abajo** y `items.ts` lo lee. Un solo sitio, ninguna flecha nueva y el banco
- * sigue pudiendo comprobar que la carta y el item dicen lo mismo (B7).
+ * Antes el jugador pagaba dos cosas por abrir una caja: la caja, que costaba
+ * `COSTE/2`, y la llave, que costaba la mitad de la caja, o sea `COSTE/4`. En total,
+ * `3/4` del valor del objeto de su tier.
+ *
+ * Ahora la caja se abre sola. **Si su precio se quedaba en `COSTE/2`, las cajas
+ * habría salido un 33 % más baratas** y todo el economy se desplazaba con ellas: el
+ * premio de nanitas, el techo de reventa de lo que sale de un cofre y el
+ * inventario que ocupa cada caja.
+ *
+ * Así que **la caja pasa a costar lo que costaba el par entero**: `3/4`. Con eso:
+ *
+ * · el jugador paga **lo mismo** por abrir una caja,
+ * · `topeDeVenta()` —que era `costeDeCaja + costeDeLlave`— **vale lo mismo**, porque
+ *   pasa a ser solo `costeDeCaja` y los dos números coinciden,
+ * · el premio de nanitas de cada caja, que es un porcentaje de ese tope, **no se
+ *   mueve**,
+ * · y el techo de reventa de un recolector o un compañero que sale de un cofre
+ *   **tampoco**.
+ *
+ * O sea: **eliminar las llaves es neutro**. No es un regalo ni un castigo, es
+ * quitar un paso. La única cifra que sí cambia es la compensación de "no te ha
+ * salido nada countable", que es un múltiplo del precio de la caja y sube con ella
+ * —y tiene que subir, porque es la caja la que ahora cuesta más.
+ *
+ * El tres cuartos está escrito como fracción y no como un número porque
+ * `COSTE_POR_TIER` es la única lista que hay que tocar al rebalancear: el
+ * multiplicador va con ella.
  */
-export const KEY_NAMES: readonly { name: string; namePlural: string; rarity: string }[] = [
-  { name: 'Llave de Cifrado', namePlural: 'Llaves de Cifrado', rarity: 'Común' },
-  { name: 'Llave Reforzada', namePlural: 'Llaves Reforzadas', rarity: 'Común' },
-  { name: 'Llave Rúnica', namePlural: 'Llaves Rúnicas', rarity: 'Raro' },
-  { name: 'Llave de Fase', namePlural: 'Llaves de Fase', rarity: 'Raro' },
-  { name: 'Llave Espectral', namePlural: 'Llaves Espectrales', rarity: 'Épico' },
-  { name: 'Llave Cuántica', namePlural: 'Llaves Cuánticas', rarity: 'Épico' },
-  { name: 'Llave Prismática', namePlural: 'Llaves Prismáticas', rarity: 'Legendario' },
-  { name: 'Llave del Vacío', namePlural: 'Llaves del Vacío', rarity: 'Legendario' },
-  { name: 'Llave de la Singularidad', namePlural: 'Llaves de la Singularidad', rarity: 'Mítico' },
-  { name: 'Llave Primordial', namePlural: 'Llaves Primordiales', rarity: 'Divino' }
-];
-
-/** El precio de la llave de una caja. Índice 0 = T1. */
-export function costeDeLlave(tier: number): number {
-  return KEY_COSTS[Math.min(KEY_COSTS.length, Math.max(1, Math.floor(tier))) - 1];
-}
+export const CRATE_COSTS: readonly number[] = COSTE_POR_TIER.map(c => Math.round(c * 3 / 4));
 
 // ==========================================================================
 //  Expansores de almacén, uno por tier de caja
@@ -510,20 +530,16 @@ export const RANURA_POR_CARTA: Record<string, { da: number; etiqueta: string }> 
  * seguir necesitando la tienda para el tier siguiente, así que la caja alta era
  * un adorno y no una puerta.
  *
- * Lo que queda es lo que de verdad es el arranque: la caja T1 y las diez llaves.
- * Las llaves siguen todas a la venta y hay que leer bien por qué — está en el
- * comentario de `KEY_COSTS`, y es que la llave no es la puerta, la puerta es la
- * caja. Comprar la llave T9 es tenerla guardada para cuando la T9 llegue, que
- * llega por la T8.
+ * Lo que queda es **lo que de verdad es el arranque: la caja T1**. Las nueve
+ * siguientes salen de abrir la anterior, y ya no hay una llave que compre por
+ * delante. Antes la caja T1 venía acompañada de su llave y había que pagar las
+ * dos por abrirla; ahora es una sola compra.
  *
  * Los precios salen todos de `COSTE_POR_TIER` y de `defDeRanura()`, y ninguna
  * carta escribe su número: si el precio cambia en un sitio, cambia en los tres
  * (R3).
  */
 export const STORE_ITEMS = {
-  ...Object.fromEntries(
-    KEY_NAMES.map((k, i) => [`keyT${i + 1}`, { cost: KEY_COSTS[i], label: k.name }])
-  ) as Record<`keyT${number}`, { cost: number; label: string }>,
   upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
   crateT1: { cost: CRATE_COSTS[0], label: CRATE_TYPES[1].name },
   // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).

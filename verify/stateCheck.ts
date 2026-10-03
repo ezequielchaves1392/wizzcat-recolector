@@ -30,14 +30,14 @@ import { CRATE_LOOT, tablaDePesos } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
-  baseSave, collector, companion, ficha, crate, key, crystal, consumable, conRoll
+  baseSave, collector, companion, ficha, crate, crystal, consumable, conRoll
 } from './kit';
 
 /**
  * La PILA de un material en un nivel dado, o `undefined` si no hay ninguna.
  *
  * Se busca por `tier` y no por el nombre, porque el nombre es lo que se deduce
- * cuando el save es viejo (`keyTierFromName`) y lo que cambia con la
+ * cuando el save es viejo (`crystalTierFromName`) y lo que cambia con la
  * traducción. El nivel es el dato del que habla el botín.
  */
 function pilaDe(g: any, tipo: string, tier: number | undefined): any {
@@ -61,7 +61,7 @@ function pilaDe(g: any, tipo: string, tier: number | undefined): any {
  * Usa `tablaDePesos` y no el `weight` de autor: con el reparto por rareza el peso
  * que manda es el ponderado, así que clavar el dado con los pesos de autor ya no
  * elige la fila. Y la fila importa, porque hay bancos que comprueban cosas que
- * dependen de qué fila salió (la llave, por ejemplo).
+ * dependen de qué fila salió (el cristal, por ejemplo).
  */
 function rollPara(caja: CrateType, idFila: string): number {
   const tabla = CRATE_LOOT[caja];
@@ -136,7 +136,6 @@ async function main() {
       // así que aquí el número sale de `danioDeRango()`, como el de cualquier otro.
       collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['a'], potential: 3 }),
       crate('c1', 6, 2),
-      key('k1', 2, 3),
       crystal('x1', 2, 4),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T2', type: 'companion', details: 'x', rarity: 'Épico', tier: 2, sellPrice: 500 }
@@ -176,7 +175,7 @@ async function main() {
     check('guardar: recolectores forjadas', t.forgedCount === 5, String(t.forgedCount));
     check('guardar: nodos del arbol', t.nodeLevels.core_sink === 3 && t.nodeLevels.core_edge === 1,
       JSON.stringify(t.nodeLevels));
-    check('guardar: el almacen entero', wh(g2).length === 6, ids(g2).join(','));
+    check('guardar: el almacen entero', wh(g2).length === 5, ids(g2).join(','));
     check('guardar: el recolector conserva nivel, dano, afijos y potencial', (() => {
       const r = find(g2, 'r1');
       return r?.level === 5 && r?.damage === danioDeRango(4, 3)
@@ -209,8 +208,8 @@ async function main() {
     const g = await boot({ saveVersion: 3, nanites: 500, warehouse: [collector('r1')] });
     check('migracion: una partida minima carga sin error', !!s(g).warehouse, 'sin almacen');
     check('migracion: los contadores de material se derivan del almacen',
-      typeof s(g).keys === 'number' && typeof s(g).upgradeCrystals === 'number',
-      `keys=${s(g).keys} crystals=${s(g).upgradeCrystals}`);
+      typeof s(g).upgradeCrystals === 'number',
+      `crystals=${s(g).upgradeCrystals}`);
     check('migracion: el documento se sube a la version actual',
       guardado().saveVersion === s(g).saveVersion,
       `documento=${guardado().saveVersion} estado=${s(g).saveVersion}`);
@@ -227,85 +226,103 @@ async function main() {
       r?.details === `Recolección por click: +${r.damage}`, JSON.stringify(r?.details));
   }
   {
-    // Llaves y cristales sin `tier`: el nivel se deduce del nombre UNA vez, para
-    // que el juego sepa que cofre abre cada llave. Hay que quitar el `tier` de
-    // verdad: la fabrica se lo pone, y si es un numero la migracion no hace nada.
-    const llave = key('k1', 1, 1, { name: 'Llave Rúnica' });
-    delete (llave as any).tier;
+    // Material sin `tier`: el nivel se deduce del nombre UNA vez, porque es lo
+    // unico que dice que cristal mejora a que recolector. Hay que quitar el `tier`
+    // de verdad: la fabrica se lo pone, y si es un numero la migracion no hace nada.
+    //
+    // **LO QUE HACIA ESTA MISMA PRUEBA CON LAS LLAVES SE HA IDO A `cajasCheck`.**
+    // Antes el motor rellenaba tambien el `tier` de una llave para poder contarla
+    // por nivel en la migracion de los contadores. Ese par de migraciones —llaves
+    // por nivel y contadores de llaves— desaparecieron juntas al redimir las
+    // llaves: para redimir hace falta el PRECIO, no el nivel, y ese precio sale de
+    // `keyTierFromName()` en el momento de redimir. Asi que la deduccion por
+    // nombre de una llave se sigue probando, pero en el banco que se encarga de
+    // la redencion, que es donde tiene sentido mirarla.
     const crist = crystal('x1', 1, 1, { name: 'Cristal de Fase' });
     delete (crist as any).tier;
-    const g = await boot(baseSave([llave, crist], { saveVersion: 4 }));
-    check('migracion: una llave sin nivel lo deduce del nombre', find(g, 'k1')?.tier === 3,
-      `tier=${find(g, 'k1')?.tier} · 'Llave Rúnica' es el T3 desde F31`);
-    check('migracion: un cristal sin nivel tambien', find(g, 'x1')?.tier === 2,
-      'tier=' + find(g, 'x1')?.tier);
+    const g = await boot(baseSave([crist], { saveVersion: 4 }));
+    check('migracion: un cristal sin nivel tambien lo deduce del nombre',
+      find(g, 'x1')?.tier === 2, 'tier=' + find(g, 'x1')?.tier);
   }
+  // =========================================================================
+  //  LOS CONTADORES DE LLAVES: ESTA PRUEBA NO EXISTE, Y POR QUÉ
+  // =========================================================================
+    //
+    // Aquí había dos comprobaciones —"un contador de llaves sin items se
+    // materializa" y "no las duplica al cargar otra vez"— que medían la migración
+    // que convertía `state.keys` y `state.keysByTier` en pilas de items del almacén.
+    // **Las dos reglas dejaron de existir**: el estado ya no tiene contadores de
+    // llaves y el guardado ya no los escribe. Un `keys: 3` en un documento viejo no
+    // se materializa en tres llaves, porque las llaves ya no son un objeto del
+    // juego. Lo que hay en el almacén de una partida vieja son items `type: 'key'`,
+    // y eso es otra cosa: no se cuentan, **se redimen**.
+    //
+    // **LO QUE SÍ HAY QUE COMPROBAR AHORA ES EL OTRO LADO**, y es el que importa:
+    // una partida con llaves en el almacén entra, y esas llaves desaparecen
+    // sumando a `nanites` un tercio del antiguo par caja+llave por unidad, con suelo
+    // de 1. Si no se pagaran, el jugador perdería lo que compró; si se pagaran dos
+    // veces, sería una máquina de imprimir nanitas.
+    //
+    // Esa prueba vive ahora en **`cajasCheck`, apartado 3** —"LAS LLAVES QUE
+    // TUVIERA ALGUIEN SE REDIMEN. UNA VEZ."— y aquí no se duplica a propósito: es
+    // la misma regla, y una regla comprobada en dos bancos solo se desincroniza uno
+    // de los dos. Además `cajasCheck` la monta con `key()`, que es una partida vieja
+    // de verdad —el nombre escrito a mano y sin `tier`—, que es justo el caso que
+    // hay que redimir.
+  //
+  // =====================================================================
+  //  Y LO QUE QUEDA DE LA MIGRACIÓN: SOLO EL CRISTAL
+  // =====================================================================
   {
-    // Contadores de material sin items detras: se MATERIALIZAN, porque ese saldo
-    // es real y no se puede volver a contarlo. Con las cajas se hace al reves.
-    // Las huerfanas se meten APILADAS, asi que 3 llaves son 2 items: una pila de
-    // nivel 0 y otra de nivel 1.
-    const g = await boot(baseSave([], {
-      saveVersion: 5, keys: 3, keysByTier: { 1: 2, 2: 1, 3: 0, 4: 0 },
-      upgradeCrystals: 4
-    }));
-    check('migracion: un contador de llaves sin items se materializa', s(g).keys === 3,
-      'keys=' + s(g).keys);
-    check('migracion: en dos pilas, una por nivel', deType(g, 'key') === 2,
-      'items=' + deType(g, 'key') + ' unidades=' +
-      wh(g).filter((w: any) => w.type === 'key').map((w: any) => `${w.name}:${w.stackCount}`).join(' '));
-    const g2 = await reload();
-    check('migracion: no duplica las llaves al cargar otra vez', s(g2).keys === 3,
-      'keys=' + s(g2).keys);
-  }
-  {
-    // LA REGRESION DE ESTA MIGRACION. La migracion de contadores a items existe
-    // para las partidas viejas, donde el contador era un numero suelto sin nada
-    // detras. Si no le resta al contador lo que YA HAY en el almacen, se ejecuta
-    // tambien en las partidas nuevas, y entonces recargar la pagina duplica el
-    // material: 3 llaves -> 6 -> 12 -> 24, y el almacen se llena de llaves que
-    // el jugador nunca pidio, hasta que el botin empieza a perderse por falta de
-    // hueco.
+    // LA REGRESION DE LA MIGRACION DE CONTADORES. La migracion de contadores a
+    // items existe para las partidas viejas, donde el contador era un numero
+    // suelto sin nada detras. Si no le resta al contador lo que YA HAY en el
+    // almacen, se ejecuta tambien en las partidas nuevas, y entonces recargar la
+    // pagina duplica el material: 4 cristales -> 8 -> 16 -> 32, y el almacen se
+    // llena de material que el jugador nunca pidio, hasta que el botin empieza a
+    // perderse por falta de hueco.
     //
     // El banco de pruebas anterior no lo veía porque sus partidas de prueba
     // traian los contadores a cero, que es justo el caso en el que la migracion
     // no hace nada. Aqui la partida se parece a una de verdad: contador y
     // almacen dicen lo mismo.
-    const g = await boot(baseSave([key('k1', 1, 3), key('k2', 2, 2), crystal('x1', 1, 4)],
-      { saveVersion: 7 }));
-    check('sin duplicar: una carga deja las llaves como estaban',
-      s(g).keys === 5 && deType(g, 'key') === 2, `keys=${s(g).keys} items=${deType(g, 'key')}`);
-    check('sin duplicar: y los cristales como estaban',
+    //
+    // **YA NO HAY LLAVES QUE MIRAR**, asi que el cristal se queda solo. Sigue
+    // siendo el mismo caso: la migración es de un tipo, y por eso el nombre de
+    // "material" describe exactamente lo que queda.
+    const g = await boot(baseSave([crystal('x1', 1, 4)], { saveVersion: 7 }));
+    check('sin duplicar: una carga deja el material como estaba',
       s(g).upgradeCrystals === 4 && deType(g, 'crystal') === 1,
       `crystals=${s(g).upgradeCrystals} items=${deType(g, 'crystal')}`);
 
     const g2 = await reload();
-    check('sin duplicar: la segunda carga NO duplica las llaves',
-      s(g2).keys === 5 && deType(g2, 'key') === 2,
-      `keys=${s(g2).keys} items=${deType(g2, 'key')} (${s(g2).warehouse.filter((w: any) => w.type === 'key').map((w: any) => w.stackCount).join('+')})`);
-    check('sin duplicar: ni los cristales',
+    check('sin duplicar: la segunda carga NO duplica los cristales',
       s(g2).upgradeCrystals === 4 && deType(g2, 'crystal') === 1,
-      `crystals=${s(g2).upgradeCrystals} items=${deType(g2, 'crystal')}`);
+      `crystals=${s(g2).upgradeCrystals} items=${deType(g2, 'crystal')} (${s(g2).warehouse.filter((w: any) => w.type === 'crystal').map((w: any) => w.stackCount).join('+')})`);
 
     const g3 = await reload();
     const g4 = await reload();
     check('sin duplicar: cinco recargas no multiplican el material',
-      s(g3).keys === 5 && s(g4).keys === 5,
-      `3a=${s(g3).keys} 4a=${s(g4).keys}`);
-    check('sin duplicar: y el almacen no crece', wh(g4).length === 3, ids(g4).join(','));
+      s(g3).upgradeCrystals === 4 && s(g4).upgradeCrystals === 4,
+      `3a=${s(g3).upgradeCrystals} 4a=${s(g4).upgradeCrystals}`);
+    check('sin duplicar: y el almacen no crece', wh(g4).length === 1, ids(g4).join(','));
   }
   {
     // El caso parcial: el contador dice MAS que el almacen porque el jugador
     // vendio material. Lo que falta es lo que hay que recuperar, y lo que ya
     // esta NO se vuelve a crear.
-    const g = await boot(baseSave([key('k1', 1, 2)], {
-      saveVersion: 7, keys: 5, keysByTier: { 1: 5, 2: 0, 3: 0, 4: 0 }
+    const g = await boot(baseSave([crystal('x1', 1, 2)], {
+      saveVersion: 7, upgradeCrystals: 5
     }));
     check('migracion parcial: solo se recupera lo que falta',
-      s(g).keys === 5, `keys=${s(g).keys} (almacen tenia 2, contador decia 5)`);
+      s(g).upgradeCrystals === 5,
+      `crystals=${s(g).upgradeCrystals} (almacen tenia 2, contador decia 5)`);
+    check('migracion parcial: y se echa a la pila que ya habia',
+      deType(g, 'crystal') === 1 && find(g, 'x1')?.stackCount === 5,
+      `items=${deType(g, 'crystal')} unidades=${find(g, 'x1')?.stackCount}`);
     const g2 = await reload();
-    check('migracion parcial: y no se duplica al cargar otra vez', s(g2).keys === 5,
-      `keys=${s(g2).keys}`);
+    check('migracion parcial: y no se duplica al cargar otra vez', s(g2).upgradeCrystals === 5,
+      `crystals=${s(g2).upgradeCrystals}`);
   }
   {
     // Al CARGAR, un contador de cajas por encima del almacen SI materializa: es
@@ -405,13 +422,13 @@ async function main() {
     // coinciden.
     //
     // ARREGLADO. El boton "Vender" de la hoja de detalle pintaba
-    // `getSellPrice` SIN multiplicar, asi que con una pila de 20 llaves decia
+    // `getSellPrice` SIN multiplicar, asi que con una pila de 20 cristales decia
     // "Vender - 480" y el modal siguiente decia "por 9.600". Ahora la vista pide
     // el total al game loop (`getSellTotal`), que es el mismo calculo que hace
     // el cobro, y no queda ninguna copia de la formula. Lo comprueba
     // `sellCheck`, que si puede porque el numero ya no se calcula en la vista.
-    const g = await boot(baseSave([crate('c1', 1, 4), key('k1', 1, 2), crystal('x1', 1, 3)]));
-    for (const [id, unidades] of [['c1', 4], ['k1', 2], ['x1', 3]] as Array<[string, number]>) {
+    const g = await boot(baseSave([crate('c1', 1, 4), crystal('x1', 1, 3), crystal('x2', 3, 2)]));
+    for (const [id, unidades] of [['c1', 4], ['x1', 3], ['x2', 2]] as Array<[string, number]>) {
       const unitario = g.getSellPrice(id);
       const nanoAntes = nanites(g);
       const r = g.sellItem(id);
@@ -684,43 +701,43 @@ async function main() {
   //  8. Abrir cajas
   // =========================================================================
   {
-    // Con una llave que NO alcanza: una de nivel 0 no abre un cofre de nivel 3.
-    // (Al reves si funciona: `keyOpens` compara por ORDEN, asi que una llave mejor
-    // abre un cofre peor. Eso si es lo que hay que comprobar.)
-    const g = await boot(baseSave([
-      crate('c1', 8),
-      key('k1', 1, 1, { name: 'Llave de Cifrado' })
-    ]));
-    const r = g.openCrateBox('c1', 'k1');
-    check('cajas: una llave de nivel 0 no abre un cofre de nivel 3', !r.ok && !!r.msg, r.msg ?? '');
-    check('cajas: y no se gasta nada', !!find(g, 'c1') && !!find(g, 'k1'), ids(g).join(','));
+    // Una caja de nivel alto se abre igual que una de nivel bajo, sin nada más que
+    // su id. Antes esta prueba comparaba el alcance de una llave con el nivel del
+    // cofre —"una llave de nivel 0 no abre un cofre de nivel 3", y al revés una
+    // llave mejor sí abría un cofre peor—, y ya no hay llave ni alcance: el
+    // alcance de una caja es su nivel y no se puede pedir nada más.
+    //
+    // **LO QUE QUEDA DE ESA COMPARACIÓN ES JUSTO ESTO**, y merece su propia
+    // comprobación porque es el cambio de fondo: quitar la llave no puede dejar
+    // la caja atada a ningún otro item del almacén. Lo de que el botín salga del
+    // nivel que la caja anuncia está más abajo, con el cristal.
+    const g = await boot(baseSave([crate('c1', 8)]));
+    const r = g.openCrateBox('c1');
+    check('cajas: una caja alta se abre sin nada más que su id', r.ok && r.crateType === 8, r.msg ?? '');
+    check('cajas: y es la de su propio nivel', r.crateType === 8, `crateType=${r.crateType}`);
   }
   {
-    // Y al reves: una llave mejor abre un cofre peor.
-    const g = await boot(baseSave([
-      crate('c1', 1),
-      key('k1', 3, 1, { name: 'Llave del Vacío' })
-    ]));
-    const r = g.openCrateBox('c1', 'k1');
-    check('cajas: una llave mejor abre un cofre peor', r.ok, r.msg ?? '');
-    check('cajas: y consume la llave', !find(g, 'k1'), ids(g).join(','));
-  }
-  {
-    const g = await boot(baseSave([crate('c1', 1), key('k1', 1, 2)]));
-    const r = g.openCrateBox('c1', 'k1');
-    check('cajas: con la llave correcta se abre', r.ok, r.msg ?? '');
+    const g = await boot(baseSave([crate('c1', 1), crystal('x1', 1, 2)]));
+    const r = g.openCrateBox('c1');
+    check('cajas: con una caja en el almacen se abre', r.ok, r.msg ?? '');
     check('cajas: la caja se consume', !find(g, 'c1'), ids(g).join(','));
-    // Lo que se comprueba aquí NO es que la pila quede en 1, sino que el botín
-    // caiga en la pila de SU nivel. Antes daba 1 siempre, y no porque estuviera
-    // bien: la caja común anuncia llaves de nivel 0 y el aplicador las forzaba a
-    // nivel 1, así que caían en OTRA pila y esta cuenta pasaba por casualidad. Al
-    // arreglarlo, el resultado depende del sorteo, así que se compara con el
-    // premio que devuelve el propio juego y no con una cuenta fija.
-    const delBotin = r.reward?.kind === 'keys' && r.reward.keyTier === 1;
-    const esperado = delBotin ? 1 + r.reward.amount : 1;
-    check('cajas: el botín de llaves se apila con las de su nivel',
-      find(g, 'k1')?.stackCount === esperado,
-      `pila=${find(g, 'k1')?.stackCount} esperado=${esperado} premio=${r.reward?.kind}`);
+    // Lo que se comprueba aquí NO es que la pila quede en su cuenta, sino que el
+    // botín caiga en la pila de SU nivel. Antes miraba la pila de llaves y daba 1
+    // siempre, y no porque estuviera bien: la caja común anunciaba llaves de nivel
+    // 0 y el aplicador las forzaba a nivel 1, así que caían en OTRA pila y esta
+    // cuenta pasaba por casualidad. Al arreglarlo, el resultado depende del
+    // sorteo, así que se compara con el premio que devuelve el propio juego y no
+    // con una cuenta fija.
+    //
+    // **AHORA LA PILA ES DE CRISTALES**, porque es la del material que existe: el
+    // cristal es lo que la caja anuncia por nivel y lo que el jugador gasta en
+    // sintonizar. La regla es idéntica —el botín cae en la pila de SU nivel—, solo
+    // que escrita sobre un tipo que el juego sigue teniendo.
+    const delBotin = r.reward?.kind === 'crystals' && r.reward.materialTier === 1;
+    const esperado = delBotin ? 2 + r.reward.amount : 2;
+    check('cajas: el botín se apila en la pila del nivel que anuncia',
+      find(g, 'x1')?.stackCount === esperado,
+      `pila=${find(g, 'x1')?.stackCount} esperado=${esperado} premio=${r.reward?.kind}`);
     check('cajas: el contador de cajas abiertas sube', s(g).cratesOpened === 1, String(s(g).cratesOpened));
     const g2 = await reload();
     // F31 · LA CAJA ABIERTA PUEDE DEJAR OTRA CAJA, Y EL CONTADOR NO ES EL NÚMERO
@@ -735,23 +752,16 @@ async function main() {
       `abiertas=${s(g2).cratesOpened} items=${deType(g2, 'crate')} contadores=${totalCajas}`);
   }
   {
-    const g = await boot(baseSave([crate('c1', 1)]));
-    const r = g.openCrateBox('c1', 'k1');
-    check('cajas: sin llave se rechaza y no se gasta la caja',
-      !r.ok && !!find(g, 'c1'), r.msg ?? '');
-  }
-  {
-    const g = await boot(baseSave([key('k1', 1, 1)]));
-    const r = g.openCrateBox('c1', 'k1');
+    const g = await boot(baseSave([crystal('x1', 1, 1)]));
+    const r = g.openCrateBox('c1');
     check('cajas: sin caja se rechaza', !r.ok, r.msg ?? '');
   }
   {
     // Con el almacen lleno, abrir una caja no puede desbordarlo.
     const lleno = Array.from({ length: 29 }, (_, i) => crate(`x${i}`));
-    const g = await boot(baseSave([...lleno, crate('c1', 1), key('k1', 1, 1)],
-      { warehouseCapacity: 30 }));
+    const g = await boot(baseSave([...lleno, crate('c1', 1)], { warehouseCapacity: 30 }));
     const antes = wh(g).length;
-    g.openCrateBox('c1', 'k1');
+    g.openCrateBox('c1');
     check('cajas: con el almacen lleno el botin no desborda', wh(g).length <= g.getCapacity(),
       `antes=${antes} ahora=${wh(g).length} cap=${g.getCapacity()}`);
   }
@@ -759,40 +769,27 @@ async function main() {
     // LA CAJA ENTREGA EL MATERIAL QUE ANUNCIA, Y NO OTRO.
     //
     // Este es el bug que más se parezca a "la ruleta mintiendo", y lo es de
-    // verdad. La tabla declara qué llave deja cada cofre (`keyTier`): la legendaria
-    // anuncia "Llave Rúnica" (nivel 2) y "Cristales de Fase" (nivel 2). Pero el
+    // verdad. La tabla declara qué material deja cada cofre (`materialTier`), y el
     // aplicador del game loop se comía ese segundo argumento y entregaba siempre
-    // nivel 1. El jugador veía "+6 Llaves Rúnicas" y recibía seis Llaves
-    // Reforzadas, sin ninguna forma de saber que eran distintas.
+    // nivel 1. El jugador veía un nombre y recibía otro, sin ninguna forma de saber
+    // que eran distintos.
     //
-    // Con el módulo de apilado era peor que cosmético: como todas las llaves de
-    // caja caían en nivel 1, se fundían en UNA sola pila. La rúnica de la
-    // legendaria entraba en la misma celda que la de Cifrado de la común y no
-    // había forma de separarlas.
+    // Con el módulo de apilado era peor que cosmético: como todo el material caía
+    // en nivel 1, se fundía en UNA sola pila y no había forma de separarlo.
     //
     // `rollPara` clava el dado en la fila que interesa, así que esto no depende
     // del sorteo ni de cuántas cajas haga falta abrir.
-    const g = await boot(baseSave([crate('c1', 8), key('k3', 8, 1)]));
-    const r = conRoll(rollPara(8, 'keys'), () => g.openCrateBox('c1', 'k3'));
-    check('cajas: la caja legendary se abre', r.ok, r.msg ?? '');
-    check('cajas: la llave del botín es del nivel que anuncia',
-      r.reward?.kind === 'keys' && pilaDe(g, 'key', r.reward.keyTier)?.stackCount === r.reward.amount,
-      `anuncia ${r.reward?.keyTier}x${r.reward?.amount} y llegó ` +
-      JSON.stringify(wh(g).filter((w: any) => w.type === 'key')
-        .map((w: any) => `${w.name}:${w.tier}x${w.stackCount ?? 1}`)));
-    check('cajas: y no aparece una llave del nivel equivocado',
-      !wh(g).some((w: any) => w.type === 'key' && w.tier !== r.reward?.keyTier),
-      'sobran llaves de otro nivel');
-    const g2 = await reload();
-    check('cajas: y el nivel de la llave sobrevive a la recarga',
-      pilaDe(g2, 'key', r.reward.keyTier)?.stackCount === r.reward.amount,
-      `pila=${pilaDe(g2, 'key', r.reward.keyTier)?.stackCount}`);
-  }
-  {
-    // Lo mismo con los cristales. La legendaria anuncia cristales de nivel 2 y
-    // antes llegaban de nivel 1, que es justo el cristal que el jugador ya tenía.
-    const g = await boot(baseSave([crate('c1', 8), key('k3', 8, 1)]));
-    const r = conRoll(rollPara(8, 'crystals'), () => g.openCrateBox('c1', 'k3'));
+    //
+    // **ESTE BLOQUE Y EL DE ABAJO ERAN EL MISMO, Y AHORA SOLO QUEDA UNO.** Estaba
+    // dos veces: una forzando la fila `keys` y otra la fila `crystals`. Las dos
+    // medían la misma regla —el botín da el material del nivel que anuncia— sobre
+    // dos tipos que en aquel momento existían. Al quitar las llaves solo queda la
+    // fila de cristales, así que las dos se han fundido en esta: se conserva la
+    // comprobación del nivel del botín y la de que no aparezca material del nivel
+    // equivocado, y de la que faltaba se ha cogido la recarga.
+    const g = await boot(baseSave([crate('c1', 8)]));
+    const r = conRoll(rollPara(8, 'crystals'), () => g.openCrateBox('c1'));
+    check('cajas: la caja T8 se abre', r.ok, r.msg ?? '');
     check('cajas: el cristal del botín es del nivel que anuncia',
       r.reward?.kind === 'crystals' && pilaDe(g, 'crystal', r.reward.materialTier)?.stackCount === r.reward.amount,
       `anuncia ${r.reward?.materialTier}x${r.reward?.amount} y llegó ` +
@@ -801,6 +798,10 @@ async function main() {
     check('cajas: y no aparece un cristal del nivel equivocado',
       !wh(g).some((w: any) => w.type === 'crystal' && w.tier !== r.reward?.materialTier),
       'sobran cristales de otro nivel');
+    const g2 = await reload();
+    check('cajas: y el nivel del cristal sobrevive a la recarga',
+      pilaDe(g2, 'crystal', r.reward?.materialTier)?.stackCount === r.reward?.amount,
+      `pila=${pilaDe(g2, 'crystal', r.reward?.materialTier)?.stackCount}`);
   }
   {
     // =====================================================================
@@ -871,39 +872,40 @@ async function main() {
     // comporten: cada una consume lo suyo, el contador sube N y todo
     // sobrevive a la recarga.
     //
-    // La llave es de nivel 1 a propósito: la común solo suelta llaves de nivel
-    // 0, así que esa pila solo puede bajar —ningún botín la rellena por detrás
-    // y la cuenta es exacta. Las cajas sí pueden dar cajas, por eso de la pila
-    // de cajas no se afirma nada.
+    // El material es de nivel 1, que es el nivel que anuncia la caja común, así
+    // que el botín de esa caja puede sumárselo por detrás y la cuenta no es
+    // exacta —por eso lo que se afirma de la pila es que nunca baja de lo que
+    // había, no una cifra fija. Las cajas sí pueden dar cajas, por eso de la pila
+    // de cajas tampoco se afirma una cuenta cerrada.
     const g = await boot(baseSave([
-      crate('c1', 1, 3), key('k1', 1, 5)
+      crate('c1', 1, 3), crystal('x1', 1, 5)
     ], { nanites: 0 }));
     const producidasAntes = s(g).totalNanitesProduced;
     const abiertasAntes = s(g).cratesOpened;
-    const resultados = [g.openCrateBox('c1', 'k1'), g.openCrateBox('c1', 'k1'), g.openCrateBox('c1', 'k1')];
+    const resultados = [g.openCrateBox('c1'), g.openCrateBox('c1'), g.openCrateBox('c1')];
     check('lote: las tres aperturas salen ok con premio',
       resultados.every(r => r.ok && !!r.reward),
       resultados.map(r => `${r.ok}:${r.reward?.kind}`).join(','));
     check('lote: el contador sube una por apertura, ni una más',
       s(g).cratesOpened === abiertasAntes + 3,
       `abiertas=${s(g).cratesOpened} antes=${abiertasAntes}`);
-    // F31 · LA PILA DE LLAVES YA NO BAJA "UNA POR APERTURA", Y POR QUÉ NO DEBE.
+    // LO QUE QUEDA DEL LOTE, Y POR QUÉ NO ES "UNA CAJA MENOS POR APERTURA".
     //
-    // La caja T1 suelta la llave T1, así que cada apertura devuelve parte de lo
-    // que cuesta: abrir tres cajas con dos llaves es perfectly legal, porque la
-    // segunda te devuelve la que gastó la primera. Antes la caja común también
-    // soltaba su llave, pero esta aserción miraba una caja que no la soltaba.
+    // La caja T1 suelta el cristal T1, así que cada apertura devuelve parte de lo
+    // que cuesta: abrir tres cajas con un solo material es legal, porque la
+    // segunda te devuelve parte de lo que gastó la primera. Y las cajas pueden dar
+    // cajas, así que el total de cajas del almacén al final no tiene por qué ser
+    // cero.
     //
-    // Lo que sí tiene que ser cierto, y es lo que importa, es que **no se puede
-    // abrir más cajas de las que tienes llaves**. Eso se mide en el bloque de
-    // abajo; aquí se mide el otro invariante: tres aperturas, tres cajas
-    // consumidas, ni una más.
+    // **LO QUE NO PUEDE PASAR ES QUE LAS CUENTAS BAJEN.** Tres aperturas, tres
+    // cajas consumidas, y el material nunca por debajo de lo que había. Eso es lo
+    // que se mide aquí.
     check('lote: la caja se gasta una por apertura, exacta',
-      deType(g, 'crate') === 0 || (find(g, 'c1')?.stackCount ?? 0) === 0,
-      `cajas=${deType(g, 'crate')} unidades=${find(g, 'c1')?.stackCount}`);
-    check('lote: y llaves netas ni sube ni baja de lo que la caja devolvió',
-      (find(g, 'k1')?.stackCount ?? 0) >= 0 && (find(g, 'k1')?.stackCount ?? 0) <= 5,
-      `k1=${find(g, 'k1')?.stackCount} (2 de partida, 3 gastadas, lo que devolvieron las cajas)`);
+      s(g).crates[1] === 0,
+      `contador T1=${s(g).crates[1]} unidades=${find(g, 'c1')?.stackCount}`);
+    check('lote: y el material nunca baja de lo que había',
+      (find(g, 'x1')?.stackCount ?? 0) >= 5,
+      `x1=${find(g, 'x1')?.stackCount} (5 de partida, y las cajas solo pueden sumar)`);
     check('lote: lo producido nunca baja entre aperturas',
       s(g).totalNanitesProduced >= producidasAntes,
       `producidas=${s(g).totalNanitesProduced} antes=${producidasAntes}`);
@@ -915,11 +917,11 @@ async function main() {
   {
     // Y la condición de parada del lote: sin cajas no hay apertura y no se
     // gasta nada. Es lo que hace que "se abrieron N de M" pare donde toca.
-    const g = await boot(baseSave([key('k1', 1, 1)]));
-    const r = g.openCrateBox('c1', 'k1');
+    const g = await boot(baseSave([crystal('x1', 1, 1)]));
+    const r = g.openCrateBox('c1');
     check('lote: sin cajas se rechaza', !r.ok && !!r.msg, r.msg ?? '');
-    check('lote: y la llave no se toca', find(g, 'k1')?.stackCount === 1,
-      `k1=${find(g, 'k1')?.stackCount}`);
+    check('lote: y no se toca el material que hay', find(g, 'x1')?.stackCount === 1,
+      `x1=${find(g, 'x1')?.stackCount}`);
   }
   {
     // Por debajo del umbral no se puede reciclar.
@@ -935,7 +937,7 @@ async function main() {
       crate('c1', 1, 2), crate('c2', 6, 1),
       collector('r1', 3), collector('r2', 3),
       { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 },
-      key('k1', 1, 5)
+      crystal('x1', 1, 5)
     ], {
       totalNanitesProduced: 50_000_000,
       nanites: 123_456,
@@ -964,8 +966,8 @@ async function main() {
     check('prestigio: se conservan las esquirlas', s(g).shards === 6, String(s(g).shards));
     // Lo unico que sobrevive al reinicio son las 2 cajas de bienvenida, y son UN
     // item apilado con 2 unidades: la capacidad se cuenta en ranuras.
-    check('prestigio: el almacen se recycle', deType(g, 'crate') === 1 && deType(g, 'key') === 0,
-      `cajas=${deType(g, 'crate')} llaves=${deType(g, 'key')}`);
+    check('prestigio: el almacen se recycle', deType(g, 'crate') === 1 && deType(g, 'crystal') === 0,
+      `cajas=${deType(g, 'crate')} cristales=${deType(g, 'crystal')}`);
     check('prestigio: y son las 2 cajas de bienvenida, en una sola pila',
       s(g).crates[1] === 2 && deType(g, 'crate') === 1 &&
       wh(g).find((w: any) => w.type === 'crate')?.stackCount === 2,
@@ -1432,14 +1434,14 @@ async function main() {
     // dispara.
     const g = await boot(baseSave([
       collector('r1', 5, { damage: 100, level: 5 }),
-      crate('c1'), crate('c2'), key('k1', 1, 1),
+      crate('c1'), crate('c2'), crystal('x1', 1, 1),
       consumable('u1', 'afk', 1, { name: 'Tarjeta AFK' })
     ], { nanites: 0 }));
     g.equipCollector('r1');
     for (let i = 0; i < 5; i++) g.click();
-    g.sellItem('k1');
+    g.sellItem('x1');
     g.useConsumable('u1');
-    g.openCrateBox('c1', 'k1');
+    g.openCrateBox('c1');
     g.moveItems([find(g, 'r2')?.id ?? 'r1'], null);
     check('logros: ninguna operacion revienta', wh(g).length >= 0, 'ok');
     check('logros: los logros desbloqueados son ids conocidos',
@@ -1528,7 +1530,6 @@ async function main() {
       collector('r2', 3, { damage: 40 }),
       crate('c1', 1, 2),
       crate('c2', 6, 1),
-      key('k1', 1, 3),
       crystal('x1', 1, 3),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 }
@@ -1546,7 +1547,7 @@ async function main() {
     g.sellItem('c2');
     g.moveItems(['r2'], 'r1');
     g.useConsumable('u1');
-    g.openCrateBox('c1', 'k1');
+    g.openCrateBox('c1');
     g.equipCollector('r2');
     g.buyNode('core_sink');
 

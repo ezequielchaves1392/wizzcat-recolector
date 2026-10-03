@@ -54,7 +54,7 @@ import { STORE_ITEMS } from '../src/gameLoop';
 import { costeDeCaja } from '../src/data/store';
 import { danioDeRango } from '../src/data/crafting';
 import { CRATE_TYPES, type CrateType } from '../src/data/store';
-import { KEY_DEFS, type KeyTier } from '../src/data/items';
+import { CRYSTAL_DEFS } from '../src/data/items';
 import {
   boot, reload, recargar, bootNew, check, resumen, s, wh, ids, nanites, deType, find,
   baseSave, collector, crystal, consumable, guardado
@@ -195,7 +195,30 @@ async function main() {
   // =========================================================================
   {
     const g3 = await recargar();
-    const barato = 'keyT1';
+    // **ESTO ERA LA LLAVE T1 Y AHORA ES LA CAJA T1, Y HAY QUE LEER POR QUÉ.** El
+    // identificador viejo daba `undefined` en `STORE_ITEMS`, así que
+    // `STORE_ITEMS[barato].cost` era `undefined` y la compra que "debería" salir con
+    // las nanitas justas se quedaba sin saldo: las tres comprobaciones de precio de
+    // este apartado medían un caso que no ocurre.
+    //
+    // La caja T1 es la candidata obvia y además la correcta por el motivo que
+    // importa: **es lo único que se vende para abrir algo**, y el jugador la compra
+    // desde el primer minuto, así que el apartado 3 sigue midiendo el camino real.
+    //
+    // **Y ESTA COMPRA SE APILA, QUE ES LO QUE CAMBIA LO QUE HAY QUE PREGUNTAR.** La
+    // partida de bienvenida ya trae dos cajas de T1, así que la comprada se suma a
+    // esa pila. `addToWarehouse()` conserva el item **primero** de cada grupo, y el
+    // id que devuelve `buyStoreItem()` es el del item nuevo, que no llega nunca al
+    // almacén. Preguntar por ese id mediría un objeto que el juego nunca guarda, y
+    // las dos comprobaciones de más abajo saldrían falsas por una razón que no tiene
+    // que ver con lo que comprueban. No es un fallo del juego: es que **un item
+    // apilado no tiene id propio**, y el banco lo daba por hecho.
+    //
+    // Por eso las dos cuentan UNIDADES con `cajasTotales()` y no ids. El cristal
+    // —que era la otra opción— tiene el mismo problema: la partida de bienvenida
+    // trae cinco cristales de T1, así que su compra también se fundía.
+    const barato = 'crateT1';
+    const cajasDeFabrica = cajasTotales(g3);
 
     // Sin nanitas no se compra, y sobre todo: no se COBRA. Un "no compres" que
     // descuenta es peor que un bug visible, porque el jugador pierde sin ver por
@@ -213,7 +236,8 @@ async function main() {
     check('tienda: se cobra EXACTAMENTE el precio de carta',
       nanites(g3) === 0, `nanitas=${nanites(g3)} precio=${precio}`);
     check('tienda: lo comprado llega al almacén',
-      ids(g3).includes((comprado as any).id), String((comprado as any)?.id));
+      Boolean(comprado) && cajasTotales(g3) === cajasDeFabrica + 1,
+      `cajas=${cajasTotales(g3)} antes=${cajasDeFabrica}`);
     // `canBuyStoreItem` NO pregunta "¿me llega el dinero?": pregunta "¿cabe en el
     // almacén?". La cartera es otra comprobación, y por eso el botón de la tienda
     // mira las dos. Con la cartera a cero pero sitio de sobra, aquí tiene que decir
@@ -222,8 +246,16 @@ async function main() {
       g3.canBuyStoreItem(barato) === true, 'dice que no cabe con 3 de 15 ranuras');
 
     const g4 = await recargar();
+    // **SE CUENTAN UNIDADES Y NO TIPOS, Y POR QUÉ.** Antes contaba
+    // `deType(g4, 'key') === 1`, y contar por tipo solo funciona mientras el tipo
+    // sea único en la partida: aquí la de bienvenida trae dos cajas de T1, así que
+    // un recuento daría 2 y la comprobación fallaría por una caja que sí compró el
+    // jugador. Y no se puede preguntar por el id del item comprado, porque la caja
+    // se apila con la de bienvenida y conserva el id de la primera: el id que
+    // devolvió la compra nunca llegó al almacén. Las unidades no tienen ese problema.
     check('tienda: la compra sobrevive a la recarga',
-      deType(g4, 'key') === 1, 'llaves=' + deType(g4, 'key'));
+      cajasTotales(g4) === cajasDeFabrica + 1,
+      `cajas=${cajasTotales(g4)} esperado=${cajasDeFabrica + 1}`);
     check('tienda: y la cartera vacía también sobrevive', nanites(g4) === 0, 'nanitas=' + nanites(g4));
   }
 
@@ -278,16 +310,34 @@ async function main() {
     const cap = g7.getCapacity();
     check('almacén: la capacidad es la que se anuncia', cap === 15, 'cap=' + cap);
 
-    // Cuatro items en el almacén son CUATRO ranuras. Lo que se apila son las 2 cajas
-    // de bienvenida, que ya son un solo item: sin apilado serían cinco ranuras.
+    // **LO QUE SE COMPRUEBA AQUÍ ES EL INVARIANTE, Y NO UN RECUENTO DE CELDAS.**
+    //
+    // Antes la comprobación llevaba un número absoluto —cuatro items, una pila de
+    // dos— y por eso medía el estado de la partida de bienvenida en vez del apilado.
+    // Se rompió dos veces por cosas que no tienen nada que ver: primero porque la
+    // partida de bienvenida cambió, y después porque el apartado 3 compró una caja
+    // que **se fundió con la pila de las de bienvenida** y esa pila conserva el id
+    // de la primera. El número absoluto bajó a tres y el banco dio rojo.
+    //
+    // Lo que importa no es cuántas celdas hay, sino que **todas las cajas que haya
+    // ocupen una sola celda por muchas que sean**. Eso se dice comparando el
+    // número de unidades con el número de items de caja, y no depende de que la
+    // partida de bienvenida traiga dos cajas o tres.
     const ranuras = wh(g7).length;
-    check('almacén: las 2 cajas de bienvenida ocupan 1 ranura, no 2',
-      deType(g7, 'crate') === 1 &&
-      wh(g7).find((w: any) => w.type === 'crate')?.stackCount === 2 &&
-      ranuras === 4,
-      `items=${ranuras} cajas=${deType(g7, 'crate')} unidades=2`);
+    const pilaDeCajas = wh(g7).filter((w: any) => w.type === 'crate');
+    const unidadesDeCaja = pilaDeCajas
+      .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
+    check('almacén: las cajas ocupan 1 ranura, por muchas que sean',
+      unidadesDeCaja >= 2 && pilaDeCajas.length === 1 &&
+      unidadesDeCaja === pilaDeCajas[0].stackCount,
+      `items=${ranuras} celdasDeCaja=${pilaDeCajas.length} unidades=${unidadesDeCaja}`);
+    // Y el total del almacén sigue cuadrando: cada celda pintada es una ranura,
+    // sin contar dos veces la pila. Sin apilado serían una ranura más.
+    check('almacén: y sin apilado serían más ranuras de las que hay',
+      ranuras === wh(g7).length && unidadesDeCaja > pilaDeCajas.length,
+      `items=${ranuras} unidadesDeCaja=${unidadesDeCaja}`);
     check('almacén: con sitio de sobra la compra cabe',
-      g7.canBuyStoreItem('keyT2') === true, 'no cabe con ' + ranuras + ' de 15');
+      g7.canBuyStoreItem('crateT1') === true, 'no cabe con ' + ranuras + ' de 15');
 
     // Ampliar el almacén tiene UN camino: el expansor es un CONSUMIBLE que se
     // compra y se usa después (F27). El permiso directo de antes ya no existe:
@@ -328,10 +378,16 @@ async function main() {
     check('almacén lleno: está lleno de verdad',
       g9.getCapacity() === 15 && wh(g9).length === 15,
       `${wh(g9).length}/${g9.getCapacity()}`);
+    // **EL CRISTAL, Y POR QUÉ NO LA CAJA.** Este bloque compara dos compras: una que
+    // necesita ranura propia y otra que se apila en la que ya hay. La caja es la
+    // segunda, y ya está comprobada dos comprobaciones más abajo. Para la primera
+    // hace falta un tipo **sin tope de almacenamiento** —`TOPE_PILA` solo pone un
+    // tope a la caja—, porque un tipo con tope siempre encuentra una pila donde
+    // meterse y nunca pediría ranura nueva.
     check('almacén lleno: un item que necesita ranura NO cabe',
-      g9.canBuyStoreItem('keyT1') === false, 'dice que cabe');
+      g9.canBuyStoreItem('upgradeCrystal') === false, 'dice que cabe');
     check('almacén lleno: y al comprarlo no se cobra',
-      (() => { g9.buyStoreItem('keyT1'); return nanites(g9) === 100_000; })(),
+      (() => { g9.buyStoreItem('upgradeCrystal'); return nanites(g9) === 100_000; })(),
       'nanitas=' + nanites(g9));
     check('almacén lleno: pero otra caja del mismo tipo SÍ cabe, porque se apila',
       g9.canBuyStoreItem('crateT1') === true,
@@ -400,27 +456,35 @@ async function main() {
   // =========================================================================
   {
     const g12 = await boot(baseSave(
-      [{ ...collector('r1', 3, { damage: 60 }) }, cr('c1', 1), keyT1('k1', 2)],
+      [{ ...collector('r1', 3, { damage: 60 }) }, cr('c1', 1), mat('x1', 2)],
       { nanites: 0, warehouseCapacity: 30 }
     ));
     const antes = nanites(g12);
     const cajas = wh(g12).filter((w: any) => w.type === 'crate').length;
-    const llaves = wh(g12).filter((w: any) => w.type === 'key')
+    const crystals = wh(g12).filter((w: any) => w.type === 'crystal')
       .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
 
-    const r = g12.openCrateBox('c1', 'k1');
+    // **LA CAJA SE ABRE CON SU ID Y NADA MÁS.** Antes era
+    // `openCrateBox('c1', 'k1')`: el id de la caja y el de la llave, y el motor
+    // comprobaba que la llave sirviera para ese cofre. Ya no hay llave que
+    // comprobar, y por eso la llamada es de un argumento.
+    const r = g12.openCrateBox('c1');
 
-    // CUÁNTAS LLAVES SOLTÓ EL BOTÍN DE ESTA CAJA.
+    // CUÁNTOS CRISTALES SOLTÓ EL BOTÍN DE ESTA CAJA.
     //
-    // La caja común tiene una fila de llaves con peso 12 sobre un total de 100, así
-    // que una de cada ocho aperturas deja material nuevo. Estas tres pruebas miran el
-    // recuento de llaves del almacén, y sin restar el botín fallan solas una de cada
-    // ocho veces: el juego está haciendo lo correcto y la prueba se equivoca de más.
+    // La caja común tiene una fila de cristales con peso 26, así que algo menos de
+    // una de cada nueve aperturas deja material nuevo. Estas pruebas miran el
+    // recuento del almacén, y **sin restar el botín fallan solas una de cada nueve
+    // veces**: el juego está haciendo lo correcto y la prueba se equivoca de más.
     // Es el peor tipo de prueba —la que sale verde casi siempre—, porque el día que
     // falle del todo nadie sabrá si es ella o el juego.
-    const sueltas = r.reward?.kind === 'keys' ? (r.reward.amount ?? 0) : 0;
-    const llavesDeFabrica = llaves - 1 + sueltas;
-    const totalLlaves = (gg: any) => wh(gg).filter((w: any) => w.type === 'key')
+    const sueltas = r.reward?.kind === 'crystals' ? (r.reward.amount ?? 0) : 0;
+    // **Y AQUÍ NO HAY QUE RESTAR NADA, Y ES LA DIFERENCIA CON LA VIEJA.** Antes abrir
+    // consumía una llave, así que lo esperado era `llaves - 1 + sueltas`. Ahora lo
+    // único que se consume es la caja, y el material solo puede **sumar**: por eso
+    // lo esperado es `cristales + sueltas`, sin el `- 1`.
+    const cristalesDeFabrica = crystals + sueltas;
+    const totalCristales = (gg: any) => wh(gg).filter((w: any) => w.type === 'crystal')
       .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
 
     check('caja: se abre', r.ok === true, r.msg ?? '');
@@ -433,9 +497,14 @@ async function main() {
     // nivel T1 baja**, que es la caja que se abrió.
     check('caja: la caja se consume',
       (s(g12).crates[1] ?? 0) < cajas, `cajasT1=${s(g12).crates[1]} items=${deType(g12, 'crate')}`);
-    check('caja: y se gasta UNA llave',
-      totalLlaves(g12) === llavesDeFabrica,
-      `llaves=${totalLlaves(g12)} esperado=${llavesDeFabrica} (botín soltó ${sueltas})`);
+    // **LO QUE ABRE UNA CAJA ES LA CAJA, Y SOLO LA CAJA.** La comprobación no es
+    // "se gastó lo que se debía": es que el material **no baja**, porque ahora no hay
+    // ningún segundo objeto que el jugador pueda gastar al abrir. Si volviera a haber
+    // uno, esta prueba seguiría dando verde si el botín lo tapara, así que el
+    // nombre también ha cambiarado.
+    check('caja: abrirla no gasta material, solo la caja',
+      totalCristales(g12) === cristalesDeFabrica,
+      `cristales=${totalCristales(g12)} esperado=${cristalesDeFabrica} (botín soltó ${sueltas})`);
     check('caja: el contador de cajas abiertas sube', s(g12).cratesOpened === 1,
       'abiertas=' + s(g12).cratesOpened);
 
@@ -466,34 +535,45 @@ async function main() {
     const g13 = await recargar();
     check('caja: el botín sobrevive a la recarga',
       s(g13).cratesOpened === 1, 'abiertas=' + s(g13).cratesOpened);
-    // Lo que se comprueba aquí es la dirección del daño: el MATERIAL NO AUMENTA.
-// Que la caja no vuelva es lo evidente; lo que sería un fallo de verdad es que
-// abrirla devolviera llaves, porque convertir una caja en llaves gratis es
-// infinitamente explotable.
-//
-    // NOTA HISTORICA: este `check` empez\u00f3 siendo un dato en lugar de una asercion, porque
-    // la llave consumida VOLVIA al recargar. Resulto ser un bug de verdad, y de los que
-    // mas caros: `saveToFirebase` no escribia `keysByTier` ni `crystalsByTier`, asi que
-    // al cargar la migracion metia el TOTAL de llaves en el cubo del nivel 0, comparaba
-    // un total contra una parte y materializaba material de mas EN CADA RECARGA.
+    // Lo que se comprueba aquí es la dirección del daño: el MATERIAL NO SE DUPLICA.
+    // Que la caja no vuelva es lo evidente; lo que sería un fallo de verdad es que
+    // abrirla fabricara material, porque convertir una caja en cristal gratis es
+    // infinitamente explotable.
     //
-    // Se ve porque el stub de Firestore guardaba el documento con una copia superficial,
-    // de modo que el banco comparaba un array consigo mismo. Al hacer que el stub
-    // serialice como Firestore, dos pruebas que eran vacuas se pusieron a mirar de
-    // verdad. Ver `CONTEXTO-JUEGO.md`, discrepancias 15 y 16.
+    // NOTA HISTORICA: este `check` empezó siendo un dato en lugar de una aserción,
+    // porque el material consumido VOLVÍA al recargar. Resultó ser un bug de verdad,
+    // y de los que más caros: `saveToFirebase` no escribía `crystalsByTier`, así que
+    // al cargar la migración metía el TOTAL en el cubo del nivel 0, comparaba un
+    // total contra una parte y materializaba material de más EN CADA RECARGA.
+    //
+    // Se ve porque el stub de Firestore guardaba el documento con una copia
+    // superficial, de modo que el banco comparaba un array consigo mismo. Al hacer
+    // que el stub serialice como Firestore, dos pruebas que eran vacuas se pusieron
+    // a mirar de verdad. Ver `CONTEXTO-JUEGO.md`, discrepancias 15 y 16.
+    //
+    // **ESTO SOBREVIVE SIN LAS LLAVES, Y ES JUSTO POR QUÉ ESTE BLOQUE SIGUE
+    // MIRANDO EL MATERIAL Y NO LAS CAJAS.** La mitad de llave del bug ya no puede
+    // pasar: las llaves no se multiplican porque no se acumulan en absoluto. La de
+    // cristal es el mismo fallo con otro nombre, y quitarla sería borrar la mitad
+    // que todavía puede activarse.
+    //
+    // Y la línea de abajo **no estaba indentada**, ni cuatro de sus comments de más
+    // abajo, ni traía un `\u00f3` literal en mitad de la frase. Ninguna de las dos
+    // cosas rompía nada —un comentario con la sangría mal puesta sigue siendo un
+    // comentario— y por eso nadie lo había visto. Se arreglan aquí porque el bloque
+    // se reescribía de todas formas, y no como una tarea aparte.
     const cajas13 = deType(g13, 'crate');
-    const llaves13 = wh(g13).filter((w: any) => w.type === 'key')
-      .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
+    const cristales13 = totalCristales(g13);
     // F31 · La caja que se abrió no vuelve, aunque el botín haya dejado otra caja
     // en su sitio. Se mide por nivel, que es donde vive el contador.
     check('caja: la caja abierta no vuelve',
       (s(g13).crates[1] ?? 0) < cajas, `cajasT1=${s(g13).crates[1]} items=${cajas13} (antes ${cajas})`);
     check('caja: abrir una caja NO multiplica el material',
-      totalLlaves(g13) <= llavesDeFabrica,
-      `llaves=${llaves13} tope=${llavesDeFabrica} (antes ${llaves}, botín soltó ${sueltas})`);
-    check('caja: la llave consumida no vuelve al recargar',
-      totalLlaves(g13) === llavesDeFabrica,
-      `llaves=${llaves13} esperado=${llavesDeFabrica} · doc=${JSON.stringify((guardado() as any)?.keys ?? 'sin campo keys')}`);
+      cristales13 <= cristalesDeFabrica,
+      `cristales=${cristales13} tope=${cristalesDeFabrica} (antes ${crystals}, botín soltó ${sueltas})`);
+    check('caja: y el material no crece al recargar',
+      cristales13 === cristalesDeFabrica,
+      `cristales=${cristales13} esperado=${cristalesDeFabrica} · doc=${JSON.stringify((guardado() as any)?.crystalsByTier ?? 'sin campo crystalsByTier')}`);
   }
 
   // =========================================================================
@@ -651,7 +731,7 @@ async function main() {
     // no da nada. Si además no le quedara nada con lo que arrancar, la partida se
     // acabaría ahí para siempre: el jugador no puede ganar su primer nanita.
     //
-    // No lo hay, y por qué: el reinicio deja 3 llaves, 5 cristales, las 2 cajas de
+    // No lo hay, y por qué: el reinicio deja 5 cristales, las 2 cajas de bienvenida y
     // bienvenida y un Blaster Láser en el almacén. Se comprueba, no se supone.
     const blaster = wh(g19).find((w: any) => w.type === 'collector');
     check('ascensión: queda un recolector con el que empezar',
@@ -698,12 +778,33 @@ function cr(id: string, tier: number, stack = 1) {
   };
 }
 
-/** Una llave de su nivel, la que abre la caja de ese nivel. */
-function keyT1(id: string, stack: number, tier = 1) {
-  const def = KEY_DEFS[tier as KeyTier];
+/**
+ * Cuántas cajas hay en el almacén, contando UNIDADES y no items.
+ *
+ * Existe porque las cajas se apilan: la partida de bienvenida trae dos, y son un
+ * solo item. Preguntar por el id del item comprado tampoco vale —la pila conserva
+ * el id de la primera—, así que la única cifra que se puede comparar antes y
+ * después es el número de unidades.
+ */
+function cajasTotales(gg: any): number {
+  return wh(gg).filter((w: any) => w.type === 'crate')
+    .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
+}
+
+/**
+ * Un cristal de su nivel, listo para el almacén.
+ *
+ * **ESTE ERA EL ITEM DE LLAVE, Y EL CRISTAL LO SUSTITUYE PORQUE SIGUE SIENDO EL
+ * MATERIAL QUE ABRE Y QUITA UNA CAJA.** El apartado 7 comprueba dos cosas: que el
+ * botín de una caja no multiplica el material y que lo consumido no vuelve al
+ * recargar. Eso se puede medir con cualquier material, y el cristal es el que
+ * queda.
+ */
+function mat(id: string, stack: number, tier = 1) {
+  const def = CRYSTAL_DEFS[tier];
   return {
-    id, name: def.name, type: 'key', details: def.details, rarity: def.rarity,
-    tier, sellPrice: 480, stackable: true, stackCount: stack
+    id, name: def.name, type: 'crystal', details: def.details, rarity: def.rarity,
+    tier, sellPrice: 180, stackable: true, stackCount: stack
   };
 }
 

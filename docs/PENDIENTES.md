@@ -1030,8 +1030,34 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **28 bancos, 2004
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1804
 pruebas**, todas en verde._
+
+### El sistema que se ha quitado entero
+
+- [x] **Las llaves no existen.** La caja se abre con su ID y nada más: sin llave que
+      buscar, sin selector, sin llave que no alcance. **Quitarlo no ha movido ni un
+      nanito**: la caja pasa a costar `COSTE_POR_TIER * 3/4`, que es exactamente lo que
+      costaba la caja más su llave, y como el tope de reventa era esa misma suma, el
+      premio de nanitas y el techo de reventa de cada cofre **no se han movido**.
+      Comprobado para los diez niveles contra la fórmula vieja reconstruida.
+      Las llaves que alguien tuviera **se redimen solas** por un tercio del tope, que es
+      lo que valían; la migración es idempotente, así que recargar no paga dos veces.
+      `SAVE_VERSION` 8 → 9.
+- [x] **Dos leyendas que mentían, y una que se había roto sola.** Las diez cajas
+      decían *"Se abre con la llave de su tier o de un tier superior"*: era verdad
+      hasta hace una hora. El texto era correcto y el juego ya no, que es la peor forma
+      de que un texto se quede viejo. Y un comentario de `components/store.ts` **ya
+      estaba roto antes de este cambio**: su frase terminaba en *"con diez llaves,"* y
+      ahí se cortaba, en mitad de una frase. Un `/** */` que se corta a mitad de
+      frase sigue compilando y sigue cerrándose.
+- [x] **`verify/llaveCheck.ts` → `verify/cajasCheck.ts`.** No solo el contenido: un banco
+      que se llama `llaveCheck` y comprueba que no hay llaves es peor que no tenerlo,
+      porque el nombre dice que el sistema existe. 220 pruebas → 69 que miran lo que
+      ahora importa: que las diez cajas abren y se gastan, que cuestan lo mismo que
+      antes el par, que las llaves se redimen una sola vez, que no queda ninguna carta,
+      entrada de botín ni texto que hable de llaves, y que la cadena T1→T10 sigue
+      entera — sin llaves **esa cadena es el contenido de la caja alta**.
 
 ### El contenido que no se podía conseguir
 

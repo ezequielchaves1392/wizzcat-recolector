@@ -14,18 +14,14 @@
 import { TIER_SYSTEM } from '../data/tiers';
 import { rollPotentialFrom, poderDeCompanero } from '../data/crafting';
 import { generateCollectorByTier } from '../data/generators';
-import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, costeDeLlave, type ExpansorTier } from '../data/store';
+import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
-// `CRATE_KEY_TIER` y `KEY_DEFS` entran como VALOR porque la entrada de llaves de
-// cada caja se construye desde ellos. Antes iban escritos a mano y por eso la
-// llave del Vacío no salía de ninguna parte: la caja legendaria era imposible
-// de abrir (B6). Ver `buildKeyLoot`.
-import { CRATE_KEY_TIER, KEY_DEFS, CRYSTAL_DEFS, type KeyTier } from '../data/items';
+import { CRYSTAL_DEFS } from '../data/items';
 import { formatNumber } from '../utils/format';
 import type { WarehouseItem } from '../types';
 
-export type LootKind = 'nanites' | 'crystals' | 'keys' | 'companion' | 'collector' | 'crate' | 'consumable' | 'cosmetic';
+export type LootKind = 'nanites' | 'crystals' | 'companion' | 'collector' | 'crate' | 'consumable' | 'cosmetic';
 
 export interface CrateReward {
   kind: LootKind;
@@ -56,16 +52,6 @@ export interface CrateReward {
    * una caja común da cristal básico y una legendaria, uno de Fase.
    */
   materialTier?: number;
-  /**
-   * Nivel de llave que otorga el botín. Cada cofre deja la suya.
-   *
-   * Es `KeyTier` y no `number` a propósito: el botín declara qué llave deja y
-   * el aplicador tiene que respetar ese número. Con `number` el compilador
-   * aceptaba cualquier valor, y como el aplicador además ignoraba el
-   * argumento, una legendaria enseñaba "+N Llaves Rúnicas" y entregaba una
-   * Llave Reforzada sin que nada lo impidiera.
-   */
-  keyTier?: KeyTier;
 }
 
 // Colores de rareza. Devolvemos la clase de texto y la de borde por separado:
@@ -631,70 +617,6 @@ export interface LootBuildContext {
 const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 /**
- * La entrada de llaves de una caja, y sale de `CRATE_KEY_TIER`: **cada caja
- * suelta la llave que la abre**.
- *
- * POR QUÉ ESTA FUNCIÓN Y NO CUATRO ENTRADAS ESCRITAS A MANO. Antes las cuatro
- * estaban escritas una por una, con su nombre, su texto y su nivel, y por eso la
- * cadena era una escalera imposible (B6): la legendaria soltaba la Rúnica, la
- * Rúnica solo salía de la legendaria, y **la del Vacío no salía de ninguna
- * parte**, así que la caja legendaria no se podía abrir nunca. Con la tabla, la
- * leyenda del Vacío sale de la legendaria porque es lo que la tabla dice, no
- * porque alguien lo escribiera.
- *
- * Y EL NOMBRE Y EL TEXTO TAMBIÉN SALEN DE AQUÍ, y no están en la línea de
- * abajo, por la misma razón que la tienda: nombre, texto y nivel tenían tres
- * copias y ninguna se deducía de las otras. Un botín que anuncia una llave con
- * un nombre que no es el de esa llave vuelve a ser el bug, solo que en la
- * ruleta.
- *
- * LA CANTIDAD ES 1 O 2 PARA TODAS, a propósito. Es lo justo para devolver parte
- * de lo que costó la llave y no más: si una caja devolviera la llave entera,
- * comprar llave y caja en la tienda sería indiferente y el cofre dejaría de ser
- * una decisión de riesgo. Con 1 o 2, abrir es siempre una pérdida neta de
- * nanitas y la tienda nunca es el camino bueno.
- */
-function buildKeyLoot(crateType: CrateType): LootEntry {
-  const tier = CRATE_KEY_TIER[crateType];
-  const def = KEY_DEFS[tier];
-  return {
-    id: 'keys',
-    weight: 10,
-    // `pesoComo` es la rareza de la CAJA, y el motivo es el mismo que en las
-    // piedras: la llave T9 es Divina porque es la novena, no porque el cofre la
-    // vuelva especial. Sin esto, la fila de llaves de la caja T9 competía en la
-    // bolsa Divina con un peso de autor de 10 sobre una bolsa de 1/150, y medido
-    // salía **menos de una vez cada 400 aperturas** — o sea, casi nunca. La
-    // cadena de cajas de F31 depende de que cada caja devuelva la llave que la
-    // abre, así que un peso que la hace casi inalcanzable no es un desajuste de
-    // balance: es la cadena rota por el otro lado.
-    pesoComo: CRATE_TYPES[crateType].rarity,
-    // LA CANTIDAD SE TIRA AQUÍ DENTRO, y no al construir la tabla. `CRATE_LOOT`
-    // se escribe una vez al cargar el módulo, así que un `rand()` al lado de
-    // `def` la fijaría para toda la partida: se vería "+1 Llave de Cifrado" en las
-    // mil cajas comunes que abrieras. Un banco que mirase una sola tirada no lo
-    // vería nunca.
-    build: () => {
-      const a = rand(1, 2);
-      // El plural sale de `def.namePlural` y no de retocar el singular: el plural
-      // de "Llave Rúnica" es "Llaves Rúnicas", con la "s" en el adjetivo, y el de
-      // "Llave de Cifrado" es "Llaves de Cifrado", sin nada que añadir al final.
-      const etiqueta = a > 1 ? def.namePlural : def.name;
-      return {
-        kind: 'keys',
-        amount: a,
-        name: def.name,
-        label: `+${a} ${etiqueta}`,
-        details: def.details,
-        rarity: def.rarity,
-        icon: 'key',
-        keyTier: tier
-      };
-    }
-  };
-}
-
-/**
  * EL EXPANSOR DE CADA CAJA: EL DE SU MISMO TIER.
  *
  * **ANTES LO DABA EL `Math.min(3, tier)`, Y ESO ERA UNA TAPA.** La caja T4 a la
@@ -986,8 +908,21 @@ const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
  * caja **no pierde y no gana**, y todo lo demás sí pierde: que es la forma
  * honesta de que una caja sea una decisión y no una inversión.
  */
+/**
+ * EL TOPE DE REVENTA DE LO QUE SALE DE UNA CAJA, Y POR QUÉ AHORA ES LA CAJA SOLA.
+ *
+ * Antes era `costeDeCaja(tier) + costeDeLlave(tier)`, o sea **las tres cuartas
+ * partes del valor del objeto de su tier**. Y sigue valiendo exactamente eso, porque
+ * la caja **subió a ese precio** cuando se quitaron las llaves: el jugador pagaba el
+ * par y ahora paga la caja, y el par era la caja.
+ *
+ * O sea que este número **no se ha movido**, y eso es lo que hace que quitar las
+ * llaves sea neutro en vez de un regalo: el premio de nanitas de cada caja es un
+ * porcentaje de este tope, y el techo de reventa de un recolector o un compañero
+ * que sale de un cofre es este mismo número.
+ */
 function topeDeVenta(tier: number): number {
-  return costeDeCaja(tier) + costeDeLlave(tier);
+  return costeDeCaja(tier);
 }
 
 /**
@@ -1135,11 +1070,6 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     }
   });
 
-  // La llave de la caja, la suya. Sale de `CRATE_KEY_TIER` y el nombre del
-  // `label` sale de `KEY_DEFS`, así que la ruleta no puede anunciar una llave que
-  // no sea la que entra.
-  tabla.push(buildKeyLoot(tier));
-
   if (!esUltima) {
     // LA CAJA SIGUIENTE. Esta entrada es la cadena de F31 entera: sin ella, la
     // T2 no llega a la T3 y el jugador se queda en la T10 sin poder. Y no sale de
@@ -1268,9 +1198,6 @@ export function pickLoot(crateType: CrateType, weights?: number[]): LootEntry {
 export type LootApplier = {
   nanites: (n: number) => void;
   crystals: (n: number, tier: number) => void;
-  /** `tier` es el nivel de llave que ANUNCIA el botín. No es opcional: ignorarlo
-   *  es lo que hacía que la ruleta prometiese una llave y entregara otra. */
-  keys: (n: number, tier: KeyTier) => void;
   addItem: (item: any) => boolean;
   hasSpace: () => boolean;
   /** Desbloquea un cosmético. `false` si ya lo tenía. */
@@ -1331,9 +1258,6 @@ export function resolveLootAmount(crateType: CrateType, entry: Omit<CrateReward,
     const value = Math.round(base.amount * (1 + RARITY_RANK[base.rarity] * 0.25));
     return { ...base, amount: value, label: `+${value} Cristales de Mejora` };
   }
-  // Las llaves no se reescalan: la entrada ya trae su cantidad y su `label`
-  // redactado ("+2 Llaves Reforzadas"). Concatenarle un "s" al nombre salía
-  // "Llave de Cifrados", que es peor que no escribir nada.
   return base;
 }
 
@@ -1346,7 +1270,7 @@ export function resolveLootAmount(crateType: CrateType, entry: Omit<CrateReward,
  * dice.
  */
 export function isCountedLoot(reward: CrateReward): boolean {
-  if (reward.kind === 'nanites' || reward.kind === 'crystals' || reward.kind === 'keys') return true;
+  if (reward.kind === 'nanites' || reward.kind === 'crystals') return true;
   if (reward.kind === 'crate' || reward.kind === 'consumable') return reward.amount > 1;
   return false;
 }
@@ -1398,10 +1322,6 @@ export function rollCrateReward(crateType: CrateType, applier: LootApplier): Cra
       // ese nivel sea SIEMPRE el de la caja. El `?? 1` es el suelo: una entrada
       // sin `materialTier` es un dato corrupto, y el T1 siempre está a mano.
       applier.crystals(reward.amount, reward.materialTier ?? 1);
-      return reward;
-    }
-    case 'keys': {
-      applier.keys(reward.amount, reward.keyTier ?? 1);
       return reward;
     }
     case 'cosmetic': {

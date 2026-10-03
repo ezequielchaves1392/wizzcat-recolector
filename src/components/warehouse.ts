@@ -37,9 +37,7 @@ import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
-import {
-  KEY_DEFS, CRATE_KEY_TIER, keyNameOpensCrate, keyTierFromName, type KeyTier
-, CRYSTAL_DEFS, crystalTierFromName } from '../data/items';
+import { CRYSTAL_DEFS, crystalTierFromName } from '../data/items';
 import { MAX_CRATE_TIER, type CrateType } from '../data/store';
 
 const TYPE_ICON: Record<string, any> = {
@@ -59,7 +57,6 @@ const TYPE_LABEL: Record<string, string> = {
   collector: 'Recolector',
   companion: 'Compañero',
   crate: 'Caja',
-  key: 'Llave',
   crystal: 'Cristal de Mejora',
   consumable: 'Consumible'
 };
@@ -70,7 +67,6 @@ const TYPE_LABEL: Record<string, string> = {
 // número ya está delante y es el que concuerda.
 const UNIDAD_SINGULAR: Record<string, string> = {
   crate: 'caja',
-  key: 'llave',
   crystal: 'cristal',
   consumable: 'consumible'
 };
@@ -518,7 +514,7 @@ function detailContent(item: any, state: any, game: any): string {
           ${item.type === 'crate' ? `
             <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="open">
-              ${llavesQueSirven(state, item).length > 0 ? 'Abrir caja' : 'Falta la llave'}
+              Abrir caja
             </button>
           ` : ''}
 
@@ -1303,11 +1299,19 @@ export function matchesFilter(w: any, filtro: string): boolean {
 //  dos salen del mismo número.
 // ==========================================================================
 /**
- * Abre una caja.
+ * Abre una caja. Sin llave, sin selector y sin pedir permiso.
  *
- * La llave la elige el jugador de las que tiene, y solo se ofrecen las que
- * sirven para ese cofre. El filtro no es una comodidad: es lo que comunica que
- * hay cuatro tipos de llave y que cada cofre pide el suyo.
+ * **LO QUE SE VA NO ES UNA COMODIDAD, ES UNA DECISIÓN QUE EL JUGADOR TOMABA SIN
+ * QUERER.** Antes había que tener la llave del nivel, y la llave venía de la caja
+ * anterior o de la tienda: dos caminos, dos estados en el botón ("Abrir caja" o
+ * "Falta la llave") y un selector para cuando había más de una que sirviera. Todo
+ * eso era **el mismo juego con un paso más**, y el paso no decidía nada: el
+ * premio que salía no dependía de la llave.
+ *
+ * Ahora el botón tiene **un solo texto** y no hay nada que comprobar antes de
+ * abrir. Que el motor siga validando sigue siendo lo correcto —la vista nunca
+ * decide si una operación es legal, solo la pide—, pero la vista ya no *predice*
+ * si lo es.
  */
 function openCrate(game: any, item: any, redraw: () => void) {
   const crateType = inferCrateType(item.name);
@@ -1319,55 +1323,34 @@ function openCrate(game: any, item: any, redraw: () => void) {
     return;
   }
 
-  const llaves = llavesQueSirven(game.getState(), item);
-
-  if (llaves.length === 0) {
-    const necesaria = KEY_DEFS[CRATE_KEY_TIER[crateType as keyof typeof CRATE_KEY_TIER]];
-    showToast(`Necesitas ${necesaria?.name ?? 'una llave'} para abrir ${item.name}.`, 'info');
-    return;
-  }
-
-  const conUnidad = (k: any) => k.stackCount || 1;
-  const total = llaves.reduce((a: number, k: any) => a + conUnidad(k), 0);
-
-  const etiquetaLlave = (k: any) =>
-    `${k.name}${conUnidad(k) > 1 ? ` ×${conUnidad(k)}` : ''}`;
-
-  // Con una sola llave posible no hace falta preguntar: se usa.
-  if (llaves.length === 1) {
-    confirmarYabrir(game, item, crateType, llaves[0], redraw);
-    return;
-  }
-
-  showKeyPicker(llaves, total, (elegida) => {
-    confirmarYabrir(game, item, crateType, elegida, redraw);
-  });
+  confirmarYabrir(game, item, crateType, redraw);
 }
 
 function confirmarYabrir(
-  game: any, item: any, crateType: any, llave: any, redraw: () => void
+  game: any, item: any, crateType: any, redraw: () => void
 ) {
   // F18: con pila se pregunta cuántas, con el mismo selector de la venta. El
   // tope es lo que de verdad se puede abrir, y lo decide `maximoDeApertura()`:
-  // cajas Y llaves, lo menor de los dos, y el tope de una apertura.
+  // las cajas que hay, y el tope de una apertura. **El mínimo de las llaves se fue
+  // con ellas**, y con él la mitad de la comprobación.
   //
   // La regla vive en `crateSummary.ts` y no aquí. Antes era este `Math.min`
   // suelto, y eso era R2 en la forma más silenciosa que hay: la regla no estaba
   // duplicada, estaba **escondida** en el único sitio del proyecto al que ningún
   // banco puede llegar.
-  const max = maximoDeApertura(stackUnits(item), stackUnits(llave));
+  const max = maximoDeApertura(stackUnits(item));
   if (max <= 1) {
     showConfirmModal(
-      mensajeAbrirCaja(llave.name),
-      () => abrirCajas(game, item, crateType, llave, 1, redraw),
+      mensajeAbrirCaja(item.name),
+      () => abrirCajas(game, item, crateType, 1, redraw),
       { sublabel: item.name, confirmText: 'Abrir' }
     );
     return;
   }
 
   showConfirmModal(
-    mensajeAbrirCaja(llave.name),
-    (units) => abrirCajas(game, item, crateType, llave, units ?? max, redraw),
+    mensajeAbrirCaja(item.name),
+    (units) => abrirCajas(game, item, crateType, units ?? max, redraw),
     {
       sublabel: item.name,
       confirmText: 'Abrir',
@@ -1375,7 +1358,7 @@ function confirmarYabrir(
         max,
         itemName: item.name,
         unitName: 'caja',
-        amount: (n) => `${n} × ${llave.name}`,
+        amount: (n) => `${n} × ${item.name}`,
         verbo: 'abrir',
         sufijoImporte: '',
       }
@@ -1384,7 +1367,7 @@ function confirmarYabrir(
 }
 
 /**
- * Abre N cajas seguidas con la misma llave y enseña UNA lista de lo que salió.
+ * Abre N cajas seguidas y enseña UNA lista de lo que salió.
  *
  * Cada apertura es una llamada entera a `openCrateBox`: el motor consume, sortea
  * y aplica de una en una, así que un lote es N operaciones honestas y no una
@@ -1408,12 +1391,12 @@ function confirmarYabrir(
  * "sumar nanitas" y "enseñar el total" se separen.
  */
 function abrirCajas(
-  game: any, item: any, crateType: any, llave: any, n: number, redraw: () => void
+  game: any, item: any, crateType: any, n: number, redraw: () => void
 ) {
   const premios: any[] = [];
   let motivo = '';
   for (let i = 0; i < n; i++) {
-    const res = game.openCrateBox(item.id, llave.id);
+    const res = game.openCrateBox(item.id);
     if (!res.ok || !res.reward) {
       motivo = res.msg || 'No se pudo abrir la caja.';
       break;
@@ -1445,114 +1428,31 @@ function abrirCajas(
 }
 
 /**
- * El mensaje de "se gastará la llave y la caja", con el nombre de la llave
- * destacado.
+ * El mensaje de "se gastará la caja", con el nombre de la caja destacado.
  *
- * Se monta con nodos y no con una cadena porque `showConfirmModal` pinta el
- * texto con `textContent` a propósito: el mensaje también lo escriben el admin
- * y el guardado (R25), así que un `<b>` dentro de la cadena salía en pantalla
- * tal cual y el jugador leía "Se gastará <b>Llave Reforzada</b>".
+ * **LO QUE ESTA FUNCIÓN DICE Y POR QUÉ SIGUE SIENDO UN NODO Y NO UNA CADENA.** El
+ * nombre va en un `span` aparte porque el texto también lo escriben el admin y el
+ * guardado (R25), y un `<b>` dentro de la cadena salía en pantalla tal cual: el
+ * jugador leía "Se gastará <b>Llave Reforzada</b>". Ahora solo hay un nombre y es el
+ * de la caja, que viene de la partida, así que **el mismo cuidado y el mismo
+ * motivo**: sigue yendo por `textContent`, porque el día que alguien lo escriba como
+ * cadena va a aparecer la etiqueta dentro del mensaje.
  *
- * El nombre va por `textContent` también: viene del guardado y aquí no se
- * decodifica nada, ni siquiera la parte que sí lleva formato.
- *
- * POR QUÉ LA SEGUNDA FRASE NO EXPLICA CÓMO SE SORTEA. Decía "El botín ya está
- * decidido: la ruleta solo lo enseña". Es cierto —el motor sortea en
- * `openCrateBox` y el trompo lo enseña—, pero este es justo el sitio donde ese
- * texto hace daño: es lo último que se lee antes de confirmar, y leerlo convierte
- * la confirmación en "pago por ver una animación que no hace nada". El jugador
- * sigue sin saber qué va a salir, que es lo que hace que tires la llave.
+ * Y la segunda frase, la de la ruleta, sigue sin explicar cómo se sortea. Es a
+ * propósito: es lo último que se lee antes de confirmar, y leerlo convierte la
+ * confirmación en "pago por ver una animación que no hace nada". Lo que el jugador
+ * vive es que no sabe qué va a salir hasta que la casilla se para.
  */
-function mensajeAbrirCaja(nombreLlave: string): HTMLElement {
+function mensajeAbrirCaja(nombreCaja: string): HTMLElement {
   const texto = document.createElement('span');
   const destacada = document.createElement('span');
   destacada.className = 'font-bold accent-text';
-  destacada.textContent = nombreLlave;
+  destacada.textContent = nombreCaja;
   texto.append(
     'Se gastará ', destacada,
-    ' y la caja. La ruleta gira y te dice qué ha salido. Tabla distinta por caja.'
+    '. La ruleta gira y te dice qué ha salido. Tabla distinta por caja.'
   );
   return texto;
-}
-
-/** Selector de llave. Solo aparece cuando hay más de una opción válida. */
-function showKeyPicker(
-  llaves: any[], total: number, onPick: (llave: any) => void
-) {
-  const overlay = document.createElement('div');
-  overlay.className = 'sheet-overlay z-[70]';
-  overlay.innerHTML = `
-    <div class="absolute inset-0 bg-black/60 pointer-events-auto" data-cerrar></div>
-    <div class="sheet-panel card-glass-elevated animate-rise-in">
-      <div class="flex items-start gap-3 mb-3">
-        <span class="w-11 h-11 rounded-xl grid place-items-center flex-shrink-0 ring-raro rarity-raro
-                     [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('key')}</span>
-        <div class="min-w-0 flex-1">
-          <h3 class="font-['Orbitron'] font-bold text-[14px] text-[var(--text-main)] leading-tight">
-            ¿Con qué llave?
-          </h3>
-          <p class="text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
-            ${llaves.length} tipos disponibles · ${total} llaves en total
-          </p>
-        </div>
-        <button data-cerrar class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
-                aria-label="Cerrar">
-          <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
-        </button>
-      </div>
-
-      <div class="flex flex-col gap-1.5">
-        ${llaves.map((k: any, i: number) => {
-          const t = typeof k.tier === 'number' ? k.tier : keyTierFromName(k.name || '');
-          const def = KEY_DEFS[t as KeyTier];
-          return `
-            <button data-key="${k.id}" data-idx="${i}"
-                    class="w-full rounded-xl border px-3 py-2.5 flex items-center gap-2.5 text-left cursor-pointer
-                           transition active:scale-[0.99] border-[var(--border-color)] hover:border-[var(--accent)]"
-                    style="background: color-mix(in srgb, var(--accent) 7%, transparent)">
-              <span class="flex-shrink-0 ${rarityClass(k.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('key')}</span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${k.name}</span>
-                <span class="block text-[9px] font-mono text-[var(--text-muted)] truncate mt-0.5">${k.details || def?.details || ''}</span>
-              </span>
-              <span class="text-[11px] font-mono accent-text tabular flex-shrink-0">×${k.stackCount || 1}</span>
-            </button>`;
-        }).join('')}
-      </div>
-    </div>
-  `;
-
-  const cerrar = () => { overlay.remove(); };
-  overlay.querySelectorAll('[data-cerrar]').forEach(b => b.addEventListener('click', cerrar));
-  overlay.querySelectorAll('[data-key]').forEach(b => {
-    b.addEventListener('click', () => {
-      sfx.pick();
-      const idx = Number((b as HTMLElement).dataset.idx);
-      cerrar();
-      onPick(llaves[idx]);
-    });
-  });
-  document.body.appendChild(overlay);
-}
-
-/**
- * Las llaves del almacén que sirven para abrir este cofre.
- *
- * Vive aquí y no en el game loop porque es una lectura: el juego solo necesita
- * saber si hay alguna y cuál es, y el selector de llave es cosa de la vista.
- */
-function llavesQueSirven(state: any, caja: any): any[] {
-  const crateType = inferCrateType(caja.name);
-  if (!crateType) return [];
-  return ((state.warehouse as any[]) || [])
-    .filter((w: any) => w.type === 'key' && keyNameOpensCrate(w.name || '', crateType))
-    .sort((a: any, b: any) => {
-      const ta = typeof a.tier === 'number' ? a.tier : keyTierFromName(a.name || '');
-      const tb = typeof b.tier === 'number' ? b.tier : keyTierFromName(b.name || '');
-      // De menor a mayor: se gasta la más pobre que sirva, que es la que abunda.
-      // Guardar la rara para cuando toque es decisión del jugador.
-      return ta - tb;
-    });
 }
 
 /**

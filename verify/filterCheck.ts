@@ -25,7 +25,7 @@ import { visibleStacksFor, moveItemTo, matchesFilter } from '../src/components/w
 import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave,
-  collector, companion, crate, key, crystal, consumable
+  collector, companion, crate, crystal, consumable
 } from './kit';
 
 /** Los ids de las celdas, que es lo que el jugador ve y lo que se comprueba. */
@@ -43,17 +43,17 @@ async function main() {
     const g = await boot(baseSave([
       collector('r1'), collector('r2'),
       companion('m1'),
-      crate('c1'), key('k1'), crystal('x1'), consumable('u1', 'afk')
+      crate('c1'), crystal('x1'), consumable('u1', 'afk')
     ]));
 
     check('filtro Todo: deja pasar todo',
-      celdas(g, 'all').length === 7, celdas(g, 'all').join(','));
+      celdas(g, 'all').length === 6, celdas(g, 'all').join(','));
     check('filtro Recolectores: solo recolectores',
       celdas(g, 'collector').join(',') === 'r1,r2', celdas(g, 'collector').join(','));
     check('filtro Companeros: solo companeros',
       celdas(g, 'companion').join(',') === 'm1', celdas(g, 'companion').join(','));
     check('filtro Otros: ni recolectores ni companeros',
-      celdas(g, 'otros').join(',') === 'c1,k1,x1,u1', celdas(g, 'otros').join(','));
+      celdas(g, 'otros').join(',') === 'c1,x1,u1', celdas(g, 'otros').join(','));
 
     // Los filtros se PARTEN la rejilla: nada puede estar en dos y nada se
     // puede perder. Si se pierde un item al filtrar, el jugador cree que ha
@@ -130,20 +130,25 @@ async function main() {
     // `Math.min(count, tope)` y con 25 cajas pintaba 20, que es lo que el jugador
     // reportaba como "tengo 25 y me sale 20" (R3).
     //
-    // **Y AHORA EL CASO SON LAS LLAVES, PORQUE EL DE LAS CAJAS YA NO EXISTE.**
-    // Las cajas tienen tope de PILA —20 de almacenamiento—, así que 25 cajas son
-    // dos celdas de 20 y 5 y la pregunta de "25 en una celda" ya no se puede
-    // hacer. Las llaves no tienen tope de pila: 150 llaves son una celda, y el
-    // tope de 99 es solo de pintado. Es el mismo bug, en el tipo donde todavía
-    // puede ocurrir, y por eso la prueba se queda ahí en vez de desaparecer.
-    const g = await boot(baseSave([key('k1', 1, 150)]));
+    // **Y AHORA EL CASO SON LOS CRISTALES, PORQUE EL DE LAS CAJAS YA NO EXISTE.**
+    // Las cajas tienen tope de PILA —99 de almacenamiento—, así que 150 cajas son
+    // dos celdas de 99 y 51 y la pregunta de "150 en una celda" ya no se puede
+    // hacer. Los cristales NO tienen tope de pila: 150 cristales son una celda, y
+    // el 99 de `MAX_STACK` es solo de pintado. Es el mismo bug, en el tipo donde
+    // todavía puede ocurrir, y por eso la prueba se queda ahí en vez de desaparecer.
+    //
+    // Antes esta prueba usaba llaves, que también eran moneda sin tope. Ya no hay
+    // llaves que meter: al cargar se venden solas, así que la partida se quedaría
+    // sin un solo item y `celda` sería `undefined`.
+    const g = await boot(baseSave([crystal('x1', 1, 150)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
     check('pilas: el contador ya NO se recorta al tope (tope 99, hay 150)', celda.count === 150,
       'count=' + celda.count);
     check('pilas: y el item sigue con sus unidades reales', celda.item.stackCount === 150,
       'stackCount=' + celda.item.stackCount);
-    check('pilas: la esquina dice "99+" y no "99"', textoDeCantidad(celda.count, 99) === '99+',
-      textoDeCantidad(celda.count, 99));
+    check('pilas: la esquina dice "99+" y no "99"',
+      textoDeCantidad(celda.count, MAX_STACK.crystal) === '99+',
+      textoDeCantidad(celda.count, MAX_STACK.crystal));
   }
   {
     // Y EL CONTRAPUNTO: con tope de pila, 250 cajas SÍ son tres celdas. No es que
@@ -159,14 +164,15 @@ async function main() {
       celdas.map(c => textoDeCantidad(c.count, MAX_STACK.crate)).join(' · '));
   }
   {
-    // El tope de llaves es 99, como el de las cajas. Con el tope metido en la
-    // función `textoDeCantidad`, una tabla mezclada se ve: 120 llaves se
+    // El tope de cristal es 99, como el de las cajas. Con el tope metido en la
+    // función `textoDeCantidad`, una tabla mezclada se ve: 120 cristales se
     // pintarían "20+" como si fueran cajas.
-    const g = await boot(baseSave([key('k1', 1, 120)]));
+    const g = await boot(baseSave([crystal('x1', 1, 120)]));
     const celda = visibleStacksFor(g, s(g), 'all', 'default')[0];
-    check('pilas: 120 llaves tampoco se recortan', celda.count === 120, 'count=' + celda.count);
-    check('pilas: y con el tope de llave la esquina es "99+", no "20+"',
-      textoDeCantidad(celda.count, 99) === '99+', textoDeCantidad(celda.count, 99));
+    check('pilas: 120 cristales tampoco se recortan', celda.count === 120, 'count=' + celda.count);
+    check('pilas: y con el tope de cristal la esquina es "99+", no "20+"',
+      textoDeCantidad(celda.count, MAX_STACK.crystal) === '99+',
+      textoDeCantidad(celda.count, MAX_STACK.crystal));
   }
   {
     // Un tipo que NO es apilable nunca se agrupa, por muchas unidades que tenga:
@@ -179,10 +185,10 @@ async function main() {
       celdas(g, 'all').length === 2, celdas(g, 'all').join(','));
   }
   {
-    // Dos llaves de DISTINTO nivel no se aunan: el jugador tiene que poder
-    // elegir con cual abrir el cofre.
-    const g = await boot(baseSave([key('k1', 1), key('k2', 2)]));
-    check('pilas: dos llaves de distinto nivel no se aunan',
+    // Dos items de DISTINTO nivel no se aunan: el jugador tiene que poder elegir con
+    // cuál de los dos, y por eso la pila se distingue por NOMBRE y no por tipo.
+    const g = await boot(baseSave([crystal('x1', 1), crystal('x2', 2)]));
+    check('pilas: dos cristales de distinto nivel no se aunan',
       celdas(g, 'all').length === 2, celdas(g, 'all').join(','));
   }
   {
@@ -301,15 +307,19 @@ async function main() {
     // el guardado puede representar: el array es una lista, no una bandeja con
     // huecos. Y tiene que decirse, no dejar al jugador con la certeza de que el
     // arrastre esta roto.
+    //
+    // La pila son 19 CRISTALES iguales: se funden en un item al cargar y de ahí
+    // una celda. Antes eran 19 llaves, que además ya no se pueden meter aquí —
+    // al cargar se venden solas y la partida se queda con dos items.
     const items = [collector('dron'), companion('blaster')];
-    for (let i = 0; i < 19; i++) items.push(key('k' + i));
+    for (let i = 0; i < 19; i++) items.push(crystal('x' + i));
     const g = await boot(baseSave(items, { warehouseCapacity: 21 }));
     check('huecos: con una pila de 19 hay 3 celdas y 21 huecos pintados',
-      celdas(g, 'all').length === 3 && celdas(g, 'all').join(',') === 'dron,blaster,k0',
+      celdas(g, 'all').length === 3 && celdas(g, 'all').join(',') === 'dron,blaster,x0',
       celdas(g, 'all').join(','));
     const r = moveItemTo(g, 'dron', 3, 'all', 'default');
     check('huecos: soltar en un hueco lleva el item a la ultima celda ocupada',
-      r === true && celdas(g, 'all').join(',') === 'blaster,k0,dron', celdas(g, 'all').join(','));
+      r === true && celdas(g, 'all').join(',') === 'blaster,x0,dron', celdas(g, 'all').join(','));
   }
   {
     // Y soltar en un hueco lo que YA esta al final no puede hacer nada, porque
@@ -318,11 +328,11 @@ async function main() {
     // no se puede mover. El banco no puede comprobar el aviso (es de la vista),
     // pero si que puede fijar que el estado no se rompe.
     const items = [collector('dron'), companion('blaster')];
-    for (let i = 0; i < 19; i++) items.push(key('k' + i));
+    for (let i = 0; i < 19; i++) items.push(crystal('x' + i));
     const g = await boot(baseSave(items, { warehouseCapacity: 21 }));
-    const r = moveItemTo(g, 'k0', 3, 'all', 'default');
+    const r = moveItemTo(g, 'x0', 3, 'all', 'default');
     check('huecos: soltar en un hueco lo que ya esta al final no rompe nada',
-      r === true && celdas(g, 'all').join(',') === 'dron,blaster,k0', celdas(g, 'all').join(','));
+      r === true && celdas(g, 'all').join(',') === 'dron,blaster,x0', celdas(g, 'all').join(','));
   }
   {
     // El caso que el comentario del codigo describe: soltar sobre su propia
@@ -339,8 +349,8 @@ async function main() {
     //
     // Se usan cajas de DISTINTO tipo: dos del mismo tipo son la misma pila y se
     // funden en un item, asi que no habria dos ids que arrastrar. Para el caso de
-    // "una celda con varios items detras" (que es el de verdad) esta el caso de las
-    // 19 llaves de mas abajo.
+    // "una celda con varios items detras" (que es el de verdad) esta el caso de los
+    // 19 cristales de mas abajo.
     const g = await boot(baseSave([
       crate('p1', 1, 2), crate('p2', 6, 3), collector('z')
     ]));
@@ -448,11 +458,11 @@ async function main() {
   {
     // Un movimiento no puede cambiar NADA mas: ni.nanites, ni el contador, ni
     // los items. Es reordenar, no editar.
-    const items = [collector('a'), crate('c1'), key('k1')];
+    const items = [collector('a'), crate('c1'), crystal('x1')];
     const g = await boot(baseSave(items, { nanites: 5000 }));
-    const antes = JSON.stringify({ n: s(g).nanites, k: s(g).keys, c: s(g).crates.common });
+    const antes = JSON.stringify({ n: s(g).nanites, x: s(g).crystalTotal, c: s(g).crates.common });
     moveItemTo(g, 'a', 2, 'all', 'default');
-    const despues = JSON.stringify({ n: s(g).nanites, k: s(g).keys, c: s(g).crates.common });
+    const despues = JSON.stringify({ n: s(g).nanites, x: s(g).crystalTotal, c: s(g).crates.common });
     check('arrastre: no toca nanitas ni contadores', antes === despues, despues);
   }
 

@@ -93,7 +93,6 @@ const MOCK: any = {
   totalClicks: 4820,
   totalInfraestructure: 0,
   cratesOpened: 128,
-  keys: 4,
   upgradeCrystals: 31,
   warehouse: [
     {

@@ -48,8 +48,7 @@ const MOCK: any = {
     { id: 'w1', name: 'Blaster Láser', type: 'collector', details: '+5', rarity: 'Común', tier: 1, level: 3, damage: 5, sellPrice: 250, equipped: true },
     { id: 'c1', name: 'Caja Común', type: 'crate', details: 'x', rarity: 'Común', tier: 0, stackable: true, stackCount: 2, sellPrice: 120 },
     { id: 'c2', name: 'Caja Legendaria', type: 'crate', details: 'x', rarity: 'Legendario', tier: 0, stackable: true, stackCount: 1, sellPrice: 4500 },
-    { id: 'k1', name: 'Llave de Cifrado', type: 'key', details: 'Abre Cofres Comunes y Raros', rarity: 'Común', tier: 0, stackable: true, stackCount: 3, sellPrice: 480 },
-    { id: 'k2', name: 'Llave del Vacío', type: 'key', details: 'Abre cualquier cofre', rarity: 'Legendario', tier: 3, stackable: true, stackCount: 1, sellPrice: 9000 },
+    { id: 'x3', name: 'Cristal del Vacío', type: 'crystal', details: 'x4 a la probabilidad de mejora', rarity: 'Divino', tier: 8, stackable: true, stackCount: 1, sellPrice: 30000 },
     { id: 'x1', name: 'Cristal de Afino', type: 'crystal', details: 'x1', rarity: 'Común', tier: 1, stackable: true, stackCount: 5, sellPrice: 720 },
     { id: 'x2', name: 'Cristal Singular', type: 'crystal', details: 'x4', rarity: 'Legendario', tier: 4, stackable: true, stackCount: 2, sellPrice: 30000 },
     { id: 'p1', name: 'Dron Explorador', type: 'companion', details: '+2/s', rarity: 'Común', tier: 1, sellPrice: 250 }
