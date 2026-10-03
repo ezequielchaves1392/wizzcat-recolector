@@ -1,6 +1,6 @@
 import { ic } from './icons';
 import { formatNumber } from '../utils/format';
-import { AFFIX_BY_ID, collectorMaxLevel } from '../data/crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 
 /**
@@ -85,7 +85,7 @@ export function renderPanel(
             </div>
             <div class="flex items-center gap-2 mt-1">
               <span class="text-[10px] font-mono rarity-${slug(rarity)}">${rarity}</span>
-              ${equippedItem.potential ? `<span class="text-[9px] text-amber-400">· ${'★'.repeat(equippedItem.potential)}</span>` : ''}
+              ${`<span class="text-[9px] text-amber-400">· ${estrellasDe(equippedItem.potential)}</span>`}
             </div>
             ${affixes.length ? `
               <div class="flex items-center gap-1 flex-wrap mt-1">

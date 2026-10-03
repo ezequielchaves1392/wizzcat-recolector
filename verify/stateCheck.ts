@@ -123,7 +123,12 @@ async function main() {
     // Todos los campos de progresion, escritos y releidos. Si uno se olvidara en
     // `saveToFirebase`, el jugador lo pierde en cada refresco.
     const g = await boot(baseSave([
-      collector('r1', 4, { level: 5, damage: 80, affixes: ['a'], potential: 3 }),
+      // **EL DAÑO SE SACA DE LA REGLA, NO DE UN NÚMERO ESCRITO.** Estaba en 80 con un
+      // ★3, y un ★3 de T4 vale 75: el item de la prueba se contradecía a sí mismo
+      // y la migración de G4 lo puso en su sitio al recargar. Un fixture
+      // incoherente no mide lo que dice medir —mide la contradicción del autor—,
+      // así que aquí el número sale de `danioDeRango()`, como el de cualquier otro.
+      collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['a'], potential: 3 }),
       crate('c1', 6, 2),
       key('k1', 2, 3),
       crystal('x1', 2, 4),
@@ -168,7 +173,8 @@ async function main() {
     check('guardar: el almacen entero', wh(g2).length === 6, ids(g2).join(','));
     check('guardar: el recolector conserva nivel, dano, afijos y potencial', (() => {
       const r = find(g2, 'r1');
-      return r?.level === 5 && r?.damage === 80 && r?.potential === 3 && JSON.stringify(r?.affixes) === '["a"]';
+      return r?.level === 5 && r?.damage === danioDeRango(4, 3)
+        && r?.potential === 3 && JSON.stringify(r?.affixes) === '["a"]';
     })(), JSON.stringify(find(g2, 'r1')));
     check('guardar: el companero activo sigue activo', t.activeCompanions.join(',') === 'm1',
       t.activeCompanions.join(','));

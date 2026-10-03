@@ -34,6 +34,7 @@ import './style.modules.css';
 import { auth } from './firebase';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { formatNumber } from './utils/format';
+import { estrellasDe } from './data/crafting';
 import { ic } from './ui/icons';
 import { showToast } from './utils/toast';
 import { showConfirmModal } from './utils/modal';
@@ -881,7 +882,7 @@ function pintarDetalle() {
                   </td>
                   <td class="py-1.5 pr-2" style="color:${colorRareza(it.rarity)}">${esc(it.rarity || '—')}</td>
                   <td class="py-1.5 pr-2 text-right text-[var(--text-muted)]">
-                    ${it.level != null ? it.level : '—'}${it.potential ? ' ' + '★'.repeat(it.potential) : ''}
+                    ${it.level != null ? it.level : '—'} ${estrellasDe(it.potential)}
                   </td>
                   <td class="py-1.5 pr-2 text-right text-[var(--text-main)]">
                     ${it.damage != null ? formatNumber(it.damage) : '—'}

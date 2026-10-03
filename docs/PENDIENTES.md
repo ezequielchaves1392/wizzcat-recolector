@@ -82,10 +82,29 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 
 ### Lote 2 · INVARIANTES DE LOS OBJETOS
 
-- [ ] **G4 · Todo item generado tiene potencial.** El primero del juego no lo tiene, y
-      `potential` ausente se lee como 3: **un item sin potencial es un item que vale un
-      tercio de lo que dice su daño**. Con eso hay que recorrer TODOS los generadores y
-      poner un banco que pregunte "¿todo item que sale del juego tiene 1..5?".
+- [x] **G4 · Todo item tiene potencial, y su daño es el de sus estrellas.** Era el punto
+      que pediste y era **medio bug y medio feature**.
+  - **Los items escritos a mano no salen de ningún generador**, y por eso a nadie se le
+       lzaba mirar. El Blaser Láser de partida venía con `damage: 5` y sin campo, y su
+      texto decía "+5"; con ★3 su daño debería ser 8. **La partida nueva y el reinicio
+      del Ascenso tenían cada uno su propia copia escrita a mano**, con reglas distintas:
+      ascender cambiaba el número del Blaser sin avisar. Ahora los dos salen de las mismas
+      dos fábricas, y son **funciones** y no constantes para que las copias no se
+      compartan (el motor muta `damage` al subir de nivel con cristales).
+  - **Un item sin potencial se pintaba SIN NINGUNA ESTRELLA**, no con cero. Siete
+      plantillas tenían su propio `${item.potential ? '★'.repeat(...) : ''}`, y eso es
+      R2 en la forma más silenciosa: la regla estaba **copiada siete veces y en ninguna
+      era comprobable**, porque `verify/` prueba el motor y no el HTML. Ahora hay una
+      regla, `estrellasDe()`, que siempre da de 1 a 5.
+  - **La migración rellenaba el campo sin ajustar el daño.** `migratePotential()` le ponía
+      ★3 a un item con daño 5 y lo dejaba en 5: **las estrellas decían una cosa y el daño
+      otra**, que es justo para lo que sirven. Ahora `migraPotenciales()` escribe el campo
+      **y deja el daño de acuerdo**, y se aplica en **cada carga**, no solo al subir de
+      versión: una partida guardada a medio camino podía traer un ★5 con el daño de un ★1.
+  - **Y la valoración cobraba por un ★1 un item que hace como un ★3**:
+      `potentialValueMult()` devolvía 1 para cualquier potencial ausente, que es el precio
+      de un ★1, mientras el item se pintaba y pegaba como un ★3. El número del diálogo y
+      el del daño eran de dos juegos distintos.
 - [ ] **G5 · La forja: exactamente 2 del mismo tier.** Y el potencial del nuevo es el
       **promedio** de los dos, y los afijos salen de los dos padres más algún aleatorio.
 - [ ] **G6 · Los botones de forja y de sus compras solo cuando están desbloqueados.**
@@ -723,6 +742,51 @@ versiones.**
       medir pesos y tablas, que son deterministas, y dejar las tiradas para lo que de verdad
       solo se puede comprobar tirando** —y entonces, muchas veces, no 20 sino las que hagan
       falta para que la probabilidad no deje hueco.
+- [x] **Tercera prueba intermitente, y era una carrera, no una tirada.**
+      `playthroughCheck` recargaba sin forzar el guardado, así que leía el documento que
+      hubiera en ese momento. El `setTimeout(1200)` del arranque —el que sube la cola
+      heredada— se colaba en mitad del bucle de clicks y guardaba 13 de 20: el documento
+      tenía 104 en vez de 160. **La prueba pasaba por suerte según cuánto tardara el bucle.**
+      Ahora vuelca y espera antes de recargar. _Salió porque subí el daño del Blaser de
+      partida de 5 a 8: no la rompió G4, la destapó G4.
+- [ ] **Cada arranque programa un guardado que no hacía falta** _(salió de lo anterior)_.
+      `if (user && hayPendientes(uid)) setTimeout(saveToFirebase, 1200)` se comprueba
+      **después** del guardado de carga, y ese guardado acaba de anotar la cola. Así que
+      la condición **es cierta siempre**: cada carga de página dispara una escritura a
+      Firestore 1,2 s después de abrir, para guardar lo mismo que ya está guardado. No
+      rompe nada —es idempotente— pero es tráfico de sobra, y **es lo que se coló en el
+      bucle de clicks**. La condición parece querer decir "quedó algo de la sesión
+      anterior"; hay que mirarla antes de tocar `naniteQueue`.
+
+### G4 · Balance · ESTA MIGRACIÓN SUBE EL DAÑO DE LAS PARTIDAS VIEJAS
+
+**No es un detalle técnico y por eso está aquí, no en un commit.**
+
+La escala de potencial (F33) subió la base de cada tier un 20 % sobre el mínimo del rango
+viejo, y el potencial la multiplica hasta ×2. El efecto es que **el suelo nuevo está
+por encima de toda la escala vieja**, y no en un tier suelto:
+
+| | rango del item viejo | escala nueva |
+|---|---|---|
+| T1 | 5 – 7 | 6 – 10 |
+| T3 | 13 – 19 | **28** – 46 |
+| T5 | 34 – 50 | **95** – 190 |
+
+Al cargar, un recolector viejo de T5 con daño 40 se queda en **95**: más del doble. Y
+como `danioDeRango(tier, potencial)` es lo que manda, es un cambio real, no de pantalla.
+
+**Se acepta**, porque la alternativa es peor: un item con ★3 pegando como un ★1 es un
+item donde **las estrellas mienten**, que es lo que el jugador pidió arreglar. Pero es una
+decisión tuya y es reversible en un sitio: **`potencialYDanoDe()`**, en
+`src/data/crafting.ts`. Si algún día molesta, se cambia esa función y ya está — está
+fijado por una prueba (`potencialCheck`, comprobación C) para que nadie lo descubra
+demasiado tarde.
+
+**Lo que NO hace la migración, y es lo importante:** no toca el poder de los compañeros,
+porque el poder del compañero *es* la posición en el rango y no hay forma exacta de
+deducir un potencial de un número suelto. A un compañero viejo se le da ★3 —que es lo
+que ya se leía— y **su poder se queda como estaba**. Tocarlo sí le cambiaría el ingreso
+a alguien, y eso una migración no puede hacerlo.
 
 ---
 
@@ -818,7 +882,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **26 bancos, 1875
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **26 bancos, 1891
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

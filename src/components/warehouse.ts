@@ -35,7 +35,7 @@ import { showCrateSummary, maximoDeApertura } from './crateSummary';
 import { showCrystalPicker } from './crystalPicker';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
-import { AFFIX_BY_ID, collectorMaxLevel } from '../data/crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import {
   KEY_DEFS, CRATE_KEY_TIER, keyNameOpensCrate, keyTierFromName, type KeyTier
@@ -157,7 +157,7 @@ function draw(
         </span>
         <span class="text-[9px] font-mono ${isEquipped ? 'text-amber-400' : 'text-[var(--text-muted)]'}">
           ${w.tier ? `T${w.tier}` : (w.rarity ?? '')}
-          ${w.potential ? ` ${'★'.repeat(w.potential)}` : ''}
+          ${` ${estrellasDe(w.potential)}`}
         </span>
         ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-panel)] rounded px-0.5">${texto}</span>` : ''}
         ${isEquipped ? `<span class="absolute bottom-0.5 left-1 text-[9px] font-mono text-amber-400">EQ</span>` : ''}
@@ -423,7 +423,7 @@ function detailContent(item: any, state: any, game: any): string {
               <span class="text-[10px] font-mono ${rarityClass(item.rarity)}">${item.rarity}</span>
               ${item.tier ? `<span class="text-[10px] font-mono text-[var(--text-muted)]">T${item.tier}</span>` : ''}
               <span class="text-[10px] font-mono text-[var(--text-muted)]">${TYPE_LABEL[item.type] ?? 'Objeto'}</span>
-              ${item.potential ? `<span class="text-[10px] text-amber-400">${'★'.repeat(item.potential)}</span>` : ''}
+              ${`<span class="text-[10px] text-amber-400">${estrellasDe(item.potential)}</span>`}
             </div>
           </div>
           <button class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"

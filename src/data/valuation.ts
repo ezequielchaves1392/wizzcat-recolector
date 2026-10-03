@@ -14,7 +14,7 @@
 // ==========================================================================
 
 import type { Rarity, CollectorItem } from '../types/domain';
-import { AFFIX_BY_ID, collectorMaxLevel, BASE_COLLECTOR_MAX_LEVEL } from './crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, BASE_COLLECTOR_MAX_LEVEL, potencialNormalizado } from './crafting';
 import { TIER_SYSTEM } from './tiers';
 
 /** Valor de referencia de un recolector base de cada tier (sin nivel ni afijos). */
@@ -65,9 +65,23 @@ export function levelValueMult(level: number, maxLevel = BASE_COLLECTOR_MAX_LEVE
   return mult;
 }
 
-export function potentialValueMult(potential: number): number {
-  if (!potential) return 1;
-  return 1 + (potential - 1) * 0.45;
+/**
+ * Lo que el potencial multiplica el valor de un item.
+ *
+ * **NORMALIZA ANTES DE MULTIPLICAR, Y POR QUÉ ES IMPORTANTE.** Antes devolvía 1
+ * para cualquier potencial ausente o cero, que es el precio de un **★1** — y en
+ * un item sin potencial, ese item **no es un ★1**: se pintaba como ★3 y pegaba
+ * como ★3 (`danioDeRango` normaliza a 3), así que cobraba por un ★1 un item que
+ * hace un 90 % más que un ★1. El número del diálogo y el del daño eran de dos
+ * juegos distintos.
+ *
+ * Con `potencialNormalizado()` los tres coinciden: el daño, las estrellas del
+ * almacén y el precio salen del mismo número. Y después de `migraPotenciales()`
+ * el campo **siempre** está, así que este camino es solo para el item que aún no
+ * ha pasado por la carga — donde, mientras tanto, vale lo que vale de verdad.
+ */
+export function potentialValueMult(potential: number | undefined): number {
+  return 1 + (potencialNormalizado(potential) - 1) * 0.45;
 }
 
 export function affixValueMult(collector: CollectorItem): number {
@@ -131,7 +145,7 @@ export function collectorValue(collector: CollectorItem, opts: ValuationOptions 
   const base = valorBaseTier(Math.max(1, collector.tier)) ?? 200;
   const levelMult = levelValueMult(collector.level || 0, collectorMaxLevel(collector.maxLevel));
   const rarityMult = RARITY_VALUE_MULT[collector.rarity] ?? 1;
-  const potMult = potentialValueMult(collector.potential ?? 0);
+  const potMult = potentialValueMult(collector.potential);
   const affMult = affixValueMult(collector);
   const fameMult = fameValueMult(opts.authorRank ?? null);
   const ageMult = marketAgeMult(collector.forgedAt);

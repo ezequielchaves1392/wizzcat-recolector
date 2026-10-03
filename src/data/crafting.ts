@@ -228,16 +228,101 @@ export function potencialNormalizado(potential: number | undefined): number {
 }
 
 /**
+ * LAS ESTRELLAS DE UN ITEM, SIEMPRE 1 A 5.
+ *
+ * **POR QUÉ ESTA FUNCIÓN Y NO UN `? '★'.repeat(...)` EN CADA PANTALLA.** Porque el
+ * bug era justo ese: siete sitios pintaban `${item.potential ? estrellas : ''}`, y
+ * un item **sin** potencial —o con un 0— se pintaba **sin ninguna estrella**. No
+ * como cero estrellas: como si no tuviera potencial. Y eso es peor que mentir por
+ * una unidad, porque un item sin estrellas parece un item viejo o malgenerado, y
+ * el jugador lo descarta sin mirar el daño.
+ *
+ * La diferencia se ve en el caso real: un recolector con daño 5 y potencial 3 se
+ * pintaba sin nada, y otro con daño 8 y potencial 3 se pintaba con tres. El jugador
+ * los comparaba y no veía ninguna diferencia, cuando uno pega un 60 % más.
+ *
+ * `potencialNormalizado` es la que hace el trabajo: un potencial ausente, un 0, un
+ * 7 o una cadena son todos el mismo caso, y ese caso es ★3. Que se pinte ★3 es
+ * decir la verdad, porque después de `migraPotenciales()` el daño de ese item es
+ * el de ★3.
+ *
+ * **Y NINGÚN BANCO PODRÍA HABERLO VISTO.** La lógica estaba en las plantillas, que
+ * no se ejecutan: `verify/` prueba el motor, no el HTML. Por eso esta función
+ * existe, y por eso los siete sitios la llaman.
+ */
+export function estrellasDe(potential: number | undefined): string {
+  return '★'.repeat(potencialNormalizado(potential));
+}
+
+/** Cuántas estrellas tiene, como número. Para leer el techo y las comparaciones. */
+export function estrellasNumeroDe(potential: number | undefined): number {
+  return potencialNormalizado(potential);
+}
+
+/**
+ * El potencial Y el daño de un item viejo, siempre de acuerdo entre sí.
+ *
+ * Va al revés que `danioDeRango` a propósito: se usa para lo que ya estaba
+ * guardado antes de que existiera el campo del potencial.
+ *
+ * **POR QUÉ DEVUELVE LOS DOS Y NO SOLO EL POTENCIAL.** Porque el potencial sin el
+ * daño no sirve de nada: si un item tiene ★3 y su daño no es el de ★3, entonces
+ * **la estrella miente**. Y una estrella que miente es peor que no tener
+ * estrellas, porque el jugador compara dos items por un número que no es el que
+ * pinta. Devolver los dos juntos hace que sea imposible separarlos.
+ *
+ * **EL POTENCIAL ES EL MÁS CERCANO, Y A EMPATES EL MENOR.** Lo segundo evita el
+ * regalo: si dos potenciales dan el mismo error, gana el menor, así que un empate
+ * nunca **sube** a nadie. Redondear siempre hacia arriba sería un regalo
+ * silencioso a todo el que juega desde antes del campo.
+ *
+ * **LO PRIMERO NO ES «EL CAMBIO MÁS PEQUEÑO», Y HAY QUE DECIRLO.** Elegir el más
+ * cercano limita el movimiento a **medio escalón**, pero no lo deja en cero: la
+ * base de cada tier subió un 20 % sobre el mínimo del rango viejo y el potencial
+ * la multiplica hasta ×2, así que el suelo nuevo queda **por encima** de casi todo
+ * lo que había. Concretamente, un recolector T3 del juego viejo iba de 13 a 19 y
+ * el suelo nuevo es 28: **casi todos los items viejos suben**, y en el T3 es de
+ * unos 15 a 28.
+ *
+ * Eso no lo decide esta función, lo decidió F33 al subir la escala, y aquí solo se
+ * aplica a lo que se guardó antes. La alternativa —dejar el daño viejo y que las
+ * estrellas sean una aproximación— deja **un item con ★3 que pega como un ★1**,
+ * que es justo lo que hay que arreglar. Corregir el dato para que cumpla la regla
+ * es mejor que dejar la regla rota, pero **es una subida de daño para las partidas
+ * viejas y es una decisión de balance, no un detalle de migración**: está escrita
+ * en PENDIENTES.md para que sea visible y para que el sitio donde se revierte, si
+ * algún día toca, sea esta función.
+ */
+export function potencialYDanoDe(
+  tier: number, damage: number
+): { potential: number; damage: number } {
+  const d = Number(damage);
+  if (!Number.isFinite(d) || d <= 0) {
+    return { potential: 3, damage: danioDeRango(tier, 3) };
+  }
+  let potential = 3;
+  let mejorError = Infinity;
+  for (let p = 1; p <= 5; p++) {
+    const error = Math.abs(danioDeRango(tier, p) - d);
+    // `<` y no `<=`: a igualdad de error se queda con el potencial MENOR, y así
+    // un empate nunca sube a nadie.
+    if (error < mejorError) {
+      mejorError = error;
+      potential = p;
+    }
+  }
+  return { potential, damage: danioDeRango(tier, potential) };
+}
+
+/**
  * El daño que explica el que un item YA tiene.
  *
- * Va al revés que `danioDeRango` a propósito, y es la misma regla en las dos
- * direcciones. Se usa para deducir el potencial de los items que ya estaban
- * guardados antes de que existiera el campo.
+ * Envoltorio delgado sobre `potencialYDanoDe()`, porque la regla tiene que vivir
+ * en un sitio. La mitad del daño se tira aquí a propósito: quien solo lee el
+ * potencial no debe tener a mano una cifra que no ha recalculado.
  */
 export function potencialDeDanio(item: CollectorItem): number {
-  const base = baseDeTier(item.tier);
-  if (base <= 0) return 3;
-  return potencialNormalizado(((item.damage ?? base) / base - 1) / 0.2);
+  return potencialYDanoDe(item.tier, item.damage ?? 0).potential;
 }
 
 /**
@@ -246,10 +331,115 @@ export function potencialDeDanio(item: CollectorItem): number {
  * Los items viejos no tienen el campo, y ponerles un 3 a pelo cambiaría su
  * daño al punto medio al abrir la partida —eso sí sería tocarle el progreso al
  * jugador. Deducirlo del daño que ya tienen los deja intactos.
+ *
+ * **ESTO SOLO LEE. Quien vaya a ESCRIBIR tiene que usar `migraPotenciales()`**,
+ * que además deja el daño de acuerdo con el potencial. Un item con el potencial
+ * deducido y el daño viejo es un item que miente por la pantalla.
  */
 export function potencialDe(item: CollectorItem): number {
   const p = item.potential;
   return typeof p === 'number' && p >= 1 && p <= 5 ? p : potencialDeDanio(item);
+}
+
+/**
+ * Todo recolector con daño tiene potencial, y su daño es el de su potencial.
+ *
+ * **ES LA MIGRACIÓN, Y ES POR QUÉ EL CAMPO NO ES OPCIONAL.** El potencial apareció
+ * después que los items, así que hay partidas guardadas con recolectores sin el
+ * campo. `potencialDe()` ya los leía como ★3 sin más, y eso era una mentira
+ * silenciosa: un item con daño 5 se pintaba ★3, y ★3 valen 8. El jugador comparaba
+ * dos items por un número que no era el de las estrellas.
+ *
+ * Aquí se escribe el campo **y se recalcula el daño para que cuadre**, que es lo
+ * único que hace que las estrellas sean verdad. Cada item se mueve como mucho medio
+ * escalón, porque `potencialYDanoDe()` elige el potencial más cercano.
+ *
+ * **PERO «COMO MUCHO MEDIO ESCALÓN» NO ES «CASI NADA».** La escala nueva está por
+ * encima de la vieja en casi todos los tiers —un T3 del juego viejo iba de 13 a
+ * 19 y el suelo nuevo es 28—, así que **esta migración sube el daño de los items
+ * viejos**. Es aplicar la regla a datos que se guardaron antes de que existiera, y
+ * no un retoque: está anotado en PENDIENTES.md porque es decisión de balance y
+ * porque el sitio donde se revierte, si algún día toca, es esta función.
+ *
+ * **COMPRUEBA TAMBIÉN LOS QUE YA LO TIENEN.** Una partida guardada a medio camino
+ * de una versión intermedia puede traer un ★5 con el daño de un ★1, y eso no lo
+ * arregla esperar a la próxima carga. Cuesta una comparación.
+ *
+ * **Y DEVUELVE EL MISMO ARRAY CUANDO NO HAY NADA QUE HACER**, para que el
+ * llamante pueda usarlo como prueba de "esto no se ha tocado".
+ */
+export function migraPotenciales(items: any[]): { items: any[]; changed: boolean } {
+  let changed = false;
+  const salida = items.map((w) => {
+    if (w?.type !== 'collector') return w;
+    const tiene = typeof w.damage === 'number' && Number.isFinite(w.damage) && w.damage > 0;
+    const { potential, damage } = tiene
+      ? potencialYDanoDe(w.tier ?? 1, w.damage)
+      : { potential: potencialNormalizado(w.potential), damage: 0 };
+
+    const potencialYaVa = typeof w.potential === 'number' && w.potential >= 1 && w.potential <= 5;
+    if (potencialYaVa && w.potential === potential && w.damage === damage) return w;
+
+    changed = true;
+    // El `details` se rehace porque es lo que se pinta, y un item cuyo texto dice
+    // "+5" mientras su daño es 6 es exactamente el bug que se está arreglando.
+    return {
+      ...w,
+      potential,
+      damage,
+      details: damage > 0 ? `Recolección por click: +${damage}` : w.details
+    };
+  });
+  if (!changed) return { items, changed: false };
+  return { items: salida, changed: true };
+}
+
+/**
+ * Lo mismo para los compañeros, cruzando `state.companions` con su ficha.
+ *
+ * **SON DOS LISTAS Y POR QUÉ.** El poder del compañero vive en `power`, que solo
+ * está en `state.companions`; la ficha del almacén no lo tiene, solo el texto de
+ * `details`. Un solo recorrido con un `if` por tipo acabaría sirviendo para uno y
+ * estropeando al otro.
+ *
+ * **A UN COMPAÑERO VIEJO SE LE PONE ★3 Y NO SE LE TOCA EL PODER.** El poder del
+ * compañero **es** la posición en el rango del tier (`poderDeCompanero`), no una
+ * escala aparte, así que de un poder suelto no se puede deducir un potencial
+ * exacto: el mismo 6 es ★3 en el T1 y ★1 en otro sitio. ★3 es el punto medio y es
+ * lo que ya se leía antes de este cambio. Recalcular el poder sí sería tocarle el
+ * ingreso al jugador, y eso no lo hace una migración.
+ *
+ * **LA FICHA SE CORRIGE DESDE AQUÍ, POR ID, Y NO LEYENDO `details`.** Parsear una
+ * cadena para sacar un número es la forma más corta de que un cambio de redacción
+ * rompa la migración en silencio. El número de verdad está en el compañero real, y
+ * las dos cosas comparten el id justo para poder cruzarlas.
+ */
+export function migraPotencialesDeCompaneros(
+  companeros: any[], fichas: any[]
+): { companeros: any[]; fichas: any[]; changed: boolean } {
+  let changed = false;
+  const reparados = new Map<string, number>();
+
+  const nuevosComp = (companeros ?? []).map((c) => {
+    if (c?.type !== 'companion') return c;
+    const tiene = typeof c.potential === 'number' && c.potential >= 1 && c.potential <= 5;
+    if (tiene) return c;
+    changed = true;
+    reparados.set(c.id, 3);
+    return { ...c, potential: 3 };
+  });
+
+  const nuevasFichas = (fichas ?? []).map((f) => {
+    if (f?.type !== 'companion') return f;
+    const tiene = typeof f.potential === 'number' && f.potential >= 1 && f.potential <= 5;
+    const reparado = reparados.get(f.id);
+    if (tiene || reparado === undefined) return f;
+    changed = true;
+    return { ...f, potential: reparado };
+  });
+
+  if (!changed) return { companeros, fichas, changed: false };
+  return { companeros: nuevosComp, fichas: nuevasFichas, changed: true };
 }
 
 /**

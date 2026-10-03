@@ -112,9 +112,22 @@ async function main() {
     check('click: el total produzido lleva la cuenta', s(g).totalNanitesProduced === ganado,
       `producido=${s(g).totalNanitesProduced} ganado=${ganado}`);
 
+    // **HAY QUE VOLCAR ANTES DE RECARGAR, Y NO ES UN DETALLE.**
+    //
+    // `reload()` lee el documento tal y como esté, sin forzar un guardado. Y
+    // mientras el bucle de clicks corre, el `setTimeout(1200)` del arranque —
+    // el que sube la cola heredada— se cuela y guarda a medio camino: se quedó
+    // con 13 de los 20 clicks y el documento tenía 104 en vez de 160.
+    //
+    // O sea que la prueba no fallaba por el saldo: **fallaba por una carrera**, y
+    // pasaba por suerte según cuánto tardara el bucle. Es la tercera prueba
+    // intermitente de esta tanda y la razón de que se arreglen así y no "hasta
+    // que deje de fallar".
+    await g.flush();
+    await new Promise((r) => setTimeout(r, 30));
     const g2 = await reload();
     check('click: y el saldo del jugador sobrevive a la recarga',
-      nanites(g2) === ganado, `nanitas=${nanites(g2)}`);
+      nanites(g2) === ganado, `nanitas=${nanites(g2)} ganado=${ganado}`);
     check('click: el recolector sigue equipado tras recargar',
       s(g2).equippedCollectorId === colector.id, String(s(g2).equippedCollectorId));
     check('click: y sigue haciendo daño', g2.getClickDamage() === announced,

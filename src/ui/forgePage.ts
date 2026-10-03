@@ -28,7 +28,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, AFFIX_BY_ID } from '../data/crafting';
+import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -106,7 +106,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
         <span class="flex flex-col items-center gap-0.5 min-w-0 w-full">
           <span class="${rarityClass(w.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic('collector')}</span>
           <span class="text-[9px] font-mono text-center leading-tight line-clamp-2">T${w.tier}</span>
-          ${w.potential ? `<span class="text-[9px] text-amber-400 leading-none">${'★'.repeat(w.potential)}</span>` : ''}
+          ${`<span class="text-[9px] text-amber-400 leading-none">${estrellasDe(w.potential)}</span>`}
         </span>
       </button>`;
   };
@@ -126,7 +126,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
           ${w.name}
         </span>
         <span class="text-[9px] font-mono text-[var(--text-muted)]">
-          T${w.tier}${w.potential ? ` · ${w.potential}★` : ''}${equipped ? ' · EQ' : ''}
+          T${w.tier} · ${estrellasDe(w.potential)}${equipped ? ' · EQ' : ''}
         </span>
       </button>`;
   };
@@ -487,7 +487,7 @@ function showForgeRoulette(result: any, onDone: () => void) {
 
   const sub = success
     ? [
-        `T${w.tier} · ${w.potential ?? 1}★ · ${w.rarity}`,
+        `T${w.tier} · ${estrellasDe(w.potential)} · ${w.rarity}`,
         (w.affixes || []).length
           ? (w.affixes as string[]).map(id => AFFIX_BY_ID[id]?.name).filter(Boolean).join(' · ')
           : 'Sin afijos',

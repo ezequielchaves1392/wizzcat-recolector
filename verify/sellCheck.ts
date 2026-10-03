@@ -9,6 +9,7 @@
 // ==========================================================================
 
 import { createGameLoop } from '../src/gameLoop';
+import { danioDeRango, estrellasDe } from '../src/data/crafting';
 import * as factories from './kit';
 
 type Row = { name: string; ok: boolean; detail: string };
@@ -74,10 +75,21 @@ const { crate, key, crystal } = factories;
  */
 const consumable = (id: string, stack = 1, over: any = {}) =>
   factories.consumable(id, 'afk', stack, { name: 'Tarjeta AFK', ...over });
-/** Un recolector como lo guardaba el juego ANTES del renombre a 'collector'. */
+/**
+ * Un recolector como lo guardaba el juego ANTES del renombre a 'collector'.
+ *
+ * **DAÑO 6 Y NO 5, Y ES POR G4.** El daño lo pone `danioDeRango()` para que el
+ * item sea coherente con el ★1: un T1 con daño 5 estaba **por debajo del suelo**
+ * de la escala, así que la migración de G4 lo subía a 6 al cargar. Con un
+ * fixture coherente, esta prueba mide lo que dice medir —que el renombre no toca
+ * nada— en vez de medirse a sí misma. El caso del item incoherente tiene su
+ * propia prueba, más abajo.
+ */
 const legacyWeapon = (id = 'weapon_blaster_001', over: any = {}) => ({
-  id, name: 'Blaster Láser', type: 'weapon', details: 'Recolección por click: +5',
-  rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250, ...over
+  id, name: 'Blaster Láser', type: 'weapon',
+  details: `Recolección por click: +${danioDeRango(1, 1)}`,
+  rarity: 'Común', tier: 1, level: 0, damage: danioDeRango(1, 1),
+  potential: 1, sellPrice: 250, ...over
 });
 /** Partida base con contadores ya en paz con el almacén. */
 function baseSave(warehouse: any[], extra: any = {}) {
@@ -406,7 +418,8 @@ async function main() {
     check('renombre: el item viejo pasa a ser recolector', deType(g, 'collector') === 1 && deType(g, 'weapon') === 0,
       ids(g).join(','));
     check('renombre: conserva su id, su daño y su descripción',
-      find(g, 'weapon_blaster_001')?.damage === 5 && find(g, 'weapon_blaster_001')?.details === 'Recolección por click: +5',
+      find(g, 'weapon_blaster_001')?.damage === danioDeRango(1, 1)
+        && find(g, 'weapon_blaster_001')?.details === `Recolección por click: +${danioDeRango(1, 1)}`,
       JSON.stringify(find(g, 'weapon_blaster_001')));
 
     // El id del equipado se renombró a la vez. Sin adoptarlo, el click se
@@ -414,6 +427,11 @@ async function main() {
     check('renombre: el recolector equipado no se pierde', s.equippedCollectorId === 'weapon_blaster_001',
       'equippedCollectorId=' + s.equippedCollectorId);
     check('renombre: el click vuelve a hacer daño', g.getClickDamage() > 0, 'daño=' + g.getClickDamage());
+    // **G4 · Y UN ITEM VIEJO INCOHERENTE SÍ SE ARREGLA AL CARGAR.** Está en su
+    // propio bloque, más abajo: `reload()` lee el último documento guardado, así
+    // que un bloque que deja otro almacén ensucia al que recargue después. Es la
+    // trampa del banco, no un problema del juego.
+
     check('renombre: la bandera "equipped" acompaña al id',
       find(g, 'weapon_blaster_001')?.equipped === true, JSON.stringify(find(g, 'weapon_blaster_001')?.equipped));
 
@@ -426,6 +444,57 @@ async function main() {
     check('renombre: se guarda y no vuelve al estado viejo',
       deType(g2, 'collector') === 1 && guardado.saveVersion === 8,
       'saveVersion=' + guardado.saveVersion);
+  }
+  // =========================================================================
+  //  G4 · UN ITEM VIEJO INCOHERENTE SE ARREGLA AL CARGAR
+  // =========================================================================
+  //  El bloque del renombre de arriba usa un item que **ya viene coherente** con
+  //  su potencial, y por eso la migración no lo toca: eso es lo que hay que
+  //  comprobar, que una partida bien puesta no se mueva sola.
+  //
+  //  Este es el otro caso: un item guardado con daño 5 y sin potencial, que es lo
+  //  que había en las partidas de antes de la escala. El suelo del T1 son 6, así
+  //  que **no existe ningún ★ que valga 5**: o el daño sube al suelo, o el item se
+  //  queda con unas estrellas que no son suyas y un número que no cuadra con ellas.
+  //
+  //  Sube al suelo. Y el cambio es el más pequeño posible porque
+  //  `potencialYDanoDe()` elige el potencial MÁS CERCANO y a empate el MENOR: una
+  //  migración no puede acabar siendo un regalo para quien lleva más tiempo.
+  {
+    const g = await boot(baseSave([
+      legacyWeapon('viejo_ok'),
+      legacyWeapon('viejo_mal', { damage: 5, details: 'Recolección por click: +5', potential: undefined })
+    ], { saveVersion: 6 }));
+    const ok = find(g, 'viejo_ok');
+    const mal = find(g, 'viejo_mal');
+
+    check('G4: un item viejo coherente no se toca al cargar',
+      ok?.damage === danioDeRango(1, 1) && ok?.potential === 1,
+      `daño=${ok?.damage} potencial=${ok?.potential}`);
+
+    check('G4: y uno incoherente se pone de acuerdo con sus estrellas',
+      mal?.potential === 1 && mal?.damage === danioDeRango(1, 1),
+      `daño=${mal?.damage} potencial=${mal?.potential} · el ★1 de T1 es ${danioDeRango(1, 1)}`);
+
+    check('G4: y el texto que se pinta pasa a decir la verdad',
+      mal?.details === `Recolección por click: +${danioDeRango(1, 1)}`,
+      `details="${mal?.details}"`);
+
+    // **Y LA REGLA DE LAS ESTRELLAS, QUE ANTES NO EXISTÍA COMO REGLA.** Siete
+    // plantillas pintaban "estrellas si hay potencial, nada si no", así que un
+    // item sin campo salía **sin ninguna estrella** — no con cero, sin nada, que
+    // parece un item viejo o malgenerado. Esto fija que nunca estén vacías.
+    check('G4: las estrellas nunca están vacías, ni sin potencial ni con uno raro',
+      estrellasDe(undefined) === '★★★' && estrellasDe(0) === '★★★'
+        && estrellasDe(7) === '★★★' && estrellasDe(1) === '★' && estrellasDe(5) === '★★★★★',
+      `ausente="${estrellasDe(undefined)}" cero="${estrellasDe(0)}" siete="${estrellasDe(7)}"`);
+
+    // Y la razón de que todo esto sirva: **daño = potencial × la regla**.
+    const incoherentes = wh(g).filter((w: any) =>
+      w.type === 'collector' && w.damage !== danioDeRango(w.tier ?? 1, w.potential));
+    check('G4: en el almacén no queda ni un item con el daño de otras estrellas',
+      incoherentes.length === 0,
+      incoherentes.map((w: any) => `${w.id}:★${w.potential} daño=${w.damage} (debería ${danioDeRango(w.tier ?? 1, w.potential)})`).join(' '));
   }
   {
     // El caso que reportado el jugador tal cual: el Blaster de partida, solo en

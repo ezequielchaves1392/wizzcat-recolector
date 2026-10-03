@@ -23,6 +23,7 @@
 // ==========================================================================
 
 import { check, resumen, boot, baseSave, collector } from './kit';
+import { danioDeRango } from '../src/data/crafting';
 
 async function main() {
   // -----------------------------------------------------------------------
@@ -73,7 +74,7 @@ async function main() {
   // -----------------------------------------------------------------------
   {
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 100, level: 10 })
+      collector('r1', 3, { damage: danioDeRango(3, 3), level: 10, potential: 3 })
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const d = g.getClickDamageBreakdown?.();
@@ -85,9 +86,15 @@ async function main() {
     // OJO CON EL NIVEL: el multiplicador es `1 + nivel * 0,10`, así que nivel 10
     // es x2,0 sobre el daño base, no x1,1. Este test se escribió primero con
     // 1,10, falló, y la culpa era del test y no del código.
-    check('y vale exactamente lo que dice la fórmula (nivel 10 = x2,0 sobre 100)',
-      d?.porNivel === 100,
-      `porNivel=${d?.porNivel} total=${d?.total}`);
+    //
+    // **Y EL DAÑO Y EL POTENCIAL SALEN DE LA REGLA, NO DE NÚMEROS SUELTOS.** Estaba
+    // en `damage: 100` sin potencial, y un T3 con ★3 vale
+    // `danioDeRango(3, 3)`: un item con 100 de daño en un T3 es un item que el
+    // juego no puede generar. La migración de G4 lo bajó a su sitio al cargar y
+    // esta comprobación medía el 100 del fixture, no el juego.
+    check('y vale exactamente lo que dice la fórmula (nivel 10 = x2,0 sobre el daño base)',
+      d?.porNivel === danioDeRango(3, 3),
+      `porNivel=${d?.porNivel} base=${danioDeRango(3, 3)} total=${d?.total}`);
 
     // Un nivel 0 no puede aportar nada. Mostrar "0 nivel" no es mentira, pero
     // ocupa una línea para decir que no hay nada, y por eso la vista lo oculta.

@@ -18,7 +18,7 @@
 //  lista**, porque enumerar era justo lo que se quedaba viejo.
 // ==========================================================================
 
-import { boot, reload, check, resumen, wh, baseSave, crate, key } from './kit';
+import { boot, bootNew, reload, check, resumen, wh, baseSave, crate, key } from './kit';
 import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_TYPES, EXPANSOR_TIERS, CONSUMABLES } from '../src/data/store';
 import { KEY_TIERS } from '../src/data/items';
@@ -29,7 +29,7 @@ import {
 } from '../src/components/crateLoot';
 import { poderDeCompanero, generateCompanionByTier } from '../src/data/generators';
 import { rangoDePoder } from '../src/data/tiers';
-import { danioDeRango, potencialNormalizado, AFIX_MIN_POR_RARIDAD, AFIX_MAX } from '../src/data/crafting';
+import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX } from '../src/data/crafting';
 
 
 /** ¿Coincide el ★3 con el punto medio del rango en los diez tiers? */
@@ -308,7 +308,140 @@ async function main() {
       `${Object.keys(AFIX_MIN_POR_RARIDAD).length} peldaños, ${RARITY_ORDER.length} rarezas`);
   }
 
-  resumen('la escala de calidad: el potencial y solo el potencial');
+// -------------------------------------------------------------------------
+  //  8. G4 · NINGÚN ITEM DEL JUEGO SE QUEDA SIN POTENCIAL
+  // -------------------------------------------------------------------------
+//  Este es el banco que hacía falta y que no existía. Todo lo demás comprueba
+//  generadores sueltos: "este generador tira potencial". Eso deja pasar el caso
+//  que de verdad se Quejó el jugador, que **no es un generador**, es el resto.
+//
+//  Un item escrito a mano —el Blaser de partida— no pasa por ningún generador, y
+//  una partida vieja tampoco. Los dos se colaban por el mismo hueco: nadie mira
+//  un objeto literal, y a un item guardado no se le puede preguntar a su
+//  generador.
+//
+//  Así que la pregunta no es "este generador está bien" sino **"en este almacén,
+//  ¿algún item incumple?"**, que es la pregunta del jugador.
+{
+  const sucios = (g: any) =>
+    wh(g)
+      .filter((w: any) => w.type === 'collector')
+      .filter((w: any) =>
+        typeof w.potential !== 'number'
+        || w.potential < 1 || w.potential > 5
+        || w.damage !== danioDeRango(w.tier ?? 1, w.potential));
+
+  // 1. Una partida nueva, tal cual. El Blaser de partida es el item que pediste.
+  {
+    const g = await bootNew();
+    const colector = wh(g).find((w: any) => w.type === 'collector');
+    check('G4: el recolector de partida nace con potencial',
+      typeof colector?.potential === 'number' && colector.potential >= 1 && colector.potential <= 5,
+      `potential=${colector?.potential}`);
+    check('G4: y su daño es el de esas estrellas, no un número suelto',
+      colector?.damage === danioDeRango(1, colector?.potential),
+      `daño=${colector?.damage} · el ★${colector?.potential} de T1 es ${danioDeRango(1, colector?.potential)}`);
+    check('G4: y lo que se pinta dice lo mismo que el daño',
+      colector?.details === `Recolección por click: +${colector?.damage}`,
+      `details="${colector?.details}" daño=${colector?.damage}`);
+    check('G4: y el almacén entero está limpio',
+      sucios(g).length === 0,
+      sucios(g).map((w: any) => `${w.id}:★${w.potential} daño=${w.damage}`).join(' '));
+  }
+
+  // 2. Y el compañero también. Su poder es la posición en el rango del tier, así
+  // que no se deduce de un número: se le da ★3, que es lo que ya se leía antes.
+  {
+    const g = await bootNew();
+    const comp = (g.getState() as any).companions?.[0];
+    check('G4: el compañero de partida nace con potencial',
+      typeof comp?.potential === 'number' && comp.potential >= 1 && comp.potential <= 5,
+      `potential=${comp?.potential}`);
+    const ficha = wh(g).find((w: any) => w.type === 'companion');
+    check('G4: y su ficha dice lo mismo que el compañero real',
+      ficha?.potential === comp?.potential,
+      `ficha=${ficha?.potential} compañero=${comp?.potential}`);
+    check('G4: y la ficha enseña el poder REAL, no un número escrito a mano',
+      ficha?.details === `Recolección por segundo: +${comp?.power}/s`,
+      `details="${ficha?.details}" · el compañero vale ${comp?.power}`);
+  }
+
+  // 3. Una partida VIEJA: sin potencial, con el daño de la escala de antes. Es el
+  //    caso que no lo cubre ningún generador porque no viene de ninguno.
+  {
+    const g = await boot(baseSave([
+      crate('c1', 1, 5),
+      // T3 con daño 15, que es donde lo ponía el juego antes de la escala.
+      { id: 'v1', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +15',
+        rarity: 'Común', tier: 3, level: 0, damage: 15, sellPrice: 250 },
+      { id: 'v2', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +19',
+        rarity: 'Común', tier: 3, level: 0, damage: 19, sellPrice: 250 }
+    ], { nanites: 0, warehouseCapacity: 20 }));
+    check('G4: los items viejos reciben potencial al cargar',
+      sucios(g).length === 0,
+      sucios(g).map((w: any) => `${w.id}:★${w.potential} daño=${w.damage} (el ★${w.potential} de T3 es ${danioDeRango(3, w.potential)})`).join(' '));
+    // Y se guarda: una migración que no se escribe es una migración que se
+    // repite en cada carga, y una que se repite puede acabar criando ★5 falsos.
+    await g.flush();
+    await new Promise((r) => setTimeout(r, 30));
+    const g2 = await reload();
+    check('G4: y lo arreglado se guarda, no se vuelve a arreglar cada vez',
+      sucios(g2).length === 0,
+      sucios(g2).map((w: any) => `${w.id}:★${w.potential} daño=${w.damage}`).join(' '));
+  }
+
+  // 4. Y lo que NO puede pasar: **que una migración le regale una mejora a
+  //    alguien.** Es la diferencia entre "aplico la regla a lo viejo" y "subo el
+  //    daño de quien llevaba más tiempo".
+  //
+  //    **LA REGLA ES "EL MÁS CERCANO", Y ESO SÍ PUEDE SUBIR.** Un daño 31 en un T3
+  //    está más cerca del 32 (★2) que del 28 (★1), así que sube a 32. Redondear al
+  //    más cercano no puede ser "nunca sube": sería mentira. Lo que sí garantiza
+  //    son dos cosas, y son las que se comprueban aquí.
+  {
+    // A · El error es EL MÍNIMO de los cinco, siempre. Si algún día se cambia la
+    //     regla de "más cercano" y se pasa a "el mayor que no pase", esto falla.
+    let noMinimo = 0;
+    for (let d = 1; d <= 600; d++) {
+      const { potential, damage } = potencialYDanoDe(3, d);
+      const errores = [1, 2, 3, 4, 5].map(p => Math.abs(danioDeRango(3, p) - d));
+      if (Math.abs(damage - d) !== Math.min(...errores)) noMinimo++;
+      void potential;
+    }
+    check('G4: la migración elige el potencial MÁS CERCANO, siempre',
+      noMinimo === 0, `${noMinimo} de 600 daños no cogieron el más cercano`);
+
+    // B · Y a EMPATE, EL MENOR. El 30 está a dos del 28 (★1) y a dos del 32 (★2):
+    //    empate perfecto. Si cogiera el mayor, cada item de esa frontera ganaría
+    //    dos de daño y la migración sería un regalo con forma de regla.
+    const empate = potencialYDanoDe(3, 30);
+    check('G4: y a empate gana el potencial MENOR, que es donde no hay regalo',
+      empate.potential === 1 && empate.damage < 30,
+      `30 → ★${empate.potential} daño=${empate.damage}`);
+
+    // C · Y EL HECHO QUE HACE QUE ESTO SEA UNA DECISIÓN DE BALANCE Y NO UN
+    //     RETOQUE, FIJADO POR UNA PRUEBA PARA QUE NO SE OLVIDE.
+    //
+    //     **LA ESCALA NUEVA ESTÁ ENTERA POR ENCIMA DE LA VIEJA.** Fijado con el T3:
+    //     el rango del que salía un recolector viejo era de 13 a 19, y el suelo de
+    //     la escala actual es 28. No hay ni un solo valor del rango viejo que
+    //     llegue al nuevo suelo, así que **todos** los items viejos de T3 suben,
+    //     y en los tiers altos el salto es mayor todavía.
+    //
+    //     Esto NO es un tope que se pueda comprobar con un "< medio escalón": se
+    //     intentó y es falso, porque los dos juegos de números no se solapan. Lo
+    //     que se puede comprobar —y lo que importa— es que el hecho siga siendo
+    //     cierto, para que nadie lo descubra cuando ya haya pasado a ser historia.
+    const rangoViejo = rangoDePoder(3);
+    const sueloNuevo = danioDeRango(3, 1);
+    check('G4: la escala nueva está por encima de la vieja: esto sube el daño viejo',
+      rangoViejo[1] < sueloNuevo,
+      `el T3 viejo llegaba a ${rangoViejo[1]} y el suelo nuevo es ${sueloNuevo}. ` +
+      `TODOS los items viejos suben: decisión de balance, escrita en PENDIENTES.md`);
+  }
+}
+
+resumen('la escala de calidad: el potencial y solo el potencial');
 }
 
 export default main();

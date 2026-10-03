@@ -13,7 +13,7 @@ export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio } from './data/crafting';
+import { attemptForge, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias } from './data/stacking';
 
@@ -184,28 +184,6 @@ function migrateItemTypes(warehouse: any[]): boolean {
 }
 
 /**
- * Rellena el `potential` de los recolectores que no lo traen.
- *
- * Los items guardados antes de que el potencial existiera no lo tienen, y el
- * potencial **es** lo que decide el daño. Ponerles un 3 a pelo les cambiaría el
- * daño al punto medio del rango al abrir la partida, que es tocarle el progreso
- * al jugador; deducirlo del daño que ya tienen los deja exactamente como
- * estaban y solo hace que el número sea legible.
- *
- * Devuelve si ha tocado algo.
- */
-function migratePotential(warehouse: any[]): boolean {
-  let changed = false;
-  for (const item of warehouse) {
-    if (item.type !== 'collector') continue;
-    if (typeof item.potential === 'number' && item.potential >= 1 && item.potential <= 5) continue;
-    item.potential = potencialDeDanio(item);
-    changed = true;
-  }
-  return changed;
-}
-
-/**
  * Deja `equippedCollectorId` y la bandera `equipped` de los items diciendo lo
  * mismo.
  *
@@ -307,6 +285,14 @@ export async function createGameLoop(
   // `unlocked` se sincroniza con state.unlockedAchievements en cada rebuild.
   const achievementState = createAchievementState();
 
+  // El potencial de los items de partida: **3**, el punto medio.
+  //
+  // Lo eligen las dos fábricas de abajo y por eso es una constante y no un 3
+  // escrito en cuatro sitios. Con un 3 suelto en cada sitio, el día que se
+  // cambiara habría cuatro que cambiar y bastaría con olvidar uno para tener un
+  // item con ★3 y el daño de ★1, que es el bug que esta tanda arregla.
+  const POTENCIAL_BASE = 3;
+
   // El compañero inicial es un T1 real: mismo poder que compra el jugador, para
   // que la decisión "comprar otro T1 o guardar" tenga sentido desde el segundo 1.
   const baseCompanion = {
@@ -318,11 +304,54 @@ export async function createGameLoop(
     // rango del T1 y por eso el "compañero inicial es un T1 real" del comentario
     // no era cierto. Ahora sale de `poderDeCompanero(1, 3)` y por construcción es
     // el T1 de la mitad, que es lo que dice el comentario.
-    power: poderDeCompanero(1, 3),
+    power: poderDeCompanero(1, POTENCIAL_BASE),
     rarity: 'Común',
     tier: 1,
-    potential: 3
+    potential: POTENCIAL_BASE
   };
+
+  /**
+   * El recolector de partida, y su ficha en el almacén.
+   *
+   * **UNA FÁBRICA Y DOS LLAMADAS, Y POR QUÉ NO UN OBJETO COMPARTIDO.** El estado
+   * nuevo y el reinicio del Ascenso necesitan las dos cosas, y antes cada uno se
+   * escribía a mano. El resultado eran dos item que se llamaban igual, con ids
+   * distintos, y **cifras distintas**: la ficha decía "+5/s" mientras el
+   * compañero real valía 6, y el recolector decía `damage: 5` con lo que su
+   * potencial 3 valía 8. Dos objetos que son lo mismo y no lo son.
+   *
+   * **Y POR QUÉ SON FUNCIONES Y NO CONSTANTES.** Dos item que comparten el mismo
+   * objeto son un bug esperando: el motor mueve `damage` al subir de nivel con
+   * cristales, `level` al forjar, `affixes`… y mutaría **las dos copias a la vez**,
+   * que es como el almacén acaba teniendo un solo Blaser en dos sitios. Una
+   * llamada devuelve objetos nuevos y las copias no se tocan.
+   */
+  const nuevoBaseCompanion = () => ({
+    id: baseCompanion.id,
+    name: baseCompanion.name,
+    type: baseCompanion.type,
+    power: baseCompanion.power,
+    rarity: baseCompanion.rarity,
+    tier: baseCompanion.tier,
+    potential: baseCompanion.potential
+  });
+
+  const nuevoBaseRecolector = () => ({
+    id: 'collector_blaster_001',
+    name: 'Blaster Láser',
+    type: 'collector',
+    // El daño sale de `danioDeRango` y el `details` sale de ESE número, no al
+    // revés. Escritos a mano eran `damage: 5` y `details: '+5'`, que casaban
+    // entre sí pero no con el potencial 3 que el item no tenía: al añadirle las
+    // estrellas, un ★3 con daño 5 se vio enseguida que era mentira.
+    damage: danioDeRango(1, POTENCIAL_BASE),
+    details: `Recolección por click: +${danioDeRango(1, POTENCIAL_BASE)}`,
+    rarity: 'Común',
+    tier: 1,
+    level: 0,
+    potential: POTENCIAL_BASE,
+    sellPrice: 250
+  });
 
   // Bonus especial para usuarios de prueba
   // El nombre llega resuelto desde `main.ts`, que ya lo ha buscado en la
@@ -401,12 +430,28 @@ export async function createGameLoop(
     crystalsByTier: { 1: 5 } as Record<number, number>,
     crystalTotal: 5,
     equippedCollectorId: null as string | null,
-    companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number }>,
+    companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number; potential?: number }>,
     activeCompanions: [] as string[],
     warehouse: [
-      { id: 'collector_blaster_001', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
-      { id: 'companion_base_001', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +5/s', rarity: 'Común', tier: 1, sellPrice: 250 }
-    ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; damage?: number; equipped?: boolean; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
+      // Las dos fichas salen de las fábricas de arriba, no de números escritos.
+      // Antes esta era la única copia "escrita a mano" que sobrevivía al
+      // Ascenso: el reinicio ya se construía desde `baseCompanion`, pero el
+      // estado inicial no. Dos sitios con el mismo item y reglas distintas.
+      nuevoBaseRecolector(),
+      {
+        id: baseCompanion.id,
+        name: baseCompanion.name,
+        type: 'companion',
+        // El `details` sale del poder REAL del compañero. Estaba escrito como
+        // "+5/s" cuando `poderDeCompanero(1, 3)` da 6: la ficha y el compañero
+        // eran el mismo objeto con dos números distintos, y solo se pintaba uno.
+        details: `Recolección por segundo: +${baseCompanion.power}/s`,
+        rarity: baseCompanion.rarity,
+        tier: baseCompanion.tier,
+        potential: baseCompanion.potential,
+        sellPrice: 250
+      }
+    ] as Array<{ id: string; name: string; type: string; details: string; rarity: string; tier?: number; level?: number; damage?: number; potential?: number; equipped?: boolean; sellPrice?: number; stackable?: boolean; stackCount?: number }>,
     buffs: {
       clickBoostExpiresAt: 0,
       passiveBoostExpiresAt: 0,
@@ -1105,14 +1150,29 @@ const AFK_THRESHOLD_MS = 60000;
         }
       }
 
-      // F33 · El potencial pasa a ser la escala 1..5 que decide el daño. Se
-      // deduce del daño que cada item ya tenía, así que **ningún item cambia de
-      // estadísticas al migrar**: lo único nuevo es que el número existe y se
-      // puede comparar. Es idempotente, pero igual que la 7 se aplica al cruzar
-      // la versión, no siempre.
-      if (savedVersion < 8) {
-        if (migratePotential(state.warehouse)) warehouseNeedsMigration = true;
-      }
+      // G4 · El potencial pasa a ser la escala 1..5 que decide el daño. Antes esto
+      // vivía en `migratePotential()` y solo rellenaba el campo: el item pasaba
+      // a tener ★3 **sin que su daño cambiara**, así que las estrellas decían una
+      // cosa y el daño otra. Un item con daño 5 se pintaba ★3, y ★3 valen 8.
+      //
+      // Ahora es `migraPotenciales()`, más abajo, y **además del campo ajusta el
+      // daño** para que cuadre con el potencial que se deduce. Cada item se mueve
+      // como mucho medio escalón porque se elige el potencial más cercano, y es la
+      // única forma de que la estrella signifique algo.
+      //
+      // **OJO: ESO SUBE EL DAÑO DE LAS PARTIDAS VIEJAS, Y NO ES UN RETOQUE.** La base
+      // de cada tier subió un 20 % sobre el rango viejo y el potencial llega a ×2,
+      // así que el suelo nuevo queda por encima de casi todo lo guardado antes —un
+      // T3 viejo iba de 13 a 19 y ahora el suelo es 28—. Se acepta porque la
+      // alternativa es un item con ★3 que pega como un ★1, que es peor; y se anota
+      // en PENDIENTES.md porque es decisión de balance, no un detalle técnico.
+      //
+      // **YA NO ESTÁ EN `if (savedVersion < 8)`.** Va siempre, porque un item que
+      // ya traía el campo podía traerlo con un daño que no era el suyo —una
+      // partida guardada a medio camino de una versión intermedia— y eso no lo
+      // arregla esperar a la siguiente subida de versión. `migraPotenciales()`
+      // devuelve el MISMO array cuando no toca nada, así que no guarda por las
+      // nubes.
 
       // El id equipado y la bandera `equipped` son la misma información en dos
       // sitios. Se pone de acuerdo antes de que nada la lea: el cálculo de daño
@@ -1255,6 +1315,36 @@ const AFK_THRESHOLD_MS = 60000;
       const fusionado = partirPilas(state.warehouse);
       if (fusionado.changed) {
         state.warehouse = fusionado.items;
+        warehouseNeedsMigration = true;
+      }
+
+      /**
+       * G4 · TODO ITEM TIENE POTENCIAL, Y SU DAÑO ES EL DE SUS ESTRELLAS.
+       *
+       * El potencial llegó después que los items, así que hay partidas guardadas
+       * con recolectores sin el campo. `potencialDe()` ya los leía como ★3 sin
+       * más, y eso era una mentira por la pantalla: un item con daño 5 se pintaba
+       * ★3, y ★3 valen 8. El jugador comparaba dos items por un número que no era
+       * el de las estrellas, que es justo para lo que sirven las estrellas.
+       *
+       * Por eso la migración **escribe el potencial Y recalcula el daño**: el
+       * potencial más cercano deja el daño casi igual de por sí, así que no le
+       * quita nada al jugador y a cambio hace que el número que se pinta y el
+       * número que pega sean el mismo.
+       *
+       * Va después de `partirPilas()` y no antes: partir crea items nuevos
+       * —copias— y un item nuevo que sale de una partición tiene que pasar por la
+       * migración como cualquier otro.
+       */
+      const conPotencial = migraPotenciales(state.warehouse);
+      if (conPotencial.changed) {
+        state.warehouse = conPotencial.items;
+        warehouseNeedsMigration = true;
+      }
+      const compConPotencial = migraPotencialesDeCompaneros(state.companions, state.warehouse);
+      if (compConPotencial.changed) {
+        state.companions = compConPotencial.companeros;
+        state.warehouse = compConPotencial.fichas;
         warehouseNeedsMigration = true;
       }
 
@@ -3656,7 +3746,13 @@ const AFK_THRESHOLD_MS = 60000;
         companions: [baseCompanion],
         activeCompanions: [],
         warehouse: [
-          { id: 'collector_blaster_001', name: 'Blaster Láser', type: 'collector', details: 'Recolección por click: +5', rarity: 'Común', tier: 1, level: 0, damage: 5, sellPrice: 250 },
+          // **LAS DOS FICHAS SALEN DE LAS FÁBRICAS DE ARRIBA, IGUAL QUE EN EL
+          // ESTADO INICIAL.** El recolector estaba escrito a mano aquí, con
+          // `damage: 5` y sin potencial, mientras la partida nueva usaba otra
+          // cosa. Dos copias del mismo item con reglas distintas, y el Ascenso es
+          // justo el momento en que se nota: acabas de ascender, tu Blaser ha
+          // cambiado de número y nadie te ha dicho por qué.
+          nuevoBaseRecolector(),
           // **EL COMPAÑERO DE PARTIDA SE CONSTRUYE DESDE `baseCompanion`, NO CON
           // NÚMEROS ESCRITOS.** Antes la ficha decía "+5/s" y no traía potencial,
           // mientras que la entrada de `state.companions` decía otra cosa: el mismo

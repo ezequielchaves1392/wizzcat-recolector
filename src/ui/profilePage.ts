@@ -18,6 +18,7 @@ import { COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosme
 import { titleStyleFor } from './identity';
 import { getSkipRoulette, setSkipRoulette } from '../roulettePrefs';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
+import { estrellasDe } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
@@ -232,7 +233,7 @@ export function renderProfilePage(
           <div class="min-w-0 flex-1">
             <div class="text-[12px] font-bold text-[var(--text-main)] truncate">${bestCollector.name}</div>
             <div class="text-[9px] font-mono text-[var(--text-muted)]">
-              T${bestCollector.tier} · ${bestCollector.rarity}${bestCollector.potential ? ` · ${'★'.repeat(bestCollector.potential)}` : ''}
+              T${bestCollector.tier} · ${bestCollector.rarity} · ${estrellasDe(bestCollector.potential)}
               ${bestCollector.forgedBy ? ` · de <span class="accent-text">${bestCollector.forgedBy}</span>` : ''}
             </div>
           </div>
