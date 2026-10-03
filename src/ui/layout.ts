@@ -254,7 +254,12 @@ export function renderLayoutHTML(
               <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('companion')}</span>
               Escuadrón
             </h2>
-            <span class="label-caps">Panel principal</span>
+            <!--
+              AQUÍ PONÍA "Panel principal", Y NO ERA CIERTO NI ÚTIL. La columna del
+              escuadón no es el panel principal: la pantalla entera lo es. Y la etiqueta
+              repetía lo que el nav ya dice al resaltar "Base", en una esquina distinta, lo
+              que la convertía en el segundo sitio donde se lee lo mismo.
+            -->
           </div>
 
           <div class="flex flex-col gap-2.5 md:gap-3 overflow-y-auto overscroll-contain

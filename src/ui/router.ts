@@ -37,7 +37,14 @@ export interface RouteDef {
 }
 
 export const ROUTES: RouteDef[] = [
-  { id: 'base', label: 'Base', icon: 'chip', inBottomBar: true, inHeader: true, title: 'Panel Principal' },
+  // El título de la base está VACÍO a propósito, y no es un olvido. Decía "Panel
+  // Principal" y repetía lo que el nav ya dice resaltando "Base": dos veces lo mismo en
+  // la misma línea de pantalla, y la segunda con tres palabras donde bastaba una.
+  //
+  // La cabecera trata el título vacío como lo que es —que no hay título— y no pinta el
+  // encabezado: en la base lo que ocupa ese sitio es la identidad del jugador, que sí
+  // tiene algo que decir.
+  { id: 'base', label: 'Base', icon: 'chip', inBottomBar: true, inHeader: true, title: '' },
   // F25 · El mercado va segundo, antes que el almacén. El jugador lo confundía
   // con la venta del almacén y lo busca "al principio"; Base se queda primero
   // porque es la vista de partida, pero el mercado —que es donde se gastan las

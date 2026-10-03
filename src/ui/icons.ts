@@ -37,6 +37,21 @@ export const ICONS = {
   crate: svg('<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5v-7Z"/><path d="M3 8.5 12 13l9-4.5"/><path d="M12 13v7"/>'),
   achievement: svg('<circle cx="12" cy="9" r="5"/><path d="m8.5 13.5-1.5 7 5-2.5 5 2.5-1.5-7"/>'),
   chip: svg('<rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>'),
+  wrench: svg('<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8Z"/>'),
+
+  // LA TUERCA DE AJUSTES, Y POR QUÉ NO EL ENGRANAJE.
+  //
+  // `gear` es un círculo con ocho radios, y a 18 px eso no se lee como un engranaje: se
+  // lee como un sol o como una estrella. La tuerquita sí se lee, porque tiene la silueta
+  // asimétrica que el ojo ya reconoce —una boca abierta arriba y un mango que baja en
+  // diagonal— y esa asimetría es justo lo que la hace legible a ese tamaño, donde un
+  // engranaje simétrico se convierte en una mancha.
+  //
+  // Y además dice lo que hace: un engranaje sugiere una máquina con muchas piezas que se
+  // ajustan entre sí, que es la lectura de un panel interno. Una tuerquita es lo que
+  // coges para apretar un tornillo.
+  //
+  // Se deja `gear` en la tabla: hay cosas que sí son engranaje.
   gear: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>'),
 
   // Destino, identidad y progresión

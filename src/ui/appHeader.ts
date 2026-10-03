@@ -220,7 +220,7 @@ export function headerSettingsButton(): string {
     <button data-abrir-ajustes
             class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
             aria-label="Ajustes" title="Ajustes">
-      <span class="[&>span>svg]:w-[18px] [&>span>svg]:h-[18px]">${ic('gear')}</span>
+      <span class="[&>span>svg]:w-[18px] [&>span>svg]:h-[18px]">${ic('wrench')}</span>
     </button>`;
 }
 
@@ -327,21 +327,36 @@ export function settingsSheetHTML(): string {
 /**
  * LA FRANJA DE ARRIBA DE LAS SIETE PANTALLAS.
  *
- * Lo único que hay que recordar al usarla es esto: **el nav es lo último y el
- * `flex-1` va en el grupo de la izquierda**. Si algún día se añade algo, va en el
- * grupo de la izquierda o en `actions`; después del nav, nunca. Un elemento
- * colocado después del nav es exactamente el cambio que rompe la posición del nav
- * en todas las pantallas menos en una, que es el peor sitio posible para que se
- * note.
+ * ## LA REGLA, Y POR QUÉ ESTÁ DICHA ASÍ DE ESTRICTA
+ *
+ * **El `flex-1` va en el grupo de la izquierda, y todo lo demás se ordena hacia la
+ * derecha.** Por eso lo que hay a la derecha del nav no lo mueve: el nav queda a
+ * `padding − (lo que haya detrás de él) − ancho del nav` del borde, y su ancho depende
+ * solo de las etiquetas, que no cambian.
+ *
+ * **DETRÁS DEL NAV SOLO PUEDE IR ANCHO FIJO, Y ESO NO ES UNA CASUALIDAD: ES LA
+ * CONDICIÓN.** El engranaje de ajustes va detrás y son 36 px constantes, así que el nav
+ * se queda igual en las siete pantallas. Si detrás del nav se pusiera algo **de ancho
+ * variable** —un contador, un nombre, una etiqueta— el nav se movería, y se movería
+ * **solo en las pantallas que lo tuvieran**, que es el peor sitio posible para que se
+ * note. Ese es el cambio que hay que revisar antes de añadir nada.
+ *
+ * Y lo que no se debe hacer es lo contrario: **quitarle el `flex-1` al grupo de la
+ * izquierda** para "centrar" algo. El `flex-1` es el que empuja; sin él, el reparto del
+ * hueco libre depende de lo que quede y el nav deja de estar clavado.
  *
  * **POR QUÉ EL HUD DE BUFFS DE ESCRITORIO VA EN EL GRUPO DE LA IZQUIERDA Y NO EN
- * `actions`.** Es una fila con desplazamiento, de ancho indeterminado. En `actions`,
- * que es `flex-shrink-0`, no podría encogerse y aplastaría al nav; en el grupo de la
- * izquierda, que es `flex-1`, se encoge él y lo que se acorta es el título. Entre
- * estortar el título y mover el nav, el título es lo correcto.
+ * `actions`.** Es una fila con desplazamiento, de ancho indeterminado, y detrás del nav
+ * no puede ir. En `actions`, que es `flex-shrink-0`, no podría encogerse y aplastaría al
+ * nav; en el grupo de la izquierda, que es `flex-1`, se encoge él y lo que se acorta es
+ * el título. Entre estortar el título y mover el nav, el título es lo correcto.
  */
 export function appHeaderHTML(opts: AppHeaderOptions): string {
-  const titulo = opts.title ?? routeTitle(opts.route);
+  // **EL TÍTULO VACÍO ES "NO HAY TÍTULO", NO "UN TÍTULO EN BLANCO".** La base no tiene:
+  // su ruta dice `title: ''` y lo que ocupa ese sitio es la identidad del jugador. Un
+  // `<h1></h1>` vacío sería una estructura sin contenido —lo que un lector de pantalla
+  // lee como un encabezado sin nombre—, así que no se pinta.
+  const titulo = (opts.title ?? routeTitle(opts.route)).trim();
 
   return `
     <header class="relative z-20 card-glass flex-shrink-0 px-3 md:px-5 py-2.5 md:py-3
@@ -351,13 +366,14 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
 
         <div class="flex items-center gap-2 min-w-0 flex-1">
           ${opts.icon ? `<span class="accent-text flex-shrink-0 hidden sm:block [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(opts.icon)}</span>` : ''}
+          ${titulo ? `
           <div class="min-w-0">
             <h1 id="page-title"
                 class="font-['Orbitron'] font-bold text-[15px] md:text-lg accent-text truncate leading-tight">
               ${titulo}
             </h1>
             ${opts.subtitle ? `<p class="text-[10px] md:text-[11px] text-[var(--text-muted)] font-mono truncate mt-0.5 hidden sm:block">${opts.subtitle}</p>` : ''}
-          </div>
+          </div>` : ''}
           ${opts.identityHTML ? `<div id="nav-identity" class="flex-shrink-0 hidden sm:flex items-center">${opts.identityHTML}</div>` : ''}
           ${opts.buffsHudId ? `
             <div id="${opts.buffsHudId}"
@@ -365,10 +381,11 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
         </div>
 
         ${opts.resources !== false ? resourceBarHTML(opts.resources) : ''}
-        ${headerSettingsButton()}
         ${opts.actions ? `<div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions}</div>` : ''}
 
         ${navDesktopHTML(opts.route)}
+
+        ${headerSettingsButton()}
       </div>
 
       ${opts.mobileBuffsId ? `
