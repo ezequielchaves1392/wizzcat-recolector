@@ -19,7 +19,131 @@
 > mueve a **Hecho** y se deja escrito el motivo, que es lo que impide que la idea vuelva a
 > aparecer.
 
+
 ---
+## GDD · Lo que pediste, ordenado
+_Tiene fecha la versión de este encargo. Está **ordenado por mi criterio**, no por el orden
+en que venía el texto: primero lo que **miente o se pierde**, despu&eacute;s lo que **rompe un
+invariant** sin el cual lo demas queda raro, despues las features y al final la estetica._
+
+**El criterio, en cuatro reglas:**
+
+1. **Un bug antes que una feature.** Un número que se ve mal o un progreso que no se guarda
+   es peor que una feature que falta, porque el jugador no puede ni jugar mal.
+2. **Un invariant antes que dos features.** Si una regla base no está, cualquier feature que
+   dependa de ella se hace sobre arena. Y **escribí la regla una vez**, en un banco, o el
+   próximo que la toque la vuelve a escribir.
+3. **Lo que prestigea, despues de lo que prestigea.** El Vault y el Prestigio tocan el estado
+   entero, así que van **antes** de las features que dependen de lo que ellos conservan.
+4. **La estética al final**, salvo que sea una cosa rota de verdad.
+
+---
+
+### Lote 1 · BUGS QUE MIENTEN O SE PIERDEN
+
+- [x] **G1 · "Sin guardar en el servidor" aparecía sin motivo.** El aviso se encendía con
+      **cualquier** fallo de guardado, y `saveToFirebase()` hace **dos** escrituras: el
+      documento de la partida y el del ranking. Si la segunda fallaba, la partida **sí**
+      estaba guardada y el jugador leía "sin guardar" igual. Y un `undefined` en cualquier
+      item del almacén hacía que Firestore **rechazase el documento entero**.
+      **Causa raíz: dos escrituras en un solo `try`.** Ahora cada una tiene su sitio, el
+      indicador grande solo se enciende si falla `users/{uid}`, el ranking tiene su propio
+      aviso, y `src/firebase.ts` usa `initializeFirestore` con `ignoreUndefinedProperties`
+      (en el SDK modular no es opción por escritura, es de la instancia: ponerlo en cada
+      `setDoc` ni siquiera compila).
+- [x] **G2 · El Ascenso te sacaba del ranking y te mataba el segundo Ascenso.** El
+      documento de `rankings/{uid}` guardaba `score: state.nanites`, o sea **el saldo**, que
+      la Ascensión reinicia: ascendías y caías al último puesto, siendo el jugador que más
+      había jugado el que más perdía. Y lo grave, encontrado de paso: **la Ascensión
+      reiniciaba `totalNanitesProduced`**, y los núcleos del siguiente ascenso son
+      `max(0, pendingCores(totalNanitesProduced) − totalCores)`; con el contador a cero,
+      `pendingCores(0)` es cero y **el segundo Ascenso no existía**, con el botón en
+      "Necesitas producir más para reciclar" y ninguna explicación.
+      **Causa raíz: confundir "progreso de esta subida" con "la marca de haber jugado".**
+      Los históricos (`totalNanitesProduced`, `totalClicks`, `cratesOpened`) ya no se
+      reinician, y **el ranking lleva lo producido**. De paso: `maxCompanionSlots` se
+      reiniciaba a 1 y eran **ranuras compradas con recurso** —cobrar y perderlas al
+      ascender—; las del árbol nunca општились porque viven en `nodeLevels`.
+- [ ] **G3 · El stack de cajas.** El tope son 20 y se pide 99, y el síntoma que describes
+      (`120/20`) es que **una compra en lote se salta el tope**: el item entra entero y la
+      rejilla pinta el número real contra un denominador viejo.
+
+### Lote 2 · INVARIANTES DE LOS OBJETOS
+
+- [ ] **G4 · Todo item generado tiene potencial.** El primero del juego no lo tiene, y
+      `potential` ausente se lee como 3: **un item sin potencial es un item que vale un
+      tercio de lo que dice su daño**. Con eso hay que recorrer TODOS los generadores y
+      poner un banco que pregunte "¿todo item que sale del juego tiene 1..5?".
+- [ ] **G5 · La forja: exactamente 2 del mismo tier.** Y el potencial del nuevo es el
+      **promedio** de los dos, y los afijos salen de los dos padres más algún aleatorio.
+- [ ] **G6 · Los botones de forja y de sus compras solo cuando están desbloqueados.**
+
+### Lote 3 · PRESTIGIO, VAULT Y LA PASIVA OFFLINE
+
+- [ ] **F40 · Vault.** Se desbloquea en el árbol, llega a **nivel 10** y lo que guarda
+      sobrevive al Prestigio. **Decisión tuya:** ¿se sube con núcleos o con items de caja?
+- [ ] **F41 · Prestigio: qué se conserva y qué no.** Ya se conservan logros, núcleos,
+      cosméticos y el histórico; falta **la lista escrita** y un banco que la compruebe.
+- [ ] **F42 · Fuera la pasiva offline.** Se elimina entera: la `grantAfkCatchUp()` y su
+      reloj. El juego no da ingreso sin que estés mirando.
+
+### Lote 4 · CONSUMIBLES
+
+- [ ] **F43 · Usar N de golpe.** Que se pueda elegir la cantidad, se descuente esa cantidad
+      y se **sume el tiempo**. Topes: AFK **30 minutos** (3 tarjetas) y click x2/x3
+      **5 minutos**.
+
+### Lote 5 · EXPANSORES Y ALMACÉN
+
+- [ ] **F44 · Expansores hasta T30.** Pides "hasta T30" y el juego tiene **10 cajas**: los
+      expansores de T11 a T30 no tienen de dónde salir. **Decisión tuya:** ¿se suben las
+      cajas a 30, o los expansores altos salen de otra parte?
+- [ ] **F45 · Buscador** en el almacén.
+- [ ] **F46 · Orden personalizado** — hay que mirarlo, porque con el agrupado de pilas que
+      se acaba de tocar puede haber pasado a ser incoherente.
+- [ ] **F47 · Los expansores a "Mejoras"**, no a recursos.
+
+### Lote 6 · RULETA, CRISTALES Y NÚMEROS
+
+- [ ] **F48 · El check de saltar animaciones va en la ruleta**, no en el perfil.
+- [ ] **F49 · Mejora automática de cristales** hasta agotarlos.
+- [ ] **F50 · Precisión de los contadores.** Con pocas nanitas el número no se mueve.
+
+### Lote 7 · INFORMACIÓN
+
+- [ ] **F51 · Explicar los afijos.** Incluye la pregunta concreta: "¿cuántos afijos puede
+      tener un Mítico?". La respuesta sale de `AFIX_MIN_POR_RARIDAD` y no está escrita en
+      ninguna parte que el jugador pueda leer.
+- [ ] **F52 · Lore de todos los items**, no solo de los que tienen entrada.
+
+### Lote 8 · APARIENCIA
+
+- [ ] **F53 · Banners, marcos y títulos en Perfil, Menú y Ranking.**
+- [ ] **F54 · Los marcos no desbordan** el avatar.
+- [ ] **F55 · Logros 100% obtenibles**, con banco que lo compruebe. Aquí hay un
+      ~~sorpresa~~: el logro `overclocked` se acaba de reasignar y hay que mirarlo con lupa.
+
+### Lote 9 · CAJAS
+
+- [ ] **F56 · Validar la apertura masiva** antes de abrir: cajas, llaves y **espacio**.
+- [ ] **F57 · "Eliminar el sistema de cajas y llaves tradicionales (o unificar su lógica)"**
+      — **no está claro qué quieres decir** y es lo más caro de deshacer. Es pregunta tuya.
+- [ ] [x] **F58 · Lista consolidada y agrupable.** Hecho en `loteCheck`.
+
+---
+
+### Las dos decisiones que necesito de ti
+
+1. **F40 · ¿Con qué se sube el Vault?** Con núcleos cuesta poco y es rápido; con items de
+   caja hace falta un item nuevo. **Recomiendo núcleos**, porque el Vault es un progreso
+   permanente y unAscenso da justo eso, y porque el árbol ya cobra núcleos.
+2. **F44 · Los expansores hasta T30.** El juego tiene 10 cajas. **Recomiendo no subir las
+   cajas** —el salto a 30 niveles de caja es un rebalance entero— y hacer que los expansores
+   de T11 a T30 **no existan**, con la escalera de 15 a 65 que ya está puesta. Dime si
+   prefieres lo otro y lo planteo con su coste.
+
+---
+
 
 ## Lo único que espera tu respuesta
 
@@ -567,6 +691,26 @@ versiones.**
 
 ---
 
+### Lo que salió del Lote 1 y no estaba en el encargo
+
+- [x] **Dos pruebas que fallaban solas, por culpa del azar.** Found while running the suite
+      three times. `loteCheck` pedía que de 20 cajas T1 saliera alguna T2, y el peso del salto
+      en una T1 da menos del 5 % por apertura: hay un camino real a cero Tiradas. Y
+      `sellCheck` pedía que **no quedara ninguna caja** en el almacén después de abrir una,
+      cuando el botín puede soltar cajas **por diseño**: el almacenamiento estaba bien y lo
+      mal escrito era el recuento. **Las dos ahora miden la regla, no una tirada.**
+      Una prueba que se cae sola es peor que no tenerla: entrena a ignorar el banco entero, y
+      el día que algo se rompa de verdad nadie va a mirar si era el código o la suerte.
+      _Las dos se caían **antes** de este lote; comprobado con `git stash` sobre el código
+      original, 1 fallo en 4 corridas._
+- [ ] **Quedan bancos que tiran dados.** `potencialCheck`, `saltoCheck`, `botinCheck` y el
+      resto hacen tiradas reales. No he desmontado todas. **El patrón a seguir es el de G3:
+      medir pesos y tablas, que son deterministas, y dejar las tiradas para lo que de verdad
+      solo se puede comprobar tirando** —y entonces, muchas veces, no 20 sino las que hagan
+      falta para que la probabilidad no deje hueco.
+
+---
+
 ## Ideas sueltas y descubiertos
 
 _Cosas que no son peticiones tuyas pero que aparecieron haciendo otra cosa, para que no se
@@ -659,7 +803,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **25 bancos, 1693
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **26 bancos, 1866
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir

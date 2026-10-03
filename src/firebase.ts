@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
        apiKey: "AIzaSyDe2OtAdDFWOml4v6EuISnPhYI-0xx8kOU",
@@ -17,4 +17,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-export const db = getFirestore(app);
+/**
+ * `initializeFirestore`, no `getFirestore`, por UNA opción.
+ *
+ * **UN `undefined` EN CUALQUIER CAMPO HACE QUE FIRESTORE RECHACE EL DOCUMENTO
+ * ENTERO.** No es un aviso ni una omisión: la escritura falla, y con ella se va
+ * la partida entera. Y en este juego los items vienen de tres sitios que **ponen y
+ * quitan campos**: la ruleta, las migraciones de partidas viejas y el guardado. Un
+ * item de antes de los potenciales no tiene `potential`; uno de antes del tope de
+ * reventa no tiene `sellPriceTope`; uno nuevo tiene los dos. Con la opción puesta
+ * aquí, el campo que falta simplemente no se escribe y el resto llega igual.
+ *
+ * Es la diferencia entre "un item al que le falta un número" y "todo el progreso".
+ * Va **una vez, aquí**, porque en el SDK modular no es una opción por escritura: es
+ * una configuración de la instancia. Escribirla en cada `setDoc` además de no
+ * compilar.
+ */
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });

@@ -239,11 +239,20 @@ async function main() {
     const g = await boot(baseSave([crate('c1'), key('k1', 1)]));
     const r = g.openCrateBox('c1', 'k1');
     check('abrir caja: ok', r.ok, r.msg ?? '');
-    check('abrir caja: la caja se consume', deType(g, 'crate') === 0, ids(g).join(','));
+    // **EL RECUENTO, NO "NO QUEDA NINGUNA CAJA".**
+    //
+    // El botín de una caja puede soltar cajas, así que la prueba pedía que no
+    // quedara ninguna en el almacén y fallaba de verdad cuando salía una: el
+    // almacenamiento está bien, lo mal escrito era el recuento. Decía "se
+    // consumió" mirando algo que el botín puede cambiar por diseño.
+    //
+    // Lo que hay que comprobar es que la caja abierta **ha dejado de existir**.
+    check('abrir caja: la caja se consume',
+      !find(g, 'c1') && g.getState().crates[1] === 0,
+      `sigue=${ids(g).join(',')} crates[1]=${g.getState().crates[1]}`);
     // El botín es aleatorio y puede soltar llaves, así que se comprueba la
     // llave concreta gastada, no el recuento de llaves del almacén.
     check('abrir caja: la llave se consume', !find(g, 'k1'), ids(g).join(','));
-    check('abrir caja: contador a 0', g.getState().crates[1] === 0, 'crates[1]=' + g.getState().crates[1]);
     const g2 = await reload();
     check('abrir caja: no revive al recargar', g2.getState().crates[1] === 0, 'crates[1]=' + g2.getState().crates[1]);
   }

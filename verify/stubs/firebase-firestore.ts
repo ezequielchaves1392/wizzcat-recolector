@@ -9,6 +9,23 @@
 // desaparecería y la recarga saldría limpia, mientras que en Firestore el id
 // viejo seguiría ahí y volvería a equipar lo que el jugador quitó.
 export const getFirestore = (app: any) => app;
+
+/**
+ * `initializeFirestore`, que `src/firebase.ts` usa en vez de `getFirestore`
+ * **por una opción**: `ignoreUndefinedProperties`.
+ *
+ * El stub no puede leer una configuración de instancia, así que se comporta
+ * **como si la opción estuviera puesta**, que es como está de verdad: el juego
+ * escribe con `clonar()`, que es `JSON.parse(JSON.stringify(...))`, y eso ya
+ * descarta los `undefined` en lugar de tirar el documento entero, que es
+ * exactamente lo que hace Firestore con la opción activa.
+ *
+ * Sin la opción, un `undefined` en cualquier item del almacén **tiraría la
+ * escritura entera**. Un stub que no distinguiera los dos casos dejaría pasar la
+ * regresión más cara del guardado: perder la partida por un campo opcional.
+ */
+export const initializeFirestore = (app: any, _opciones?: unknown) => app;
+
 export const doc = (_db: any, ...path: string[]) => ({ id: path.join('/') });
 export const getDoc = async (ref: any) => {
   const doc = globalThis.__MEM_DB__?.[ref.id];
@@ -35,7 +52,15 @@ export const setDoc = async (ref: any, data: any, options?: { merge?: boolean })
   // `__MEM_DB__.fallar` se pone a true para simular la caída y a false para
   // recuperar la conexión, que es como lo hace el juego en producción con el
   // evento `online`.
-  if (globalThis.__MEM_DB__?.fallar) {
+  //
+  // **Y `fallarDoc`, PARA UNO SOLO.** El guardado del juego hace **dos**
+  // escrituras —`users/{uid}` y `rankings/{uid}`— y son independientes: el
+  // ranking es un documento público con reglas de seguridad propias, y fallar él
+  // no es perder la partida. Sin este hook, un banco no puede comprobar la
+  // diferencia entre "no se ha guardado nada" y "no se ha guardado tu posición",
+  // que es exactamente la diferencia que el jugador no podía ver en el aviso.
+  const fallaEste = globalThis.__MEM_DB__?.fallarDoc;
+  if (globalThis.__MEM_DB__?.fallar || (fallaEste && String(ref.id).includes(fallaEste))) {
     throw new Error('FirestoreError: unavailable: Sin conexión (simulado)');
   }
   // RETRASO PROGRAMADO.

@@ -971,6 +971,21 @@ const AFK_THRESHOLD_MS = 60000;
   let guardadoFallando = false;
 
   /**
+   * El ranking va fallando, y ya se le ha avisado.
+   *
+   * **SON DOS BANDERAS Y NO UNA, Y POR QUÉ.** La del guardado grande es "tu
+   * partida está en peligro": eso solo se enciende si falla el documento de
+   * `users/{uid}`. La del ranking es "no hay red con el documento público": el
+   * progreso está a salvo y lo único que se pierde es la posición en la tabla.
+   *
+   * Con una sola bandera, la del ranking encendería el indicador grande y el
+   * jugador leería "sin guardar" con la partida guardada — que es exactamente lo
+   * que pasaba, y es el aviso que más veces se ha reportado.
+   */
+  let rankingFallando = false;
+  let rankingSeAviso = false;
+
+  /**
    * Enciende o apaga el aviso de "sin guardar".
    *
    * No es decoración. Con esta cola, "el número que veo no está en el servidor"
@@ -2101,33 +2116,92 @@ const AFK_THRESHOLD_MS = 60000;
         cosmetics: state.cosmetics,
         updatedAt: new Date()
       };
-      // Guardar datos del juego en users/{uid}
+      // ==========================================================================
+// ==========================================================================
+      //  PASO 1 · EL DOCUMENTO DE LA PARTIDA. ESTE ES EL QUE IMPORTA.
+      // ==========================================================================
+      //
+      //  `ignoreUndefinedProperties` no es un detalle: **sin él, un único
+      //  `undefined` en cualquier item del almacén hace que Firestore RECHACE el
+      //  documento entero**, y el jugador pierde el progreso entero por un campo
+      //  opcional que no existía. Los items vienen de la ruleta, del guardado y
+      //  de las migraciones, y los tres ponen y quitan campos: un item de una
+      //  partida vieja no tiene `sellPriceTope`, uno nuevo sí lo tiene, y uno de
+      //  antes de los potenciales no tiene `potential`.
+      //
+      //  Con la opción, el campo que falte simplemente no se escribe y el resto
+      //  llega igual. Es la diferencia entre "un item sin un número" y "todo el
+      //  progreso de la partida".
       await setDoc(userRef, gameData, { merge: true });
-      // Guardar solo datos de ranking en rankings/{uid}
-      await setDoc(rankingRef, {
-        userId: user.uid,
-        username: user.displayName || 'Operativo',
-        score: state.nanites,
-        totalClicks: state.totalClicks,
-        // Módulo 8: el ranking refleja logros y firmas de autor
-        achievements: state.unlockedAchievements.filter(id => !SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
-        secretAchievements: state.unlockedAchievements.filter(id => SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
-        forgedCount: state.forgedCount,
-        // F29 · Los núcleos van al documento PÚBLICO del ranking. No hay decisión
-        // de privacidad: un número de núcleos es "cuántas veces has reiniciado", no
-        // el saldo ni el inventario. Y `totalCores`, no `cores`: los núcleos que
-        // gastas en el árbol no son menos Ascensión hecha.
-        cores: state.totalCores,
-        title: state.cosmetics.title,
-        frame: state.cosmetics.frame ?? 'frame_none',
-        banner: state.cosmetics.banner ?? 'banner_none',
-        cosmetics: {
+// ==========================================================================
+      //  PASO 1bis · EL DOCUMENTO DEL RANKING. ES OTRO, Y FALLAR AQUÍ NO ES
+      //  PERDER LA PARTIDA.
+      // ==========================================================================
+      //
+      //  **ESTE ES EL MOTIVO DEL AVISO QUE NO TENÍA SENTIDO.** Las dos escrituras
+      //  estaban en el mismo `try`, así que un fallo del ranking —que es un
+      //  documento público, con reglas de seguridad propias y campos que la
+      //  partida no necesita para nada— encendía "Sin guardar en el servidor" con
+      //  la partida **perfectamente guardada**. Y como el aviso es lo único que el
+      //  jugador ve, la conclusión que sacaba era la contraria de la real: que su
+      //  progreso estaba en peligro.
+      //
+      //  Ahora tienen su propio `try` y su propio aviso, y el indicador grande
+      //  solo se enciende si falla **la partida**.
+      try {
+        await setDoc(rankingRef, {
+          userId: user.uid,
+          username: displayName || 'Operativo',
+          // **EL HISTÓRICO, NO EL SALDO.** Aquí se guarda `state.nanites`, y la
+          // Ascensión lo pone a cero: ascend eras y caías al último puesto del
+          // ranking, siendo el jugador que más había jugado el que más perdía.
+          // Lo que no se reinicia nunca es `totalNanitesProduced`, que es lo que
+          // el ranking debe medir: cuánto has producido, no cuánto te queda en el
+          // bolsillo. Ver B13.
+          score: state.totalNanitesProduced,
+          totalClicks: state.totalClicks,
+          // Módulo 8: el ranking refleja logros y firmas de autor
+          achievements: state.unlockedAchievements.filter(id => !SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
+          secretAchievements: state.unlockedAchievements.filter(id => SECRET_ACHIEVEMENTS.includes(id as AchievementId)).length,
+          forgedCount: state.forgedCount,
+          // F29 · Los núcleos van al documento PÚBLICO del ranking. No hay decisión
+          // de privacidad: un número de núcleos es "cuántas veces has reiniciado", no
+          // el saldo ni el inventario. Y `totalCores`, no `cores`: los núcleos que
+          // gastas en el árbol no son menos Ascensión hecha.
+          cores: state.totalCores,
           title: state.cosmetics.title,
           frame: state.cosmetics.frame ?? 'frame_none',
           banner: state.cosmetics.banner ?? 'banner_none',
-        },
-        updatedAt: new Date()
-      }, { merge: true });
+          cosmetics: {
+            title: state.cosmetics.title,
+            frame: state.cosmetics.frame ?? 'frame_none',
+            banner: state.cosmetics.banner ?? 'banner_none',
+          },
+          updatedAt: new Date()
+        }, { merge: true });
+      } catch (rankingError) {
+        // Se avisa por consola y con un aviso propio, y NO se toca el indicador
+        // grande. La partida está guardada; lo que falla es una tabla de posiciones.
+        //
+        // Y el "se ha arreglado" va **fuera** del `catch`: en JavaScript un
+        // `catch` no admite `else`, que es un `if/else` disfrazado. La bandera es
+        // la forma de decirlo sin reescribir el bloque.
+        console.error("Error al guardar en el ranking:", rankingError);
+        rankingFallando = true;
+      }
+      // `rankingSeAviso` es "ya le he dicho al jugador que el ranking falla", para
+      // no repetir el mismo aviso cada quince segundos igual que hace el grande.
+      if (!rankingFallando && rankingSeAviso) {
+        rankingSeAviso = false;
+        showToast('Tu posición en el ranking está al día.', 'success');
+      } else if (rankingFallando && !rankingSeAviso) {
+        rankingSeAviso = true;
+        showToast(
+          'Tu partida se está guardando bien, pero la tabla de posiciones no responde. ' +
+          'Tu progreso no corre riesgo.',
+          'info'
+        );
+      }
 
       /**
        * PASO 2 · EL SERVIDOR CONFIRMA.
@@ -3519,19 +3593,62 @@ const AFK_THRESHOLD_MS = 60000;
       const keptNodes = { ...state.nodeLevels };
       const keptCosmetics = { ...state.cosmetics, unlocked: [...state.cosmetics.unlocked] };
 
+      /**
+       * LOS HISTÓRICOS. NO SE RECICLAN.
+       *
+       * Hay dos clases de números en la partida y confundirlas cuesta caro:
+       * los que son **de esta subida** —el saldo, los ingestos, los compañeros
+       * que llevas puestos— y los que son **de tu historia** —cuánto has producido,
+       * cuántos clics llevas, cuántas cajas has abierto, cuántas ranuras
+       * compraste—. Los primeros se reinician porque el Ascenso es empezar de
+       * cero. Los segundos no, porque **no son progreso: son la marca de haber
+       * jugado**, y por eso se publican y por eso se pagan.
+       *
+       * **El que de verdad rompía el juego era `totalNanitesProduced`.**
+       *
+       * Los núcleos de la siguiente Ascensión son
+       * `nextCores = max(0, pendingCores(totalNanitesProduced) − totalCores)`, y
+       * `pendingCores(0)` es **cero**. Con el contador a cero después del primer
+       * Ascenso, el segundo Ascenso daba siempre `max(0, 0 − 16) = 0`: el botón
+       * se quedaba para siempre en "Necesitas producir más para reciclar" y la
+       * partida se acababa para siempre. No era que el segundo Ascenso costara
+       * más, era que **no existía**, y no había ningún aviso: el jugador subía y
+       * se encontraba con un botón muerto sin explicación.
+       *
+       * Los otros tres son de la misma familia y más discretos:
+       *
+       *  - `totalClicks` alimenta la tabla de "Clics". Reiniciarlo te sacaba de
+       *    ella, y quien más había hecho clic era quien más perdía.
+       *  - `cratesOpened` sale en el panel de administración como "Cajas abiertas".
+       *    El logro `crate_opener` no se puede repetir —los logros se conservan—,
+       *    así que no regalaba nada: solo hacía que el contador mintiera.
+       *  - `maxCompanionSlots` son las ranuras que se **compran con recurso** en la
+       *    tienda. Reiniciarlas a 1 era cobrar por algo que el siguiente Ascenso se
+       *    llevaba. Las del árbol (`state.bonus.companionSlots`) nunca se pierden,
+       *    porque viven en `nodeLevels`; estas eran las únicas que sí.
+       *
+       * `totalInfraestructure` sí se sigue reiniciando, y no por ser histórica:
+       * es un campo muerto que siempre ha valido cero. No se toca porque no hay
+       * nada que conserving.
+       */
+      const keptNanitesProduced = state.totalNanitesProduced;
+      const keptClicks = state.totalClicks;
+      const keptCratesOpened = state.cratesOpened;
+      const keptCompanionSlots = state.maxCompanionSlots;
+
       // Reinicio total
       Object.assign(state, {
         nanites: 0,
-        totalNanitesProduced: 0,
+        totalNanitesProduced: keptNanitesProduced,
         passiveIncome: 0,
         passiveMultiplier: 1,
-        totalClicks: 0,
+        totalClicks: keptClicks,
         totalInfraestructure: 0,
-        cratesOpened: 0,
+        cratesOpened: keptCratesOpened,
         keys: 3,
         upgradeCrystals: 5,
         warehouseCapacity: 15,
-        maxCompanionSlots: 1,
+        maxCompanionSlots: keptCompanionSlots,
         afkCards: 0,
         afkExpiresAt: 0,
         crates: { ...contadorDeCajasVacio(), 1: 2 },

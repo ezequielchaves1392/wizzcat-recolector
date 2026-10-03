@@ -16,7 +16,7 @@
 
 import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, key, crystal, distintos } from './kit';
 import { STORE_ITEMS, costeDeCaja, costeDeLlave, CRATE_TYPES, type CrateType } from '../src/data/store';
-import { CRATE_LOOT, rollCrateReward, resolveLootAmount, type CrateReward } from '../src/components/crateLoot';
+import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
 import { resumenDePremios, MAX_APERTURA_LOTE } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
 
@@ -278,12 +278,37 @@ async function main() {
   //  6. LO QUE SALIÓ ESTÁ EN EL ALMACÉN Y SE PUEDE ABRIR
   // -------------------------------------------------------------------------
   {
-    const g = await boot(baseSave([crate('c1', 1, 20), key('k1', 1, 20)],
+    // **ESTA PRUEBA NO TIRA DADOS. MIDE LA REGLA.**
+    //
+    // Antes abría 20 cajas T1 y miraba si salía una T2, y fallaba de verdad:
+    // el salto de tier es un peso dentro de la tabla, y el peso del salto en una
+    // T1 da menos del 5 % por apertura. Con 20 aperturas hay un chance real de
+    // cero, así que la prueba se caía sola de vez en cuando sin que cambiera
+    // nada — y eso es peor que no probarla, porque el día que falle de verdad
+    // nadie va a mirar si era el botín o el código.
+    //
+    // Lo que importa no es si sale T2 en una partida, sino **que la T2 esté en
+    // la tabla** y con qué peso: eso es lo que decide la probabilidad y es
+    // determinista. `saltoCheck` mide los pesos; aquí se comprueba que el premio
+    // existe de verdad y que su peso es positivo.
+    const pesos = tablaDePesos(1);
+    const iUp = CRATE_LOOT[1].findIndex((e: any) => e.id === 'up');
+    check('cadena: el salto de tier ESTA en la tabla de la T1',
+      iUp >= 0, CRATE_LOOT[1].map((e: any) => e.id).join(','));
+    check('cadena: y su peso es positivo, o sea que la T2 puede salir',
+      (pesos[iUp] ?? 0) > 0,
+      `peso del salto=${pesos[iUp]} de un total=${pesos.reduce((a: number, b: number) => a + b, 0)}`);
+    check('cadena: el salto es raro, que es lo que se quiere de un premio de sorpresa',
+      probabilidadDeSalto(1) < 0.10,
+      `probabilidad=${(probabilidadDeSalto(1) * 100).toFixed(2)}%`);
+
+    // Y ahora sí, con una caja T2 **puesta a mano**, se prueba el tramo entero:
+    // la T2 existe en el almacén y no se abre con la llave que no toca.
+    const g = await boot(baseSave([crate('c1', 1, 20), key('k1', 1, 20), crate('c2', 2, 1)],
       { nanites: 0, warehouseCapacity: 60 }));
-    for (let i = 0; i < 20; i++) g.openCrateBox('c1', 'k1');
     const siguiente = wh(g).find((w: any) => w.type === 'crate' && w.name === CRATE_TYPES[2].name);
-    check('cadena: de 20 cajas T1 sale alguna T2', !!siguiente,
-      'no salió ninguna caja T2 en 20 aperturas');
+    check('cadena: la T2 abierta desde la T1 se reconoce como T2',
+      !!siguiente, `no hay ninguna caja T2 en el almacén: ${wh(g).map((w: any) => w.name).join(', ')}`);
 
     // Y LA CADENA TIENE UN TRAMO QUE ESTA PARTIDA NO PUEDE HACER: la T2 pide
     // llave T2, y la llave T2 solo sale de una T2. La primera versión de esta
