@@ -918,14 +918,25 @@ function subirNTier(crateType: CrateType, pasos: number): any {
  * querer**: subir el del arma sube también la del salto, porque comparten tabla.
  * Con un número suelto en la línea de `weight:` nadie ve esa relación.
  *
- * Con el total en torno a 160-200, 28 y 30 dejan a los dos objetos de tier en
- * torno al 17 % cada uno, y el resto se reparte entre nanitas, cristales, llave,
- * caja siguiente, salto y expansor. **Subir la T10 por encima de eso no es una
- * mejora: es cambiar la caja.** `saltoCheck` mide los pesos de cada caja, así que
- * el número exacto de aquí está medido, no estimado.
+ * Con el total en torno a 200-260, 58 y 62 dejan a los dos objetos de tier en
+ * torno al 27 % cada uno, y el resto se reparte entre nanitas, cristales, caja
+ * siguiente, salto y expansor. **Subir la T10 por encima de eso no es una mejora: es
+ * cambiar la caja.** `saltoCheck` mide los pesos de cada caja y `lootCheck` mide
+ * el resultado con 4 000 tiradas por caja, así que el número exacto de aquí está
+ * medido, no estimado.
+ *
+ * **Y POR QUÉ ESTÁN EN DOS CONSTANTES Y NO EN LA LÍNEA DE `weight:`.** Porque los
+ * pesos son **relativos**: subir el del arma sube la del arma **y baja la de todo lo
+ * demás**, que es justo lo que se pidió, y sube también la del salto, que comparte
+ * tabla. Con un número suelto nadie ve esa relación, y el día que alguien lo sube
+ * para "que salga más" se lleva por delante el salto y los cristales sin saberlo.
+ *
+ * La lista de lo que se reparte y la de lo que se sube están juntas, y el banco
+ * mide las dos cosas: que la caja siga dando objetos —que es lo que se pidió— y que
+ * no deje de darlos, que es lo que se rompió la vez anterior.
  */
-const PESO_RECOLECTOR = 28;
-const PESO_COMPANERO = 30;
+const PESO_RECOLECTOR = 58;
+const PESO_COMPANERO = 62;
 
 /**
  * F31 · LOS COMPAÑEROS EXCLUSIVOS, REPARTIDOS POR CAJA.

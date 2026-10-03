@@ -149,24 +149,49 @@ async function main() {
   {
     const TIRADAS = 4000;
     const sinArma: string[] = [];
+    const sinCompanero: string[] = [];
     const porCaja: string[] = [];
     for (const caja of CAJAS) {
       let conArma = 0;
-      let otraCosa = 0;
+      let conCompanero = 0;
       for (let i = 0; i < TIRADAS; i++) {
         const { applier } = crearApplier(true);
         const premio = rollCrateReward(caja, applier);
         if (premio.kind === 'collector') conArma++;
-        else otraCosa++;
+        if (premio.kind === 'companion') conCompanero++;
       }
-      porCaja.push(`T${caja}: ${Math.round((conArma / TIRADAS) * 100)}%`);
-      // **UN UMBRAL, NO "AL MENOS UNA".** Con 4000 tiradas, un premio con un peso
-      // real sale siempre. Si una caja no puede dar armas, sale cero veces, y un
-      // "> 0" no distingue "no puede" de "es rarísimo".
+      const pa = Math.round((conArma / TIRADAS) * 100);
+      const pc = Math.round((conCompanero / TIRADAS) * 100);
+      porCaja.push(`T${caja}: ${pa}% arma / ${pc}% compañero`);
       if (conArma / TIRADAS < 0.01) sinArma.push(`T${caja} (${conArma}/${TIRADAS})`);
+      if (conCompanero / TIRADAS < 0.01) sinCompanero.push(`T${caja} (${conCompanero}/${TIRADAS})`);
     }
     check('botín: TODA caja puede dar un recolector, la T1 incluida',
       sinArma.length === 0, sinArma.join(', ') || porCaja.join(' '));
+    check('botín: y un compañero, con la misma garantía',
+      sinCompanero.length === 0, sinCompanero.join(', ') || porCaja.join(' '));
+
+    // **Y QUE LOS DOS OBJETOS SALGAN LO SUFICIENTE A MENUDO.** Esta es la
+    // comprobación que motivó subir los pesos, y por eso hay un suelo y no
+    // solo la garantía de que existen. Es un **mínimo por caja**, no una media: el
+    // fallo que se quiere cazar es "la caja T3 no da armas casi nunca", y una
+    // hoy sale entre 27 % y 29 %- para que subirlo más no rompa el banco por
+    // flor.
+    // rosca.
+    const MINIMO_OBJETO = 0.22;
+    const flojos: string[] = [];
+    for (const caja of CAJAS) {
+      let conObjeto = 0;
+      for (let i = 0; i < TIRADAS; i++) {
+        const { applier } = crearApplier(true);
+        const p = rollCrateReward(caja, applier);
+        if (p.kind === 'collector' || p.kind === 'companion') conObjeto++;
+      }
+      const p = conObjeto / TIRADAS;
+      if (p < MINIMO_OBJETO) flojos.push(`T${caja} ${Math.round(p * 100)}%`);
+    }
+    check('botín: armas y compañeros salen al menos un 22 % de las veces, en toda caja',
+      flojos.length === 0, flojos.join(', ') || porCaja.join(' '));
   }
 
   // =========================================================================
