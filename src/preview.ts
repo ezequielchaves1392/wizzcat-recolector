@@ -331,9 +331,22 @@ function repartoProporcional(mock: any): (id: string) => number {
 
 const app = document.querySelector('#app') as HTMLElement;
 
-// En el preview la navegacion se simula: cada boton lleva a la vista que
+// En el preview la navegación se simula: cada botón lleva a la vista que
 // tenga en la URL, para poder recorrerlas todas sin Firebase.
-const ir = (destino: string) => () => {
+//
+// **ESTO ES UNA FUNCIÓN QUE NAVEGA, NO UNA QUE DEVUELVE UNA FUNCIÓN**, y antes era
+// al revés. `wireNav` llama `go(ruta)` esperando que navegue; con la fábrica,
+// `ir('tienda')` devolvía otra función sin hacer nada y el clic se perdía en
+// silencio.
+//
+// Solo se notaba ahora porque **antes las páginas no tenían botones de `data-nav`
+// que no fueran el `‹` de volver**, que iba por su propio camino. Al poner las
+// barras en todas las pantallas, cada página ha recibido seis botones nuevos que
+// usan `go`, y el `preview` —que es lo que se usa para mirar cómo queda— era el
+// único sitio donde no funcionaban. El juego real usa `router.goTo()`, que sí
+// tiene la firma correcta: esto era un cable mal puesto en el mostrador, no en el
+// motor.
+const ir = (destino: string) => {
   const q = new URLSearchParams(location.search);
   q.set('vista', destino);
   location.href = location.pathname + '?' + q.toString();
@@ -341,22 +354,22 @@ const ir = (destino: string) => () => {
 
 switch (vista) {
   case 'almacen':
-    renderWarehouseTab(app, fakeGame, ir('base'), noop, ir);
+    renderWarehouseTab(app, fakeGame, noop, ir);
     break;
   case 'tienda':
-    renderStoreTab(app, fakeGame, ir('base'), ir);
+    renderStoreTab(app, fakeGame, ir);
     break;
   case 'forja':
-    renderForgePage(app, fakeGame, ir('base'), ir);
+    renderForgePage(app, fakeGame, ir);
     break;
   case 'perfil':
-    renderProfilePage(app, fakeGame, ir('base'), ir('prestigio'), ir);
+    renderProfilePage(app, fakeGame, () => ir('prestigio'), ir);
     break;
   case 'prestigio':
-    renderPrestigePage(app, fakeGame, ir('base'), ir);
+    renderPrestigePage(app, fakeGame, ir);
     break;
   case 'ranking':
-    renderRankings(app, { uid: 'me' }, ir('base'), ir);
+    renderRankings(app, { uid: 'me' }, ir);
     break;
   default:
     app.innerHTML = renderLayoutHTML(MOCK, 'cyber-dark', 'base', {

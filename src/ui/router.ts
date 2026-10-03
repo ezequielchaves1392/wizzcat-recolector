@@ -15,10 +15,10 @@
 //   - conservar el estado de la partida mientras se navega (no se reinicia el
 //     game loop al cambiar de vista; el tick sigue corriendo en segundo plano)
 //
-// La barra inferior es el índice del menú principal y solo se pinta en la
-// base. Desde un sector se vuelve con `back()` (el `‹` de la esquina superior
-// izquierda), que además tiene el historial como red de seguridad: si no queda
-// nada atrás, quien llama cae a la base.
+// Las dos barras de navegación son el índice del juego, y se pintan en TODAS
+// las pantallas: la de abajo en móvil y la fila de la cabecera en escritorio.
+// El enrutador ya no lleva pila, porque no hay botón de atrás: se navega con las
+// barras o con cualquier `data-nav` que haya en una página.
 // ==========================================================================
 
 export type Route = 'base' | 'almacen' | 'forja' | 'tienda' | 'perfil' | 'ranking' | 'prestigio';
@@ -57,30 +57,8 @@ export const HEADER_ROUTES = ROUTES.filter(r => r.inHeader);
 export function routeTitle(route: Route): string {
   return ROUTES.find(r => r.id === route)?.title ?? 'Cyber Base';
 }
-
-/**
- * Pila de navegación.
- *
- * El botón "volver" hace pop(); si la pila se queda vacía, `back()` devuelve
- * `false` y quien llama cae a la base, que es el único sitio donde siempre se
- * puede estar. Así no puede haber un "atrás" que no lleve a ninguna parte.
- *
- * LÍMITE DE LA PILA.
- *
- * Navegar siempre hace push, y eso hace que una sesión larga acumule: base →
- * almacén → forja → tienda → base → almacén deja cinco entradas, y el jugador
- * tiene que pulsarlo cinco veces para llegar al principio. Se siente como un
- * botón de atrás roto.
- *
- * Con el tope, tras varias navegaciones se empieza a olvidar el principio, que
- * es justo lo que se quiere: `back()` vuelve "a donde estabas hace un rato",
- * y el botón de inicio lleva a la base sin ninguna ambigüedad. Diez es un
- * número alto a propósito: da para una exploración larga sin castigar al que
- * solo mira dos pantallas.
- */
-const MAX_STACK = 10;
-
 export class Router {
+  /** La ruta de ahora. Y solo eso: **aquí ya no hay pila.** */
   private stack: Route[] = ['base'];
   private listeners = new Set<(route: Route, previous: Route) => void>();
 
@@ -88,38 +66,22 @@ export class Router {
     return this.stack[this.stack.length - 1];
   }
 
-  /** Cambia de vista. Si es la misma, no hace nada. */
+  /**
+   * Cambia de vista. Si es la misma, no hace nada.
+   *
+   * **ANTES HACIA PUSH Y TRATABA LA BASE COMO CASO ESPECIAL**, con un tope de
+   * diez entradas. Las dos cosas existían por el botón de atrás: el tope era
+   * "cuántas veces hay que pulsar para llegar al principio" y el reinicio era "no
+   * quiero que ir a la base y volver cueste cuatro toques".
+   *
+   * Sin botón no hay ni tope ni reinicio. Y quitarlo no es solo limpieza: es que
+   * `goTo()` deja de decidir cosas en nombre de un control que ya no existe.
+   */
   goTo(route: Route): void {
     if (route === this.current) return;
     const previous = this.current;
-    // Navegar a la base limpia la pila: si no, volver tres veces para llegar
-    // al panel principal sería absurdo.
-    if (route === 'base') this.stack = ['base'];
-    else {
-      this.stack.push(route);
-      // Se descarta el principio, nunca la entrada actual: `back()` siempre
-      // tiene adónde ir después de una navegación.
-      if (this.stack.length > MAX_STACK) this.stack.shift();
-    }
+    this.stack.push(route);
     this.emit(previous);
-  }
-
-  /** Vuelve a la vista anterior. Devuelve false si ya estaba en la base. */
-  back(): boolean {
-    if (this.stack.length <= 1) return false;
-    const previous = this.current;
-    this.stack.pop();
-    this.emit(previous);
-    return true;
-  }
-
-  /** Pila actual, para depurar. */
-  get history(): readonly Route[] {
-    return this.stack;
-  }
-
-  canGoBack(): boolean {
-    return this.stack.length > 1;
   }
 
   onChange(fn: (route: Route, previous: Route) => void): () => void {

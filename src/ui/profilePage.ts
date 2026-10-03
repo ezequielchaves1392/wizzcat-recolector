@@ -90,7 +90,6 @@ const ui = { tab: 'title' as 'title' | 'frame' | 'banner' };
 export function renderProfilePage(
   container: HTMLElement,
   game: any,
-  onBack: () => void,
   onGoPrestige: () => void,
   go?: (r: any) => void
 ) {
@@ -339,7 +338,7 @@ export function renderProfilePage(
     title: 'Perfil',
     subtitle: 'Identidad, cosméticos y logros',
     icon: 'user',
-    onBack,
+    route: 'perfil',
     state,
     // La píldora de nanitas de la cabecera se retiraba: el perfil ya trae su
     // propia cifra en la franja de estadísticas, con el mismo rombo delante de
@@ -349,7 +348,7 @@ export function renderProfilePage(
   }, body));
 
   // --- Eventos ---
-  wireNav(root, { back: onBack, go });
+  wireNav(root, { go });
   root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
   // El check es un `input` real: su estado lo lleva el propio navegador y la
   // preferencia vive en `localStorage`, así que no hay que re-pintar nada al
@@ -364,7 +363,7 @@ export function renderProfilePage(
     btn.addEventListener('click', () => {
       sfx.nav();
       ui.tab = btn.dataset.cosTab as 'title' | 'frame' | 'banner';
-      renderProfilePage(container, game, onBack, onGoPrestige, go);
+      renderProfilePage(container, game, onGoPrestige, go);
     });
   });
 
@@ -379,7 +378,7 @@ export function renderProfilePage(
       }
       sfx.equip();
       game.equipCosmetic(tab, cosId);
-      renderProfilePage(container, game, onBack, onGoPrestige, go);
+      renderProfilePage(container, game, onGoPrestige, go);
     });
   });
 }

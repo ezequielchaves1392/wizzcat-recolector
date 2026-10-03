@@ -51,14 +51,22 @@
 
 import { ic } from './icons';
 import type { Route } from './router';
+import { navDesktopHTML, navMobileHTML } from './navBars';
 import { formatNumber } from '../utils/format';
 
 export interface PageShellOptions {
   title: string;
   subtitle?: string;
   icon?: string;
-  /** Botón de volver. Si no se pasa `onBack`, no se pinta. */
-  onBack?: () => void;
+  /**
+   * Qué ruta está pintando esta página.
+   *
+   * **NO ES ADORNO: es lo que marca el botón activo de las dos barras.** Sin esto
+   * cada página diría cuál de las cinco rutas es la buena, y el jugador vería
+   * "Forja" resaltada dentro del almacén. Y como las barras viven en un módulo
+   * compartido, el fallo no se ve en la página: se ve en las dos barras a la vez.
+   */
+  route: Route;
   /** Contenido extra del encabezado a la derecha, antes del contador. */
   actions?: string;
   /** Estado de la partida, para pintar el contador de nanitas. */
@@ -130,7 +138,7 @@ export function unmount(container: HTMLElement): void {
  * acumularía sobre nodos muertos. Un solo listener en la raíz, y la raíz se
  * recrea limpia con `mountInto`.
  */
-export function wireNav(root: HTMLElement, cb: { back?: () => void; go?: (r: Route) => void }) {
+export function wireNav(root: HTMLElement, cb: { go?: (r: Route) => void }) {
   root.addEventListener('click', (e) => {
     const nav = (e.target as HTMLElement).closest('[data-nav]') as HTMLElement | null;
     if (nav) {
@@ -138,29 +146,10 @@ export function wireNav(root: HTMLElement, cb: { back?: () => void; go?: (r: Rou
       cb.go?.(nav.dataset.nav as Route);
       return;
     }
-    const back = (e.target as HTMLElement).closest('[data-nav-back]') as HTMLElement | null;
-    if (back) {
-      e.stopPropagation();
-      cb.back?.();
-    }
   });
 }
 
 export function pageShell(opts: PageShellOptions, body: string): string {
-  // El `‹` es LA salida del sector, y por eso se pinta siempre que haya
-  // `onBack` — sin importar el tamaño de la pantalla. Es el único control de
-  // navegación que existe aquí, así que no puede depender de un breakpoint:
-  // en móvil es la esquina inalcanzable del pulgar, y en escritorio es el
-  // botón de vuelta atrás de toda la vida.
-  const backBtn = opts.onBack
-    ? `<button data-nav-back
-         class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0
-                transition-transform active:scale-90"
-         style="min-width:44px;min-height:44px" aria-label="Volver">
-         <span class="[&>span>svg]:w-5 [&>span>svg]:h-5">${ic('back')}</span>
-       </button>`
-    : '';
-
   // El contador de nanitas viaja en el encabezado de todas las páginas: es el
   // número que hace falta para decidir cualquier compra, y estaba solo en la
   // base y en la tienda.
@@ -184,14 +173,15 @@ export function pageShell(opts: PageShellOptions, body: string): string {
         class="card-glass flex-shrink-0 flex items-center gap-2 px-3 md:px-5 py-2.5 md:py-3
                border-x-0 border-t-0 md:mx-4 md:mt-2 md:rounded-2xl md:border"
         style="padding-top: max(0.625rem, env(safe-area-inset-top))">
-        ${backBtn}
+
         ${opts.icon ? `<span class="accent-text flex-shrink-0 hidden sm:block [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(opts.icon as any)}</span>` : ''}
-        <div class="min-w-0 flex-1">
+        <div class="min-w-0">
           <h1 class="font-['Orbitron'] font-bold text-[15px] md:text-lg accent-text truncate leading-tight">
             ${opts.title}
           </h1>
           ${opts.subtitle ? `<p class="text-[10px] md:text-[11px] text-[var(--text-muted)] font-mono truncate mt-0.5 hidden sm:block">${opts.subtitle}</p>` : ''}
         </div>
+        ${navDesktopHTML(opts.route)}
         ${nanites}
         ${opts.actions ? `<div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions}</div>` : ''}
       </header>
@@ -202,6 +192,8 @@ export function pageShell(opts: PageShellOptions, body: string): string {
            style="padding-bottom: calc(1rem + env(safe-area-inset-bottom))">
         ${body}
       </main>
+
+      ${navMobileHTML(opts.route)}
     </div>
   `;
 }

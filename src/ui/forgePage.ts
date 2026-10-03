@@ -73,11 +73,11 @@ const NOMBRES = {
 } as const;
 
 /** Punto de entrada. Re-monta la página conservando la selección. */
-export function renderForgePage(container: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
-  draw(container, game, onBack, go);
+export function renderForgePage(container: HTMLElement, game: any, go?: (r: any) => void) {
+  draw(container, game, go);
 }
 
-function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
+function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   const state = game.getState();
   const info = game.getForgeInfo();
   const N = NOMBRES[ui.tipo];
@@ -324,7 +324,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
     title: 'Forja',
     subtitle: 'Fusión, autoría y potencial',
     icon: 'anvil',
-    onBack,
+    route: 'forja',
     state,
     actions: `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
@@ -333,8 +333,8 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
       </span>`
   }, body));
 
-  wireNav(root, { back: onBack, go });
-  wire(root, game, onBack, go);
+  wireNav(root, { go });
+  wire(root, game, go);
 }
 
 /**
@@ -357,9 +357,9 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
  * `root.parentElement`, que es exactamente el padre que usó `mountInto`. Son
  * dos cosas distintas y se confundían.
  */
-function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
+function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
   const container = root.parentElement as HTMLElement;
-  const redraw = () => draw(container, game, onBack, go);
+  const redraw = () => draw(container, game, go);
 
   // Estado derivado que los manejadores necesitan. Se recalcula aquí en vez de
   // capturarlo en `draw`, porque cuando llegan los eventos `draw` ya ha

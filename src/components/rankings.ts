@@ -43,7 +43,6 @@ let tableroActivo: BoardKind = 'definitivo';
 export function renderRankings(
   container: HTMLElement,
   currentUser: any,
-  onBack: () => void,
   go?: (r: any) => void
 ) {
   const meId = currentUser?.uid ?? currentUser?.userId;
@@ -52,14 +51,14 @@ export function renderRankings(
     title: 'Ranking global',
     subtitle: 'La tabla general y los cuatro criterios por separado',
     icon: 'trophy',
-    onBack
+    route: 'ranking'
   }, `
     <div class="flex flex-col gap-2" id="rank-body">
       ${skeleton()}
     </div>
   `));
 
-  wireNav(root, { back: onBack, go });
+  wireNav(root, { go });
 
   const body = root.querySelector('#rank-body')!;
 

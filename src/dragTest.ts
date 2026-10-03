@@ -264,7 +264,7 @@ function pintar(sc: Scenario) {
   estado.warehouseCapacity = sc.capacity;
   estado.warehouseGaps = [...(sc.gaps ?? [])];
   llamadas.length = 0;
-  renderWarehouseTab(app, game, () => {}, () => {}, () => {});
+  renderWarehouseTab(app, game, () => {}, () => {});
 }
 
 /**

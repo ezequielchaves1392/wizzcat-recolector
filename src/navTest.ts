@@ -86,7 +86,7 @@ const router = new Router();
 
 function renderRoute(route: Route) {
   app.innerHTML = '';
-  const goBack = () => { if (!router.back()) router.goTo('base'); renderRoute(router.current); };
+
   const go = (r: Route) => { router.goTo(r); renderRoute(router.current); };
 
   switch (route) {
@@ -107,22 +107,22 @@ function renderRoute(route: Route) {
       break;
     }
     case 'almacen':
-      renderWarehouseTab(app, fakeGame, goBack, noop, go);
+      renderWarehouseTab(app, fakeGame, noop, go);
       break;
     case 'forja':
-      renderForgePage(app, fakeGame, goBack, go);
+      renderForgePage(app, fakeGame, go);
       break;
     case 'tienda':
-      renderStoreTab(app, fakeGame, goBack, go);
+      renderStoreTab(app, fakeGame, go);
       break;
     case 'perfil':
-      renderProfilePage(app, fakeGame, goBack, () => go('prestigio'), go);
+      renderProfilePage(app, fakeGame, () => go('prestigio'), go);
       break;
     case 'ranking':
-      renderRankings(app, { uid: 'me' }, goBack, go);
+      renderRankings(app, { uid: 'me' }, go);
       break;
     case 'prestigio':
-      renderPrestigePage(app, fakeGame, goBack, go);
+      renderPrestigePage(app, fakeGame, go);
       break;
   }
 }

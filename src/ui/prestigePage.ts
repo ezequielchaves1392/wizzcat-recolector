@@ -84,7 +84,6 @@ function weight(key: keyof PassiveBonuses, value: number): number {
 export function renderPrestigePage(
   container: HTMLElement,
   game: any,
-  onBack: () => void,
   go?: (r: any) => void
 ) {
   const state = game.getState();
@@ -255,7 +254,7 @@ export function renderPrestigePage(
     title: 'Ascensión',
     subtitle: 'Núcleos y árbol de pasivas',
     icon: 'recycle',
-    onBack,
+    route: 'prestigio',
     state,
     actions: `
       <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
@@ -266,8 +265,8 @@ export function renderPrestigePage(
     `
   }, body));
 
-  wireNav(root, { back: onBack, go });
-  wireEvents(root, game, onBack, state, go);
+  wireNav(root, { go });
+  wireEvents(root, game, state, go);
 }
 
 /**
@@ -287,7 +286,7 @@ export function renderPrestigePage(
  * `mountInto` usó como padre. Es el mismo truco que usan `warehouse.ts` y
  * `forgePage.ts`.
  */
-function wireEvents(root: HTMLElement, game: any, onBack: () => void, state: any, go?: (r: any) => void) {
+function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => void) {
   const container = root.parentElement as HTMLElement;
   // --- Reciclar ---
   container.querySelector('#recycle-btn')?.addEventListener('click', () => {
@@ -304,7 +303,7 @@ function wireEvents(root: HTMLElement, game: any, onBack: () => void, state: any
         if (res.success) {
           sfx.prestige();
           showToast(`Ascendido: ${res.msg}`, 'success');
-          renderPrestigePage(container, game, onBack, go);
+          renderPrestigePage(container, game, go);
         } else {
           showToast(res.msg, 'error');
         }
@@ -346,7 +345,7 @@ function wireEvents(root: HTMLElement, game: any, onBack: () => void, state: any
             sfx.error();
             showToast(res.msg, 'error');
           }
-          renderPrestigePage(container, game, onBack, go);
+          renderPrestigePage(container, game, go);
         },
         {
           sublabel: `${cat?.label ?? 'Nodo'} · nivel ${level + 1}/${node.maxLevel}`,

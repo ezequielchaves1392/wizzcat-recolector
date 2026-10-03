@@ -337,7 +337,6 @@ function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; 
 export function renderStoreTab(
   container: HTMLElement,
   game: any,
-  onBack: () => void,
   go?: (r: any) => void
 ) {
   const state = game.getState();
@@ -489,12 +488,12 @@ export function renderStoreTab(
     title: 'Mercado',
     subtitle: discount > 0 ? `Descuento del árbol aplicado: −${Math.round(discount * 100)}%` : 'Todo se paga con nanitas',
     icon: 'store',
-    onBack,
+    route: 'tienda',
     state,
     hideNanites: true
   }, body));
 
-  wireNav(root, { back: onBack, go });
+  wireNav(root, { go });
 
   // El indicador se posiciona al montar, una vez que el navegador conoce los
   // anchos. Antes que nada se deja fuera de pantalla: si se pinta en 0 y luego
@@ -513,7 +512,7 @@ export function renderStoreTab(
       // continuación y no como un salto de vuelta al origen.
       const strip = root.querySelector('#cat-tabs') as HTMLElement | null;
       ui.stripScroll = strip?.scrollLeft ?? 0;
-      renderStoreTab(container, game, onBack, go);
+      renderStoreTab(container, game, go);
     });
   });
 
@@ -532,7 +531,7 @@ export function renderStoreTab(
         showToast(st.reason ?? 'No te alcanza', 'info');
         return;
       }
-      comprarFlujo(game, key, container, onBack, go);
+      comprarFlujo(game, key, container, go);
       return;
     }
 
@@ -540,14 +539,14 @@ export function renderStoreTab(
     if (info) {
       sfx.pick();
       ui.detail = ui.detail === info.dataset.info ? null : info.dataset.info!;
-      renderStoreTab(container, game, onBack, go);
+      renderStoreTab(container, game, go);
       return;
     }
 
     if ((target as HTMLElement).closest('[data-detail-close]')) {
       sfx.pick();
       ui.detail = null;
-      renderStoreTab(container, game, onBack, go);
+      renderStoreTab(container, game, go);
     }
   });
 
@@ -563,7 +562,7 @@ export function renderStoreTab(
  * del motor). Al cerrar, lo sorteado se enseña con su modal (F12) y el resto
  * con su aviso.
  */
-function comprarFlujo(game: any, itemKey: string, container: HTMLElement, onBack: () => void, go?: (r: any) => void) {
+function comprarFlujo(game: any, itemKey: string, container: HTMLElement, go?: (r: any) => void) {
   const cerrar = (bought: any, units?: number) => {
     if (bought === false) {
       sfx.error();
@@ -573,11 +572,11 @@ function comprarFlujo(game: any, itemKey: string, container: HTMLElement, onBack
     sfx.buy();
     if (typeof bought === 'object' && bought !== null &&
         (bought.type === 'companion' || bought.type === 'collector')) {
-      showPurchaseModal(game, bought, () => renderStoreTab(container, game, onBack, go));
+      showPurchaseModal(game, bought, () => renderStoreTab(container, game, go));
       return;
     }
     showToast(units && units > 1 ? `Comprado ×${units}` : 'Comprado', 'success');
-    renderStoreTab(container, game, onBack, go);
+    renderStoreTab(container, game, go);
   };
 
   const max = game.getBulkMax?.(itemKey) ?? 1;

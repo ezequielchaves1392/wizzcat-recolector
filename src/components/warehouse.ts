@@ -92,17 +92,15 @@ const ui = {
 export function renderWarehouseTab(
   container: HTMLElement,
   game: any,
-  onBack: () => void,
   onStateChange?: () => void,
   go?: (r: any) => void
 ) {
-  draw(container, game, onBack, onStateChange, go);
+  draw(container, game, onStateChange, go);
 }
 
 function draw(
   container: HTMLElement,
   game: any,
-  onBack: () => void,
   onStateChange?: () => void,
   go?: (r: any) => void
 ) {
@@ -312,16 +310,16 @@ function draw(
     title: 'Almacén',
     subtitle: 'Arrastra para reordenar · toca para inspeccionar',
     icon: 'warehouse',
-    onBack,
+    route: 'almacen',
     state,
     // El contador va junto a las ranuras, dentro del cuerpo de la página.
     hideNanites: true
   }, body));
 
-  wireNav(root, { back: onBack, go });
+  wireNav(root, { go });
   // `wire` recibe `root` (el nodo que se recrea), no `container`. Es lo que
   // evita que los listeners se acumulen de un repintado a otro.
-  wire(root, game, onBack, onStateChange, go);
+  wire(root, game, onStateChange, go);
 }
 
 /** Hoja de detalle. En móvil va abajo con arrastre de salida; en escritorio, arriba. */
@@ -593,12 +591,12 @@ function esEquipado(w: any, state: any): boolean {
  * sobre `root`: viven en nodos nuevos, así que no acumulan, y por cada uno hay
  * un solo elemento.
  */
-function wire(root: HTMLElement, game: any, onBack: () => void, onStateChange?: () => void, go?: (r: any) => void) {
+function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r: any) => void) {
   // El re-render tiene que recibir lo mismo que el render original. Aquí se
   // perdían las rutas de navegación: al mover un item la página se repintaba
   // sin ellas y a partir de ahí no se podía saltar a otra sección.
   const container = root.parentElement as HTMLElement;
-  const redraw = () => draw(container, game, onBack, onStateChange, go);
+  const redraw = () => draw(container, game, onStateChange, go);
 
   // --- Filtro y orden ---
   root.querySelectorAll<HTMLElement>('[data-filter]').forEach(btn => {

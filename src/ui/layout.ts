@@ -32,7 +32,8 @@
 import { ic, type IconName } from './icons';
 import { isSfxEnabled, isMusicEnabled } from '../utils/audio';
 import { THEMES } from '../theme';
-import { BOTTOM_BAR_ROUTES, HEADER_ROUTES, routeTitle, type Route } from './router';
+import { routeTitle, type Route } from './router';
+import { navDesktopHTML, navMobileHTML } from './navBars';
 import { miniIdentity, type IdentityCosmetics } from './identity';
 
 export interface LayoutCallbacks {
@@ -62,38 +63,6 @@ export function renderLayoutHTML(
     `<option value="${t.value}" ${t.value === savedTheme ? 'selected' : ''}>${t.label}</option>`
   ).join('');
 
-  /**
-   * G6 · LAS DOS BARRAS SALEN DE LA MISMA LISTA. YA NO HACE FALTA.
-   *
-   * Aquí hubo una condición de "esto aún no está abierto" y dos listas derivadas,
-   * para que la Forja no saliera hasta tener su nodo. **Con la forja abierta desde
-   * el inicio se han ido las dos cosas**: la condición y la lista. Las barras
-   * vuelven a filtrar `BOTTOM_BAR_ROUTES` y `HEADER_ROUTES` por su cuenta, que es
-   * lo más simple y no tiene un estado que haya que sincronizar detrás.
-   *
-   * Se deja el hueco en vez de un `if (false)`: una condición apagada es una
-   * condición que alguien vuelve a encender sin mirar por qué estaba apagada.
-   */
-  const navBtn = (route: Route) => {
-    const def = BOTTOM_BAR_ROUTES.find(r => r.id === route)!;
-    const active = activeRoute === route;
-    return `
-      <button data-nav="${route}"
-        class="nav-item group flex flex-col items-center justify-center gap-1 flex-1 h-full cursor-pointer
-               transition-colors duration-150 active:scale-95
-               ${active ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'}"
-        style="min-height:44px" aria-label="${def.label}"
-        ${active ? 'aria-current="page"' : ''}>
-        <span class="[&>span>svg]:w-[22px] [&>span>svg]:h-[22px] transition-transform duration-150
-                     group-active:scale-90
-                     ${active ? 'drop-shadow-[0_0_8px_var(--accent)]' : ''}">
-          ${ic(def.icon as IconName)}
-        </span>
-        <span class="text-[9px] font-mono tracking-wide leading-none">${def.label}</span>
-        ${active ? `<span class="absolute top-0 w-6 h-[2px] rounded-full" style="background: var(--accent)"></span>` : ''}
-      </button>`;
-  };
-
   return `
     <div class="fixed inset-0 app-bg flex flex-col font-sans select-none overflow-hidden">
 
@@ -119,21 +88,8 @@ export function renderLayoutHTML(
             </div>
           </div>
 
-          <!-- Navegación de escritorio -->
-          <nav class="hidden lg:flex items-center gap-0.5 flex-shrink-0" aria-label="Navegación">
-            ${HEADER_ROUTES.map(r => {
-              const active = activeRoute === r.id;
-              return `
-                <button data-nav="${r.id}"
-                  class="h-9 px-3 rounded-lg text-[11px] font-mono cursor-pointer transition flex items-center gap-1.5
-                         ${active ? 'accent-bg text-slate-950 font-bold'
-                                  : 'btn-ghost text-[var(--text-muted)]'}"
-                  aria-label="${r.title}">
-                  <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(r.icon as IconName)}</span>
-                  ${r.label}
-                </button>`;
-            }).join('')}
-          </nav>
+          <!-- Navegación de escritorio. Ahora la misma que pintan las páginas: -->
+          ${navDesktopHTML(activeRoute)}
 
           <!-- HUD de buffs: fila con scroll, nunca agranda la cabecera -->
           <div id="active-buffs-hud"
@@ -374,14 +330,7 @@ export function renderLayoutHTML(
       </main>
 
       <!-- ===================== NAVEGACIÓN INFERIOR (MÓVIL) ===================== -->
-      <nav
-        class="lg:hidden relative z-20 card-glass border-x-0 border-b-0 flex-shrink-0 px-1 pt-1.5 pb-1"
-        style="padding-bottom: max(0.25rem, env(safe-area-inset-bottom))"
-        aria-label="Navegación principal">
-        <div class="flex items-stretch gap-0.5 relative">
-          ${BOTTOM_BAR_ROUTES.map(r => navBtn(r.id)).join('')}
-        </div>
-      </nav>
+      ${navMobileHTML(activeRoute)}
 
       <!-- Avisos de logro: por encima de todo, sin bloquear toques -->
       <div id="achievement-stack"

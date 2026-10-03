@@ -580,17 +580,6 @@ function renderRoute(route: Route) {
   // `innerHTML = ''` acaba de destruir. Se limpian antes de montar la nueva.
   clearAudioUnsubscribers();
 
-  /**
-   * Volver. Se intenta el historial y, si ya no queda nada, se cae a la base:
-   * la base es el único sitio donde siempre se puede estar, así que nunca
-   * puede haber un "atrás" que no lleve a ninguna parte.
-   */
-  const goBack = () => {
-    sfx.nav();
-    if (!router.back()) router.goTo('base');
-    renderRoute(router.current);
-  };
-
   const go = (r: Route) => {
     sfx.nav();
     router.goTo(r);
@@ -599,27 +588,27 @@ function renderRoute(route: Route) {
 
   switch (route) {
     case 'base':
-      renderBase(go, goBack);
+      renderBase(go);
       break;
     case 'almacen':
-      renderWarehouseTab(app, activeGameInstance, goBack, () => {
+      renderWarehouseTab(app, activeGameInstance, () => {
         updateUI(activeGameInstance.getState(), activeGameInstance.isAfk());
       }, go);
       break;
     case 'forja':
-      renderForgePage(app, activeGameInstance, goBack, go);
+      renderForgePage(app, activeGameInstance, go);
       break;
     case 'tienda':
-      renderStoreTab(app, activeGameInstance, goBack, go);
+      renderStoreTab(app, activeGameInstance, go);
       break;
     case 'perfil':
-      renderProfilePage(app, activeGameInstance, goBack, () => go('prestigio'), go);
+      renderProfilePage(app, activeGameInstance, () => go('prestigio'), go);
       break;
     case 'ranking':
-      renderRankings(app, activeUser, goBack, go);
+      renderRankings(app, activeUser, go);
       break;
     case 'prestigio':
-      renderPrestigePage(app, activeGameInstance, goBack, go);
+      renderPrestigePage(app, activeGameInstance, go);
       break;
   }
 
@@ -632,7 +621,7 @@ function renderRoute(route: Route) {
 }
 
 /** Vista principal: el recolector, el escuadrón y la navegación. */
-function renderBase(onNavigate: (r: Route) => void, goBack: () => void) {
+function renderBase(onNavigate: (r: Route) => void) {
   const game = activeGameInstance;
   const user = activeUser;
 
