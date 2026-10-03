@@ -29,6 +29,7 @@ import {
 } from '../src/components/crateLoot';
 import { CRATE_TIERS } from '../src/data/store';
 import { generateCompanionByTier } from '../src/data/generators';
+
 import { rangoDePoder } from '../src/data/tiers';
 import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero } from '../src/data/crafting';
 
@@ -206,6 +207,65 @@ async function main() {
         && suItem.potential === inicial.potential
         && suItem.details.includes(String(inicial.power)),
 `item=${JSON.stringify({ pot: suItem?.potential, det: suItem?.details })} ficha=${JSON.stringify({ pot: inicial?.potential, power: inicial?.power })}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  3b. LAS DOS MITADES DEL EQUIPO DE PARTIDA: RECOLECTOR Y COMPAÑERO
+  // -------------------------------------------------------------------------
+  //  **LO QUE PIDE EL JUGADOR NUEVO, Y LO QUE NO TENÍA PRUEBA.** Un T1 de arma con
+  //  potencial 1 y un T1 de compañero con potencial 1, **los dos ya equipados**.
+  //
+  //  El compañero sí estaba comprobado —arriba, después de la Ascensión— y el
+  //  recolector **no**. Que es la mitad exacta del encargo: una mitad probada y
+  //  otra en la que nadie miraba.
+  //
+  //  **POR QUÉ "EQUIPADO" ESTÁ EN LA MISMA COMPROBACIÓN Y NO EN OTRA.** Lo
+  //  equipado no es un detalle: es lo que hace que el primer clic de la partida
+  //  cobre algo. Un arma de partida sin equipar es un minuto cero esperando a que
+  //  el jugador adivine que tiene que tocar el arma, y eso no es una partida, es
+  //  una pantalla muerta. Y el compañero sin equipar no da ingreso por segundo.
+  //
+  //  Y se comprueba **por el mismo camino que el juego**, que es el Ascenso: la
+  //  partida nueva escribe su base desde las mismas fábricas, así que si el
+  //  Ascensoconstruyera un equipo distinto del de partida nueva, alguien podría
+  //  haber arreglado uno y no el otro. Se leen los dos del mismo sitio.
+  {
+    const g = await boot(baseSave([], {
+      totalNanitesProduced: 1_000_000_000, totalCores: 0, cores: 0, resets: 0
+    }));
+    g.prestige();
+    const g2 = await reload();
+    const st: any = g2.getState();
+
+    // El recolector: T1, ★1, y con la bandera de equipado puesta.
+    const arma: any = (wh(g2) as any[]).find((w: any) => w.type === 'collector');
+    check('equipo de partida: hay un arma, y es un T1 de ★1',
+      !!arma && arma.tier === 1 && arma.potential === 1,
+      `arma=${JSON.stringify(arma && { tier: arma.tier, pot: arma.potential, id: arma.id })}`);
+    check('equipo de partida: y está equipada de origen',
+      !!arma && st.equippedCollectorId === arma.id && arma.equipped === true,
+      `equipped=${st.equippedCollectorId} bandera=${arma?.equipped}`);
+    check('equipo de partida: su daño es el del suelo del T1, no un número escrito',
+      !!arma && arma.damage === danioDeRango(1, 1),
+      `daño=${arma?.damage} esperado=${danioDeRango(1, 1)}`);
+
+    // El compañero: T1, ★1, activo.
+    const comp: any = (st.companions as any[])[0];
+    check('equipo de partida: hay un compañero, y es un T1 de ★1',
+      !!comp && comp.tier === 1 && comp.potential === 1,
+      `compañero=${JSON.stringify(comp && { tier: comp.tier, pot: comp.potential, id: comp.id })}`);
+    check('equipo de partida: y está activo de origen',
+      !!comp && (st.activeCompanions || []).includes(comp.id),
+      `activos=${JSON.stringify(st.activeCompanions)}`);
+    check('equipo de partida: y da ingreso, que es para lo que está',
+      st.passiveIncome > 0, `pasivo=${st.passiveIncome}`);
+
+    // **LOS DOS TIENEN QUE ESTAR A LA VEZ, Y ESO ES LO QUE NO SE COMPRUEBA SI SE
+    // MIRA UNO SOLO.** Con el equipo vacío la partida arranca en cero sin que nada
+    // falle, y el jugador ve un contador parado.
+    check('equipo de partida: y están los DOS, que es lo que pedía el encargo',
+      !!arma && !!comp && !!st.equippedCollectorId && (st.activeCompanions || []).length >= 1,
+      `arma=${!!arma} companio=${!!comp} equipado=${!!st.equippedCollectorId} activos=${(st.activeCompanions || []).length}`);
   }
 
   // -------------------------------------------------------------------------

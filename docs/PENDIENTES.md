@@ -1030,7 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **28 bancos, 1975
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **28 bancos, 1982
 pruebas**, todas en verde._
 
 ### El contenido que no se podía conseguir
