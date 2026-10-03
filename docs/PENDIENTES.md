@@ -321,10 +321,10 @@ programar bien hasta que estén.**
 | **4** | **F19 · Dos cosas de los logros como items.** Qué pasa con el item si ya tienes el logro (¿se vende, se guarda, no se usa dos veces?), y si los logros **seguros** son tradeares o solo los de caja. | Cambia el modelo de logros entero. Es la última cosa del lote a propósito. |
 | **5** | **P5 · Las cajas ya no dan nanitas.** El premio pasó de ×14-22 del par a **25-40%**, porque era una máquina de imprimir. | Cerrar el bucle compra-venta era lo que pediste, y la única palanca que quedaba era la **fórmula** de las nanitas. Con menos nanitas de las cajas, la **forja pasa a ser el ingreso principal** y la partida puede hacerse más lenta. El sitio del ajuste es un número, y cualquier valor sigue teniendo la prueba de que no supera el par. |
 
-**Y una cosa que no es una decisión, solo una limpieza:** `.github/workflows/publicar.yml`
-falla en **todos** los pushes porque Pages no está activado en el repo. **No quieres
-Pages**, así que lo razonable es borrar ese workflow y que deje de aparecer rojo. Es una
-línea pendiente, no un bloqueo: no toca el juego.
+**Y una limpieza que ya está hecha:** `.github/workflows/publicar.yml` **está borrado**.
+Fallaba en todos los pushes porque Pages no está activado en el repo, y no se quiere
+Pages, así que no quedaba nada que arreglar: sobraba el fichero. Con él se va también
+el directorio `.github`, que solo contenía esa carpeta.
 
 **Y un número que ya está decidido y solo necesita confirmación:** el **75% fijo desde
 el T20**. Es lo que garantiza que siempre haya riesgo; un tope del 95% es un 5% de
@@ -1602,9 +1602,15 @@ _Cosas que estorban al trabajo más que al juego._
       `consumable('u1', 3)` pasó a significar "tres tarjetas AFK" y catorce bancos se
       cayeron de golpe. Compilaba. Una firma distinta en dos sitios que se llaman igual es
       peor que un nombre distinto.
-- [ ] **`.github/workflows/publicar.yml` se puede borrar.** Como no hay Pages y no se
-      quiere, este workflow solo consigue que **todos los pushes salgan en rojo** en
+- [x] **`.github/workflows/publicar.yml` borrado.** Como no hay Pages y no se
+      quiere, este workflow solo conseguía que **todos los pushes salgan en rojo** en
       `configure-pages`. Los pasos que dependen del código (`tsc` y el que falla la
-      publicación si existe `dist/admin.html`) están los dos en verde; lo único que falla es
-      la activación manual, que no se va a hacer. Borrarlo quita el ruido sin tocar el juego.
-      _Pendiente de que lo confirmes: implica borrar un fichero del repo._
+      publicación si existe `dist/admin.html`) estaban los dos en verde; lo único que
+      fallaba era la activación manual, que no se iba a hacer. Borrarlo quita el ruido sin
+      tocar el juego. Con él se va `.github/` entero, que solo contenía esa carpeta.
+      **Y QUEDA UNA COSA A PROPÓSITO:** la variable `GH_PAGES` de `vite.config.ts` sigue
+      ahí, y sigue haciendo sus dos cosas —`base: './'` y **no construir `admin.html`**—.
+      No la pone nadie, así que hoy no hace nada; pero es la red que impide que un
+      despliegue público cualquiera termine subido el botón de **borrar la base de
+      datos**, y esa red compensa más que el sitio que ocupa. Borrar el fichero de
+      despliegue no es lo mismo que borrar la protección.

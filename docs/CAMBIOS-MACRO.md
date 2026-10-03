@@ -656,18 +656,28 @@ Actions*. Y el propio commit `3021eab` lo decía en su cuerpo, en la última
 línea: *"Lo que falta y es de la cuenta del usuario: activar Pages… y anadir el
 dominio a Firebase Auth"*. Lo que faltaba era mirarlo.
 
-### Por qué el workflow es como es, y no se toca
+### Cómo acabó esto, y por qué no se toca
 
-`publicar.yml` construye con `GH_PAGES=1`, y esa variable decide **dos cosas a
-la vez**: `base: './'` —Pages sirve desde un subcamino— y **quita `admin.html`
-del build**. Y están juntas a propósito: si alguien las separara y creyera que
-`GH_PAGES` solo cambia el `base`, publicaría el botón que borra la base de
-datos.
+**`publicar.yml` está borrado.** Con `has_pages: false` y sin querer Pages, lo único
+que aquel workflow conseguía era que **todos los pushes salgan en rojo** en
+`configure-pages`. No había una casilla que marcar ni un paso que arreglar: sobraba el
+fichero. Con él se fue `.github/` entero, que solo contenía esa carpeta.
 
-Lo que hace que esto sea un proyecto y no un ejercicio de `git push` es que el
-despliegue **no depende de acordarse de lanzarlo**: cada push a `main`
-reconstruye. El coste es que un push roto se deployed sin que nadie lo mire
-hasta que alguien mira, que es justo lo que pasó aquí.
+**Y LA VARIABLE `GH_PAGES` SE QUEDA, A PROPÓSITO.** Vive en `vite.config.ts` y decide
+**dos cosas a la vez**: `base: './'` —Pages sirve desde un subcamino— y **quita
+`admin.html` del build**. Y están juntas a propósito: si alguien las separara y creyera
+que `GH_PAGES` solo cambia el `base`, publicaría el botón que borra la base de datos.
+
+Hoy no la pone nadie, así que no hace nada. Sigue ahí porque es **la red que impide
+que un despliegue público cualquiera termine subido el terminal de administración**, y
+eso compensa más que el sitio que ocupa en un fichero. Borrar el fichero de despliegue
+no es lo mismo que borrar la protección, y esa distinción es la razón de que el cambio
+sea de un solo fichero y no de dos.
+
+Lo que hace que esto sea un proyecto y no un ejercicio de `git push` era que el
+despliegue **no dependía de acordarse de lanzarlo**: cada push a `main` reconstruía. Ese
+mismo automatismo es el que hacía que un push roto saliera en rojo sin que nadie lo
+mirara, que es exactamente lo que pasó aquí hasta que se miró.
 
 ### Qué se comprobó
 

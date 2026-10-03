@@ -35,6 +35,18 @@
 //  O sea que una variable de entorno decide dos cosas a la vez, y conviene que
 //  sea explícita: si alguien la pone y cree que solo cambia el `base`, publica
 //  el botón de borrar. Las dos cosas están en este mismo bloque a propósito.
+//
+//  ## ESTO SE QUEDA AUNQUE NO HAYA PAGES
+//
+//  `.github/workflows/publicar.yml` está **borrado**: Pages no está activado en el repo y
+//  no se quiere, así que aquel workflow solo conseguía que todos los pushes salieran en
+//  rojo. Con él se fue `.github/` entero.
+//
+//  Esta variable **sigue aquí a propósito**, y no la pone nadie, así que hoy no hace
+//  nada. Es la red que impide que un despliegue público —Pages, Netlify, un `dist` en
+//  cualquier servidor— acabe subido `admin.html`, que tiene un botón de **borrar la
+//  base de datos**. Borrar el fichero de despliegue no es lo mismo que borrar la
+//  protección, y esa es la diferencia entre este commit y el siguiente.
 // ==========================================================================
 
 import { defineConfig } from 'vite';

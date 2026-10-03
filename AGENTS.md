@@ -55,10 +55,14 @@ Azulado), el AFK automático, el cartel de logro, la valoración a la vista y el
 rebalanceo de la fase 10. La lista de lo implementado está en el apartado **Hecho** de
 `docs/PENDIENTES.md`.
 
-**Y una corrección que hace tiempo que estaba mal: el juego NO está en GitHub Pages.**
-El tag existe, pero Pages no está activado en el repo y `.github/workflows/publicar.yml`
-falla en `configure-pages` en todos los pushes. **No se quiere publicar en Pages**, así que
-lo pendiente es borrar ese workflow, no activar nada.
+**Y una corrección que hace tiempo que estaba mal: el juego NO está en GitHub Pages, y ya
+no hay ni el intento.** El tag existe, pero **no se quiere publicar en Pages**, así que
+`.github/workflows/publicar.yml` —que fallaba en `configure-pages` en todos los pushes—
+está **borrado**, y con él `.github/` entero. **No hay que activar nada: no hay nada que
+activar.** Lo que queda de eso es la variable `GH_PAGES` de `vite.config.ts`, y se queda
+a propósito: no la pone nadie, pero es la red que impide que un despliegue público
+cualquiera acabe subido el terminal de administración, que tiene un botón de **borrar la
+base de datos**.
 
 Aun así, **comprueba `git status` antes de dar por buena cualquier afirmación
 sobre el estado del repo**: el árbol puede ir por delante del último commit, y
