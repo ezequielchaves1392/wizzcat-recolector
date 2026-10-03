@@ -101,10 +101,29 @@ const CATEGORIES: Category[] = [
  * Descripciones de producto. El texto responde a las dos preguntas que el
  * jugador se hace al mirar una tarjeta: "¿qué me da?" y "¿me compensa?".
  */
-const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
+/**
+ * Las leyendas de las tarjetas, en bruto.
+ *
+ * **EXPORTADAS PORQUE UN BANCO LAS CONTRASTA CON EL CÓDIGO.** `leyendaCheck`
+ * comprueba que ninguna diga una cosa distinta de la que el juego hace, y para
+ * eso tiene que leerlas. Y como no era necesaria, la lista era la copia del botín
+ * que `data/store.ts` ya había proibido para las cajas, y nadie lo vio porque
+ * nadie la leía con la tabla al lado.
+ */
+export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   crateT1: {
     what: 'La caja básica, y la única que se vende.',
-    detail: 'Da nanitas, cristal T1, un compañero T1, su llave y —a veces— la caja T2. Las nueve cajas siguientes no están en la tienda: se sacan abriendo la anterior.'
+    // **ESTE TEXTO ENUMERABA EL BOTÍN Y ESTABA VIEJO.** Decía "da nanitas, cristal
+    // T1, un compañero T1, su llave y —a veces— la caja T2", que son cinco cosas y
+    // **no incluyen el recolector**: el jugador leía que esa caja nunca podía darle
+    // un arma. Y sí puede. Quien reportaba que las cajas T1 no tiraban armas de T1
+    // no se equivocaba: se fiaba de la carta.
+    //
+    // Una lista escrita al lado de la tabla que genera esa lista es una segunda
+    // fuente de verdad, y `data/store.ts` ya lo prohíbe para las cajas con un
+    // comentario que explica por qué. Aquí la prohibición no se había aplicado.
+    // `leyendaCheck` la comprueba.
+    detail: 'Las nueve cajas siguientes no están en la tienda: se sacan abriendo la anterior. Lo que trae cada una se ve cuando sale.'
   },
 
   key: {

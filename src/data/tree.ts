@@ -190,7 +190,7 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { storageSlots: 8 }, x: 4, y: 2
   },
   {
-    id: 'chaos_forge', name: 'Forja del Caos', description: '+20% a la probabilidad de crafteo. Recolectores más caras de reparar.',
+    id: 'chaos_forge', name: 'Forja del Caos', description: '+20% a la probabilidad de crafteo, el peldaño más alto.',
     icon: 'collector', category: 'crafteo', tier: 4, requires: ['master_smith', 'core_yield'],
     baseCost: 260, costGrowth: 2.1, maxLevel: 4,
     bonus: { craftLuck: 0.20 }, x: 4, y: 3
