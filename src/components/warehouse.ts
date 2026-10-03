@@ -35,11 +35,11 @@ import { showCrateSummary, maximoDeApertura } from './crateSummary';
 import { showCrystalPicker } from './crystalPicker';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
-import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe } from '../data/crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import {
   KEY_DEFS, CRATE_KEY_TIER, keyNameOpensCrate, keyTierFromName, type KeyTier
-} from '../data/items';
+, CRYSTAL_DEFS, crystalTierFromName } from '../data/items';
 import { MAX_CRATE_TIER, type CrateType } from '../data/store';
 
 const TYPE_ICON: Record<string, any> = {
@@ -385,6 +385,14 @@ function detailContent(item: any, state: any, game: any): string {
   const isCollector = item.type === 'collector';
   const isCompanion = item.type === 'companion';
   const isEquipped = esEquipado(item, state);
+
+  // **EL NIVEL Y EL TECHO, LEÍDOS CON LAS MISMAS FUNCIONES QUE USA EL MOTOR.**
+  // El botón enseña un coste y un techo; si los calculara con números de aquí,
+  // serían una segunda cuenta al lado de la del motor y se separarían en cuanto
+  // cambiara la curva. Lo que el botón enseña y lo que el motor acepta sale de la
+  // misma llamada.
+  const nivelComp = Math.max(0, Math.floor(Number((item as any).level) || 0));
+  const topeComp = nivelMaximoDeCompanio((item as any).potential, (item as any).maxLevel);
   // LO QUE SE VENDE, no lo que vale una unidad. `getSellPrice` es el precio
   // unitario y el botón tiene que enseñar lo que se va a cobrar: con una pila de
   // 20 llaves, "Vender · 480" y un cargo de 9.600 es R3 roto. El total lo pide
@@ -534,6 +542,16 @@ function detailContent(item: any, state: any, game: any): string {
             </button>
           ` : ''}
 
+          ${isCompanion ? `
+            <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
+                    data-act="upgrade-companion"
+                    title="Sube el nivel con el cristal de su tier, igual que el recolector">
+              ${nivelComp >= topeComp
+                ? 'Nivel máximo'
+                : `Subir a nivel ${nivelComp + 1} · ${costeDeNivelDeCompanio(nivelComp)} cristales`}
+            </button>
+          ` : ''}
+
           <button class="w-full h-11 rounded-xl font-['Orbitron'] font-bold text-[11px] cursor-pointer
                          border border-amber-500/30 text-amber-400"
                   style="background: color-mix(in srgb, #f59e0b 12%, transparent)"
@@ -664,6 +682,18 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         // y el consumo los calcula el juego.
         showCrystalPicker(game, redraw);
         break;
+
+      case 'upgrade-companion': {
+        // **SIN SELECTOR DE CRISTAL, Y POR QUÉ NO HAY UNO.** En el recolector lo hay
+        // porque había diez cristales y había que elegir; el del compañero es
+        // **el de su tier**, por la misma regla F26, y no llega como argumento. Un
+        // selector aquí sería una pregunta sobre multiplicadores que no cambia
+        // nada, que es exactamente lo que F26 vino a quitar.
+        const comp: any = item;
+        if (!comp) return;
+        subirNivelDeCompanio(game, comp, redraw);
+        break;
+      }
 
       case 'nada':
         // Botón informativo: no hace nada a propósito.
@@ -1583,6 +1613,57 @@ function useConsumable(game: any, item: any, redraw: () => void) {
  * de multiplicar aquí: es la misma cuenta que hace `sellItem`, y por eso el
  * número que ve el jugador y el que se cobra no pueden separarse (R3).
  */
+/**
+ * Sube el nivel de un compañero: confirmar, llamar al motor y enseñar el resultado.
+ *
+ * **ES LA MISMA SECUENCIA QUE LA DEL RECOLECTOR**, y por eso son las dos un sitio.
+ * El resultado ya está decidido cuando se llama a `game.upgradeCompanion()`: la
+ * animación solo lo enseña. Si la ruleta eligiera el premio, el jugador descubriría
+ * en veinte tiradas que la ruleta no es la fuente de verdad, y a partir de ahí
+ * ninguna otra cifra del juego le creería.
+ */
+function subirNivelDeCompanio(game: any, item: any, redraw: () => void) {
+  const nivel = Math.max(0, Math.floor(Number(item.level) || 0));
+  const tope = nivelMaximoDeCompanio(item.potential, item.maxLevel);
+  if (nivel >= tope) {
+    showToast(`${item.name} ya está al nivel máximo.`, 'info');
+    return;
+  }
+
+  const coste = costeDeNivelDeCompanio(nivel);
+  const crystalTier = Math.max(1, Math.floor(Number(item.tier) || 1));
+  const def = CRYSTAL_DEFS[crystalTier];
+  const pila = ((game.getState().warehouse as any[]) || [])
+    .find((w: any) => w.type === 'crystal'
+      && (typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '')) === crystalTier);
+  const tiene = pila?.stackCount || 0;
+
+  showConfirmModal(
+    `Sube a ${item.name} del nivel ${nivel} al ${nivel + 1}. ` +
+    `Cuesta ${coste} x ${def?.name ?? 'Cristal'} y tienes ${tiene}. ` +
+    `Si falla, **no baja de nivel**: se pierde el cristal.`,
+    () => {
+      sfx.use();
+      const r: any = game.upgradeCompanion(item.id);
+      if (!r?.rolled) {
+        // Sin tirada no hay ruleta: el motor ha rechazado antes de gastar, y enseñarle
+        // una ruleta para un "no tienes cristales" sería una mentira animada.
+        sfx.error();
+        showToast(r?.msg ?? 'No se puede subir ahora mismo.', 'error');
+        redraw();
+        return;
+      }
+      sfx.forgeSuccess();
+      showToast(r.msg, r.success ? 'success' : 'error');
+      redraw();
+    },
+    {
+      sublabel: `Nivel ${nivel} → ${nivel + 1}  ·  techo ${tope}`,
+      confirmText: 'Subir',
+      danger: false
+    }
+  );
+}
 function sellItem(game: any, item: any, redraw: () => void) {
   const qty = stackUnits(item);
   const total = game.getSellTotal?.(item.id)

@@ -465,6 +465,76 @@ export function migraPotenciales(items: any[]): { items: any[]; changed: boolean
  * rompa la migración en silencio. El número de verdad está en el compañero real, y
  * las dos cosas comparten el id justo para poder cruzarlas.
  */
+/**
+ * LA MIGRACIÓN DEL NIVEL DE LOS COMPAÑEROS, Y POR QUÉ ES ESTA Y NO UNA LECTURA CON
+ * `?? 0`.
+ *
+ * Un compañero guardado antes de que existiera el nivel no lo tiene. **La regla
+ * dice que eso es un nivel 0**, así que técnicamente no hace falta migrar: todo lo
+ * que lea `comp.level` podría usar `?? 0` y acertaría.
+ *
+ * Pero el que falta no es solo el nivel: **falta también el techo**, y el techo es
+ * lo que el jugador ve. Un botón que enseña un techo calculado con una función y un
+ * motor que acepta hasta otro distinto discrepan en la partida que ya estaba
+ * empezada, que es la única que importa cuando algo se rompe. Y esa discrepancia no
+ * se ve en los bancos, porque los bancos construyen su propio estado.
+ *
+ * Se migran las **dos mitades**, como se migró el potencial: el compañero de
+ * `state.companions` y su ficha en el almacén. Son el mismo objeto y antes se
+ * separaban.
+ *
+ * **Y NO ES UNA ADICIÓN DE NIVELES.** Todo lo que no tiene `level` es un 0, y todo
+ * lo que no tiene `maxLevel` recibe el que dice la misma función que usa el resto
+ * del juego. Una migración que "arregla" números está cambiando la partida de
+ * alguien sin avisar.
+ */
+export function migraNivelesDeCompaneros(
+  companeros: any[], fichas: any[]
+): { companeros: any[]; fichas: any[]; changed: boolean } {
+  let changed = false;
+
+  const nivelDe = (c: any) =>
+    (typeof c?.level === 'number' && c.level >= 0) ? Math.floor(c.level) : 0;
+
+  // **EL ARRAY NO SE FILTRA POR TIPO, Y NO ES UNA COMISIÓN.** En
+  // `state.companions` **todo es un compañero**, pero su `type` es el de su
+  // ingreso —`click`, `passive` o `multiplier`—, no `'companion'`, que es el
+  // tipo de la **ficha** del almacén. Filtrar por `type === 'companion'` aquí
+  // saltaba el array entero: la ficha se rellenaba y el compañero no, y quedaban
+  // dos verdades sobre el mismo objeto —justo lo que esta migración viene a
+  // arreglar—. La migración de los potenciales tiene ese mismo filtro y solo
+  // arregla las fichas; aquí se hace bien desde el principio.
+  const nuevosComp = (companeros ?? []).map((c) => {
+    if (!c || typeof c !== 'object') return c;
+    const nivel = nivelDe(c);
+    const techo = typeof c.maxLevel === 'number' && c.maxLevel > 0
+      ? c.maxLevel
+      : nivelMaximoDeCompanio(c.potential);
+    if (c.level === nivel && c.maxLevel === techo) return c;
+    changed = true;
+    return { ...c, level: nivel, maxLevel: techo };
+  });
+
+  // La ficha se empareja **por id**, que es lo que hace la de los potenciales. Y el
+  // nivel del compañero manda: si los dos disagreean, el del array es el bueno,
+  // porque es el que paga el ingreso.
+  const porId = new Map<string, number>();
+  for (const c of nuevosComp) if (c?.type === 'companion') porId.set(c.id, c.level);
+
+  const nuevasFichas = (fichas ?? []).map((f) => {
+    if (f?.type !== 'companion') return f;
+    const nivel = porId.has(f.id) ? porId.get(f.id)! : nivelDe(f);
+    const techo = typeof f.maxLevel === 'number' && f.maxLevel > 0
+      ? f.maxLevel
+      : nivelMaximoDeCompanio(f.potential);
+    if (f.level === nivel && f.maxLevel === techo) return f;
+    changed = true;
+    return { ...f, level: nivel, maxLevel: techo };
+  });
+
+  return { companeros: nuevosComp, fichas: nuevasFichas, changed };
+}
+
 export function migraPotencialesDeCompaneros(
   companeros: any[], fichas: any[]
 ): { companeros: any[]; fichas: any[]; changed: boolean } {
@@ -701,7 +771,7 @@ export function crearCompanioDeTier(
   tier: number,
   potential: number,
   rng: () => number = Math.random
-): { id: string; name: string; type: 'click'; power: number; rarity: string; tier: number; potential: number } {
+): { id: string; name: string; type: 'click'; power: number; rarity: string; tier: number; potential: number; level: number; maxLevel: number } {
   const p = potencialNormalizado(potential);
   return {
     id: `comp_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
@@ -710,8 +780,84 @@ export function crearCompanioDeTier(
     power: poderDeCompanero(tier, p),
     rarity: TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común',
     tier,
-    potential: p
+    potential: p,
+    // **NACE CON NIVEL 0 Y SU TECHO PUESTOS, Y POR ESO NO HAY MIGRACIÓN QUE
+    // INVENTARLOS.** Un compañero sin nivel es un nivel 0, que es lo que haría
+    // cualquier código que lo leyera; y el techo lo pone la misma función que lo
+    // lo aplica, así que no puede haber un compañero cuyo botón diga una cosa y el
+    // motor acepte otra.
+    level: 0,
+    maxLevel: nivelMaximoDeCompanio(tier, p)
   };
+}
+
+/**
+ * LOS NIVELES DEL COMPAÑERO, Y POR QUÉ VIVEN AQUÍ Y NO EN SU PÁGINA.
+ *
+ * El jugador sube el nivel de los recolectores con cristales. **La misma moneda,
+ * la misma curva y la misma probabilidad**, y por eso las reglas no son un sitio
+ * nuevo: son tres funciones al lado de las del recolector, que es donde ya está
+ * escrito por qué el coste vive en `data/` y no en el motor.
+ *
+ * **LO QUE ES IGUAL A PROPÓSITO.** El coste `1.2 × 1.26^n`, la probabilidad
+ * `crystalSuccessChance(nivel, power)`, el `+10 %` por nivel y el techo de
+ * `20 + potencial × 3`. Escribir una curva "para el compañero" habría sido el
+ * error de siempre: dos números que empiezan iguales y se separan en tres meses,
+ * con un jugador que sube el recolector veinte niveles y el compañero cinco y no
+ * sabe por qué.
+ *
+ * **Y LO QUE NO ES IGUAL.** El techo del compañero son **20 niveles base**, como el
+ * del recolector, pero el incremento por estrella es el mismo. No hay una razón de
+ * juego para que sean distintos todavía; si algún día la hay, es una constante y
+ * una línea de comentario, no una función reescrita.
+ */
+
+/** El techo de niveles de un compañero, y el mismo reparto por estrella. */
+export function nivelMaximoDeCompanio(potential?: number | null, maxLevel?: number | null): number {
+  if (typeof maxLevel === 'number' && maxLevel > 0) return maxLevel;
+  return BASE_COLLECTOR_MAX_LEVEL + potencialNormalizado(potential ?? undefined) * MAX_LEVEL_PER_POTENTIAL;
+}
+
+/**
+ * Lo que suma un nivel al ingreso del compañero.
+ *
+ * **ES EL MISMO +10 % DEL RECOLECTOR, Y SE LLAMA A LA MISMA FUNCIÓN.** No es que
+ * los dos trabajos dé 10 y 10 por casualidad: es `multiplicadorDeNivel()`, que
+ * comparten las dos fichas. La cuenta del ingreso del compañero vive en
+ * `recalculatePassiveIncome()` y el del recolector en `cuentaDeClickSinBuff()`,
+ * pero las dos multiplican con esta misma regla.
+ */
+export function multiplicadorDeNivel(level: number | undefined | null): number {
+  return 1 + Math.max(0, Math.floor(Number(level) || 0)) * 0.10;
+}
+
+/**
+ * Cristales que cuesta subir del nivel dado al siguiente.
+ *
+ * **ES LA MISMA CURVA QUE `collectorUpgradeCost()`, Y DELEGA EN ELLA.** Dos
+ * funciones con el mismo nombre y la misma fórmula en dos ficheros es la forma más
+ * barata de tener dos reglas que un día no coinciden. El coste del compañero es un
+ * alias, no una copia: si la curva cambia, cambia para los dos.
+ */
+export const costeDeNivelDeCompanio = collectorUpgradeCost;
+
+/**
+ * El poder que un compañero **rinde** de verdad, con su nivel puesto.
+ *
+ * **ESTO ES LA PIEZA QUE HACE QUE EXISTA LA FUNCIONALIDAD.** Sin ella, el nivel del
+ * compañero sería un número que sube y no hace nada —el peor tipo de progreso: el
+ * jugador lo ve crecer y no gana nada—. Y el sitio donde se aplica **no puede ser
+ * el que guarda el poder**, porque ese número es el que `poderDeCompanero()` calcula
+ * del tier y el potencial, y los bancos comparan contra esa función. Si el nivel se
+ * guardara dentro de `power`, dejaría de ser "el poder de un T5 con potencial 3" y
+ * pasaría a ser "el poder de un T5 con potencial 3 que ya subiría de nivel", que es
+ * otra pregunta con otra respuesta.
+ *
+ * Por eso el poder guardado es el de base y el multiplicado se aplica al sumar el
+ * ingreso.
+ */
+export function poderEfectivoDeCompanio(comp: { power?: number; level?: number }): number {
+  return Math.round((comp.power || 0) * multiplicadorDeNivel(comp.level));
 }
 /**
  * LO QUE LAS DOS FUSIONES TIENEN QUE COMPARECER.

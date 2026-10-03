@@ -14,7 +14,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, poderDeCompanero } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -458,7 +458,7 @@ export async function createGameLoop(
     // adivinara que tenía que hacer clic en el arma. Equipado de origen, el primer
     // clic ya cobra y la pantalla enseña cómo se ve cuando está funcionando.
     equippedCollectorId: 'collector_blaster_001' as string | null,
-    companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number; potential?: number }>,
+    companions: [baseCompanion] as Array<{ id: string; name: string; type: 'click' | 'passive' | 'multiplier'; power: number; rarity: string; tier?: number; potential?: number; level?: number; maxLevel?: number }>,
     activeCompanions: ['companion_base_001'] as string[],
     warehouse: [
       // Las dos fichas salen de las fábricas de arriba, no de números escritos.
@@ -1376,6 +1376,16 @@ const AFK_THRESHOLD_MS = 60000;
         warehouseNeedsMigration = true;
       }
 
+      // El nivel va ENCIMA de la del potencial, no antes: el techo sale del
+      // potencial, y si se calcula antes de rellenarlo, un compañero viejo sin
+      // potencial recibe el techo del 3 y ya no se le corrige nunca.
+      const compConNivel = migraNivelesDeCompaneros(state.companions, state.warehouse);
+      if (compConNivel.changed) {
+        state.companions = compConNivel.companeros;
+        state.warehouse = compConNivel.fichas;
+        warehouseNeedsMigration = true;
+      }
+
       state.afkCards = data.afkCards ?? 0;
       state.afkExpiresAt = data.afkExpiresAt ?? 0;
       // --- Prestige y cosméticos ---
@@ -1611,6 +1621,12 @@ const AFK_THRESHOLD_MS = 60000;
           // salen sin él, que es lo correcto y no un olvido.
           tier: comp.tier,
           potential: comp.potential,
+          // **EL NIVEL VA TAMBIÉN EN LA FICHA, Y POR LA MISMA RAZÓN QUE EL POTENCIAL.**
+          // Esta ficha es la que pinta las estrellas y la que se vende; si el nivel
+          // se quedara solo en `state.companions`, el almacén y el panel dirían
+          // cosas distintas del mismo objeto.
+          level: comp.level ?? 0,
+          maxLevel: comp.maxLevel ?? nivelMaximoDeCompanio(comp.potential),
           sellPrice: comp.rarity === 'Común' ? 100 : comp.rarity === 'Raro' ? 500 : comp.rarity === 'Épico' ? 2000 : 10000
         } as any);
       }
@@ -2108,7 +2124,15 @@ const AFK_THRESHOLD_MS = 60000;
     state.activeCompanions.forEach(compId => {
       const comp = state.companions.find(c => c.id === compId);
       if (comp && comp.type !== 'multiplier') {
-        base += comp.power;
+        // **EL NIVEL MULTIPLICA AQUÍ, Y NO AL ESCRIBIR `power`.** El poder guardado
+        // es `poderDeCompanero(tier, potencial)`, que es lo que comparan los bancos y
+        // lo que dice la ficha. Si el nivel se escribiera dentro, ese número dejaría
+        // de ser "el poder de un T5 con potencial 3" y pasaría a ser "el poder de
+        // uno al que ya le has subido cinco niveles", que es otra pregunta.
+        //
+        // Y el multiplicador es la MISMA función que usa el recolector, así que un
+        // nivel vale lo mismo en los dos y no hay dos reglas que separar.
+        base += Math.round((comp.power || 0) * multiplicadorDeNivel(comp.level));
         contributors.push(comp);
       }
     });
@@ -3303,6 +3327,107 @@ const AFK_THRESHOLD_MS = 60000;
      * vista (R1 y R2), y se rompería en cuanto el consumo dejara de ser una
      * línea recta.
      */
+/**
+     * Sube el nivel de un compañero con el cristal de SU tier.
+     *
+     * **ES LA MISMA REGLA QUE EL RECOLECTOR, EN TODAS LAS PARTES QUE IMPORTAN.** El
+     * cristal lo decide el tier del compañero y no llega como argumento —F26, igual
+     * que en el recolector—, el coste sale de la misma curva, la probabilidad sale de
+     * `crystalSuccessChance()`, y **fallar no retrocede el nivel**: se pierde el
+     * cristal, que es el coste que se eligió arriesgar. Un retroceso con coste
+     * creciente es una escalera sin retorno.
+     *
+     * **LO ÚNICO QUE NO SE COPIA ES LA FIRMA:** el recolector sube el *equipado*
+     * porque solo hay uno; el compañero lo elige el jugador, así que el id llega.
+     */
+    upgradeCompanion: (compId: string) => {
+      handleUserActivity();
+
+      const comp = (state.companions as any[]).find((c: any) => c.id === compId);
+      if (!comp) return { success: false, rolled: false, msg: 'Compañero no encontrado.' };
+      const ficha = (state.warehouse as any[]).find((w: any) => w.id === compId);
+      // La ficha es la que pinta las estrellas y la que se vende. Si solo se
+      // escribiera el array, el almacén y el panel dirían cosas distintas del mismo
+      // objeto, que es el bug que ya se corrigió una vez con el potencial.
+      if (!ficha) return { success: false, rolled: false, msg: 'La ficha del compañero no está en el almacén.' };
+
+      const level = Math.max(0, Math.floor(Number(comp.level) || 0));
+      const tierItem = Math.max(1, Math.floor(Number(comp.tier) || 1));
+      const crystalTier = tierItem;
+
+      // El mismo techo declarado que el del recolector, y con el mismo motivo: la
+      // forja es infinita y producecompaneros por encima del último cristal. No es
+      // un bug, es un techo, y se dice en vez de degradar la regla de F26.
+      if (crystalTier > MAX_CRYSTAL_TIER) {
+        return {
+          success: false,
+          rolled: false,
+          msg: `Hace falta el Cristal T${crystalTier}, y el más alto que existe es el T${MAX_CRYSTAL_TIER}. Un T${tierItem} todavía no se puede subir.`
+        };
+      }
+
+      // **EL TECHO LO PONE LA MISMA FUNCIÓN QUE LO APLICA**, con la ficha como
+      // fuente. Si la ficha dijera 25 y el motor aceptara 20, el jugador vería una
+      // barra que llega a 25 y gastaría cristales en algo que no pasa.
+      const tope = nivelMaximoDeCompanio(comp.potential, (ficha as any).maxLevel);
+      if (level >= tope) {
+        return { success: false, rolled: false, msg: `${comp.name} está al nivel máximo (+${Math.round(tope * 10)}%).` };
+      }
+
+      const crystal = state.warehouse.find((w: any) =>
+        w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '')) === crystalTier);
+      if (!crystal) {
+        const nombre = CRYSTAL_DEFS[crystalTier]?.name ?? 'Cristal';
+        return { success: false, rolled: false, msg: `No tienes ${nombre}.` };
+      }
+
+      const crystalCost = costeDeNivelDeCompanio(level);
+      const units = crystal.stackCount || 1;
+      if (units < crystalCost) {
+        return {
+          success: false,
+          rolled: false,
+          msg: `Necesitas ${crystalCost} x ${CRYSTAL_DEFS[crystalTier].name} (tienes ${units}).`
+        };
+      }
+
+      consumeWarehouseItem(crystal.id, crystalCost);
+      syncWarehouseGaps();
+      syncMaterialCounters();
+
+      const successChance = crystalSuccessChance(level, CRYSTAL_DEFS[crystalTier]?.power ?? 1);
+      const roll = Math.random() * 100;
+
+      if (roll <= successChance) {
+        const nuevo = level + 1;
+        // **LAS DOS MITADES, JUNTAS.** El array paga el ingreso y la ficha lo pinta;
+        // escribir una sola deja la partida con dos verdades sobre el mismo objeto.
+        state.companions = (state.companions as any[]).map((c: any) =>
+          c.id === compId ? { ...c, level: nuevo, maxLevel: tope } : c);
+        state.warehouse = state.warehouse.map((w: any) =>
+          w.id === compId ? { ...w, level: nuevo, maxLevel: tope } : w);
+        recalculatePassiveIncome();
+        checkAchievements();
+        onUpdate(state, isAfk);
+        saveToFirebase();
+        return {
+          success: true,
+          rolled: true,
+          level: nuevo,
+          msg: `¡Mejora exitosa! ${comp.name} ascendió al nivel ${nuevo}.`
+        };
+      }
+
+      // Fallo: **el nivel no retrocede**, y el cristal ya está gastado.
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return {
+        success: false,
+        rolled: true,
+        level,
+        msg: `Fallo en el sintonizador. ${comp.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)`
+      };
+    },
     upgradeEquippedCollector: () => {
       handleUserActivity();
       if (!state.equippedCollectorId) return { success: false, rolled: false, msg: 'No hay ningún recolector equipado.' };
