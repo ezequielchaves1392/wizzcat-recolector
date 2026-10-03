@@ -1030,8 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1825
-pruebas**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1827**, todas en verde._
 
 ### La chrome, y por qué se ha medido
 

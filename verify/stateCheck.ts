@@ -1284,28 +1284,61 @@ async function main() {
     const r = g.forgeCollector(['a', 'b']);
     check('forja: con 2 del mismo tier se ejecuta',
       typeof r.success === 'boolean', r.msg ?? '');
-    // El resultado de la forja es un DADO: la probabilidad depende del tier, de
-    // la suerte y de las piedras. Comprobar el estado de "despues de acertar"
-    // sin mirar si ha acertado hacia que la prueba fallara una de cada tres
-    // veces, solo segun la semilla. Aqui se comprueba el estado que corresponde
-    // a CADA desenlace, y de paso el de fallo, que no se comprobaba nunca.
-    if (r.success) {
-      check('forja: acierto, queda solo la forjada',
-        deType(g, 'collector') === 1, 'recolectores=' + deType(g, 'collector'));
-      check('forja: acierto, el almacen no queda ni vacio ni duplicado',
-        wh(g).length === 1 && new Set(ids(g)).size === wh(g).length, ids(g).join(','));
-      check('forja: la cuenta de forjadas sube', s(g).forgedCount >= 1, String(s(g).forgedCount));
-    } else {
-      check('forja: fallo, se pierden los 2 materiales',
-        deType(g, 'collector') === 0, 'recolectores=' + deType(g, 'collector'));
-      check('forja: fallo, y a cambio dan esquirlas',
-        s(g).shards > 0, 'esquirlas=' + s(g).shards);
-      check('forja: fallo, y el almacen no queda con ids repetidos',
-        new Set(ids(g)).size === wh(g).length, ids(g).join(','));
-    }
+
+    // **LO SIGUIENTE SE TIRABA DOS VECES PARA QUE LAS DOS RAMAS CUADREN SIEMPRE.**
+    //
+    // Antes había un `if (r.success) { tres pruebas } else { otras tres }`, con la
+    // forja llamada **sin fijar el dado**. Las seis aserciones eran correctas, pero solo
+    // se ejecutaban tres: las del desenlace que saliera. Y como el desenlace es un
+    // `Math.random()` de verdad, el banco pasaba con 104 o con 103 según la semilla.
+    //
+    // **LO QUE ESO COSTABA, Y POR QUÉ NO VALE LA PENA.** La cifra de pruebas del proyecto
+    // es la que aparece en `AGENTS.md` y en `PENDIENTES.md`, y una cifra que se mueve sola
+    // no puede usarse para notar una pérdida: si un banco pierde tres pruebas, se ve lo
+    // mismo que cuando el dado cae al revés. El total oscilaba entre 1824 y 1825 y nadie
+    // sabía por qué.
+    //
+    // Ahora se tiran las dos: `conRoll` quita la varianza —el techo del acierto es 95 y el
+    // suelo del fallo es 35, así que `0` acierta siempre y `0.999` falla siempre para
+    // cualquier tier— y las seis comprobaciones se ejecutan **siempre**. No es una prueba
+    // más: es la mitad de las que ya había, ahora todas las veces.
+    const rehacer = async (tirada: number) => {
+      const gg = await boot(baseSave([
+        collector('a', 2, { damage: 40 }), collector('b', 2, { damage: 50 })
+      ], conBlueprint));
+      const rr: any = conRoll(tirada, () => gg.forgeCollector(['a', 'b']));
+      return { g: gg, rr };
+    };
+
+    const bien = await rehacer(0.001);
+    check('forja: acierto, queda solo la forjada',
+      bien.rr.success === true && deType(bien.g, 'collector') === 1,
+      `exito=${bien.rr.success} recolectores=${deType(bien.g, 'collector')}`);
+    check('forja: acierto, el almacen no queda ni vacio ni duplicado',
+      wh(bien.g).length === 1 && new Set(ids(bien.g)).size === wh(bien.g).length,
+      ids(bien.g).join(','));
+    check('forja: acierto, y la cuenta de forjadas sube',
+      s(bien.g).forgedCount >= 1, String(s(bien.g).forgedCount));
+
+    const mal = await rehacer(0.999);
+    check('forja: fallo, se pierden los 2 materiales',
+      mal.rr.success === false && deType(mal.g, 'collector') === 0,
+      `exito=${mal.rr.success} recolectores=${deType(mal.g, 'collector')}`);
+    check('forja: fallo, y a cambio dan esquirlas',
+      s(mal.g).shards > 0, 'esquirlas=' + s(mal.g).shards);
+    check('forja: fallo, y el almacen no queda con ids repetidos',
+      new Set(ids(mal.g)).size === wh(mal.g).length, ids(mal.g).join(','));
+
+    // Y el que sí depende de la tirada se comprueba sobre un juego propio, y es
+    // **propio por una razón concreta**: `reload()` recarga el último juego arrancado, y
+    // aquí se arrancan tres seguidos. Si se comprobara sobre `g` a secas —como estaba—,
+    // `reload()` devolvería la partida del fallo, que no tiene ningún item, y la
+    // comparación daría "0 contra 1" sin que haya pasado nada.
+    const gPersiste = await rehacer(0.001);
     const g2 = await reload();
     check('forja: el resultado sobrevive a la recarga',
-      wh(g2).length === wh(g).length, `${wh(g2).length} vs ${wh(g).length}`);
+      wh(g2).length === wh(gPersiste.g).length,
+      `${wh(g2).length} vs ${wh(gPersiste.g).length}`);
   }
   {
     // Pedir mas piedras de las que hay no puede gastarlas de mas.
