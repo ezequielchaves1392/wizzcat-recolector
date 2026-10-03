@@ -286,7 +286,7 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
         class="w-full mt-3 rounded-xl font-['Orbitron'] font-bold text-[12px] tracking-wide cursor-pointer
                ${ready ? 'btn-primary' : 'btn-ghost opacity-40 cursor-not-allowed'}"
         style="min-height:52px">
-        ${ready ? `FORJAR ${N.uno.toUpperCase()}` : `FALTAN ${MATERIALES_POR_FUSION - elegidos.length} MATERIALES`}
+        ${ready ? `FORJAR ${N.uno.toUpperCase()}` : `FALTA ${MATERIALES_POR_FUSION - elegidos.length} ${MATERIALES_POR_FUSION - elegidos.length === 1 ? 'MATERIAL' : 'MATERIALES'}`}
       </button>
       <p class="text-[9px] text-[var(--text-muted)] text-center mt-2 leading-relaxed">
         El nuevo sale con el potencial promedio de los dos.
@@ -340,19 +340,22 @@ function draw(container: HTMLElement, game: any, onBack: () => void, go?: (r: an
 /**
  * Conecta los manejadores de la Forja.
  *
- * `root` es el nodo que `mountInto` acaba de crear, y los listeners van ahí
- * (R5). El re-render, en cambio, necesita el CONTENEDOR, y son cosas distintas:
- * `mountInto` sustituye el `[data-page-root]` que es hijo del contenedor, así
- * que si se le pasa el nodo montado no encuentra ninguno y hace `appendChild`.
+ * **EL LISTENER VA SOBRE `root`, Y NO SOBRE EL CONTENEDOR.** El contenedor
+ * sobrevive a todos los repintados, así que un `addEventListener` en cada
+ * `draw()` deja el anterior vivo y el mismo clic llega N veces, donde N es el
+ * número de repintados desde que se entró en la Forja. Eso ya se pagó una vez en
+ * el almacén, y allí está escrito con el detalle: equipar y desequipar se
+ * ejecutaban tantas veces como listeners hubiera, y como el toggle es su propia
+ * inversa, con un número par el estado acababa igual que estaba.
  *
- * Consecuencia, y era un bug visible: la Forja se anidaba dentro de sí misma y
- * cada vez que se marcaba una piedra o se lanzaba una fusión aparecía una copia
- * entera de la pantalla debajo. Además el redraw no repassaba `go`, así que a
- * partir del segundo render el botón de inicio y los `data-nav` dejaban de
- * responder y no había forma de salir de la página.
+ * Aquí el síntoma era distinto pero del mismo género: el guardia de duplicados
+ * que ya no cortaba, así que cada copia del listener añadía el material otra vez
+ * y un solo clic llenaba las dos casillas.
  *
- * El contenedor se recupera con `root.parentElement`, que es exactamente lo que
- * `mountInto` usó como padre. Es el mismo truco que usa `warehouse.ts`.
+ * Lo que sí necesita el contenedor es el **repintado**, y eso no tiene nada que
+ * ver: `draw()` recibe el contenedor, y por eso se recupera con
+ * `root.parentElement`, que es exactamente el padre que usó `mountInto`. Son
+ * dos cosas distintas y se confundían.
  */
 function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) => void) {
   const container = root.parentElement as HTMLElement;
@@ -369,7 +372,7 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
     return { lista, selected };
   };
 
-  container.addEventListener('click', (e) => {
+  root.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     if (!btn) return;
     const act = btn.dataset.act;
@@ -404,10 +407,24 @@ function wire(root: HTMLElement, game: any, onBack: () => void, go?: (r: any) =>
         const { lista, selected } = context();
         const picked = lista.find(w => w.id === btn.dataset.id);
         if (!picked) return;
-        // F24 · Un id por material. Sin esto, tocar el mismo dos veces llena
-        // el yunque con el mismo item en las dos casillas ("enseña 3 y metí
-        // 1") y el motor lo aceptaba, regalando un material.
-        if (selected.includes(picked.id)) {
+        // F24 · Un id por material.
+        //
+        // **ESTE GUARDIA NO EXISTÍA, Y POR ESO ESTA LÍNEA.** Se escribía
+        // `selected.includes(picked.id)`, y `selected` es un array de **fichas**:
+        // `includes` compara por identidad, así que eso es "¿este array de objetos
+        // contiene la cadena 'f'?", y la respuesta es siempre no.
+        //
+        // El síntoma era el peor posible: un clic metía el material y el segundo
+        // volvía a meterlo, así que el yunque se llenaba con **el mismo item en las
+        // dos casillas** y el botón se activaba. Y como el motor sí comprueba que
+        // los ids sean distintos, la pantalla montaba una combinación imposible y
+        // el FORJAR contestaba "selecciona 2 distintos". Pantalla llena y botón
+        // muerto.
+        //
+        // Lo de comparar es lo que cuesta: `some(w => w.id === ...)` para fichas y
+        // `includes()` para ids. Un array de ids y uno de objetos se parecen
+        // muchísimo y fallan al revés de lo que uno espera.
+        if (selected.some((w: any) => w.id === picked.id)) {
           sfx.error();
           showToast(`Ese ${NOMBRES[ui.tipo].uno} ya está en el yunque. Toca su casilla para quitarlo.`, 'info');
           return;
