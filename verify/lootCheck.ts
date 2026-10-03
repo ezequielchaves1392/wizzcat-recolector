@@ -130,6 +130,46 @@ async function main() {
   }
 
   // =========================================================================
+  //  1b. TODA CAJA PUEDE DAR UN RECOLECTOR, Y DEL TIER DE SU NIVEL
+  // =========================================================================
+  //  **ESTE BUG LLEVABA MESES VIVO Y NO LO CANTABA NINGÚN BANCO.**
+  //
+  //  La tabla de botín del recolector estaba detrás de un `if (tier >= 3)`, así que
+  //  **una caja T1 y una T2 no podían dar un arma**. No había ninguna prueba que
+  //  lo mirara: los bancos comprobaban el botín que sí salía, nunca el que no.
+  //
+  //  Y para el jugador era indistinguible de que el juego no quisiera darle armas:
+  //  abría cajas y no le salían. Peor aún, la tarjeta de la caja T1 en la
+  //  tienda **enumeraba el botín y no incluía el recolector**, así que el juego le
+  //  decía al jugador que esa caja no le iba a dar armas. Los dos bugs se
+  //  sostenían el uno al otro.
+  //
+  //  La prueba cuenta, con tiradas de verdad, cuántas cajas de cada nivel sacan un
+  //  recolector. No mira la tabla: mira lo que sale.
+  {
+    const TIRADAS = 4000;
+    const sinArma: string[] = [];
+    const porCaja: string[] = [];
+    for (const caja of CAJAS) {
+      let conArma = 0;
+      let otraCosa = 0;
+      for (let i = 0; i < TIRADAS; i++) {
+        const { applier } = crearApplier(true);
+        const premio = rollCrateReward(caja, applier);
+        if (premio.kind === 'collector') conArma++;
+        else otraCosa++;
+      }
+      porCaja.push(`T${caja}: ${Math.round((conArma / TIRADAS) * 100)}%`);
+      // **UN UMBRAL, NO "AL MENOS UNA".** Con 4000 tiradas, un premio con un peso
+      // real sale siempre. Si una caja no puede dar armas, sale cero veces, y un
+      // "> 0" no distingue "no puede" de "es rarísimo".
+      if (conArma / TIRADAS < 0.01) sinArma.push(`T${caja} (${conArma}/${TIRADAS})`);
+    }
+    check('botín: TODA caja puede dar un recolector, la T1 incluida',
+      sinArma.length === 0, sinArma.join(', ') || porCaja.join(' '));
+  }
+
+  // =========================================================================
   //  2. La tira de la ruleta
   // =========================================================================
   {
