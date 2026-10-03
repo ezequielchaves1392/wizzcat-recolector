@@ -29,8 +29,8 @@
 import { FRENADO, VUELTAS, avance, instante, geometria, crucesDeCasilla } from '../src/components/rouletteSpin';
 import { tuningRoll } from '../src/components/tuningRoulette';
 import { getSkipRoulette, setSkipRoulette } from '../src/roulettePrefs';
-import { collectorUpgradeCost } from '../src/gameLoop';
-import { check, resumen, boot, reload, conRoll, baseSave, collector, crystal, find } from './kit';
+import { costeDeNivel } from '../src/data/crafting';
+import { check, resumen, boot, reload, conRoll, baseSave, collector, find, s } from './kit';
 
 /** Ventanas reales: el movil de 390 px y el escritorio de 1440 px. */
 const MOVIL = 358;      // 390 menos los 16 px de margen a cada lado
@@ -49,6 +49,28 @@ function geometrias() {
 
 /** El trompo de las cajas: 5200 ms, el valor de `crateRoulette.ts`. */
 const DURACION = 5200;
+
+// ==========================================================================
+//  LA PARTIDA DE LA SECCIÓN 6, Y POR QUÉ ESTÁ ESCRITA CON ESTOS NÚMEROS
+// ==========================================================================
+//
+//  **EL CRISTAL ES UN RECURSO, ASÍ QUE EL SALDO ES `state.crystals` Y EL PRECIO
+//  LO PONE EL TIER DEL ITEM.** Todas las partidas de abajo usan un recolector T3 en
+//  nivel 4, así que el precio de subir un nivel es `costeDeNivel(3, 4)`. Es el
+//  punto donde este banco se equivoca con más facilidad: antes el coste salía de
+//  una función de un solo argumento y eran unas pocas unidades, y ahora **el mismo
+//  item cuesta miles**, porque el número depende del tier. Un saldo escrito a ojo
+//  —los 9 cristales que servían antes— no alcanza ni para intentar la sintonización
+//  y el banco mediría rechazos donde cree medir aciertos.
+//
+//  Los saldos se escriben con la regla delante, no con un número redondo: si
+//  `costeDeNivel()` cambia, estas partidas siguen pagando lo que cuesta subir.
+const TIER_R1 = 3;
+const NIVEL_R1 = 4;
+/** Lo que cuesta pasar del nivel 4 al 5 en un T3. */
+const COSTE_R1 = costeDeNivel(TIER_R1, NIVEL_R1);
+/** Lo que cuestan las dos subidas seguidas del mismo item, del 4 al 6. */
+const COSTE_DOS_SUBIDAS = COSTE_R1 + costeDeNivel(TIER_R1, NIVEL_R1 + 1);
 
 async function main() {
   // =========================================================================
@@ -291,22 +313,27 @@ async function main() {
   //  ruleta. Y nace de un fallo de razon que es facil de cometer y que ningun
   // banco habria visto: `upgradeEquippedCollector` devuelve `{ success: false }`
   // tanto cuando el dado falla como cuando la operacion se RECHAZA antes de
-  // tirar (no hay cristal, faltan unidades, ya esta en el techo). Los dos casos
-  // son `false`, pero son cosas opuestas para el jugador: uno gasto el cristal y
-  // hay que enseñarle el fallo, el otro no gasto nada y lo que corresponde es
-  // un aviso.
+  // tirar (faltan cristales, ya esta en el techo, no hay recolector equipado). Los
+  // dos casos son `false`, pero son cosas opuestas para el jugador: uno gasto los
+  // cristales y hay que enseñarle el fallo, el otro no gasto nada y lo que
+  // corresponde es un aviso.
   //
   //  Sin `rolled`, un rechazo hacia girar la ruleta entera para una operacion
   //  que no ocurrio, con un cartel de "FALLO" y un mensaje que habla de otra
-  //  cosa ("Necesitas 4 x Cristal de Afino"). Y no habria ningun error: la
-  //  ruleta habria girado bien, con su casilla y su cartel.
+  //  cosa ("Necesitas ${coste} de Cristal de Mejora (tienes 0)"). Y no habria
+  //  ningun error: la ruleta habria girado bien, con su casilla y su cartel.
+  //
+  //  **LO QUE CAMBIA AQUI ES DE DONDE SE MIDE EL GASTO.** Antes el cristal era un
+  //  item del almacen y se gastaba una pila: `find(g, 'x1').stackCount`. Ahora es
+  //  un recurso, y lo que se mide es el saldo antes y despues de la llamada. El
+  //  significado de la prueba es el mismo —un fallo que no costara nada no seria
+  //  un fallo— asi que el nombre del `check` no cambia; lo que se lee, si.
   // =========================================================================
   {
     // EL ACIERTO: el dado salio, y la ruleta tiene que girar.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 3, 9)
-    ], { nanites: 0 }));
+      collector('r1', TIER_R1, { damage: 60, level: NIVEL_R1 })
+    ], { nanites: 0, crystals: COSTE_R1 }));
     g.equipCollector('r1');
     const nivelAntes = find(g, 'r1').level;
     const res = conRoll(0, () => g.upgradeEquippedCollector());
@@ -321,7 +348,7 @@ async function main() {
     // que si `levelBefore` se leyera despues de la llamada daria el nivel nuevo
     // en los dos casos y la ruleta pintaria "5 -> 5", un numero que no existe.
     check('contrato: la flecha del acierto es "4 -> 5"',
-      roll.levelBefore === 4 && roll.levelAfter === 5,
+      roll.levelBefore === NIVEL_R1 && roll.levelAfter === NIVEL_R1 + 1,
       `${roll.levelBefore} -> ${roll.levelAfter}`);
 
     const g2 = await reload();
@@ -329,13 +356,17 @@ async function main() {
       'nivel=' + find(g2, 'r1')?.level);
   }
   {
-    // EL FALLO DEL DADO: se gasto el cristal, y hay que decirlo.
+    // EL FALLO DEL DADO: se gastaron los cristales, y hay que decirlo.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 3, 9)
-    ], { nanites: 0 }));
+      collector('r1', TIER_R1, { damage: 60, level: NIVEL_R1 })
+    ], { nanites: 0, crystals: COSTE_R1 }));
     g.equipCollector('r1');
     const nivelAntes = find(g, 'r1').level;
+    // **EL COBRO SE MIDE SOBRE EL SALDO, NO SOBRE UNA PILA.** El cristal es un
+    // recurso: lo que se gasta es `state.crystals`, y lo que cuesta lo pone el
+    // tier del item (`COSTE_R1`), no una tabla de niveles de cristal. El saldo se
+    // lee ANTES de la llamada, que es donde está el sentido de la comparación.
+    const crystalsAntes = s(g).crystals;
     const res = conRoll(0.999, () => g.upgradeEquippedCollector());
     const roll = tuningRoll(res, nivelAntes, find(g, 'r1').level);
 
@@ -345,58 +376,77 @@ async function main() {
       roll.rolled === true && roll.success === false,
       `rolled=${roll.rolled} success=${roll.success}`);
     check('contrato: el fallo deja el nivel donde estaba',
-      roll.levelAfter === roll.levelBefore && find(g, 'r1').level === 4,
+      roll.levelAfter === roll.levelBefore && find(g, 'r1').level === NIVEL_R1,
       `${roll.levelBefore} -> ${roll.levelAfter}, el item esta en ${find(g, 'r1').level}`);
     // Y se paga. Un fallo que no costara nada seria un fallo que no es un
     // fallo: seria el ruleta echando el premio.
-    check('contrato: el fallo se paga con el cristal',
-      find(g, 'x1').stackCount === 9 - collectorUpgradeCost(4),
-      'x1=' + find(g, 'x1').stackCount);
+    check('contrato: el fallo se paga con los cristales',
+      s(g).crystals === crystalsAntes - COSTE_R1,
+      `antes=${crystalsAntes} despues=${s(g).crystals}, y subir el nivel ${NIVEL_R1} cuesta ${COSTE_R1}`);
   }
   {
     // LOS RECHAZOS, que es lo que la ruleta tiene que NO representar.
     //
     // Cada uno se monta con la partida que lo provoca y se mira lo mismo: que el
     // motor diga `rolled: false`, que la ruleta se entere, y que no se haya
-    // gastado nada. La ultima es la que de verdad lo demuestra: si el cristal
-    // sigue entero, no hubo tirada que mostrar, y una ruleta girando aqui seria
+    // gastado nada. La ultima es la que de verdad lo demuestra: si el saldo sigue
+    // entero, no hubo tirada que mostrar, y una ruleta girando aqui seria
     // inventarse un resultado.
+    //
+    // **LO QUE SE MIDE AHORA ES EL SALDO Y NO UNA PILA DEL ALMACEN**, y por eso los
+    // casos se montan con `crystals` en la partida en vez de con un item de
+    // cristal: el rechazo que queda es el de no tener saldo, no el de no tener el
+    // cristal del nivel pedido, que era F26 y ya no existe.
     const rechazos: Array<{ nombre: string; save: any; equipo?: string }> = [
       {
-        // F26 · Un T3 con cristal T1: el rejections ya no es "el jugador pidió
-        // otro nivel", es "este recolector necesita el suyo y no lo tienes".
-        // Antes el caso era un `crystal('x1', 1, ...)` con un `upgrade...(1)`
-        // explícito; ahora el nivel lo pone el item y no se puede pedir otro.
-        nombre: 'sin cristales de ese nivel',
-        save: baseSave([collector('r1', 3, { damage: 60, level: 4 }), crystal('x1', 1, 5)], { nanites: 0 })
+        // F26 · EL PRIMER CASO YA NO ES EL DE "EL CRISTAL DE ESE NIVEL". Con un
+        // solo recurso no hay "este nivel": hay saldo o no hay saldo. Antes era un
+        // `crystal('x1', 1, 5)` con el recolector en T3, o sea un T3 con un cristal
+        // T1, y el motor respondía "este recolector necesita el suyo". Esa regla se
+        // borró con la tabla de niveles, así que el caso que queda es el mismo
+        // rechazo por la mitad: ni una unidad en el saldo.
+        //
+        // El cero va explícito porque `baseSave()` no pone `crystals`: sin el campo
+        // el motor carga su partida nueva, que arranca con 5 unidades, y con 5 sí
+        // habría para un T1. Un rechazo que en realidad es un acierto es el peor
+        // fallo posible en este banco.
+        nombre: 'sin cristales en el saldo',
+        save: baseSave([collector('r1', TIER_R1, { damage: 60, level: NIVEL_R1 })], { nanites: 0, crystals: 0 })
       },
       {
         nombre: 'con menos cristales de los necesarios',
-        save: baseSave([collector('r1', 3, { damage: 60, level: 10 }), crystal('x1', 3, 1)], { nanites: 0 })
+        save: baseSave([collector('r1', TIER_R1, { damage: 60, level: 10 })], { nanites: 0, crystals: 1 })
       },
       {
+        // **EL TECHO SE COMPRUEBA CON SALDO DE SOBRA, A PROPÓSITO.** Si el saldo se
+        // quedara corto, el motor rechazaría por falta de cristales y no por el
+        // techo, y el caso demostraría otra cosa sin que nadie lo notara: el
+        // rechazo seguiría siendo `false` y el banco daría verde. Con el saldo
+        // justo para subir este nivel, la unica razón posible del rechazo es el
+        // tope.
         nombre: 'en el techo de niveles',
-        save: baseSave([collector('r1', 3, { damage: 60, level: 20, maxLevel: 20 }), crystal('x1', 3, 99)], { nanites: 0 })
+        save: baseSave([collector('r1', TIER_R1, { damage: 60, level: 20, maxLevel: 20 })],
+          { nanites: 0, crystals: costeDeNivel(TIER_R1, 20) })
       },
       {
+        // Almacén VACÍO a propósito: este caso se provoca por no tener recolector
+        // equipado, y `baseSave([])` no trae ninguno. Con un item cualquiera
+        // también valdría, mientras no sea un `r1` —el `equipCollector('r1')` de
+        // abajo no encontraría nada y la partida seguiría sin equipar—.
         nombre: 'sin recolector equipado',
-        save: baseSave([crystal('x1', 1, 9)], { nanites: 0 })
+        save: baseSave([], { nanites: 0, crystals: COSTE_R1 })
       }
     ];
 
     for (const caso of rechazos) {
       const g = await boot(caso.save);
       if (caso.equipo !== null) g.equipCollector('r1');
-      const crystalsAntes = (g.getState().warehouse as any[])
-        .filter((w: any) => w.type === 'crystal')
-        .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+      const crystalsAntes = s(g).crystals;
 
       const nivelAntes = find(g, 'r1')?.level;
       const res = g.upgradeEquippedCollector();
       const roll = tuningRoll(res, nivelAntes ?? 0, find(g, 'r1')?.level ?? 0);
-      const crystalsDespues = (g.getState().warehouse as any[])
-        .filter((w: any) => w.type === 'crystal')
-        .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+      const crystalsDespues = s(g).crystals;
 
       check(`rechazo (${caso.nombre}): el motor dice que no se tiro el dado`,
         res.success === false && res.rolled === false,
@@ -424,15 +474,19 @@ async function main() {
     // Y el motor da siempre el nivel con el que se queda. La ruleta lo usa
     // para la flecha, y sin el tendria que releer el item, que es el error del
     // "5 -> 5" que esta seccion existe para cerrar.
+    //
+    // **AQUÍ HAY QUE PAGAR LAS DOS SUBIDAS, Y CADA UNA A SU PRECIO.** El acierto
+    // gasta el coste del nivel 4 y el fallo el del nivel 5, que ya no es el mismo
+    // —crece con `1,26^nivel`—, así que el saldo se pone con la suma de los dos y
+    // no con un número que haya que adivinar.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 3, 9)
-    ], { nanites: 0 }));
+      collector('r1', TIER_R1, { damage: 60, level: NIVEL_R1 })
+    ], { nanites: 0, crystals: COSTE_DOS_SUBIDAS }));
     g.equipCollector('r1');
     const ok = conRoll(0, () => g.upgradeEquippedCollector());
     const mal = conRoll(0.999, () => g.upgradeEquippedCollector());
     check('contrato: el motor devuelve el nivel con el que se queda',
-      ok.level === 5 && mal.level === 5,
+      ok.level === NIVEL_R1 + 1 && mal.level === NIVEL_R1 + 1,
       `acierto=${ok.level} fallo=${mal.level}: el fallo no retrocede, asi que los dos suben`);
   }
   {

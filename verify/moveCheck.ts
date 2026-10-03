@@ -25,7 +25,7 @@
 
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
-  collector, companion, crate, crystal, consumable, ficha
+  collector, companion, crate, consumable, ficha
 } from './kit';
 
 async function main() {
@@ -163,16 +163,17 @@ async function main() {
     // material guardadas como items separados. `mergeStacks` las funde al cargar
     // en una sola pila, y arrastrar esa celda tiene que moverla entera sin partirla.
     //
-    // **ESTE ERA EL CASO DE LAS LLAVES Y AHORA ES DEL CRISTAL, Y NO ES SÓLO UN CAMBIO
-    // DE PALABRA.** Las llaves dejaron de apilarse cuando dejaron de ser moneda:
-    // `'key'` ya no está en `STACKABLE_TYPES`, así que 19 llaves en una partida vieja
-    // ya ni siquiera llegan a la pantalla —la redención las convierte en nanitas—.
-    // Con llaves, este bloque habría dado verde midiendo dos items que no se
-    // funden y habría dado verde midiendo dos items que no se funden, y el apilado real lo mide otro banco.
+    // **ESTE CASO PASÓ POR LAS LLAVES Y POR EL CRISTAL, Y AHORA ES DE UN CONSUMIBLE.**
+    // Los dos dejaron de ser moneda de pago: las llaves se redimen al cargar, y el
+    // cristal es un recurso, un número en `state.crystals`. Ninguno de los dos está
+    // en `STACKABLE_TYPES`, así que un item viejo de cualquiera de ellos ya ni
+    // siquiera llega a la pantalla, y con ellos este bloque habría dado verde
+    // midiendo items que no se funden entre sí.
     //
-    // El cristal es el objeto que de verdad llena una celda con tres dígitos, así que
-    // el escenario que se quiere probar es el suyo.
-    const items = Array.from({ length: 19 }, (_, i) => crystal('k' + i, 1));
+    // El que de verdad llena una celda es el consumible —'`stackKey()` es tipo y
+    // nombre, así que 19 tarjetas iguales son una pila—, y es el escenario que se
+    // quiere probar aquí.
+    const items = Array.from({ length: 19 }, (_, i) => consumable('k' + i, 'afk'));
     const g = await boot(baseSave([collector('z'), ...items]));
     check('mover: 19 unidades separadas se funden en una celda', wh(g).length === 2,
       'items=' + wh(g).length);
@@ -191,18 +192,26 @@ async function main() {
       collector('r1', 4, { level: 3, damage: 80, affixes: ['x'], potential: 3 }),
       companion('m1', 2),
       crate('c1', 6, 4),
-      crystal('x2', 2, 7),
-      crystal('x1', 3, 2),
+      // Tres consumibles **de nombres distintos**, y no por gusto: `stackKey()` es
+      // tipo y nombre, así que dos con el mismo nombre serían la MISMA pila y se
+      // fundirían al cargar. Aquí se quiere medir que mover no crea ni borra nada,
+      // y con items que se funden la foto de antes y la de después no serían
+      // comparables.
+      consumable('x2', 'clickX2', 7, { name: 'Tarjeta Click x2' }),
+      consumable('x1', 'calibrationStone', 2, { name: 'Piedra de Calibración' }),
       consumable('u1', 'afk', 5)
     ];
     const g = await boot(baseSave(items, { nanites: 7777 }));
     const foto = JSON.stringify(wh(g).slice().sort((a, b) => a.id.localeCompare(b.id)));
     const contadores = JSON.stringify({
-      // **EL CONTADOR DE LLAVES SE SALE DE ESTA FOTO, Y POR QUÉ NO SE SUSTITUYE.** La
-      // foto compara el estado antes y después de mover para probar que mover **no
-      // toca nada**. Con las llaves fuera, el contador ya no existe; lo que se mira
-      // es el que sí: el total de cristales, que es donde el almacén también cuenta.
-      n: s(g).nanites, cr: s(g).crystalTotal, c: s(g).crates,
+      // **EL CRISTAL YA NO ESTÁ EN ESTA FOTO COMO CONTADOR DEL ALMACÉN, Y POR QUÉ EL
+      // SALDO SE COMPARA IGUAL.** Antes era el total de cristales, derivado de las
+      // pilas del almacén. Al ser un recurso ya no hay nada que el almacén cuente,
+      // pero la pregunta del banco es la misma —que mover **no toca nada**—, y el
+      // saldo del recurso es justo uno de esos "nadas": si un movimiento lo
+      // descolocara, el jugador vería su saldo de cristal cambiar sin haber gastado
+      // un solo cristal.
+      n: s(g).nanites, cr: s(g).crystals, c: s(g).crates,
       comp: s(g).companions, afk: s(g).afkCards
     });
 
@@ -212,8 +221,8 @@ async function main() {
       `${wh(g).length} vs ${items.length}`);
     check('mover: el contenido de los items es identico',
       JSON.stringify(wh(g).slice().sort((a, b) => a.id.localeCompare(b.id))) === foto);
-    check('mover: nanitas y contadores intactos',
-      JSON.stringify({ n: s(g).nanites, cr: s(g).crystalTotal, c: s(g).crates, comp: s(g).companions, afk: s(g).afkCards }) === contadores,
+    check('mover: nanitas, saldo de cristal y contadores intactos',
+      JSON.stringify({ n: s(g).nanites, cr: s(g).crystals, c: s(g).crates, comp: s(g).companions, afk: s(g).afkCards }) === contadores,
       'cambiados');
   }
   {

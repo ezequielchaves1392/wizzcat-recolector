@@ -93,7 +93,10 @@ const MOCK: any = {
   totalClicks: 4820,
   totalInfraestructure: 0,
   cratesOpened: 128,
-  upgradeCrystals: 31,
+  // El cristal es un recurso. La cifra se elige para que la carta de la tienda
+  // muestre un n�mero de intentos de T1 con decimales, que es lo que un jugador ve de
+  // verdad: un saldo redondo no ense�ar�a si el redondeo funciona.
+  crystals: 2_480,
   warehouse: [
     {
       id: 'forged_1',

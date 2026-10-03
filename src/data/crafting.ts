@@ -49,6 +49,10 @@
 import type { Affix, Rarity, CollectorItem } from '../types/domain';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from './tiers';
 import { nombreDe } from './nombres';
+// `costeDeCaja` es de la tienda, y la flecha va de aquí hacia allí. **No crea ciclo
+// porque `store.ts` no importa nada**: es el fichero más abajo del árbol de datos, y
+// esta es la primera vez que se le pide un número desde las reglas de la forja.
+import { costeDeCaja } from './store';
 
 // --------------------------------------------------------------------------
 // Atributos
@@ -142,31 +146,92 @@ export function collectorMaxLevel(maxLevel?: number | null): number {
 }
 
 /**
- * Cristales que cuesta subir del nivel dado al siguiente.
+ * LOS CRISTALES SON UN RECURSO, Y POR QUÉ LA REGLA DE PRECIO SE ESCRIBE ASÍ
  *
- * Vive AQUÍ y no en `gameLoop.ts` por una razón concreta: es la mitad de la
- * sintonización, y la otra mitad —la probabilidad de éxito,
- * `crystalSuccessChance()` en `data/items.ts`— ya vivía en `data/`. Una regla
- * partida en dos sitios es una regla que se puede tocar por un lado y olvidar por
- * el otro.
+ * ANTES. El cristal era un item del almacén con **diez niveles**: Cristal de Afino,
+ * Cristal Rúnico, Cristal Primordial. Cada nivel tenía su propio multiplicador de
+ * probabilidad (`power` de 1 a 6), así que gastar un T5 era "mejorar con más
+ * probabilidades" y gastar un T1 era "mejorar con menos probabilidades". F26
+ * obligaba además a que el cristal fuera **del mismo nivel que el item**, con lo que
+ * la pregunta del jugador se convertía en una cuenta y no en una decisión.
  *
- * 1,1,2,2,3,3,5,6,8,9,11,14,17,21,26,32,40,50,63,79 -> 456 cristales en total,
- * 91 200 nanitas con el cristal a 200.
+ * AHORA. **Un recurso, un número, sin nivel.** Como no hay nivel, el coste tiene que
+ * salir de otro sitio, y sale del sitio que el juego ya usa para decir cuánto vale un
+ * objeto de un nivel: el precio de la caja de ese nivel.
  *
- * POR QUÉ SUBIÓ DE 1.14 A 1.26. Antes subir a nivel 20 costaba 100 cristales, que
- * a 60 cada uno salían 6 000 nanitas: menos del 4% de un T10. No había nada que
- * decidir, era un botón. Ahora subir al máximo cuesta la mitad del recolector,
- * que es la relación que hace que "¿llevo esto a 15 o a 16?" sea una pregunta de
- * verdad.
+ *     valor de un cristal de nivel n  =  costeDeCaja(n)
+ *     nivel n del nivel k de un item  =  valor(n) * 1,26^k
  *
- * Y por qué NO depende del tier del recolector, que es lo tentador: porque el
- * coste es POR INTENTO, no por item. Sube un T1 y sale carísimo; sube un T10 y
- * sale la mitad de su precio. La consecuencia buscada es que no se desperdicie
- * cristal en un recolector malo, que es justo lo que se quiere: el jugador
- * invierte en lo que le va a durar la partida.
+ * LA PROPIEDAD QUE HACE QUE ESTO NO SEA UN NÚMERO INVENTADO
+ * -------------------------------------------------------
+ * **Una caja de nivel n da exactamente los mismos intentos de mejora que daba antes.**
+ *
+ * Antes: la caja de nivel n soltaba `rand(3n, 5n)` cristales de nivel n, y un
+ * cristal era un intento. O sea que daba entre 3n y 5n intentos.
+ *
+ * Ahora: suelta `rand(3n, 5n) × valor(n)` unidades, y el primer nivel de un item de
+ * nivel n cuesta `valor(n)`. Se divide y queda lo mismo.
+ *
+ * Y la cuenta no se puede torcer por el redondeo porque **los dos lados llevan el
+ * mismo factor**: el precio viejo de un intento de nivel k era `1,2 × 1,26^k`, y el
+ * nuevo es `valor(n) × 1,26^k`. La curva es la misma con un factor delante, así que
+ * un item de nivel n completo cuesta en el nuevo sistema exactamente lo mismo que
+ * costaba en el viejo, en número de cajas.
+ *
+ * EL PRECIO DE LA CAJA Y NO OTRO NÚMERO
+ * -------------------------------------
+ * Porque el precio de la caja es **el único número del juego que ya significa "cuánto
+ * vale un objeto de este nivel"**. Poner un 500 ahí, o un 12, sería inventar una
+ * economía nueva y dejaría el coste de mejora sin ninguna relación con el precio de
+ * las cajas, que es lo que el jugador usa para decidir.
+ *
+ * Y sale con una frase que no hay que recordar: **un cristal vale lo que una caja**.
+ * Si el coste de subir un T1 a nivel 1 es el precio de una caja T1, entonces el jugador
+ * puede leer su propio progreso: "me falta una caja" es literalmente lo que dice el
+ * número.
  */
-export function collectorUpgradeCost(level: number): number {
-  return Math.max(1, Math.floor(1.2 * Math.pow(1.26, level)));
+
+/**
+ * Cuánto vale un cristal del nivel dado, en unidades del recurso único.
+ *
+ * **ES LA MISMA FUNCION QUE EL COSTE DEL PRIMER NIVEL, Y NO HAY SEGUNDA.** Se podría
+ * escribir al revés, con una que llama a la otra, pero entonces habría dos nombres
+ * para el mismo número y el día que una cambiara la otra no se enteraría. Aquí hay
+ * una función y dos usos.
+ *
+ * Vive en `crafting.ts` y no en `items.ts` porque depende de `costeDeCaja()`, que es
+ * de la tienda: la flecha va de las reglas de la forja hacia los precios, que es el
+ * mismo sentido que ya tiene.
+ */
+export function valorDeUnCristal(tier: number): number {
+  const n = Math.max(1, Math.floor(Number(tier) || 1));
+  return costeDeCaja(n);
+}
+
+/**
+ * UNIDADES QUE CUESTA SUBIR DEL NIVEL `nivel` AL SIGUIENTE UN ITEM DE TIER `tier`.
+ *
+ * **ES LA FUNCIÓN DE ARRIBA CON UN FACTOR DEL TIER DELANTE, Y POR QUÉ EL FACTOR
+ * ESTÁ DENTRO Y NO FUERA.** El coste tiene dos ejes porque hay dos cosas que
+ * suben: el **nivel**, que es la curva de siempre (`1,26^nivel`), y el **tier del
+ * item**, que es el valor de un cristal de ese nivel.
+ *
+ * Podría escribirse `valorDeUnCristal(tier) * collectorUpgradeCost(nivel)` y sería
+ * casi lo mismo, pero no es lo mismo: `collectorUpgradeCost` trae un `1,2` delante
+ * que con un valor de 675 es ruido de redondeo, y con uno de 145.388 se pierde en
+ * la cuarta cifra. Traer solo el factor `1,26` deja la curva exactamente donde
+ * estaba.
+ *
+ * **Y EL `max(1, …)` DE ABAJO ES PARA QUE UN ITEM DE TIER 0 NO CUESTE NADA.**
+ * Un item sin nivel guardado —una partida vieja, un item de la tienda— tiene tier 0, y
+ * `costeDeCaja(0)` está recortado a 1 para no leer `undefined`; sin ese suelo el
+ * motor aceptaría una mejora gratuita. Que el suelo sea 1 y no el del T1 es a
+ * propósito: el tier 0 no existe de verdad, así que no tiene que costar su precio
+ * exacto, solo que no sea gratis.
+ */
+export function costeDeNivel(tier: number, nivel: number): number {
+  const curva = Math.pow(1.26, Math.max(0, Math.floor(Number(nivel) || 0)));
+  return Math.max(1, Math.round(valorDeUnCristal(tier) * curva));
 }
 
 // --------------------------------------------------------------------------
@@ -870,7 +935,7 @@ export function multiplicadorDeNivel(level: number | undefined | null): number {
  * barata de tener dos reglas que un día no coinciden. El coste del compañero es un
  * alias, no una copia: si la curva cambia, cambia para los dos.
  */
-export const costeDeNivelDeCompanio = collectorUpgradeCost;
+export const costeDeNivelDeCompanio = costeDeNivel;
 
 /**
  * El poder que un compañero **rinde** de verdad, con su nivel puesto.
@@ -978,34 +1043,41 @@ export function tiraDeForja(
 }
 
 /**
- * CRISTALES QUE DEJA UN FALLO DE FORJA, Y POR QUÉ SON ESTOS Y NO OTROS.
- *
- * **EL MOTIVO ES QUE EL FALLO NO PUEDE SER UN CALLEJÓN SIN SALIDA.** Un fallo
- * cuesta los dos materiales del yunque, y eso es un objetivo de tier: en los
- * niveles altos es el equivalente a miles de nanitas. Sin más, la racha mala vacía
- * el almacén y el jugador deja de intentar; con algo que se lleva, la racha mala
- * **cuesta pero no empobrece**, y se sigue intentando.
- *
- * **POR QUÉ SUBE CON EL TIER.** Porque el coste del fallo también sube: dos T10
- * duelen mucho más que dos T1, y una compensación plana haría que el fallo fuera
- * una pesadilla solo al principio y gratis al final. Lineal, sin curva: una curva
- * sería inventarse una economía que nadie ha pedido.
- *
- * **Y POR QUÉ NO ES TANTA COMO DA UNA CAJA.** Una caja de tier `n` da entre 3n y 5n
- * cristales, más el multiplicador de rareza: para el T10 son unas decenas. Aquí el
- * fallo da `2 + n`, o sea un orden de magnitud menos en los niveles altos. La
- * diferencia es deliberada: **abrir cajas tiene que seguir siendo la forma buena
- * de conseguir cristales**, y la forja es la que se usa cuando ya tienes el
- * material. Si igualaramos las dos fuentes, las cajas dejarían de tener sentido y
- * con ellas el 30 % del botín que ellas dan.
- *
- * El número está aquí y no en el motor porque es **la mitad de la regla del
- * fallo**, igual que las esquirlas. Y en un solo sitio para las dos fusiones: si
- * el recolector y el compañero dieran distinto, sería dos reglas.
- */
-function cristalesDeConsuelo(tier: number): number {
-  return 2 + Math.max(1, Math.floor(tier));
+/**
+ * CUÁNTOS CRISTALES DEJA UN FALLO DE FORJA, Y POR QUÉ SON ESTOS Y NO OTROS.
+ *
+ * **EL MOTIVO POR EL QUE EL FALLO NO PUEDE SER UN CALLEJÓN SIN SALIDA.** Un fallo
+ * cuesta los dos materiales del yunque, y eso es un objeto de tier: en los niveles
+ * altos es el equivalente a miles de nanitas. Sin más, la racha mala vacía el almacén
+ * y el jugador deja de intentar; con algo que se lleva, la racha mala **cuesta pero
+ * no empobrece**, y se sigue intentando.
+ *
+ * **POR QUÉ SUBE CON EL TIER.** Porque el coste del fallo también sube: dos T10
+ * duelen mucho más que dos T1, y una compensación plana haría que el fallo fuera una
+ * pesadilla al principio y gratis al final.
+ *
+ * **Y POR QUÉ NO ES TANTA COMO DA UNA CAJA.** Una caja de tier n da entre 3n y 5n
+ * cristales, más el multiplicador de rareza. Aquí el fallo da 2 + n. La razón de que
+ * la diferencia sea deliberada: **abrir cajas tiene que seguir siendo la forma buena
+ * de conseguir cristales**, y la forja es la que se usa cuando ya tienes el material
+ * en la mano. Si igualáramos las dos fuentes, las cajas dejarían de tener sentido y con
+ * ellas el 30 % del botín que dan.
+ *
+ * **EL NÚMERO DEVUELTO SON INTENTOS, Y EL MOTOR LOS CONVIERTE.** El recurso es único,
+ * así que esta función devuelve "cuántos intentos de nivel 0" y quien entrega los
+ * multiplica por `valorDeUnCristal(tier)`. Multiplicar en el motor y no aquí es a
+ * propósito: **el dinero lo decide quien lo paga.** Si esta función devolviera
+ * unidades, la mitad de los llamadores podrían olvidar el factor y la forja valdría
+ * casi cero en los niveles altos sin que nada lo delatara.
+ *
+ * El número está aquí y no en el motor porque es **la mitad de la regla del fallo**,
+ * igual que las esquirlas. Y es **la misma función para las dos fusiones**: si el
+ * recolector y el compañero dieran distinto, serían dos reglas.
+ */
+export function cristalesDeConsuelo(tier: number): number {
+  return 2 + Math.max(1, Math.floor(tier));
 }
+
 /**
  * Intenta fusionar 2 recolectores del mismo tier.
  * - Si tiene éxito: devuelve el nuevo recolector, los 2 materiales se consumen.

@@ -21,7 +21,7 @@
 //  sigue leyéndose bien y describe algo que el juego ya no hace.**
 // ==========================================================================
 
-import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, collector, companion, ficha, crystal, consumable, conRoll } from './kit';
+import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, collector, companion, ficha, consumable, conRoll } from './kit';
 import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_TYPES, EXPANSOR_TIERS, CONSUMABLES } from '../src/data/store';
 import {
@@ -32,7 +32,7 @@ import { CRATE_TIERS } from '../src/data/store';
 import { generateCompanionByTier } from '../src/data/generators';
 
 import { rangoDePoder } from '../src/data/tiers';
-import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel } from '../src/data/crafting';
+import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
 
 
 /** ¿Coincide el ★3 con el punto medio del rango en los diez tiers? */
@@ -570,24 +570,36 @@ async function main() {
 //  · Que el nivel **sube de verdad**: que el ingreso sube con él. Sin esto,
 //    "subir de nivel" sería un número que crece y no hace nada, que es el peor
 //    tipo de progreso que se puede añadir a un juego.
-//  · Que **es la misma regla que el recolector**: mismo cristal por regla de F26,
-//    misma curva de coste, misma probabilidad y **fallar no retrocede**. Escribir
+//  · Que **es la misma regla que el recolector**: el mismo recurso, la misma
+//    curva de coste, la misma probabilidad y **fallar no retrocede**. Escribir
 //    una curva "para el compañero" es el error que produce dos reglas que un día
 //    no coinciden.
 //  · Que el techo lo pone **la misma función** que lo aplica, con la ficha como
 //    fuente, y que un compañero de una partida vieja —sin `level` ni `maxLevel`—
 //    los recibe.
 //  · Y que **el rechazo no cuesta nada**, que es lo que protege al jugador.
+//
+//  **LO QUE ESTE BLOQUE COMPROBABA ANTES Y YA NO PUEDE COMPROBAR.** La mitad de
+//  la regla F26 —"el cristal tiene que ser del mismo nivel que el item"— nació
+//  de que el cristal fuera un item con diez niveles, cada uno con su
+//  multiplicador de probabilidad. Sin niveles no hay con qué incumplirla: la
+//  pregunta "qué cristal gasto" se ha convertido en "cuánto cuesta", y esa sí se
+//  comprueba. Lo que **no** se ha perdido es la mitad buena de F26 —que no exista
+//  una curva propia para el compañero—, y eso es lo que queda aquí.
 // =========================================================================
 
 // --- 1. El nivel sube y el ingreso sube con él --------------------------------
 {
+  // **EL MONTAJE SON CIFRAS, NO ITEMS.** Antes esto montaba una pila de cristales
+  // del T3 en el almacén y la gastaba. Ahora el cristal es un recurso: lo que se
+  // pone es `state.crystals`, en unidades, y la cuenta sale de
+  // `valorDeUnCristal()` —que es la misma que usa el motor para el precio.
   const g = await boot(baseSave([
-    companion('c1', 3, { potential: 5 }),
-    crystal('x3', 3, 20)
+    companion('c1', 3, { potential: 5 })
   ], {
     nanites: 0, warehouseCapacity: 40, activeCompanions: ['c1'],
-    companions: [ficha('c1', 3, { potential: 5 })]
+    companions: [ficha('c1', 3, { potential: 5 })],
+    crystals: valorDeUnCristal(3) * 4
   }));
 
   const antes: any = s(g).passiveIncome;
@@ -595,7 +607,7 @@ async function main() {
 
   // Con el dado forzado a 0, el `%` sale 0 y siempre acierta.
   const r: any = conRoll(0, () => g.upgradeCompanion('c1'));
-  check('nivel companero: con el cristal de su tier, sube de nivel',
+  check('nivel companero: con las unidades del coste, sube de nivel',
     r.success === true && r.level === 1, `success=${r.success} nivel=${r.level} msg=${r.msg}`);
 
   const despues: any = s(g).passiveIncome;
@@ -613,43 +625,60 @@ async function main() {
 
 // --- 2. La misma regla que el recolector --------------------------------------
 {
-  // **F26: el cristal lo decide el tier y NO LLEGA COMO ARGUMENTO.** Un compañero
-  // T3 con un cristal T1 tiene que rechazarse, igual que un recolector.
-  const g = await boot(baseSave([
-    companion('c1', 3, { potential: 3 }),
-    crystal('x1', 1, 99)
-  ], { nanites: 0, warehouseCapacity: 40, companions: [ficha('c1', 3, { potential: 3 })] }));
-  const r: any = conRoll(0, () => g.upgradeCompanion('c1'));
-  check('nivel companero: el cristal de otro tier no sirve, igual que el recolector',
-    r.success === false && /No tienes/.test(r.msg ?? ''), r.msg ?? 'aceptado');
+  // **LO QUE QUEDA DE F26, Y ES LA MITAD BUENA.** La regla vieja era "el cristal
+  // tiene que ser del mismo nivel que el item", y nacía de que el cristal fuera un
+  // item con diez niveles. Sin niveles ya no hay con qué incumplirla, así que esa
+  // mitad se ha ido con sus nombres. Lo que se conserva es lo que F26 protegía de
+  // verdad: que el precio lo ponga el **tier del item**, que no llega como
+  // argumento, y que sale de la misma función que la del recolector.
+  //
+  // Y el rechazo que queda es el otro: **no hay unidades suficientes**. Es la
+  // versión buena de "un rechazo no cuesta nada", y se comprueba con una unidad
+  // menos de lo que cuesta.
+  const coste = costeDeNivelDeCompanio(3, 0);
+  const gCorto = await boot(baseSave([
+    companion('c1', 3, { potential: 3 })
+  ], {
+    nanites: 0, warehouseCapacity: 40, crystals: coste - 1,
+    companions: [ficha('c1', 3, { potential: 3 })]
+  }));
+  const rCorto: any = conRoll(0, () => gCorto.upgradeCompanion('c1'));
+  check('nivel companero: con una unidad menos se rechaza y no se gasta nada',
+    rCorto.success === false && /Necesitas/.test(rCorto.msg ?? '')
+      && s(gCorto).crystals === coste - 1,
+    `msg="${rCorto.msg}" crystals=${s(gCorto).crystals} de ${coste - 1}`);
   check('nivel companero: y no sube de nivel',
-    (s(g).companions as any[])[0]?.level === 0,
-    `nivel=${(s(g).companions as any[])[0]?.level}`);
+    (s(gCorto).companions as any[])[0]?.level === 0,
+    `nivel=${(s(gCorto).companions as any[])[0]?.level}`);
 
   // Y la curva de coste es **la misma función**: el primer nivel cuesta lo que
   // cuesta el del recolector, y el segundo más. Un número escrito aquí sería una
   // segunda curva que un día no coincidiría.
-  const g2 = await boot(baseSave([
-    companion('c1', 3, { potential: 3 }),
-    crystal('x3', 3, 200)
-  ], { nanites: 0, warehouseCapacity: 40, companions: [ficha('c1', 3, { potential: 3 })] }));
-  // Se sube hasta el 4 y se compara lo gastado en cada salto contra lo que
-  // dice `costeDeNivelDeCompanio()`, que es un alias de la curva del recolector.
   //
-  // **NO SE COMPRUEBA QUE LA CURVA CREZCA NIVEL A NIVEL, PORQUE EN EL PRIMERO NO
-  // CRECE:** `floor(1.2 × 1.26) = 1`, igual que el nivel 0. Esperar que el nivel 1
-  // cueste más que el 0 es pedirle a la curva algo que no hace, y el banco fallaría
-  // por una regla que está bien. Lo que se comprueba es que el número **sale de la
-  // función**, que es lo que evita tener dos curvas.
+  // **AHORA LA CURVA SÍ CRECE DESDE EL PRIMER NIVEL**, y es una consecuencia del
+  // cristal como recurso: el precio de una subida es el valor del cristal de ese
+  // tier multiplicado por `1,26^nivel`, así que el nivel 1 cuesta un 26 % más que
+  // el 0. Con la curva entera de antes (`floor(1,2 × 1,26^n)`, en unidades de un
+  // solo cristal) el primer salto no crecía, porque `floor(1,2 × 1,26) = 1`. Ese
+  // caso raro ya no existe y sí se puede exigir que la curva suba.
+  const partida = valorDeUnCristal(3) * 20;
+  const g2 = await boot(baseSave([
+    companion('c1', 3, { potential: 3 })
+  ], {
+    nanites: 0, warehouseCapacity: 40, crystals: partida,
+    companions: [ficha('c1', 3, { potential: 3 })]
+  }));
+  // Se sube hasta el 4 y se compara lo gastado en cada salto contra lo que
+  // dice `costeDeNivelDeCompanio(3, nivel)`, que es un alias de la curva del
+  // recolector: los dos argumentos son el tier del item y el nivel que ya tiene.
   const gastados: number[] = [];
   for (let nivel = 0; nivel < 4; nivel++) {
     conRoll(0, () => g2.upgradeCompanion('c1'));
-    const restantes = wh(g2).find((w: any) => w.id === 'x3')?.stackCount ?? 0;
-    gastados.push(200 - restantes);
+    gastados.push(partida - s(g2).crystals);
   }
-  const esperado = gastados.map((_, i) => costeDeNivelDeCompanio(i));
+  const esperado = gastados.map((_, i) => costeDeNivelDeCompanio(3, i));
   // **SE COMPARAN LOS SALTOS, NO EL TOTAL.** `gastados` es acumulado —lo que queda
-  // fuera de la pila— y `esperado` es lo que cuesta *ese* nivel. Comparar los dos
+  // fuera de la cuenta— y `esperado` es lo que cuesta *ese* nivel. Comparar los dos
   // así da un desfase de uno en cada término y parece que la curva está mal. Lo que
   // dice la regla es lo que cuesta **cada** subida, y eso es la diferencia entre
   // dos totales consecutivos.
@@ -657,14 +686,19 @@ async function main() {
   check('nivel companero: el coste sale de la MISMA curva que el del recolector',
     porSalto.every((g, i) => g === esperado[i]) && esperado[3] > esperado[0],
     `por salto=[${porSalto.join(',')}] esperado=[${esperado.join(',')}]`);
+  check('nivel companero: y el primer nivel ya cuesta más que el cero',
+    esperado[1] > esperado[0],
+    `nivel0=${esperado[0]} nivel1=${esperado[1]}`);
 }
 
 // --- 3. Fallar no retrocede ----------------------------------------------------
 {
   const g = await boot(baseSave([
-    companion('c1', 3, { potential: 3 }),
-    crystal('x3', 3, 50)
-  ], { nanites: 0, warehouseCapacity: 40, companions: [ficha('c1', 3, { potential: 3 })] }));
+    companion('c1', 3, { potential: 3 })
+  ], {
+    nanites: 0, warehouseCapacity: 40, crystals: valorDeUnCristal(3) * 4,
+    companions: [ficha('c1', 3, { potential: 3 })]
+  }));
 
   // Con el dado al 99 %, siempre falla, sin importar el nivel.
   const r: any = conRoll(0.99, () => g.upgradeCompanion('c1'));
@@ -679,10 +713,9 @@ async function main() {
 {
   // El techo lo pone **la ficha**, y la ficha lo pone `nivelMaximoDeCompanio()`.
   const g = await boot(baseSave([
-    companion('c1', 3, { potential: 1, level: 0, maxLevel: 3 }),
-    crystal('x3', 3, 200)
+    companion('c1', 3, { potential: 1, level: 0, maxLevel: 3 })
   ], {
-    nanites: 0, warehouseCapacity: 40,
+    nanites: 0, warehouseCapacity: 40, crystals: valorDeUnCristal(3) * 20,
     companions: [ficha('c1', 3, { potential: 1, level: 0, maxLevel: 3 })]
   }));
 
@@ -695,30 +728,34 @@ async function main() {
   const nivelFinal = (s(g).companions as any[])[0]?.level;
   check('nivel companero: llega al techo de la ficha y ahí para',
     ok === 3 && nivelFinal === 3, `subidas=${ok} nivel=${nivelFinal}`);
+  const antesEnElTecho = s(g).crystals;
   const rTop: any = conRoll(0, () => g.upgradeCompanion('c1'));
   check('nivel companero: y en el techo responde "máximo", no cobra nada',
-    rTop.success === false && /m/i.test(rTop.msg ?? ''), rTop.msg ?? 'aceptado');
+    rTop.success === false && /m/i.test(rTop.msg ?? '') && s(g).crystals === antesEnElTecho,
+    `msg="${rTop.msg}" crystals=${antesEnElTecho} -> ${s(g).crystals}`);
 
-  // **Un rechazo no cuesta nada.** Con cristales de sobra en la mano, que es donde
+  // **Un rechazo no cuesta nada.** Con unidades de sobra en la mano, que es donde
   // el orden importa: si la comprobación fuera después del cobro, el jugador
   // pagaría por una subida que no ocurrió.
-  // **El rechazo es "ya está en el techo", no "no tengo cristales".** Con un
-  // cristal y un coste de uno la operación ACIERTA, así que una comprobación de
-  // "un rechazo no gasta nada" que acabe en éxito no comprueba nada. El techo en
-  // cero da el rechazo que se repite cada vez que se vuelve a tocar el botón.
+  //
+  // **EL RECHAZO ES "YA ESTÁ EN EL TECHO", NO "NO TENGO CRISTALES".** Con un
+  // rechazo por falta de unidades se comprobaría el orden del cobro dos veces —con
+  // el mismo resultado—, y además ese rechazo se puede tapar con "quedan cero": es
+  // el que sale cuando el jugador no ha jugado nunca. El techo da el rechazo que se
+  // repite cada vez que se vuelve a tocar el botón, y es el que un jugador con la
+  // cartera llena se encuentra.
   const tope = nivelMaximoDeCompanio(3, 3);
   const g2 = await boot(baseSave([
-    companion('c1', 3, { potential: 3, level: tope, maxLevel: tope }),
-    crystal('x3', 3, 1)
+    companion('c1', 3, { potential: 3, level: tope, maxLevel: tope })
   ], {
-    nanites: 0, warehouseCapacity: 40,
+    nanites: 0, warehouseCapacity: 40, crystals: costeDeNivelDeCompanio(3, 0),
     companions: [ficha('c1', 3, { potential: 3, level: tope, maxLevel: tope })]
   }));
-  const antes = (wh(g2).find((w: any) => w.id === 'x3')?.stackCount) ?? 0;
+  const antes = s(g2).crystals;
   const r2: any = g2.upgradeCompanion('c1');
-  check('nivel companero: un rechazo no gasta ni un cristal',
-    r2.success === false && (wh(g2).find((w: any) => w.id === 'x3')?.stackCount ?? 0) === antes,
-    `antes=${antes} msg=${r2.msg}`);
+  check('nivel companero: un rechazo no gasta ni una unidad de cristal',
+    r2.success === false && s(g2).crystals === antes,
+    `antes=${antes} despues=${s(g2).crystals} msg="${r2.msg}"`);
 
   const rNoExiste: any = g2.upgradeCompanion('no-existe');
   check('nivel companero: y un id que no existe se rechaza sin decir "undefined"',
@@ -755,10 +792,10 @@ async function main() {
   // un T3 con potencial 5" y todos los bancos que comparan contra
   // `poderDeCompanero()` empezarían a fallar sin que nadie supiera por qué.
   const gGuardado = await boot(baseSave([
-    companion('c1', 3, { potential: 5 }),
-    crystal('x3', 3, 20)
+    companion('c1', 3, { potential: 5 })
   ], {
     nanites: 0, warehouseCapacity: 40, activeCompanions: ['c1'],
+    crystals: valorDeUnCristal(3) * 4,
     companions: [ficha('c1', 3, { potential: 5, power: poderDeCompanero(3, 5) })]
   }));
   conRoll(0, () => gGuardado.upgradeCompanion('c1'));

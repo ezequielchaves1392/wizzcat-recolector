@@ -52,12 +52,11 @@
 
 import { STORE_ITEMS } from '../src/gameLoop';
 import { costeDeCaja } from '../src/data/store';
-import { danioDeRango } from '../src/data/crafting';
+import { danioDeRango, valorDeUnCristal } from '../src/data/crafting';
 import { CRATE_TYPES, type CrateType } from '../src/data/store';
-import { CRYSTAL_DEFS } from '../src/data/items';
 import {
   boot, reload, recargar, bootNew, check, resumen, s, wh, ids, nanites, deType, find,
-  baseSave, collector, crystal, consumable, guardado
+  baseSave, collector, consumable, guardado
 } from './kit';
 
 /** Cuántos clicks se dan en un paso. Suficiente para que la cifra sea legible. */
@@ -214,9 +213,10 @@ async function main() {
     // que ver con lo que comprueban. No es un fallo del juego: es que **un item
     // apilado no tiene id propio**, y el banco lo daba por hecho.
     //
-    // Por eso las dos cuentan UNIDADES con `cajasTotales()` y no ids. El cristal
-    // —que era la otra opción— tiene el mismo problema: la partida de bienvenida
-    // trae cinco cristales de T1, así que su compra también se fundía.
+    // Por eso las dos cuentan UNIDADES con `cajasTotales()` y no ids. El material de
+    // mejora —que fue la otra opción— ya no es una opción: **el cristal es un
+    // recurso**, no un item, así que ni se compra en una celda ni se funde con
+    // ninguna.
     const barato = 'crateT1';
     const cajasDeFabrica = cajasTotales(g3);
 
@@ -378,17 +378,38 @@ async function main() {
     check('almacén lleno: está lleno de verdad',
       g9.getCapacity() === 15 && wh(g9).length === 15,
       `${wh(g9).length}/${g9.getCapacity()}`);
-    // **EL CRISTAL, Y POR QUÉ NO LA CAJA.** Este bloque compara dos compras: una que
-    // necesita ranura propia y otra que se apila en la que ya hay. La caja es la
-    // segunda, y ya está comprobada dos comprobaciones más abajo. Para la primera
-    // hace falta un tipo **sin tope de almacenamiento** —`TOPE_PILA` solo pone un
-    // tope a la caja—, porque un tipo con tope siempre encuentra una pila donde
-    // meterse y nunca pediría ranura nueva.
+    // **EL EXPANSOR, Y POR QUÉ YA NO ES EL CRISTAL.** Este bloque compara dos
+    // compras: una que necesita ranura propia y otra que se apila en la que ya hay.
+    // La caja es la segunda, y ya está comprobada dos comprobaciones más abajo. Para
+    // la primera hace falta un tipo **sin tope de almacenamiento** —`TOPE_PILA` solo
+    // pone un tope a la caja—, porque un tipo con tope siempre encuentra una pila
+    // donde meterse y nunca pediría ranura nueva.
+    //
+    // **LA CARTA DEL CRISTAL DEJÓ DE SERVIR PARA ESO, Y ES POR QUÉ SE CAMBIA.** Era
+    // la que se usaba porque creaba un item sin tope, así que necesitaba ranura. Al
+    // ser un recurso **no crea nada**: `previewStoreItem()` devuelve `null` y la
+    // pregunta de espacio no le aplica, así que con el almacén lleno **sí cabe**, y
+    // una comprobación que afirmara lo contrario estaría mintiendo sobre el juego.
+    // El expansor es un consumible de verdad, y `stackCheck` mide el mismo par desde
+    // el otro lado; aquí lo que se mide es que el camino de la tienda sigue entero.
     check('almacén lleno: un item que necesita ranura NO cabe',
-      g9.canBuyStoreItem('upgradeCrystal') === false, 'dice que cabe');
+      g9.canBuyStoreItem('expansorT1') === false, 'dice que cabe');
     check('almacén lleno: y al comprarlo no se cobra',
-      (() => { g9.buyStoreItem('upgradeCrystal'); return nanites(g9) === 100_000; })(),
+      (() => { g9.buyStoreItem('expansorT1'); return nanites(g9) === 100_000; })(),
       'nanitas=' + nanites(g9));
+    // **Y LA CARTA DEL CRISTAL, AL REVÉS: ES LO QUE NO NECESITA RANURA.** Con las
+    // quince ranuras ocupadas, comprar material de mejora tiene que funcionar: es un
+    // número, no un objeto, y si el botón se apagara aquí el jugador leería "no
+    // tienes sitio" cuando lo que le falta es otra cosa.
+    check('almacén lleno: y el cristal sí se puede comprar, porque no ocupa ranura',
+      (() => {
+        g9.updateState({ nanites: 100_000, crystals: 0 });
+        const antes = nanites(g9);
+        const r: any = g9.buyStoreItem('upgradeCrystal');
+        return g9.canBuyStoreItem('upgradeCrystal') === true
+          && r !== false && nanites(g9) < antes && s(g9).crystals > 0;
+      })(),
+      `nanitas=${nanites(g9)} crystals=${s(g9).crystals}`);
     check('almacén lleno: pero otra caja del mismo tipo SÍ cabe, porque se apila',
       g9.canBuyStoreItem('crateT1') === true,
       `hay una pila de ${wh(g9).find((w: any) => w.id === 'pila')?.stackCount} cajas`);
@@ -456,13 +477,14 @@ async function main() {
   // =========================================================================
   {
     const g12 = await boot(baseSave(
-      [{ ...collector('r1', 3, { damage: 60 }) }, cr('c1', 1), mat('x1', 2)],
-      { nanites: 0, warehouseCapacity: 30 }
+      [{ ...collector('r1', 3, { damage: 60 }) }, cr('c1', 1)],
+      { nanites: 0, warehouseCapacity: 30, crystals: valorDeUnCristal(1) * 3 }
     ));
     const antes = nanites(g12);
     const cajas = wh(g12).filter((w: any) => w.type === 'crate').length;
-    const crystals = wh(g12).filter((w: any) => w.type === 'crystal')
-      .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
+    const crystals = cristalTotal(g12);
+    // EL CRISTAL SE LEE COMO UN NÚMERO, Y NO COMO UN ITEM DEL ALMACÉN. Antes era la suma
+    // de `stackCount` de unas pilas repartidas en tres celdas; ahora es `state.crystals`.
 
     // **LA CAJA SE ABRE CON SU ID Y NADA MÁS.** Antes era
     // `openCrateBox('c1', 'k1')`: el id de la caja y el de la llave, y el motor
@@ -470,22 +492,24 @@ async function main() {
     // comprobar, y por eso la llamada es de un argumento.
     const r = g12.openCrateBox('c1');
 
-    // CUÁNTOS CRISTALES SOLTÓ EL BOTÍN DE ESTA CAJA.
+    // CUÁNTAS UNIDADES DE CRISTAL SOLTÓ EL BOTÍN DE ESTA CAJA.
     //
     // La caja común tiene una fila de cristales con peso 26, así que algo menos de
-    // una de cada nueve aperturas deja material nuevo. Estas pruebas miran el
-    // recuento del almacén, y **sin restar el botín fallan solas una de cada nueve
+    // una de cada nueve aperturas deja material nuevo. Estas pruebas miran la
+    // cuenta del recurso, y **sin sumar el botín fallan solas una de cada nueve
     // veces**: el juego está haciendo lo correcto y la prueba se equivoca de más.
     // Es el peor tipo de prueba —la que sale verde casi siempre—, porque el día que
     // falle del todo nadie sabrá si es ella o el juego.
     const sueltas = r.reward?.kind === 'crystals' ? (r.reward.amount ?? 0) : 0;
     // **Y AQUÍ NO HAY QUE RESTAR NADA, Y ES LA DIFERENCIA CON LA VIEJA.** Antes abrir
     // consumía una llave, así que lo esperado era `llaves - 1 + sueltas`. Ahora lo
-    // único que se consume es la caja, y el material solo puede **sumar**: por eso
+    // único que se consume es la caja, y el cristal solo puede **sumar**: por eso
     // lo esperado es `cristales + sueltas`, sin el `- 1`.
+    //
+    // **LO QUE ENTREGA EL BOTÍN SON UNIDADES YA CONVERTIDAS**, no intentos: la fila
+    // multiplica `rand(3n, 5n)` por `valorDeUnCristal(n)`. Lo que dice la etiqueta es
+    // exactamente lo que se compara con `state.crystals`.
     const cristalesDeFabrica = crystals + sueltas;
-    const totalCristales = (gg: any) => wh(gg).filter((w: any) => w.type === 'crystal')
-      .reduce((a, w: any) => a + (w.stackCount ?? 1), 0);
 
     check('caja: se abre', r.ok === true, r.msg ?? '');
     // F31 · ABRIR UNA CAJA PUEDE DEJAR OTRA CAJA, Y POR ESO YA NO SE CUENTAN.
@@ -498,13 +522,13 @@ async function main() {
     check('caja: la caja se consume',
       (s(g12).crates[1] ?? 0) < cajas, `cajasT1=${s(g12).crates[1]} items=${deType(g12, 'crate')}`);
     // **LO QUE ABRE UNA CAJA ES LA CAJA, Y SOLO LA CAJA.** La comprobación no es
-    // "se gastó lo que se debía": es que el material **no baja**, porque ahora no hay
+    // "se gastó lo que se debía": es que el cristal **no baja**, porque ahora no hay
     // ningún segundo objeto que el jugador pueda gastar al abrir. Si volviera a haber
     // uno, esta prueba seguiría dando verde si el botín lo tapara, así que el
-    // nombre también ha cambiarado.
-    check('caja: abrirla no gasta material, solo la caja',
-      totalCristales(g12) === cristalesDeFabrica,
-      `cristales=${totalCristales(g12)} esperado=${cristalesDeFabrica} (botín soltó ${sueltas})`);
+    // nombre también ha cambiado.
+    check('caja: abrirla no gasta cristal, solo la caja',
+      cristalTotal(g12) === cristalesDeFabrica,
+      `cristales=${cristalTotal(g12)} esperado=${cristalesDeFabrica} (botín soltó ${sueltas})`);
     check('caja: el contador de cajas abiertas sube', s(g12).cratesOpened === 1,
       'abiertas=' + s(g12).cratesOpened);
 
@@ -535,9 +559,9 @@ async function main() {
     const g13 = await recargar();
     check('caja: el botín sobrevive a la recarga',
       s(g13).cratesOpened === 1, 'abiertas=' + s(g13).cratesOpened);
-    // Lo que se comprueba aquí es la dirección del daño: el MATERIAL NO SE DUPLICA.
+    // Lo que se comprueba aquí es la dirección del daño: **EL CRISTAL NO SE DUPLICA.**
     // Que la caja no vuelva es lo evidente; lo que sería un fallo de verdad es que
-    // abrirla fabricara material, porque convertir una caja en cristal gratis es
+    // abrirla fabricara cristal, porque convertir una caja en unidades gratis es
     // infinitamente explotable.
     //
     // NOTA HISTORICA: este `check` empezó siendo un dato en lugar de una aserción,
@@ -552,28 +576,34 @@ async function main() {
     // a mirar de verdad. Ver `CONTEXTO-JUEGO.md`, discrepancias 15 y 16.
     //
     // **ESTO SOBREVIVE SIN LAS LLAVES, Y ES JUSTO POR QUÉ ESTE BLOQUE SIGUE
-    // MIRANDO EL MATERIAL Y NO LAS CAJAS.** La mitad de llave del bug ya no puede
+    // MIRANDO EL CRISTAL Y NO LAS CAJAS.** La mitad de llave del bug ya no puede
     // pasar: las llaves no se multiplican porque no se acumulan en absoluto. La de
     // cristal es el mismo fallo con otro nombre, y quitarla sería borrar la mitad
     // que todavía puede activarse.
     //
-    // Y la línea de abajo **no estaba indentada**, ni cuatro de sus comments de más
+    // **Y CON EL CRISTAL SIENDO UN RECURSO LA ASERCIÓN ES MÁS FUERTE, NO MÁS FLOJA.**
+    // Antes había que recorrer el almacén: el botín podía abrir una pila nueva y el
+    // contador del juego —`crystalTotal`, derivado del almacén— podía no coincidir
+    // con lo que el banco contaba. Ahora las dos mitades son el mismo número en
+    // `state.crystals`, y una recarga que lo suba es un fallo sin discusión posible.
+    //
+    // Y la línea de abajo **no estaba indentada**, ni cuatro de sus comentarios de más
     // abajo, ni traía un `\u00f3` literal en mitad de la frase. Ninguna de las dos
     // cosas rompía nada —un comentario con la sangría mal puesta sigue siendo un
     // comentario— y por eso nadie lo había visto. Se arreglan aquí porque el bloque
     // se reescribía de todas formas, y no como una tarea aparte.
     const cajas13 = deType(g13, 'crate');
-    const cristales13 = totalCristales(g13);
+    const cristales13 = cristalTotal(g13);
     // F31 · La caja que se abrió no vuelve, aunque el botín haya dejado otra caja
     // en su sitio. Se mide por nivel, que es donde vive el contador.
     check('caja: la caja abierta no vuelve',
       (s(g13).crates[1] ?? 0) < cajas, `cajasT1=${s(g13).crates[1]} items=${cajas13} (antes ${cajas})`);
-    check('caja: abrir una caja NO multiplica el material',
+    check('caja: abrir una caja NO multiplica el cristal',
       cristales13 <= cristalesDeFabrica,
       `cristales=${cristales13} tope=${cristalesDeFabrica} (antes ${crystals}, botín soltó ${sueltas})`);
-    check('caja: y el material no crece al recargar',
+    check('caja: y el cristal no crece al recargar',
       cristales13 === cristalesDeFabrica,
-      `cristales=${cristales13} esperado=${cristalesDeFabrica} · doc=${JSON.stringify((guardado() as any)?.crystalsByTier ?? 'sin campo crystalsByTier')}`);
+      `cristales=${cristales13} esperado=${cristalesDeFabrica} · doc=${JSON.stringify((guardado() as any)?.crystals ?? 'sin campo crystals')}`);
   }
 
   // =========================================================================
@@ -695,9 +725,10 @@ async function main() {
     check('ascensión: y no se toca el progreso', nanites(g17) === 1000, 'nanitas=' + nanites(g17));
 
     const g18 = await boot(baseSave(
-      [collector('r1', 3, { damage: 60 }), crystal('x1', 1, 3)],
+      [collector('r1', 3, { damage: 60 })],
       {
         nanites: 2_000_000, totalNanitesProduced: 50_000_000,
+        crystals: valorDeUnCristal(1) * 3,
         warehouseCapacity: 30, cores: 3, totalCores: 10, resets: 2,
         nodeLevels: { core_sink: 2 }, unlockedNodes: ['core_sink']
       }
@@ -792,20 +823,19 @@ function cajasTotales(gg: any): number {
 }
 
 /**
- * Un cristal de su nivel, listo para el almacén.
+ * Cuántas unidades de cristal hay en la partida.
  *
- * **ESTE ERA EL ITEM DE LLAVE, Y EL CRISTAL LO SUSTITUYE PORQUE SIGUE SIENDO EL
- * MATERIAL QUE ABRE Y QUITA UNA CAJA.** El apartado 7 comprueba dos cosas: que el
- * botín de una caja no multiplica el material y que lo consumido no vuelve al
- * recargar. Eso se puede medir con cualquier material, y el cristal es el que
- * queda.
+ * **LA ÚNICA FORMA DE LEER EL CRISTAL DESDE AQUÍ.** El cristal es un recurso, así
+ * que la pregunta no es "¿qué item de cristal hay en el almacén?" sino "¿cuántas
+ * unidades tiene?". Este es el sitio donde está esa cuenta, y lo devuelven las dos
+ * mitades —la partida y el documento guardado— porque el apartado 7 las compara.
+ *
+ * Antes esta función no existía: el banco contaba items de tipo `crystal` por el
+ * almacén, y con el recurso único eso daría siempre cero y el apartado mediría
+ * nada.
  */
-function mat(id: string, stack: number, tier = 1) {
-  const def = CRYSTAL_DEFS[tier];
-  return {
-    id, name: def.name, type: 'crystal', details: def.details, rarity: def.rarity,
-    tier, sellPrice: 180, stackable: true, stackCount: stack
-  };
+function cristalTotal(gg: any): number {
+  return (s(gg).crystals as number) ?? 0;
 }
 
 export default main();

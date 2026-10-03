@@ -356,15 +356,37 @@ async function main() {
       // contra la caja entera, no compiten en la bolsa de su rareza, y los miden
       // los bloques de arriba (salto 1-8%, D1 exclusividad). La escalera de rareza
       // es solo para las entradas que sí compiten por rareza.
-      const porRareza: Record<string, number> = {};
+      // **LA MEDIA POR ENTRADA, QUE ES LO QUE EL COMENTARIO DE ARRIBA DICE QUE SE
+      // MIDE, Y NO LA SUMA.** El comentario lleva tres párrafos explicando por qué la
+      // suma es la medida equivocada —"una rareza puede ser la de TRES entradas
+      // distintas y la de otra la de una sola"—, y el código sumaba. No es un detalle
+      // de redacción: la suma compara **cuántos premios hay de cada rareza**, y esa
+      // jerarquía es la del diseñador, no la del jugador.
+      //
+      // La prueba pasaba en vacío, y conviene decir por qué. Antes, el botín de cristal
+      // de una caja alta era Legendario o Divino, así que en las cajas T5 a T10 **no
+      // existía ninguna entrada Rara**, la escalera empezaba en Épico y no había un
+      // peldaño anterior con el que comparar. Ahora el cristal conserva su rareza de
+      // siempre, que tampoco cambia eso, pero el día que aparezca un peldaño más la
+      // escalera tiene que sostenerse por lo que dice el comentario y no porque no
+      // tenga con qué compararse.
+      const porRareza: Record<string, number[]> = {};
       tabla.forEach((e, i) => {
         if (e.id === 'up' || e.exclusivo) return;
         const rar = rarezas[i] ?? 'Común';
-        porRareza[rar] = (porRareza[rar] ?? 0) + pesos[i];
+        (porRareza[rar] ??= []).push(pesos[i]);
       });
       const escalera = Object.keys(porRareza)
         .sort((a, b) => (RARITY_RANK[a] ?? 0) - (RARITY_RANK[b] ?? 0))
-        .map(k => ({ rar: k, prob: porRareza[k] * 100 }));
+        .map(k => {
+          // Media, no suma: el peso **por entrada** de esa rareza, que es lo que el
+          // jugador nota —una entrada Épica es más fácil que una Legendario—. La
+          // media pondera por el número de entradas, así que una rareza con cuatro
+          // entradas no queda handicapeada por tener cuatro.
+          const lista = porRareza[k];
+          const media = lista.reduce((a, b) => a + b, 0) / lista.length;
+          return { rar: k, prob: media * 100 };
+        });
       let rompe = '';
       for (let i = 1; i < escalera.length; i++) {
         if (escalera[i].prob >= escalera[i - 1].prob) {

@@ -12,12 +12,12 @@
 //     distintas del mismo objeto.
 
 import { TIER_SYSTEM } from '../data/tiers';
-import { rollPotentialFrom, poderDeCompanero } from '../data/crafting';
+import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal } from '../data/crafting';
 import { generateCollectorByTier } from '../data/generators';
 import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
-import { CRYSTAL_DEFS } from '../data/items';
+import { CRISTAL_NOMBRE, CRISTAL_RAREZA } from '../data/items';
 import { formatNumber } from '../utils/format';
 import type { WarehouseItem } from '../types';
 
@@ -1009,18 +1009,58 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     build: () => { const a = rand(250, 400); return { kind: 'nanites', amount: a, name: 'Nanitas', label: `+${a} Nanitas`, details: 'Materia prima básica', rarity: 'Común', icon: 'bolt' }; }
   });
 
-  // F26 · LA CAJA T{n} SUELTA EL CRISTAL T{n}. Una línea, y es la que convierte
-  // la regla estricta en algo alcanzable.
+  // LA RAREZA DEL BOTÍN, Y POR QUÉ NO ES LA DE LA CAJA.
+  //
+  // Todo lo demás de esta tabla usa la rareza de su caja, y lo debería: el jugador ve
+  // una caja-divina y espera botín-divino. El cristal es el caso raro, y lo era
+  // **antes** de que el cristal fuera un recurso: su rareza venía de
+  // `CRYSTAL_DEFS[tier].rarity`, que era una escala propia y distinta de la de las
+  // cajas —T4 y T5 eran las dos Legendario, T8, T9 y T10 las tres Divino—.
+  //
+  // Se conserva esa escala, y no la de la caja, por una razón que no es nostalgia:
+  // **`resolveLootAmount()` multiplica la cantidad por la rareza del premio.** Cambiar
+  // la rareza del cristal por la de su caja recortaba el botín hasta un 29 % —T4
+  // pasaba de 21-35 intentos por caja a 15-25,_ con el precio de la tienda igual, lo
+  // que es subir de nivel más lento sin que nadie lo hubiera pedido— y esa cuenta no
+  // está escrita en ningún sitio, así que no se habría visto hasta que alguien midiera
+  // los diez niveles uno a uno.
+  //
+  // **LO QUE ESTE NÚMERO ES Y LO QUE NO ES.** Es la rareza **del premio**: lo que
+  // tiñe la casilla de la ruleta y lo que escala la cantidad. No dice nada de qué es
+  // el cristal, que es un recurso único y se llama siempre igual. Un botín-divino de
+  // cristal no es un cristal distinto: es más cantidad del mismo.
+  const RAREZA_DEL_BOTIN = [0, 1, 2, 3, 3, 4, 4, 5, 5, 5];
+
+  /** La rareza que llevaba el botín de cristal de ese nivel antes de unificarlo. */
+  function rarezaDelBotinDeCristal(tier: number): string {
+    const t = Math.max(1, Math.min(RAREZA_DEL_BOTIN.length, Math.floor(tier) || 1));
+    return Object.keys(RARITY_RANK).find(k => RARITY_RANK[k] === RAREZA_DEL_BOTIN[t - 1]) ?? 'Raro';
+  }
+
+  // LOS CRISTALES QUE SUELTA ESTA CAJA, YA EN UNIDADES DEL RECURSO ÚNICO.
+  //
+  // **LA CONVERGENCIA ESTÁ AQUÍ Y NO EN EL ALMACÉN, Y ES DONDE TIENE QUE ESTAR.** La
+  // cuenta es `rand(3n, 5n) × valorDeUnCristal(n)`: sale la misma cantidad de
+  // *números* que antes, y cada uno vale ahora lo que costaba un intento entero en vez
+  // de un intento entero entero por uno.
+  //
+  // La razón de que el número de salida no cambie es justo la que hace el cambio
+  // neutro: **una caja de nivel n da los mismos intentos de mejora que daba antes**,
+  // porque los dos lados de la división llevan el mismo factor.
+  //
+  // **Y YA NO HAY NIVEL QUE ANUNCIAR.** Antes la fila decía "Cristal de Fase" y el
+  // motor tenía que respetar ese nivel, o el jugador veía un nombre y recibía otro.
+  // Con un solo recurso el nombre es único y no hay nada que respetar: **la fila ya no
+  // puede mentir porque ya no dice qué nivel es.**
   tabla.push({
     id: 'crystals', weight: 26,
     build: () => {
-      const a = rand(3 * tier, 5 * tier);
-      const def = CRYSTAL_DEFS[tier];
+      const unidades = Math.round(rand(3 * tier, 5 * tier) * valorDeUnCristal(tier));
       return {
-        kind: 'crystals', amount: a,
-        name: def.name, label: `+${a} ${def.name}`,
-        details: `Sube el nivel de un recolector T${tier}`,
-        rarity: def.rarity, icon: 'crystal', materialTier: tier
+        kind: 'crystals', amount: unidades,
+        name: CRISTAL_NOMBRE, label: `+${formatNumber(unidades)} ${CRISTAL_NOMBRE}`,
+        details: `Sube el nivel de un recolector o un compañero T${tier}`,
+        rarity: rarezaDelBotinDeCristal(tier), icon: 'crystal'
       };
     }
   });
@@ -1256,7 +1296,11 @@ export function resolveLootAmount(crateType: CrateType, entry: Omit<CrateReward,
   }
   if (base.kind === 'crystals') {
     const value = Math.round(base.amount * (1 + RARITY_RANK[base.rarity] * 0.25));
-    return { ...base, amount: value, label: `+${value} Cristales de Mejora` };
+    // `formatNumber` y no el número en crudo: la etiqueta es lo que lee el jugador, y
+    // los -nanitas- de la línea de arriba,_que son la mitad de lo que sale de una caja
+    // T10,_ lo formatean. Una casilla con "+1293840 Cristales de Mejora" al lado de otra
+    // con "+9.25 K Nanitas" dice que el cristal es otro juego.
+    return { ...base, amount: value, label: `+${formatNumber(value)} ${CRISTAL_NOMBRE}` };
   }
   return base;
 }

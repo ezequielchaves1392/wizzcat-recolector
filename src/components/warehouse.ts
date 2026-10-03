@@ -32,12 +32,12 @@ import { pageShell, mountInto, wireNav, sectionHead } from '../ui/pageShell';
 import { showConfirmModal } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
 import { showCrateSummary, maximoDeApertura } from './crateSummary';
-import { showCrystalPicker } from './crystalPicker';
+import { showSintonizacion } from './sintonizacion';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
-import { CRYSTAL_DEFS, crystalTierFromName } from '../data/items';
+import { CRISTAL_NOMBRE } from '../data/items';
 import { MAX_CRATE_TIER, type CrateType } from '../data/store';
 
 const TYPE_ICON: Record<string, any> = {
@@ -45,7 +45,6 @@ const TYPE_ICON: Record<string, any> = {
   companion: 'companion',
   crate: 'crate',
   key: 'key',
-  crystal: 'crystal',
   consumable: 'flask'
 };
 
@@ -57,7 +56,6 @@ const TYPE_LABEL: Record<string, string> = {
   collector: 'Recolector',
   companion: 'Compañero',
   crate: 'Caja',
-  crystal: 'Cristal de Mejora',
   consumable: 'Consumible'
 };
 
@@ -389,6 +387,11 @@ function detailContent(item: any, state: any, game: any): string {
   // misma llamada.
   const nivelComp = Math.max(0, Math.floor(Number((item as any).level) || 0));
   const topeComp = nivelMaximoDeCompanio((item as any).potential, (item as any).maxLevel);
+  // **EL TIER DEL COMPAÑERO, Y POR QUÉ HACE FALTA AHORA QUE ANTES NO.** El coste de
+  // subir de nivel sale de `costeDeNivel(tier, nivel)`, así que sin el tier el botón
+  // no puede ni calcular la cifra ni decir cuánto falta. Antes el coste no dependía
+  // del item, y por eso no se leía.
+  const tierComp = Math.max(1, Math.floor(Number((item as any).tier) || 1));
   // LO QUE SE VENDE, no lo que vale una unidad. `getSellPrice` es el precio
   // unitario y el botón tiene que enseñar lo que se va a cobrar: con una pila de
   // 20 llaves, "Vender · 480" y un cargo de 9.600 es R3 roto. El total lo pide
@@ -518,12 +521,6 @@ function detailContent(item: any, state: any, game: any): string {
             </button>
           ` : ''}
 
-          ${item.type === 'crystal' ? `
-            <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
-                    data-act="nada" title="Los cristales se gastan desde la Sintonización del recolector">
-              Se usa en Sintonización
-            </button>
-          ` : ''}
 
           ${item.type === 'consumable' ? `
             <button class="w-full h-11 rounded-xl btn-primary font-['Orbitron'] font-bold text-[11px] cursor-pointer"
@@ -541,10 +538,10 @@ function detailContent(item: any, state: any, game: any): string {
           ${isCompanion ? `
             <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="upgrade-companion"
-                    title="Sube el nivel con el cristal de su tier, igual que el recolector">
+                    title="Sube el nivel con el cristal, igual que el recolector">
               ${nivelComp >= topeComp
                 ? 'Nivel máximo'
-                : `Subir a nivel ${nivelComp + 1} · ${costeDeNivelDeCompanio(nivelComp)} cristales`}
+                : `Subir a nivel ${nivelComp + 1} · ${formatNumber(costeDeNivelDeCompanio(tierComp, nivelComp))} de cristal`}
             </button>
           ` : ''}
 
@@ -676,7 +673,7 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         // El selector de cristal vive en la vista y no en el game loop porque
         // elegir cristal es una decisión de interfaz. El coste, la probabilidad
         // y el consumo los calcula el juego.
-        showCrystalPicker(game, redraw);
+        showSintonizacion(game, redraw);
         break;
 
       case 'upgrade-companion': {
@@ -1530,17 +1527,18 @@ function subirNivelDeCompanio(game: any, item: any, redraw: () => void) {
     return;
   }
 
-  const coste = costeDeNivelDeCompanio(nivel);
-  const crystalTier = Math.max(1, Math.floor(Number(item.tier) || 1));
-  const def = CRYSTAL_DEFS[crystalTier];
-  const pila = ((game.getState().warehouse as any[]) || [])
-    .find((w: any) => w.type === 'crystal'
-      && (typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '')) === crystalTier);
-  const tiene = pila?.stackCount || 0;
+  // **EL COSTE LLEVA EL TIER Y EL SALDO ES UN NÚMERO DEL ESTADO.** Antes eran dos
+  // búsquedas en el almacén —la pila del cristal del nivel correcto— y ahora no hay
+  // ninguna: el cristal es un recurso y está en `state.crystals`. **Y EL COSTE HA
+  // CRECIDO**, porque un T8 cuesta mucho más que un T1; el botón lo enseña con la
+  // misma función que lo cobra, así que el número no puede separarse (R3).
+  const tier = Math.max(1, Math.floor(Number(item.tier) || 1));
+  const coste = costeDeNivelDeCompanio(tier, nivel);
+  const tiene = game.getState().crystals ?? 0;
 
   showConfirmModal(
     `Sube a ${item.name} del nivel ${nivel} al ${nivel + 1}. ` +
-    `Cuesta ${coste} x ${def?.name ?? 'Cristal'} y tienes ${tiene}. ` +
+    `Cuesta ${formatNumber(coste)} de ${CRISTAL_NOMBRE} y tienes ${formatNumber(tiene)}. ` +
     `Si falla, **no baja de nivel**: se pierde el cristal.`,
     () => {
       sfx.use();

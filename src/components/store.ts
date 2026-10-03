@@ -34,7 +34,7 @@ import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
-import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, type CrateType } from '../data/store';
+import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, costeDeCaja, type CrateType } from '../data/store';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { showConfirmModal } from '../utils/modal';
@@ -127,8 +127,16 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     // que la casilla se para. Ese es el trompo, y es lo único que esta tarjeta
     // tiene que contar.
   upgradeCrystal: {
-    what: 'Cristal T1, para subir el nivel de un recolector T1.',
-    detail: 'F26: cada recolector se sintoniza con el cristal de SU MISMO tier. Los otros nueve salen de las cajas de su nivel; aquí solo se vende el T1.'
+    what: 'El recurso que sube de nivel a recolectores y a compañeros.',
+    // **ESTE TEXTO YA NO HABLA DE NIVELES PORQUE NO LOS HAY.** Antes decía "cada
+    // recolector se sintoniza con el cristal de SU MISMO tier" y enumeraba de dónde
+    // salían los otros nueve: eso era F26, que era una regla del sistema de las
+    // llaves y del material. Con un solo recurso las dos mitades se han ido.
+    //
+    // Y hay una regla nueva que sí hay que decir, porque no se deduce solo: **un
+    // T10 cuesta mucho más que un T1**, y eso es lo que hace que subir un item
+    // alto sea una decisión y no un trámite.
+    detail: 'Sube el nivel de un recolector o un compañero. Cuanto mayor es el nivel del item, más cuesta cada nivel, y el coste sube en cada subida. La probabilidad de acierto baja con el nivel y no hay forma de comprarse más suerte.'
   },
 
   afkCard: {
@@ -342,7 +350,11 @@ export function renderStoreTab(
     } else if (itemKey === 'afkCard') {
       note = `${Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000)} min cada una · acumulable ×3`;
     } else if (itemKey === 'upgradeCrystal') {
-      note = `Tienes ${state.upgradeCrystals}`;
+      // **EL SALDO ES UN NÚMERO DEL ESTADO, Y LA UNIDAD ES UN INTENTO.** La carta
+      // entrega `valorDeUnCristal(1)` unidades por unidad comprada, que es exactamente
+      // un intento de subir de nivel un item de T1 —lo mismo que entregaba antes—.
+      // Decir "Tienes 4.050" no dice nada; decir "te da 6 subidas" sí.
+      note = `Tienes ${formatNumber(state.crystals ?? 0)} · ${Math.floor((state.crystals ?? 0) / costeDeCaja(1))} subidas de T1`;
     } else if (RANURA_POR_CARTA[itemKey]) {
       // F7/F11 · CUÁNTAS RANURAS ABRE ESTA CARTA, EN EL NÚMERO.
       //

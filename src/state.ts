@@ -11,7 +11,7 @@ export const defaultState: GameState = {
   },
   lastUpdate: Date.now(),
   keys: 0,
-  upgradeCrystals: 0,
+  crystals: 0,
   warehouseCapacity: 20,
   maxCompanionSlots: 3,
   crates: {

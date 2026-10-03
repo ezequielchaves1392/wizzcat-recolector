@@ -33,7 +33,8 @@ export interface GameState {
   lastUpdate: number;
   // Inventario y progresión
   keys: number;
-  upgradeCrystals: number;
+  /** Recurso único de mejora. Lo escribe el motor; este tipo es vestigial. */
+  crystals: number;
   warehouseCapacity: number;
   maxCompanionSlots: number;
   crates: {

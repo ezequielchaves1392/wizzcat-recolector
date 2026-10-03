@@ -1,7 +1,8 @@
 import { check, resumen } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
-import { CRYSTAL_DEFS, crystalSuccessChance } from '../src/data/items';
-import { CRATE_TYPES, COMPANION_SLOT_BUY } from '../src/data/store';
+import { chanceDeSintonizacion } from '../src/data/items';
+import { costeDeNivel } from '../src/data/crafting';
+import { CRATE_TYPES, COMPANION_SLOT_BUY, STORE_ITEMS } from '../src/data/store';
 import { ACHIEVEMENTS } from '../src/achievements';
 import { CRATE_LOOT } from '../src/components/crateLoot';
 import { DESCRIPTIONS } from '../src/components/store';
@@ -110,19 +111,85 @@ async function main() {
   }
 
   // =========================================================================
-  //  4. LOS CRISTALES: LA "x" DE LA LEYENDA ES EL POWER
+  //  4. EL CRISTAL: UNA LEYENDA, Y CONTRA LA REGLA QUE SÍ HAY
   // =========================================================================
+  //
+  //  **LO QUE HAY AQUÍ ANTES, Y POR QUÉ NO SE PUEDE ADAPTAR TAL CUAL.** Recorría los
+  //  diez niveles de la tabla y comparaba la "x" de cada leyenda con el multiplicador
+  //  de ese nivel. Eso solo tenía sentido con una tabla que ya no existe: ahora hay
+  //  **un** cristal, sin nivel y sin multiplicador, y su texto es el de la carta de
+  //  la tienda.
+  //
+  //  Pero un texto sin tabla al lado sigue siendo un texto que puede mentir, así que
+  //  lo útil se reparte en las dos mitades que quedan y que sí se pueden comprobar:
+  //
+  //    · Que el texto **no prometa** nada de lo que ya no hay: ni niveles de cristal
+  //      que comprar, ni multiplicador, ni la regla de F26.
+  //    · Y que lo que **sí** dice —que el coste sube con el nivel del item y que la
+  //      probabilidad baja con el nivel— sea exactamente lo que aplican
+  //      `costeDeNivel()` y `chanceDeSintonizacion()`.
   {
-    const malos: string[] = [];
-    for (const tier of Object.keys(CRYSTAL_DEFS)) {
-      const def: any = (CRYSTAL_DEFS as any)[tier];
-      const x = /x(\d+(?:[.,]\d+)?)/.exec(def.details);
-      if (!x) { malos.push(`T${tier}: la leyenda no dice la x (${def.details})`); continue; }
-      const dicho = Number(x[1].replace(',', '.'));
-      if (Math.abs(dicho - def.power) > 1e-9) malos.push(`T${tier}: dice x${dicho} y su power es ${def.power}`);
+    const carta = STORE_ITEMS.upgradeCrystal;
+    const desc = (DESCRIPTIONS as any).upgradeCrystal;
+    const texto = [carta?.label, desc?.what, desc?.detail].filter(Boolean).join(' ');
+
+    // Lo que ya no existe. **NO SE PROHÍBE QUE DIGA "T10"**: eso es verdad y es
+    // exactamente lo que quiere decir, porque ahora el tier del ITEM es lo que
+    // pone el precio. Lo que se prohíbe es prometer una elección de cristal.
+    const PROHIBIDO: [RegExp, string][] = [
+      [/multiplicador/i, 'un multiplicador que ya no existe'],
+      [/\bx\s?\d/i, 'la "x" del nivel de cristal que ya no existe'],
+      [/cristal\s+(de\s+nivel\s+)?t\d/i, 'niveles de cristal que ya no existen'],
+      [/su\s+mismo\s+tier/i, 'F26: el cristal ya no es del tier del item, el precio sale de el'],
+      [/su\s+propio\s+nivel/i, 'niveles de cristal que ya no existen']
+    ];
+    const promesas: string[] = [];
+    for (const [re, que] of PROHIBIDO) {
+      if (re.test(texto)) promesas.push(`dice "${que}" (${texto})`);
     }
-    check('leyenda: la x de cada cristal es su power',
-      malos.length === 0, malos.join(' | ') || `${Object.keys(CRYSTAL_DEFS).length} cristales`);
+    check('leyenda: el cristal no promete niveles ni multiplicador, porque ya no los hay',
+      !!texto && promesas.length === 0, promesas.join(' | ') || `la carta dice "${carta?.label}"`);
+
+    // Y la regla que el texto SÍ afirma, medida contra la regla que el juego aplica.
+    // "La probabilidad de acierto baja con el nivel" es una afirmación comprobable:
+    // tiene que ser verdad para todos los niveles, no para los que alguien probó.
+    let algunoQueSube = -1;
+    let fueraDeRango = 0;
+    let anterior = chanceDeSintonizacion(0);
+    for (let nivel = 0; nivel <= 60; nivel++) {
+      const ahora = chanceDeSintonizacion(nivel);
+      if (ahora > anterior) algunoQueSube = nivel;
+      if (ahora < 35 || ahora > 95) fueraDeRango++;
+      anterior = ahora;
+    }
+    check('leyenda: "la probabilidad baja con el nivel" es lo que hace la regla',
+      algunoQueSube === -1 && fueraDeRango === 0 && chanceDeSintonizacion(0) === 95,
+      `nivel 0 = ${chanceDeSintonizacion(0)}, nivel 20 = ${chanceDeSintonizacion(20)}, ` +
+      `nivel 60 = ${chanceDeSintonizacion(60)}, niveles que suben = ${algunoQueSube}`);
+
+    // **Y QUE NO HAYA FORMA DE COMPRARSE SUERTE.** El texto promete eso, y la forma
+    // de que un cristal vuelva a multiplicar la probabilidad es volver a meterle un
+    // argumento. Se comprueba la aridad de la función, que es lo único que la ata:
+    // con un solo parámetro no hay nada que elegir, y si algún día lo hay, el banco
+    // lo dice el mismo día.
+    check('leyenda: y no hay forma de comprarse más suerte, porque la regla solo recibe el nivel',
+      chanceDeSintonizacion.length === 1,
+      `chanceDeSintonizacion recibe ${chanceDeSintonizacion.length} argumento(s)`);
+
+    // "Cada nivel cuesta más, y más cuanto mayor es el item": las dos mitades del
+    // precio. La primera es la curva del nivel; la segunda, el factor del tier, que
+    // es lo único que se lee del item que se sube.
+    let costeQueNoSube = 0;
+    for (const tier of [1, 3, 10, 30]) {
+      for (let nivel = 0; nivel < 40; nivel++) {
+        if (costeDeNivel(tier, nivel + 1) <= costeDeNivel(tier, nivel)) costeQueNoSube++;
+      }
+    }
+    const porTier = costeDeNivel(10, 0) > costeDeNivel(1, 0);
+    check('leyenda: "cada nivel cuesta más" y el tier del item es lo que lo hace caro',
+      costeQueNoSube === 0 && porTier,
+      `T1 nivel 0 = ${costeDeNivel(1, 0)}, T10 nivel 0 = ${costeDeNivel(10, 0)}, ` +
+      `niveles que no encarecen = ${costeQueNoSube}`);
   }
 
   // =========================================================================
@@ -239,16 +306,29 @@ async function main() {
   }
 
   // =========================================================================
-  //  9. EL CRISTAL SIGUE MOVIENDO LA PROBABILIDAD
+  //  9. QUEDABA AQUÍ, Y YA NO HAY NADA QUE MEDIR
   // =========================================================================
-  //  No es una leyenda, es el suelo: si el cristal no moviera nada, el sintonizador
-  //  sería una tirada que no tiene nada que ver con lo que se gasta.
-  {
-    const conT1 = crystalSuccessChance(10, CRYSTAL_DEFS[1].power);
-    const conT10 = crystalSuccessChance(10, CRYSTAL_DEFS[10].power);
-    check('leyenda: el cristal sigue moviendo la probabilidad, no es decorativo',
-      conT1 !== conT10, `T1=${conT1} T10=${conT10}`);
-  }
+  //
+  //  Aquí se comprobaba que un cristal caro subiera la probabilidad frente a uno
+  //  barato: `crystalSuccessChance` con el multiplicador de un T1 y con el de un
+  //  T10, y que los dos salieran distintos.
+  //
+  //  **MEDÍA QUE GASTAR UN CRISTAL MEJORADO VALÍA MÁS QUE GASTAR UNO BARATO**, que
+  //  era la razón de ser de la tabla de diez niveles. Esa regla se borró a
+  //  propósito al convertir el cristal en un recurso: con un solo cristal no hay
+  //  "cuál gasto", y la probabilidad depende únicamente del nivel al que ya se está
+  //  subiendo.
+  //
+  //  **POR QUÉ NO SE ADAPTA MANTENIENDO EL SIGNIFICADO.** Se podría escribir la
+  //  misma comprobación contra `chanceDeSintonizacion`, pero contra dos números
+  //  cualesquiera: no mediría nada, y además mediría una regla que el juego no
+  //  tiene. Un banco que afirma comprobar algo que ya no existe es peor que un
+  //  banco que no lo comprueba, porque el primero da verde mientras el jugador
+  //  gasta creyendo en una elección que ya no puede hacer.
+  //
+  //  Lo que la sustituye está en el apartado 4, y sí mide la regla de hoy: la
+  //  probabilidad baja con el nivel y no depende de nada que se pueda elegir.
+  // =========================================================================
 
   // =========================================================================
   //  10. QUEDABA AQUÍ, Y SE HA IDO CON LAS LLAVES: SU LEYENDA ERA SU ALCANCE

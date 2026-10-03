@@ -35,9 +35,12 @@ const companion = (id: string, tier = 3) => ({
 });
 function baseSave(warehouse: any[], extra: any = {}) {
   return {
-    saveVersion: 7, nanites: 1000, warehouse, crates: {},
+    // 9 y no 7: por debajo de 9 no se cruza la redención de las llaves ni la del
+    // cristal, así que una partida con 7 no es una partida que el juego sepa abrir.
+    saveVersion: 9, nanites: 1000, warehouse, crates: {},
     companions: [], activeCompanions: [], equippedCollectorId: null,
-    keys: 0, upgradeCrystals: 0, warehouseCapacity: 30,
+    // El cristal es un recurso: un número, no un contador derivado del almacén.
+    crystals: 0, warehouseCapacity: 30,
     maxCompanionSlots: 3, ...extra
   };
 }

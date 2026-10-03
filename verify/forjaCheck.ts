@@ -19,7 +19,7 @@
 //  afijos—, así que una prueba que tire una vez mide el azar, no la regla.
 // ==========================================================================
 
-import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, crystal, conRoll } from './kit';
+import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { successChance, baseSuccessChance } from '../src/data/crafting';
 import { poderDeCompanero } from '../src/data/crafting';
@@ -42,7 +42,8 @@ const NOMBRE_PIEDRA = 'Piedra de Calibración';
 const NOMBRE_NANO = 'Nanopartícula de Estabilidad';
 import {
   attemptForge, rangoDeAfijosForjados, danioDeRango,
-  AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION
+  AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION,
+  valorDeUnCristal, cristalesDeConsuelo
 } from '../src/data/crafting';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
@@ -331,7 +332,7 @@ async function main() {
     //
     // Y una prueba que afirma una regla borrada es peor que no tenerla: alguien la
     // lee, la ve pasar, y se queda creyendo que la puerta sigue ahí.
-    const g = await boot(baseSave([collector('a', 3), collector('b', 3), crystal('x1', 3, 10)],
+    const g = await boot(baseSave([collector('a', 3), collector('b', 3)],
       { nanites: 0, warehouseCapacity: 20, nodeLevels: {} }));
     const sinPuerta: any = conRoll(0.001, () => g.forgeCollector(['a', 'b']));
     check('forja: sin ninguna puerta, una partida sin árbol forja igual',
@@ -552,33 +553,52 @@ async function main() {
 //  · Que el fallo **entrega** cristales, y no solo los anuncia. El mensaje dice
 //    "+N cristales": si no se entregues, el juego le está mintiendo al jugador en
 //    el momento en que más caro sale.
-//  · Que entrega **los del tier que se estaba forjando**, no los de otro. Es la
-//    misma regla F26 que el resto del juego: el cristal va con el nivel.
+//  · Que entrega **los intentos del tier que se estaba forjando**, y lo que se
+//    mide son INTENTOS, no unidades.
 //  · Que **suben con el tier**, porque el coste del fallo también sube. Un fallo
 //    en T1 no puede costar lo mismo que uno en T10.
 //  · Y que **las dos fusiones dan lo mismo**, que es la comprobación que más fácil
 //    se rompe el día que alguien copia una de las dos ramas.
+//
+//  **EL CRISTAL ES UN RECURSO, Y POR QUÉ ESTE BLOQUE MIDE INTENTOS.** Antes el
+//  consuelo eran N items de cristal apilados y la cifra que se miraba era `N`. Ahora
+//  el cristal es un número, y el motor convierte los intentos por
+//  `valorDeUnCristal(tier)` al entregar: **`cristalesDeConsuelo()` sigue devolviendo
+//  `2 + n` intentos y el que paga es el motor**. Comparar unidades contra `2 + n`
+//  daría un fallo falso en los nueve tiers que no sean el primero, así que lo que
+//  se comprueba aquí es que las unidades entregadas, divididas por el valor del
+//  cristal de ese tier, den exactamente los intentos de siempre.
 // =========================================================================
 
-const falloCon = async (extra: any = {}) => {
+// **LA PARTIDA DE TRABAJO, Y POR QUÉ EMPIEZA EN CERO CRISTAL.** Sin esto el saldo
+// de la partida nueva —que son 5— se sumaría al del fallo y la comprobación de
+// "el acierto no da nada" mediría un número que ya no era cero. Se pone a cero para
+// que cada entrega se pueda leer tal cual.
+const falloCon = async () => {
   const g = await boot(baseSave([
     collector('a', 3, { potential: 3, damage: 100 }),
     collector('b', 3, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystalsByTier: {}, upgradeCrystals: 0, ...extra }));
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
   const r: any = conRoll(0.999, () => g.forgeCollector(['a', 'b']));
-  const cristales = (wh(g) as any[]).filter((w: any) => w.type === 'crystal')
-    .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
-  return { g, r, cristales };
+  const unidades = s(g).crystals;
+  // **LOS INTENTOS, Y NO LAS UNIDADES.** El motor entrega unidades y el jugador
+  // gasta unidades; lo que la regla fija es cuántas *subidas* compra la
+  // compensación, y esa cifra es la que se compara con `2 + tier`.
+  const intentos = unidades / valorDeUnCristal(3);
+  return { g, r, unidades, intentos };
 };
 
 // --- 1. El fallo entrega cristales, y el mensaje lo dice -------------------------
 {
-  const { r, cristales } = await falloCon();
+  const { r, unidades, intentos } = await falloCon();
   check('consuelo: el fallo entrega cristales de verdad',
-    cristales > 0, `cristales=${cristales}`);
+    unidades > 0, `unidades=${unidades}`);
   check('consuelo: y el mensaje lo anuncia, que es la mitad de la promesa',
-    /cristales/.test(r.msg ?? '') && cristales === (r.crystals ?? -1),
-    `msg="${r.msg}" crystals=${r.crystals} entregados=${cristales}`);
+    /cristales/.test(r.msg ?? '') && unidades === (r.crystals ?? -1),
+    `msg="${r.msg}" crystals=${r.crystals} entregadas=${unidades}`);
+  check('consuelo: y lo que entrega son los 2 + n intentos de siempre',
+    intentos === cristalesDeConsuelo(3),
+    `intentos=${intentos} de la regla=${cristalesDeConsuelo(3)} (unidades=${unidades} de valor ${valorDeUnCristal(3)})`);
 }
 
 // --- 2. Son del tier que se estaba forjando, y suben con él ----------------------
@@ -586,22 +606,23 @@ const falloCon = async (extra: any = {}) => {
   const porTier: string[] = [];
   let bien = true;
   for (const tier of [1, 4, 7]) {
-    const { cristales } = await falloCon({
-      warehouseCapacity: 40
-    });
     const g = await boot(baseSave([
       collector(`a${tier}`, tier, { potential: 3, damage: 100 }),
       collector(`b${tier}`, tier, { potential: 3, damage: 100 })
-    ], { nanites: 0, warehouseCapacity: 40, shards: 0 }));
-    const r: any = conRoll(0.999, () => g.forgeCollector([`a${tier}`, `b${tier}`]));
-    const pila = (wh(g) as any[]).find((w: any) => w.type === 'crystal');
-    const n = pila?.stackCount || 0;
-    porTier.push(`T${tier}:${n}@cristal${pila?.tier ?? '-'}`);
-    if (!pila || pila.tier !== tier) bien = false;
-    if (n !== 2 + tier) bien = false;
-    void cristales;
+    ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+    conRoll(0.999, () => g.forgeCollector([`a${tier}`, `b${tier}`]));
+    const unidades = s(g).crystals;
+    // El motor convierte los intentos por el valor del cristal de ESE tier, así que
+    // volver a dividir por el mismo valor deshace la conversión y deja la regla a
+    // la vista. Es la cuenta del jugador, no una cuenta del banco.
+    const intentos = unidades / valorDeUnCristal(tier);
+    porTier.push(`T${tier}:${intentos} intentos=${unidades} unidades`);
+    if (intentos !== 2 + tier) bien = false;
+    // Y la conversión tiene que ser la de ese tier: si el motor dividiera por el
+    // T1 o por una constante, aquí saldría un número que no es entero.
+    if (unidades !== (2 + tier) * valorDeUnCristal(tier)) bien = false;
   }
-  check('consuelo: el cristal es del TIER que se forja, no de otro',
+  check('consuelo: los intentos son los del TIER que se forja, y suben con él',
     bien, porTier.join(' '));
 }
 
@@ -615,9 +636,9 @@ const falloCon = async (extra: any = {}) => {
   const gRec = await boot(baseSave([
     collector('a', 5, { potential: 3, damage: 100 }),
     collector('b', 5, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0 }));
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
   const rRec: any = conRoll(0.999, () => gRec.forgeCollector(['a', 'b']));
-  const rec = (wh(gRec) as any[]).find((w: any) => w.type === 'crystal')?.stackCount ?? 0;
+  const rec = s(gRec).crystals / valorDeUnCristal(5);
 
   const gCom = await boot(baseSave([
     companion('c1', 5, { potential: 3 }),
@@ -625,16 +646,15 @@ const falloCon = async (extra: any = {}) => {
     ficha('c1', 5, { potential: 3 }),
     ficha('c2', 5, { potential: 3 })
   ], {
-    nanites: 0, warehouseCapacity: 40, shards: 0,
+    nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0,
     companions: [ficha('c1', 5, { potential: 3 }), ficha('c2', 5, { potential: 3 })]
   }));
   const rCom: any = conRoll(0.999, () => gCom.forgeCompanion(['c1', 'c2']));
-  const com = (wh(gCom) as any[]).filter((w: any) => w.type === 'crystal')
-    .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+  const com = s(gCom).crystals / valorDeUnCristal(5);
 
   check('consuelo: un fallo da lo MISMO en las dos fusiones',
-    rec === com && rRec.crystals === rCom.crystals && rec > 0,
-    `recolector=${rec} companero=${com}`);
+    rec === com && rRec.crystals === rCom.crystals && rec === 2 + 5,
+    `recolector=${rec} intentos, companero=${com} intentos, regla=${2 + 5}`);
 }
 
 // --- 4. Y el acierto no da nada, que si no es una ruleta más ----------------------
@@ -642,11 +662,11 @@ const falloCon = async (extra: any = {}) => {
   const g = await boot(baseSave([
     collector('a', 3, { potential: 3, damage: 100 }),
     collector('b', 3, { potential: 3, damage: 100 })
-  ], { nanites: 0, warehouseCapacity: 40, shards: 0 }));
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
   conRoll(0.001, () => g.forgeCollector(['a', 'b']));
-  const cristales = (wh(g) as any[]).filter((w: any) => w.type === 'crystal').length;
+  const unidades = s(g).crystals;
   check('consuelo: el acierto NO da cristales de consuelo, que solo compensan el fallo',
-    cristales === 0, `pilas de cristal=${cristales}`);
+    unidades === 0, `unidades=${unidades}`);
 }
   resumen('la forja: dos del mismo tier, potencial medio y afijos por linaje');
 }

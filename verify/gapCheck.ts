@@ -27,7 +27,7 @@
 
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave, guardado,
-  collector, companion, crate, crystal
+  collector, companion, crate, consumable
 } from './kit';
 
 import { moveItemTo, moveIntoGap, moveToFreeCell, visibleStacksFor } from '../src/components/warehouse';
@@ -161,7 +161,7 @@ async function main() {
   {
     const items = [
       collector('a'), collector('b'), crate('p1', 1, 3), crate('p2', 1, 2),
-      crystal('k1', 1, 7), companion('m1')
+      consumable('k1', 'afk', 7), companion('m1')
     ];
     const g = await boot(baseSave(items));
     const original = new Set(ids(g));
@@ -320,9 +320,12 @@ async function main() {
     // hueco no habría nada que colocar —el hueco está pegado a su derecha— y el
     // gesto se rechazaría, que es lo correcto pero no es lo que se quiere ver.
     const items: any[] = [collector('dron'), collector('blaster')];
-    for (let i = 0; i < 19; i++) items.push(crystal('k' + i));
+    // 19 unidades apilables del MISMO tipo y nombre, que es el caso que mide esto:
+    // se funden en una pila, y el agrupador tiene que enseñar una celda con la
+    // pila, no 19 con una unidad.
+    for (let i = 0; i < 19; i++) items.push(consumable('k' + i, 'afk'));
     const g = await boot(baseSave(items, { warehouseCapacity: 21 }));
-    check('mockup: el almacen con 19 cristales da 3 celdas',
+    check('mockup: el almacen con 19 unidades apilables da 3 celdas',
       visibleStacksFor(g, s(g), 'all', 'default').length === 3, ids(g).join(','));
 
     // El hueco se monta aqui con la API y no arrastrando, para poder colocar el

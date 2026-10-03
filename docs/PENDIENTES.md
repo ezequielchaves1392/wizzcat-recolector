@@ -1030,10 +1030,71 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1804
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1825
 pruebas**, todas en verde._
 
 ### El sistema que se ha quitado entero
+
+- [x] **El cristal es un recurso, y ya no tiene diez niveles.** Era un item del almacén con
+      nombre y rareza propios del T1 al T10, y cada nivel tenía su multiplicador de
+      probabilidad, así que gastar un T5 era "mejorar con más probabilidades" y la pregunta
+      del jugador era una cuenta y no una decisión. **Ahora es un número,**
+      `state.crystals`, como las nanitas: no está en el almacén, no ocupa ranura, no se
+      vende y no se puede apilar.
+      El coste lo pone **el nivel del item**, y sale del precio de la caja de ese nivel:
+      un intento de nivel 0 sobre un T10 cuesta `costeDeCaja(10)`, o sea **lo que una
+      caja T10**. Un T1 cuesta 675 y un T10 145 388: doscientas veces más.
+      Y de ahí sale la propiedad que hace que el cambio sea neutro y comprobable:
+      **una caja T-n da exactamente los mismos intentos de mejora que daba antes**, en los
+      diez niveles. Antes soltaba entre 3n y 5n cristales y cada uno era un intento; ahora
+      suelta esas mismas unidades ya convertidas y un intento cuesta lo que valía un
+      cristal. Fijado con una prueba en `stateCheck`, con la banda del juego viejo escrita
+      a mano y los multiplicadores de rareza incluidos.
+      Las partidas viejas **se redimen solas** por lo que valían (`SAVE_VERSION` 9  10),
+      y la redención es idempotente: las pilas desaparecen, así que recargar no paga dos
+      veces.
+
+      **LO QUE SE PIERDE, DICHO PARA QUE NO SE PIERDA DE VISTAS:** el multiplicador. Con
+      un solo recurso la sintonización es **determinista dado el nivel** — en el 15 acierta
+      el 50 % y siempre —. El riesgo que queda es el del nivel, que sube en cada subida, y
+      ya no hay forma de comprarse más suerte.
+
+      **Y LO QUE SE GANA, SIN QUE NADIE LO PIDIERA:** los items por encima del T10 **ya se
+      pueden subir de nivel**. La forja es infinita y produce T11, T12, T30, y antes
+      todos ellos eran imsubibles con el mensaje *"hace falta el Cristal T11, y el más alto
+      que existe es el T10"*. Al no haber niveles de cristal, no hay ese techo. Era un tope
+      de progresión y ha desaparecido con el sistema entero.
+
+      **TRES FALLOS QUE EL CAMBIO DEJÓ A LA VISTA, Y QUE NO SON DEL CAMBIO:**
+
+      · **El Ascenso no tocaba el saldo de cristal.** Escribía `upgradeCrystals: 5`, un
+        campo que ya no leía nadie, en vez del saldo de verdad: ascendía, el contador nuevo
+        ponía 5 y las unidades se quedaban. Y había una prueba que **recogía el
+        comportamiento como si fuera intencionado** —decía "el Ascenso no recicla el
+        saldo"—, así que el bug estaba escrito en el banco. Ahora el Ascenso reconstruye
+        la partida desde el estado de partida nueva, como las nanitas.
+      · **Con el almacén lleno no se podían comprar cristales.** La carta ya no crea un
+        item, pero `cabeLaCompra()` caía en `isStackable(null) === false` y comparaba
+        ranuras ocupadas con capacidad. El bug del item reproducido por la puerta de atrás.
+        Ahora es una regla y no un caso: **una carta que no crea un item no pide ranura**,
+        así que la siguiente carta que sea un recurso hereda la respuesta correcta.
+      · **El botín de cristal se recortaba hasta un 29 %.** La rareza del premio multiplica
+        la cantidad, y la rareza del botín de cristal era su propia escala, distinta de la
+        de las cajas —T4 y T5 Legendario, T8, T9 y T10 Divino—. Al unificar pasó a ser
+        fija y las cajas T3 a T8 dejaron de dar tanto. Restaurada, con la escala escrita
+        donde se ve por qué existe.
+
+      **Y UNA PRUEBA QUE PASABA EN VACÍO:** la de `saltoCheck` que afirma "más rareza,
+      menos probabilidad" **sumaba** los pesos de cada rareza, que mide cuántos premios hay
+      de cada una y no su probabilidad —justo lo que su propio comentario, tres párrafos
+      arriba, dice que no hay que medir—. Pasaba porque en las cajas altas no existía
+      ninguna entrada Rara, así que la escalera no tenía peldaño con el que comparar.
+      Ahora mide la media por entrada, que es lo que el comentario dice.
+
+      **Y DOS FICHEROS QUE CAMBIARON DE NOMBRE, NO SOLO DE CONTENIDO:** `crystalPicker.ts`
+      pasó a ser `sintonizacion.ts`, porque ya no elige cristal —enseña el coste y tira—;
+      y con un solo recurso el botón del compañero **es la misma hoja que el del
+      recolector**, con su ruleta y todo.
 
 - [x] **Las llaves no existen.** La caja se abre con su ID y nada más: sin llave que
       buscar, sin selector, sin llave que no alcance. **Quitarlo no ha movido ni un

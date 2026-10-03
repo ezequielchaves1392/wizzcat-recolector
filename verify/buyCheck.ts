@@ -23,8 +23,12 @@ import { TREE_BY_ID, nodeCost } from '../src/data/tree';
 // escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
 // texto de la tarjeta y en estas dos aserciones.
 import { COMPANION_SLOT_BUY, RANURA_POR_CARTA } from '../src/data/store';
+// Cuántas unidades de cristal entrega una carta. El número lo pone esta función y
+// no el banco: si el valor del recurso cambia, estas comprobaciones lo siguen sin
+// tocarse.
+import { valorDeUnCristal } from '../src/data/crafting';
 import {
-  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, crystal, consumable, distintos
+  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, consumable, distintos
 } from './kit';
 
 async function main() {
@@ -104,18 +108,31 @@ async function main() {
     const g = await boot(baseSave([], { nanites: masCaro * 2 }));
     const antesN = wh(g).length;
     const antesNanites = nanites(g);
+    const antesCristales = s(g).crystals;
     const item = g.buyStoreItem(carta as any);
     const tipo = String(item?.type ?? '');
+    // **UNA CARTA DE ESTE BANCO NO ES UN ITEM, Y POR ESO TIENE SU MITAD PROPIA.**
+    // `upgradeCrystal` ya no crea nada en el almacén: suma unidades a
+    // `state.crystals`. Si se comprobara con el mismo criterio que las demás,
+    // fallaría por lo único que hace bien, que es no crear un item.
+    const esRecurso = carta === 'upgradeCrystal';
 
     check(`tienda ${carta}: cobra ${coste}`, nanites(g) === antesNanites - coste,
       `cobrado=${antesNanites - nanites(g)}`);
+
+    if (esRecurso) {
+      check(`tienda ${carta}: no mete ningún item en el almacen`,
+        wh(g).length === antesN && deType(g, 'crystal') === 0,
+        `antes=${antesN} ahora=${wh(g).length}`);
+      check(`tienda ${carta}: lo que entrega son unidades del recurso`,
+        s(g).crystals === antesCristales + valorDeUnCristal(1),
+        `crystals=${s(g).crystals} antes=${antesCristales}`);
+      continue;
+    }
+
     check(`tienda ${carta}: mete 1 item de tipo ${tipo}`,
       !!tipo && wh(g).length === antesN + 1 && deType(g, tipo) === 1,
       `antes=${antesN} ahora=${wh(g).length} tipo=${tipo} de ${tipo}=${deType(g, tipo)}`);
-    // Un item recien comprado tiene que ser utilizable: si la compra entrega
-    // algo que el juego no reconoce despues, es un callejon sin salida.
-    check(`tienda ${carta}: el item comprado existe y trae id`,
-      !!item?.id && !!find(g, item.id), JSON.stringify(item?.id));
     // Un item recien comprado tiene que ser utilizable: si la compra entrega
     // algo que el juego no reconoce despues, es un callejon sin salida.
     check(`tienda ${carta}: el item comprado existe y trae id`,
@@ -203,9 +220,15 @@ async function main() {
     // error que un comentario que describe un precio.
     const precioCristal = (STORE_ITEMS as Record<string, { cost: number }>).upgradeCrystal.cost;
     const g = await boot(baseSave([], { nanites: precioCristal }));
+    // La carta del cristal es además la que NO crea un item, así que del saldo
+    // justo se comprueban las dos mitades: que se cobra, y que lo que llega son
+    // unidades del recurso en vez de una pila en el almacén.
+    const antesCristales = s(g).crystals;
     const r = g.buyStoreItem('upgradeCrystal');
     check('tienda: con las nanitas justas SI se compra', r !== false, String(r));
-    check('tienda: y deja la cartera a cero', nanites(g) === 0, 'nanitas=' + nanites(g));
+    check('tienda: y deja la cartera a cero', nanites(g) === 0, 'nanites=' + nanites(g));
+    check('tienda: la carta del cristal no deja ningún item en el almacen', wh(g).length === 0, ids(g).join(','));
+    check('tienda: y deja el recurso con las unidades de la carta', s(g).crystals === antesCristales + valorDeUnCristal(1), `crystals=${s(g).crystals} antes=${antesCristales}`);
   }
   {
     const menos = (STORE_ITEMS as Record<string, { cost: number }>).upgradeCrystal.cost - 1;
@@ -470,14 +493,45 @@ async function main() {
     // F31 · Antes eran dos cajas DISTINTAS: la segunda necesitaba ranura nueva y
     // con el almacén lleno se rechazaba. Ahora solo se vende una caja, y dos cajas
     // iguales se funden en una pila —que sí entra—, así que el caso se mide con
-    // un item de otra clase: el cristal sí necesita ranura propia.
+    // un item de otra clase: el expansor sí necesita ranura propia.
+    //
+    // Y el cristal, que era lo que se ponía aquí, **ya no vale**: es un recurso y no
+    // ocupa ranura, así que con el almacén lleno se compra igual. Eso no es un
+    // detalle de esta prueba: es el bloque siguiente entero.
     const g = await boot(baseSave([], { nanites: 200_000, warehouseCapacity: 1 }));
     const r1 = g.buyStoreItem('crateT1');
-    const r2 = g.buyStoreItem('upgradeCrystal');
+    const r2 = g.buyStoreItem('expansorT1');
     check('capacidad: el primer item entra', r1 !== false);
     check('capacidad: el segundo se rechaza al llenarse', r2 === false && ranuras(g) === 1,
       'ranuras=' + ranuras(g));
     check('capacidad: y solo se cobro una vez', nanites(g) === 200_000 - STORE_ITEMS.crateT1.cost,
+      'nanites=' + nanites(g));
+  }
+  {
+    // EL CRISTAL, QUE NO NECESITA HUECO. El bloque de arriba comprueba que lo que
+    // necesita ranura se rechaza con el almacén lleno; este comprueba lo
+    // contrario, que es la mitad nueva de la regla.
+    //
+    // **POR QUÉ ESTA PRUEBA VALE MÁS QUE LA QUE SUSTITUYE.** El cristal era un item
+    // y pedía hueco, así que un jugador con las cuatrocientas ranuras llenas no
+    // podía comprar el material que necesita para subir de nivel: el almacén, que
+    // es donde vive lo que ya tiene, le impedía comprar lo que le falta. Al ser un
+    // recurso la pregunta de espacio desaparece, y esta es la prueba que lo ata.
+    const g = await boot(baseSave(distintos(30), { nanites: 200_000 }));
+    check('capacidad: el almacen de la prueba esta lleno', ranuras(g) === 30,
+      `ranuras=${ranuras(g)}/${g.getCapacity()}`);
+    const antes = nanites(g);
+    const antesCristales = s(g).crystals;
+    const r = g.buyStoreItem('upgradeCrystal');
+    check('capacidad: el cristal se compra con el almacen lleno: no es un item', r !== false,
+      String(r));
+    check('capacidad: y no ocupa ni una ranura',
+      ranuras(g) === 30 && wh(g).length === 30, `ranuras=${ranuras(g)} items=${wh(g).length}`);
+    check('capacidad: lo que sube son las unidades del recurso',
+      s(g).crystals === antesCristales + valorDeUnCristal(1),
+      `crystals=${s(g).crystals} antes=${antesCristales}`);
+    check('capacidad: y se cobra una sola vez',
+      nanites(g) === antes - (STORE_ITEMS as Record<string, { cost: number }>).upgradeCrystal.cost,
       'nanites=' + nanites(g));
   }
   {
@@ -663,9 +717,10 @@ async function main() {
   {
     // Abrir una caja con el almacen lleno: si el botin cabe, entra; si no cabe,
     // no se cuela. Con una capacidad de 1 no hay forma de que quepa nada.
-    // El segundo item es un cristal porque la llave que ponía aquí ya no existe:
-    // al cargar una partida vieja se redime y desaparece.
-    const g = await boot(baseSave([crate('c1'), crystal('x1')],
+    // El segundo item es un consumible: la llave que ponía aquí ya no existe —al
+    // cargar una partida vieja se redime y desaparece— y el cristal ya no es un
+    // item, así que ni siquiera se puede meter en el guardado de una partida.
+    const g = await boot(baseSave([crate('c1'), consumable('x1', 'afk')],
       { warehouseCapacity: 1 }));
     check('capacidad: la partida respeta la capacidad al cargar', wh(g).length <= 1, 'items=' + wh(g).length);
   }
@@ -690,8 +745,14 @@ async function main() {
     // abuso de la novena —si lo hubiera— no lo habría visto nadie. Se recorre
     // `STORE_ITEMS` y se quitan las cartas de ranura, que no meten nada en el
     // almacén y por eso no tienen reventa que comprobar.
+    //
+    // **Y LA DEL CRISTAL SE QUITA POR UNA RAZÓN NUEVA, Y POR ESO DICE SU NOMBRE.**
+    // Antes la recorría y la compraba, pero devuelven un recurso: no hay item que
+    // vender y su valor es de uso, no de reventa. Sin este filtro, el `continue`
+    // de "no hay id" la saltaría en silencio y el banco habría dado por comprobado
+    // algo que no ha mirado.
     const cartasConItem = (Object.keys(STORE_ITEMS) as (keyof typeof STORE_ITEMS)[])
-      .filter(k => !RANURA_POR_CARTA[k as string]);
+      .filter(k => !RANURA_POR_CARTA[k as string] && k !== 'upgradeCrystal');
 
     const abusos: string[] = [];
     for (const carta of cartasConItem) {
@@ -731,15 +792,19 @@ async function main() {
     //
     // Comprar y vender en bucle, diez veces. Con el bug anterior el saldo
     // crecía sin límite: +4.260 por cristal era el más gordo.
-    const g = await boot(baseSave([], { nanites: 10_000, warehouseCapacity: 40 }));
+    //
+    // El cristal sale del bucle porque **ya no hay nada que vender**: la compra
+    // devuelve unidades de un recurso y no hay item detrás. El segundo producto es
+    // la tarjeta de click x2, que sí deja un item en el almacén y se vende por un
+    // cuarto de lo que costó.
+    const g = await boot(baseSave([], { nanites: 1_000_000, warehouseCapacity: 40 }));
     const antes = nanites(g);
     for (let i = 0; i < 10; i++) {
-      const cj = g.buyStoreItem('crateT1');
-      if (!cj || !find(g, (cj as any).id)) continue;
-      g.sellItem((cj as any).id);
-      const c = g.buyStoreItem('upgradeCrystal');
-      if (!c || !find(g, (c as any).id)) continue;
-      g.sellItem((c as any).id);
+      for (const carta of ['crateT1', 'clickX2Card']) {
+        const comprado: any = g.buyStoreItem(carta as any);
+        if (!comprado || !find(g, comprado.id)) continue;
+        g.sellItem(comprado.id);
+      }
     }
     check('tienda: comprar y vender 10 veces NO crea nanitas',
       nanites(g) <= antes,

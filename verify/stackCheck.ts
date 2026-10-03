@@ -22,8 +22,10 @@
 
 import { visibleStacksFor } from '../src/components/warehouse';
 import { countOccupiedSlots, isStackable, mergeStacks, partirPilas, stackUnits, textoDeCantidad, topeDePila, cabeEnPila, pilasNecesarias, MAX_STACK, TOPE_PILA } from '../src/data/stacking';
-import { boot, reload, bootNew, check, resumen, s, wh, ids, nanites, baseSave, collector, crate, key, crystal, consumable } from './kit';
-import { CRYSTAL_DEFS } from '../src/data/items';
+import { boot, reload, bootNew, check, resumen, s, wh, ids, nanites, baseSave, collector, crate, key, crystalViejo, consumable } from './kit';
+// Lo que vale una unidad del recurso único. La tienda lo entrega a este precio, así
+// que el banco no lo escribe: lo lee de la función que lo calcula.
+import { valorDeUnCristal } from '../src/data/crafting';
 
 /** Cuántas celdas pinta la rejilla, que es lo que el jugador ve. */
 const celdas = (g: any) => visibleStacksFor(g, s(g), 'all', 'default');
@@ -37,14 +39,18 @@ async function main() {
   //  1. La regla, sola
   // =========================================================================
   {
-    // La fusión, medida con el cristal: es un objeto que el juego fabrica y que sí
-    // se apila. La llave se usaba antes porque era lo único que se fundía sin
-    // límite; hoy eso lo hace el consumible, y el cristal es el caso con tope.
-    const uno = crystal('x1', 1, 19);
-    const otro = crystal('x2', 1, 4);
+    // La fusión, medida con el CONSUMIBLE: es el objeto que el juego fabrica y que
+    // se apila sin tope, así que 19 + 4 tienen que acabar en la misma pila.
+    //
+    // **POR QUÉ NO ES EL CRISTAL, QUE ES LO QUE SE USABA ANTES.** El cristal ya no
+    // es un item: es un número en `state.crystals`. Una pila de cristal no existe,
+    // y una prueba que la montara estaría midiendo un objeto que el juego no
+    // reconoce —la forma más tranquila de tener un banco en verde y falso—.
+    const uno = consumable('x1', 'afk', 19);
+    const otro = consumable('x2', 'afk', 4);
     const r = mergeStacks([uno, otro]);
 
-    check('apilado: dos pilas del mismo cristal se funden en una',
+    check('apilado: dos pilas del mismo consumible se funden en una',
       r.items.length === 1, String(r.items.length));
     check('apilado: y las unidades se suman, no se pierden',
       r.items[0].stackCount === 23, 'stackCount=' + r.items[0].stackCount);
@@ -70,21 +76,38 @@ async function main() {
   {
     // Un item guardado sin `stackCount` vale UNA unidad, no cero. Restarlo como
     // cero lo dejaba en la pila sin cambiar nada y se perdía en silencio.
-    const r = mergeStacks([crystal('x1', 1, 5),
-      { id: 'x2', name: CRYSTAL_DEFS[1].name, type: 'crystal', stackable: true } as any]);
+    //
+    // El item sin conteo se fabrica a partir del del kit y se le quita el campo, en
+    // vez de escribir un objeto a mano: el nombre tiene que ser el de verdad, porque
+    // es la clave con la que se decide si dos items son la misma pila.
+    const sinConteo: any = consumable('x2', 'afk');
+    delete sinConteo.stackCount;
+    const r = mergeStacks([consumable('x1', 'afk', 5), sinConteo]);
     check('apilado: un item sin stackCount cuenta como una unidad',
       r.items.length === 1 && r.items[0].stackCount === 6,
       `items=${r.items.length} stack=${r.items[0]?.stackCount}`);
   }
   {
-    // Dos objetos de DISTINTO nivel no son la misma pila: el jugador tiene que
+    // Dos objetos de DISTINTO nombre no son la misma pila: el jugador tiene que
     // poder verlos y elegirlos por separado.
-    const r = mergeStacks([crystal('x1', 1, 3), crystal('x2', 2, 3)]);
-    check('apilado: dos cristales de distinto nivel NO se funden', r.items.length === 2, String(r.items.length));
+    const r = mergeStacks([
+      consumable('x1', 'afk', 3),
+      consumable('x2', 'clickBoost', 3, { name: 'Píldora de Foco' })
+    ]);
+    check('apilado: dos consumibles de distinto nombre NO se funden', r.items.length === 2, String(r.items.length));
+  }
+  {
+    // Y el cristal viejo, que ya no es un item de ninguna manera: sale de
+    // `STACKABLE_TYPES` al dejar de ser moneda, igual que la llave. Un item de
+    // cristal que se colara en el almacén **no se funde** con otro porque
+    // `isStackable` ya no lo reconoce, y en una partida de antes la redención lo
+    // convierte en unidades antes de que nada lo mire.
+    check('apilado: un cristal viejo ya NO es apilable: es un recurso',
+      isStackable(crystalViejo('x1', 1, 19)) === false);
   }
   {
 // =====================================================================
-    //  TOPE DE PILA: LA CAJA Y EL CRISTAL APILAN DE 99 EN 99
+    //  TOPE DE PILA: LA CAJA APILA DE 99 EN 99, EL CONSUMIBLE NO
     // =====================================================================
     //
     // La diferencia con `MAX_STACK` es la que separa dos cosas que se confundían:
@@ -135,20 +158,21 @@ async function main() {
     // imposible por el otro lado.
     // **LO QUE ESTE BLOQUE DABA POR HECHO Y NO ES CIERTO, Y POR QUÉ EL BANCO DEBÍA
     // HABERLO DADO POR HECHO.** Daba por hecho que el cristal tenía tope de
-    // almacenamiento de 99, como la caja. No lo tiene: `TOPE_PILA` es
-    // `{ crate: 99 }` y nada más. El 99 del cristal está en `MAX_STACK`, que es el
-    // tope **de pintado**, que es otra cosa.
+    // almacenamiento de 99, como la caja. No lo tenía: `TOPE_PILA` es
+    // `{ crate: 99 }` y nada más. El 99 del cristal estaba en `MAX_STACK`, que es el
+    // tope **de pintado**, que es otra cosa. Y ya no hay ni una cosa ni otra: el
+    // cristal es un recurso.
     //
     // Así que lo que se comprueba aquí es la asimetría, que es lo que hay:
-    // **la caja se reparte y el cristal no**, en la misma pasada y con el mismo
+    // **la caja se reparte y el consumible no**, en la misma pasada y con el mismo
     // recorrido. Si `partirPilas` repartiera por `MAX_STACK` en vez de por
-    // `TOPE_PILA`, 250 cristales se partirían en tres y el almacén contaría ranuras
-    // donde el jugador no ve más que una celda.
-    const f4 = partirPilas([crystal('x1', 1, 120), crate('c1', 1, 250)]);
-    check('tope de pila: la caja se reparte y el cristal no, en la misma pasada',
+    // `TOPE_PILA`, 250 consumibles se partirían en trece y el almacén contaría
+    // ranuras donde el jugador no ve más que una celda.
+    const f4 = partirPilas([consumable('x1', 'afk', 120), crate('c1', 1, 250)]);
+    check('tope de pila: la caja se reparte y el consumible no, en la misma pasada',
       f4.changed && f4.items.length === 4
-        && f4.items.filter((w: any) => w.type === 'crystal').length === 1
-        && f4.items.filter((w: any) => w.type === 'crystal')[0]?.stackCount === 120
+        && f4.items.filter((w: any) => w.type === 'consumable').length === 1
+        && f4.items.filter((w: any) => w.type === 'consumable')[0]?.stackCount === 120
         && f4.items.filter((w: any) => w.type === 'crate').length === 3,
       JSON.stringify(f4.items.map((w: any) => `${w.type}:${w.stackCount}`)));
 
@@ -161,26 +185,26 @@ async function main() {
       `changed=${sinCambio.changed} items=${sinCambio.items.length}`);
     // **EL TOPE DE ALMACENAMIENTO Y EL DE PINTADO, MIRADOS POR SEPARADO, QUE ES LA
     // MITAD DE LO QUE ESTA AFIRMACIÓN DABA POR HECHO.** Sólo la caja tiene tope de
-    // pila: el cristal y el consumible se guardan enteros en una ranura y se
-    // recortan solo al pintar. Y una llave vieja **no se apila en absoluto**, que
-    // es la afirmación nueva y la interesante: ya no es moneda, así que dos no
-    // caben en una celda ni se funden.
+    // pila: el consumible se guarda entero en una ranura y se recorta solo al
+    // pintar. Y una llave vieja **no se apila en absoluto**, que es la afirmación
+    // interesante: ya no es moneda, así que dos no caben en una celda ni se funden.
+    // El cristal tampoco se apila, y por un motivo más fuerte: ya no está en el
+    // almacén, así que la pregunta ni se le hace.
     check('tope de pila: solo la caja tiene tope de almacenamiento, y la llave vieja no apila',
       topeDePila('crate') === 99
-        && topeDePila('crystal') === Infinity
         && topeDePila('consumable') === Infinity
         && isStackable(key('k1')) === false,
-      `caja=${topeDePila('crate')} cristal=${topeDePila('crystal')} consumible=${topeDePila('consumable')} llave apilable=${isStackable(key('k1'))}`);
-    // Y los tres tipos que sí se apilan tienen tope de pintado, que es lo que
-    // hace que "150" se lea como "99+" y no como una cifra imposible.
-    check('tope de pila: y los tres que se apilan tienen tope de pintado',
-      MAX_STACK.crate === 99 && MAX_STACK.crystal === 99 && MAX_STACK.consumable === 20,
-      `caja=${MAX_STACK.crate} cristal=${MAX_STACK.crystal} consumible=${MAX_STACK.consumable}`);
+      `caja=${topeDePila('crate')} consumible=${topeDePila('consumable')} llave apilable=${isStackable(key('k1'))}`);
+    // Y los dos tipos que sí se apilan tienen tope de pintado, que es lo que
+    // hace que "150" se lea como "20+" y no como una cifra imposible.
+    check('tope de pila: y los dos que se apilan tienen tope de pintado',
+      MAX_STACK.crate === 99 && MAX_STACK.consumable === 20,
+      `caja=${MAX_STACK.crate} consumible=${MAX_STACK.consumable}`);
     check('tope de pila: y cabeEnPila lo dice por item, no por tipo suelto',
       cabeEnPila(crate('c1', 1, 98), 1) === true && cabeEnPila(crate('c1', 1, 99), 1) === false,
       `98+1=${cabeEnPila(crate('c1', 1, 98), 1)} 99+1=${cabeEnPila(crate('c1', 1, 99), 1)}`);
     // **250 unidades, dos respuestas, y la asimetría es la que se está midiendo.**
-    // De la caja salen tres pilas porque su tope es 99; del cristal sale **una**,
+    // De la caja salen tres pilas porque su tope es 99; del consumible sale **una**,
     // y ese uno es el número que el jugador ve en la rejilla. Si estas dos cuentas
     // se separaran, el contador del almacén, la rejilla y la comprobación de si
     // cabe una compra dejarían de estar de acuerdo, que es el fallo que G3 describe
@@ -192,9 +216,9 @@ async function main() {
     // Ponerlo a cero haría que "no comprar nada" no pidiera hueco, que es la forma
     // de que una comprobación de espacio acepte una compra que no cabe.
     check('tope de pila: pilasNecesarias es la cuenta del contador',
-      pilasNecesarias(250, 'crate') === 3 && pilasNecesarias(250, 'crystal') === 1
+      pilasNecesarias(250, 'crate') === 3 && pilasNecesarias(250, 'consumable') === 1
         && pilasNecesarias(0, 'crate') === 1,
-      `cajas=${pilasNecesarias(250, 'crate')} cristales=${pilasNecesarias(250, 'crystal')}`);
+      `cajas=${pilasNecesarias(250, 'crate')} consumibles=${pilasNecesarias(250, 'consumable')}`);
 
     // **G3 · LOS DOS TOPES NO PUEDEN SEPARARSE.**
     //
@@ -291,12 +315,12 @@ async function main() {
   {
     // El contador de ranuras y la rejilla tienen que usar la MISMA clave. Si
     // una cuenta entradas y la otra grupos, el "21/21" no cuadra con lo que se ve.
-    // Aqui: 1 recolector + 4 cajas del mismo tipo (una pila) + 19 cristales
+    // Aqui: 1 recolector + 4 cajas del mismo tipo (una pila) + 19 consumibles
     // repartidos en dos entradas (una sola pila) = 3 ranuras. Contando entradas
     // serian 5.
     const items = [collector('r1'), crate('c1', 1, 3), crate('c2'),
-      crystal('x1', 1, 7), crystal('x2', 1, 12)];
-    check('ranuras: 4 cajas y 19 cristales son 2 ranuras, no 5',
+      consumable('x1', 'afk', 7), consumable('x2', 'afk', 12)];
+    check('ranuras: 4 cajas y 19 consumibles son 2 ranuras, no 5',
       countOccupiedSlots(items) === 3, String(countOccupiedSlots(items)));
   }
 
@@ -349,32 +373,59 @@ async function main() {
   // =========================================================================
   {
     // 19 items del mismo tipo guardados por separado, como los dejaba el código
-    // viejo. El objeto es un cristal: el único tipo apilable que además trae el
-    // juego por su cuenta, así que la migración se mide sobre un objeto vivo.
-    // Antes se medía con llaves, que ya no existen.
-    const sueltos = Array.from({ length: 19 }, (_, i) => crystal(`x${i}`, 1, 1));
+    // viejo. El objeto es un consumible: el tipo apilable sin tope que además trae
+    // el juego por su cuenta, así que la migración se mide sobre un objeto vivo.
+    // Antes se medía con cristales, que ya no son items.
+    const sueltos = Array.from({ length: 19 }, (_, i) => consumable(`x${i}`, 'afk', 1));
     const g = await boot(baseSave([collector('r1'), ...sueltos]));
 
-    const cristales = wh(g).filter((w: any) => w.type === 'crystal');
-    check('migracion: 19 cristales guardados por separado se vuelven una pila',
-      cristales.length === 1, `pilas=${cristales.length}`);
-    check('migracion: y las 19 unidades siguen ahi', cristales[0]?.stackCount === 19, String(cristales[0]?.stackCount));
-    check('migracion: no se pierde ni una unidad', unidades(g, 'crystal') === 19, String(unidades(g, 'crystal')));
-    check('migracion: el contador derivado no cambia', s(g).upgradeCrystals === 19, String(s(g).upgradeCrystals));
+    const tarjetas = wh(g).filter((w: any) => w.type === 'consumable');
+    check('migracion: 19 consumibles guardados por separado se vuelven una pila',
+      tarjetas.length === 1, `pilas=${tarjetas.length}`);
+    check('migracion: y las 19 unidades siguen ahi', tarjetas[0]?.stackCount === 19, String(tarjetas[0]?.stackCount));
+    check('migracion: no se pierde ni una unidad', unidades(g, 'consumable') === 19, String(unidades(g, 'consumable')));
+    check('migracion: el contador derivado no cambia', s(g).afkCards === 19, String(s(g).afkCards));
     check('migracion: y el almacen ocupa una ranura menos',
       countOccupiedSlots(wh(g)) === 2, String(countOccupiedSlots(wh(g))));
   }
   {
     // Y la fusión tiene que sobrevivir a la recarga: si el resultado no se
     // guarda, la siguiente vuelta a cargar deshace la migración.
-    const sueltos = Array.from({ length: 19 }, (_, i) => crystal(`x${i}`, 1, 1));
+    const sueltos = Array.from({ length: 19 }, (_, i) => consumable(`x${i}`, 'afk', 1));
     const g = await boot(baseSave([collector('r1'), ...sueltos]));
     const g2 = await reload();
-    const cristales = wh(g2).filter((w: any) => w.type === 'crystal');
+    const tarjetas = wh(g2).filter((w: any) => w.type === 'consumable');
 
-    check('migracion: la fusion se guarda', cristales.length === 1, `pilas=${cristales.length}`);
+    check('migracion: la fusion se guarda', tarjetas.length === 1, `pilas=${tarjetas.length}`);
     check('migracion: y no se vuelve a partir en 19 al recargar',
-      cristales[0]?.stackCount === 19, String(cristales[0]?.stackCount));
+      tarjetas[0]?.stackCount === 19, String(tarjetas[0]?.stackCount));
+  }
+  {
+    // LA REDENCIÓN DEL CRISTAL, QUE ES LO QUE QUEDA DE LA PILA VIEJA.
+    //
+    // Una partida guardada antes del cambio tiene cristales **en el almacén**,
+    // porque eran un item con diez niveles. Ahora son un recurso, así que esas
+    // pilas desaparecen y lo que llega es un número en `state.crystals`. El banco
+    // lo mide con `crystalViejo()`, la fábrica que existe para esto y para nada
+    // más: un item de cristal no se puede usar para probar el apilado porque ya no
+    // hay apilado de cristales que probar.
+    //
+    // **LO QUE CUESTA NO ES EL DEL ITEM VIEJO, ES EL DEL RECURSO.** La unidad de un
+    // cristal de nivel n vale lo que vale una caja de nivel n, y eso lo pone
+    // `valorDeUnCristal()`: el banco no escribe el número.
+    const g = await boot(baseSave([crystalViejo('x1', 1, 19)]));
+    check('redencion: una partida con cristales viejos sale SIN ninguna pila de cristal',
+      wh(g).filter((w: any) => w.type === 'crystal').length === 0 && wh(g).length === 0,
+      ids(g).join(',') || 'almacen vacio');
+    check('redencion: y el recurso vale lo que valian las unidades',
+      s(g).crystals === 19 * valorDeUnCristal(1),
+      `crystals=${s(g).crystals} esperado=${19 * valorDeUnCristal(1)}`);
+
+    // Y no se redime dos veces: la segunda carga ya no encuentra ninguna pila, y
+    // el número tiene que ser el mismo.
+    const g2 = await reload();
+    check('redencion: y la segunda carga no vuelve a sumar nada',
+      s(g2).crystals === 19 * valorDeUnCristal(1), `crystals=${s(g2).crystals}`);
   }
   {
     // Una partida nueva: las 2 cajas de bienvenida se materializan, y ahora se
@@ -394,8 +445,9 @@ async function main() {
     const items = [
       collector('r1'), collector('r2'),
       crate('c1', 1, 4), crate('c2', 1, 2), crate('c3', 6),
-      crystal('x1', 1, 8), crystal('x2', 2, 3), crystal('x3', 1, 11),
-      consumable('u1', 'afk', 2), consumable('u2', 'clickBoost', 1)
+      consumable('u1', 'afk', 2), consumable('u2', 'clickBoost', 1),
+      consumable('u3', 'afk', 8), consumable('u4', 'clickBoost', 3),
+      consumable('u5', 'afk', 11)
     ];
     const g = await boot(baseSave(items));
     check('cuadra: el contador de ranuras coincide con las celdas pintadas',
@@ -423,7 +475,7 @@ async function main() {
   {
     // Y con los filtros puestos, que el contador no se mueva: es el almacén
     // entero, no la vista filtrada.
-    const g = await boot(baseSave([collector('r1'), crystal('x1', 1, 19), crate('c1')]));
+    const g = await boot(baseSave([collector('r1'), consumable('x1', 'afk', 19), crate('c1')]));
     check('cuadra: el contador no depende del filtro',
       countOccupiedSlots(wh(g)) === 3, String(countOccupiedSlots(wh(g))));
   }
@@ -454,15 +506,30 @@ async function main() {
     // Comprar un item que sí necesita ranura propia se sigue rechazando, y sin
     // cobrar: un "Almacén lleno" que descuenta nanitas es un robo.
     //
-    // F31 · Antes la carta era `companionCardT1`, que ya no se vende. El caso se
-    // mide con el cristal, que necesita su propia pila y no hay ninguna en un
-    // almacén lleno.
+    // F31 · Antes la carta era `companionCardT1`, que ya no se vende, y después
+    // se medía con el cristal. **El cristal ya no sirve para esto: es un recurso y
+    // no ocupa ranura.** El caso se mide con el expansor, que es un item con su
+    // propia pila y no hay ninguna en un almacén lleno.
     const g2 = await boot(baseSave([...lleno, crate('c1', 1, 1), consumable('u1', 'afk', 1)],
       { warehouseCapacity: 6, nanites: 10_000_000 }));
     const antes = nanites(g2);
-    const r2 = g2.buyStoreItem('upgradeCrystal');
+    const r2 = g2.buyStoreItem('expansorT1');
     check('lleno: y un item que si ocupa ranura se rechaza', r2 === false, String(r2));
     check('lleno: sin cobrar por encima', nanites(g2) === antes, `${antes} -> ${nanites(g2)}`);
+
+    // **Y EL CRISTAL, QUE ES LA MITAD NUEVA DE ESTE BLOQUE.** Un recurso no está
+    // en el almacén, así que no pide hueco: con las seis ranuras ocupadas se
+    // compra igual. Antes esto era un rechazo, y era absurdo —un jugador con el
+    // almacén lleno no podía comprar el material que necesita para subir de
+    // nivel—.
+    const antesCristales = s(g2).crystals;
+    const r3 = g2.buyStoreItem('upgradeCrystal');
+    check('lleno: el cristal se compra con el almacen lleno: no es un item',
+      r3 !== false && wh(g2).filter((w: any) => w.type === 'crystal').length === 0, String(r3));
+    check('lleno: y lo que sube son las unidades del recurso, no las ranuras',
+      countOccupiedSlots(wh(g2)) === g2.getCapacity()
+        && s(g2).crystals === antesCristales + valorDeUnCristal(1),
+      `ranuras=${countOccupiedSlots(wh(g2))}/${g2.getCapacity()} crystals=${s(g2).crystals}`);
   }
 
   // =========================================================================
@@ -485,9 +552,14 @@ async function main() {
     check('tienda: y comprar una caja funciona de verdad',
       g.buyStoreItem('crateT1') !== false, 'rechazada');
     check('tienda: con el almacen lleno, una carta que necesita ranura propia NO cabe',
-      g.canBuyStoreItem('upgradeCrystal') === false, String(g.canBuyStoreItem('upgradeCrystal')));
+      g.canBuyStoreItem('expansorT1') === false, String(g.canBuyStoreItem('expansorT1')));
     check('tienda: y comprarla falla de verdad',
-      g.buyStoreItem('upgradeCrystal') === false, 'aceptada');
+      g.buyStoreItem('expansorT1') === false, 'aceptada');
+    // Y el botón del cristal dice que SÍ con el almacén lleno, porque la pregunta
+    // de espacio no le aplica. Botón apagado para algo que sí se puede comprar es
+    // un jugador que cree que no le llega la nanita cuando sí le llega.
+    check('tienda: y el boton del cristal se enciende igual: no ocupa ranura',
+      g.canBuyStoreItem('upgradeCrystal') === true, String(g.canBuyStoreItem('upgradeCrystal')));
   }
   {
     // Y con hueco de sobra, nada se rechaza: un boton apagado sin motivo es un
@@ -537,7 +609,7 @@ async function main() {
     // cosas a la vez y fallaria sin que hubiera ningun bug: el error estaria en
     // la prueba.
     const cartas: [string, string][] = [
-      ['crateT1', 'crate'], ['upgradeCrystal', 'crystal'],
+      ['crateT1', 'crate'],
       ['afkCard', 'consumable'], ['expansorT1', 'consumable']
     ];
     for (const [k, tipo] of cartas) {
@@ -555,6 +627,22 @@ async function main() {
         new Set(pilas.map((w: any) => w.tier)).size === 1,
         `niveles=${[...new Set(pilas.map((w: any) => w.tier))].join(',')}`);
     }
+    // Y LA CARTA QUE NO ENTRA EN LA LISTA POR UNA RAZÓN NUEVA. `upgradeCrystal` no
+    // crea ningún item, así que "caen en una pila" no tiene nada que ver con ella.
+    // Lo que se comprueba es la otra mitad de la misma pregunta: dos compras del
+    // cristal no abren NINGUNA celda, y lo que sí sube es el recurso. Si la carta
+    // metiera un item invisible en el almacén, el contador de ranuras mentiría y
+    // este bloque entero no lo vería.
+    const gr = await boot(baseSave([collector('r1')], { nanites: 10_000_000 }));
+    const antesRecurso = s(gr).crystals;
+    gr.buyStoreItem('upgradeCrystal');
+    gr.buyStoreItem('upgradeCrystal');
+    check('tienda: dos compras de cristal NO abren ninguna celda',
+      wh(gr).length === 1 && wh(gr)[0]?.type === 'collector',
+      `items=${ids(gr).join(',')}`);
+    check('tienda: y lo que suben son las unidades del recurso',
+      s(gr).crystals === antesRecurso + 2 * valorDeUnCristal(1),
+      `crystals=${s(gr).crystals} antes=${antesRecurso}`);
   }
   {
     // Y el caso que lo destapó: con el almacén lleno y una pila de lo que la
@@ -600,9 +688,9 @@ async function main() {
   //  6. Vender y gastar una pila sigue funcionando
   // =========================================================================
   {
-    const sueltos = Array.from({ length: 19 }, (_, i) => crystal(`x${i}`, 1, 1));
+    const sueltos = Array.from({ length: 19 }, (_, i) => consumable(`x${i}`, 'afk', 1));
     const g = await boot(baseSave([collector('r1'), collector('r2'), ...sueltos], { nanites: 0 }));
-    const pila = wh(g).find((w: any) => w.type === 'crystal');
+    const pila = wh(g).find((w: any) => w.type === 'consumable');
     const antes = nanites(g);
     const r = g.sellItem(pila.id);
 
@@ -610,7 +698,7 @@ async function main() {
     check('vender: y cobra las 19 unidades, no una',
       nanites(g) === antes + 19 * pila.sellPrice, `${antes} -> ${nanites(g)}`);
     check('vender: la pila desaparece del almacen',
-      !wh(g).some((w: any) => w.type === 'crystal'), ids(g).join(','));
+      !wh(g).some((w: any) => w.type === 'consumable'), ids(g).join(','));
   }
   {
     const sueltos = Array.from({ length: 3 }, (_, i) => consumable(`u${i}`, 'afk', 1));

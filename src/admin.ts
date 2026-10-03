@@ -725,7 +725,7 @@ function pintarDetalle() {
         ${campo('Producidas', formatNumber(u.totalNanitesProduced))}
         ${campo('Clics', formatNumber(u.totalClicks))}
         ${campo('Núcleos', formatNumber(u.cores))}
-        ${campo('Cristales', formatNumber(Number(d.upgradeCrystals) || 0))}
+        ${campo('Cristales', formatNumber(Number(d.crystals) || 0))}
         ${campo('Cajas', `${cajas.common || 0}C · ${cajas.rare || 0}R · ${cajas.epic || 0}E · ${cajas.legendary || 0}L`)}
         ${campo('Almacén', `${u.items} / ${d.warehouseCapacity ?? '—'}`)}
         ${campo('Logros', formatNumber(Array.isArray(d.unlockedAchievements) ? d.unlockedAchievements.length : 0))}

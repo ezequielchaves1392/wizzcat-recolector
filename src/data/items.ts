@@ -8,6 +8,9 @@
 //
 // ANTES, aquí también estaban las llaves, y eran CONTADORES sueltOS
 // (`state.keys`, `state.upgradeCrystals`) que no ocupaban ranura. Eso rompía tres
+// cosas, y **el cristal ha vuelto a ser un contador por la puerta de atrás**: ya no
+// es un item, es `state.crystals`, y el motivo por el que se hizo item —que se podía
+// ver, ordenar y guardar— ya no se aplica porque no hay item que guardar.
 // cosas:
 //
 //   1. no se podían ordenar ni ver: eran un número suelto en la cabecera
@@ -103,90 +106,84 @@ export interface KeyDef {
  * ordena de forma fiable entre idiomas y es un dato editable desde Firestore.
  */
 /**
- * Cristales de mejora.
+ * EL CRISTAL DE MEJORA, Y POR QUÉ YA NO TIENE NIVELES.
  *
- * F26 · **UN CRISTAL POR TIER, Y ESE ES EL ÚNICO QUE VALE.**
+ * **LO QUE HABÍA AQUI:** una tabla de diez niveles con nombre, rareza,
+ * multiplicador de probabilidad y precio. El multiplicador era lo que el jugador
+ * elegía sin elegir: con F26 el cristal tenía que ser del mismo nivel que el item,
+ * así que la pregunta "qué multiplicador gasto" no tenía respuesta.
  *
- * Antes había cuatro cristales y la elección del jugador era "qué multiplicador
- * gasto", que es una pregunta de cuenta: con un T7 en la mano, un x2.2 y un x4
- * parecían lo mismo y no había forma de decidir sin hacer cuentas. Y, peor: los
- * cuatro estaban escritos y **solo dos se podían conseguir**. El 3 y el 4
- * tenían nombre, multiplicador y probabilidad, y no los sacaba nadie de ninguna
- * caja — con la regla estricta de F26, eso los habría convertido en el contenido
- * que bloquea la progresión, no en una recompensa.
+ * **LO QUE HAY AHORA:** un recurso. Un nombre, un número y nada más.
  *
- * Ahora el cristal que sirve es **el del mismo tier del recolector**, sin
- * excepciones ni "igual o superior". Tres cosas se arreglan a la vez:
+ * · El **coste** lo pone el nivel del item que subes, y sale de
+ *   `valorDeUnCristal()` en `crafting.ts`. Un T10 cuesta muchísimos más que un
+ *   T1, y no porque el cristal sea distinto: porque no hay cristal distinto.
+ * · La **probabilidad** la pone el nivel al que ya estás subiendo, y esa función
+ *   es la de más abajo. Un solo cristal significa una sola probabilidad.
+ * · Y ya **no es un item**: no está en el almacén, no ocupa ranura y no se puede
+ *   vender. Es un número en `state.crystals`, como las nanitas.
  *
- *    · la elección es legible: el botón dice "necesitas cristal T7" y no hay que
- *      comparar dos números para saber cuál es;
- *    · el cristal deja de ser un multiplicador suelto y pasa a ser **la llave de
- *      la progresión**, que es lo que pedía F31: si el T8 exige cristal T8 y ese
- *      cristal sale de las cajas T8, las cajas dejan de ser un adorno;
- *    · los cuatro cristales muertos pasan a ser diez vivos, porque la caja T{n}
- *      suelta el cristal T{n} por construcción y no por una línea a mano.
+ * **LO QUE SE PIERDE, DICHO PARA QUE NO SE PIERDA DE VISTAS:** el multiplicador.
+ * Antes un cristal T5 multiplicaba la probabilidad por 2,2 y eso era una decisión
+ * con contenido. Con un solo recurso, la sintonización **es determinista dado el
+ * nivel**: en el nivel 15 acierta el 50 % y siempre. El riesgo que queda es el del
+ * nivel, que es real y sube con cada subida.
  *
- * El multiplicador sigue ahí y sigue siendo lo que compra el cristal caro, pero
- * ya no es la decisión: es el premio. Y sigue en pasos redondos —x1, x1.4, x2.2—
- * para que el jugador sepa de un vistazo cuánto riesgo se quita.
- *
- * EL COSTE EN UNIDADES NO SUBE CON EL NIVEL DEL CRISTAL, y es deliberado: son
- * siempre `collectorUpgradeCost(level)`. La escasez la pone la caja, no el
- * precio: un cristal T10 cuesta lo mismo en unidades que uno T1 y sale de un
- * cofre T10, que sale de un T9, que sale de un T8. Si además costara más, la
- * última etapa sería una cuenta y no una escalera que hay que subir.
+ * Eso es coherente con "un recurso", pero es un cambio de cómo se siente gastar,
+ * y la razón está escrita aquí para que no parezca un descuido.
  */
-export interface CrystalDef {
-  tier: number;
-  name: string;
-  details: string;
-  rarity: Rarity;
-  buyable: boolean;
-  cost: number | null;
-  /** Multiplicador de probabilidad de éxito. */
-  power: number;
-  /** QUITADO `dropRate`: no lo leía nadie (ver `KeyDef.dropRate` en este mismo fichero). */
-}
-
-export const CRYSTAL_DEFS: Record<number, CrystalDef> = {
-  1: { tier: 1, name: 'Cristal de Afino', details: 'x1 a la probabilidad de mejora.', rarity: 'Común', buyable: true, cost: 1_440, power: 1 },
-  2: { tier: 2, name: 'Cristal de Fase', details: 'x1.4 a la probabilidad de mejora.', rarity: 'Raro', buyable: false, cost: null, power: 1.4 },
-  3: { tier: 3, name: 'Cristal de Entropía', details: 'x1.8 a la probabilidad de mejora.', rarity: 'Épico', buyable: false, cost: null, power: 1.8 },
-  4: { tier: 4, name: 'Cristal Singular', details: 'x2.2 a la probabilidad de mejora.', rarity: 'Legendario', buyable: false, cost: null, power: 2.2 },
-  5: { tier: 5, name: 'Cristal Espectral', details: 'x2.6 a la probabilidad de mejora.', rarity: 'Legendario', buyable: false, cost: null, power: 2.6 },
-  6: { tier: 6, name: 'Cristal Cuántico', details: 'x3 a la probabilidad de mejora.', rarity: 'Mítico', buyable: false, cost: null, power: 3 },
-  7: { tier: 7, name: 'Cristal Prismático', details: 'x3.5 a la probabilidad de mejora.', rarity: 'Mítico', buyable: false, cost: null, power: 3.5 },
-  8: { tier: 8, name: 'Cristal del Vacío', details: 'x4 a la probabilidad de mejora.', rarity: 'Divino', buyable: false, cost: null, power: 4 },
-  9: { tier: 9, name: 'Cristal de la Singularidad', details: 'x5 a la probabilidad de mejora.', rarity: 'Divino', buyable: false, cost: null, power: 5 },
-  10: { tier: 10, name: 'Cristal Primordial', details: 'x6 a la probabilidad de mejora.', rarity: 'Divino', buyable: false, cost: null, power: 6 }
-};
-
-/** Nivel de cristal más alto conocido. */
-export const MAX_CRYSTAL_TIER = 10;
-
-/** Nivel de llave más alto conocido. */
-export const MAX_KEY_TIER = 10;
+export const CRISTAL_NOMBRE = 'Cristal de Mejora';
 
 /**
- * Probabilidad de éxito de una sintonización con el cristal dado.
- *
- * Fórmula base: `95 - nivel·3`, con suelo en 35. Es alta al principio y se
- * estrecha al final, así que el jugador sube deprisa las primeras niveles y
- * tiene que decidir cuánto arriesgar en las últimas.
- *
- * El cristal multiplica DESPUÉS de aplicar el suelo, no antes. Si
- * multiplicara antes, un cristal x4 con el suelo en 35 daría 140; el recorte
- * al 95 se comería la diferencia casi entera y el cristal caro no valdría su
- * precio. El techo del 95% es intencionado —nunca hay fallo garantizado, solo
- * improbable— para que la mejora siempre se sienta posible.
+ * El color del cristal. Sale de la rareza más baja porque ya no hay niveles a los
+ * que asignar una rareza distinta.
  */
-export function crystalSuccessChance(level: number, crystalPower: number): number {
-  const base = Math.max(35, 95 - level * 3);
-  return Math.min(95, Math.round(base * crystalPower));
+export const CRISTAL_RAREZA: Rarity = 'Raro';
+
+/**
+ * La probabilidad de que una sintonización acierte, y su único contenido.
+ *
+ * Fórmula: `95 - nivel·3`, con suelo en 35 y techo en 95. Alta al principio y
+ * estrecha al final, así que el jugador sube deprisa las primeras niveles y tiene
+ * que decidir cuánto arriesgar en las últimas.
+ *
+ * **EL TECHO DEL 95 % ES INTENCIONADO**: nunca hay fallo garantizado, solo
+ * improbable, para que la mejora siempre se sienta posible.
+ *
+ * **YA NO MULTIPLICA POR EL CRISTAL.** Antes esta función era
+ * `crystalSuccessChance(level, power)` y `power` venía de la tabla de niveles, de 1
+ * a 6. Con un solo recurso no hay de dónde sacarlo, y **no se ha inventado otro
+ * factor**: un multiplicador nuevo habría sido una economía nueva escrita sin que
+ * nadie la pidiera, en la función que decide si una mejora funciona.
+ *
+ * El suelo del 35 % es lo que hace que subir un item al tope siga siendo posible:
+ * en el último nivel se acierta una de cada tres, y eso es una escalera con final.
+ */
+export function chanceDeSintonizacion(level: number): number {
+  const base = Math.max(35, 95 - Math.max(0, Math.floor(level) || 0) * 3);
+  return Math.min(95, base);
 }
 
+/*
+ * BORRADO DE ESTE FICHERO, Y POR QUÉ NO SE DEJA "POR SI ACASO":
+ *
+ * · `CRYSTAL_DEFS` y `CrystalDef`. Los diez niveles y sus multiplicadores.
+ * · `MAX_CRYSTAL_TIER`. Solo lo usaba la comprobación de "este cristal no supera el
+ *   nivel más alto que existe", que ya no tiene sentido: no hay niveles.
+ * · `crystalPowerFromName()`. Leía el multiplicador del nombre.
+ * · El `power` que `upgradeEquippedCollector` recibía y que el motor descartaba.
+ *
 /**
  * El nivel de un cristal a partir de su etiqueta.
+ *
+ * **ESTO SOLO LO USA LA REDENCIÓN, Y POR QUÉ SIGUE AQUÍ.** El juego ya no tiene
+ * niveles de cristal, así que no hay a quién preguntarle. Pero una partida guardada
+ * antes del cambio **sí tiene** items de cristal en el almacén, con nombre y sin
+ * otra cosa, y para convertirlos en el recurso único hay que saber qué nivel eran
+ * —porque un cristal T5 no vale lo mismo que uno T1, y ahora eso lo dice
+ * `valorDeUnCristal()`.
+ *
+ * Se puede borrar en cuanto la redención se borre, y no antes.
  *
  * F26 · ANTES NO EXISTÍA, Y ESO ERA EL AGUJERO. El motor no leía el nivel del
  * cristal: leía su **multiplicador** y traducía "x1 o no x1" a "nivel 1 o nivel
@@ -219,11 +216,6 @@ export function crystalTierFromName(name: string): number {
     if (n.includes(aguja)) return tier;
   }
   return 1;
-}
-
-/** El multiplicador de un cristal por su etiqueta. Delega en el nivel. */
-export function crystalPowerFromName(name: string): number {
-  return CRYSTAL_DEFS[crystalTierFromName(name)].power;
 }
 
 /**

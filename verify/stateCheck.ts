@@ -21,29 +21,22 @@
 //  guardado, y ese es exactamente el bug que mas veces ha llegado a produccion.
 // ==========================================================================
 
-import { STORE_ITEMS, collectorUpgradeCost, type CrateType } from '../src/gameLoop';
+import { STORE_ITEMS, type CrateType } from '../src/gameLoop';
+import { costeDeNivel, valorDeUnCristal } from '../src/data/crafting';
+import { chanceDeSintonizacion } from '../src/data/items';
+import { costeDeCaja } from '../src/data/store';
+import { formatNumber } from '../src/utils/format';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom } from '../src/data/crafting';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
 import { RARITY_ORDER } from '../src/types/domain';
-import { CRATE_LOOT, tablaDePesos } from '../src/components/crateLoot';
+import { CRATE_LOOT, tablaDePesos, resolveLootAmount } from '../src/components/crateLoot';
+import { RARITY_RANK } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
-  baseSave, collector, companion, ficha, crate, crystal, consumable, conRoll
+  baseSave, collector, companion, ficha, crate, crystalViejo, consumable, conRoll
 } from './kit';
-
-/**
- * La PILA de un material en un nivel dado, o `undefined` si no hay ninguna.
- *
- * Se busca por `tier` y no por el nombre, porque el nombre es lo que se deduce
- * cuando el save es viejo (`crystalTierFromName`) y lo que cambia con la
- * traducción. El nivel es el dato del que habla el botín.
- */
-function pilaDe(g: any, tipo: string, tier: number | undefined): any {
-  if (typeof tier !== 'number') return undefined;
-  return wh(g).find((w: any) => w.type === tipo && w.tier === tier);
-}
 
 /**
  * Valor de `Math.random` que hace salir la fila pedida de la tabla de una caja.
@@ -136,11 +129,15 @@ async function main() {
       // así que aquí el número sale de `danioDeRango()`, como el de cualquier otro.
       collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['a'], potential: 3 }),
       crate('c1', 6, 2),
-      crystal('x1', 2, 4),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T2', type: 'companion', details: 'x', rarity: 'Épico', tier: 2, sellPrice: 500 }
     ], {
       nanites: 12_345,
+      // **EL CRISTAL VA POR AQUÍ, Y ANTES ERA UN ITEM DEL ALMACÉN.** Un item de nivel
+      // n costaba un intento, así que 4 cristales de T2 son `4 * valorDeUnCristal(2)`
+      // unidades. Es el mismo saldo con otra forma de escribirlo, y meter el item en
+      // la lista ya no significaría nada: la redención se lo comería al cargar.
+      crystals: 4 * valorDeUnCristal(2),
       totalNanitesProduced: 987_654,
       totalClicks: 321,
       cratesOpened: 7,
@@ -175,7 +172,13 @@ async function main() {
     check('guardar: recolectores forjadas', t.forgedCount === 5, String(t.forgedCount));
     check('guardar: nodos del arbol', t.nodeLevels.core_sink === 3 && t.nodeLevels.core_edge === 1,
       JSON.stringify(t.nodeLevels));
-    check('guardar: el almacen entero', wh(g2).length === 5, ids(g2).join(','));
+    check('guardar: el almacen entero', wh(g2).length === 4, ids(g2).join(','));
+    // Y el cristal, que ya no está en el almacén y por eso necesita su propia línea:
+    // un recurso que solo vive en memoria es un bug, y no se vería mirando el
+    // almacén, porque en el almacén ya no está.
+    check('guardar: el cristal, que ahora es un numero y no un item',
+      t.crystals === 4 * valorDeUnCristal(2),
+      `crystals=${t.crystals} esperado=${4 * valorDeUnCristal(2)}`);
     check('guardar: el recolector conserva nivel, dano, afijos y potencial', (() => {
       const r = find(g2, 'r1');
       return r?.level === 5 && r?.damage === danioDeRango(4, 3)
@@ -207,9 +210,13 @@ async function main() {
     // de los valores por defecto sin petar.
     const g = await boot({ saveVersion: 3, nanites: 500, warehouse: [collector('r1')] });
     check('migracion: una partida minima carga sin error', !!s(g).warehouse, 'sin almacen');
-    check('migracion: los contadores de material se derivan del almacen',
-      typeof s(g).upgradeCrystals === 'number',
-      `crystals=${s(g).upgradeCrystals}`);
+    // **EL CRISTAL ES UN RECURSO, Y AQUÍ NO HAY NINGUNA PILA QUE REDIMIR.** Esta
+    // partida es de las más antiguas: ni `crystals` ni `crystalsByTier` ni una sola
+    // pila en el almacén. El motor cae al valor por defecto, que es lo que recibía
+    // una partida nueva, y no se inventa ningún item por el camino.
+    check('migracion: el cristal sale un numero y por defecto, sin inventar items',
+      typeof s(g).crystals === 'number' && deType(g, 'crystal') === 0,
+      `crystals=${s(g).crystals} items=${deType(g, 'crystal')}`);
     check('migracion: el documento se sube a la version actual',
       guardado().saveVersion === s(g).saveVersion,
       `documento=${guardado().saveVersion} estado=${s(g).saveVersion}`);
@@ -226,9 +233,13 @@ async function main() {
       r?.details === `Recolección por click: +${r.damage}`, JSON.stringify(r?.details));
   }
   {
-    // Material sin `tier`: el nivel se deduce del nombre UNA vez, porque es lo
-    // unico que dice que cristal mejora a que recolector. Hay que quitar el `tier`
-    // de verdad: la fabrica se lo pone, y si es un numero la migracion no hace nada.
+    // **EL NIVEL DE UNA PILA VIEJA SE SIGUE DEDUCIDO DEL NOMBRE, PERO YA NO PARA
+    // CONTAR: SE USA PARA PAGAR.** Un item de material sin `tier` —una partida de
+    // antes de que el campo existiera— tiene el nombre escrito a mano y nada más.
+    // Ese nombre es lo único que dice cuánto valía cada cristal, así que la
+    // redención lo lee (`crystalTierFromName`) y paga por lo que pagaba. Hay que
+    // quitar el `tier` de verdad: la fabrica se lo pone, y si es un numero la
+    // deduccion no hace nada.
     //
     // **LO QUE HACIA ESTA MISMA PRUEBA CON LAS LLAVES SE HA IDO A `cajasCheck`.**
     // Antes el motor rellenaba tambien el `tier` de una llave para poder contarla
@@ -238,11 +249,14 @@ async function main() {
     // `keyTierFromName()` en el momento de redimir. Asi que la deduccion por
     // nombre de una llave se sigue probando, pero en el banco que se encarga de
     // la redencion, que es donde tiene sentido mirarla.
-    const crist = crystal('x1', 1, 1, { name: 'Cristal de Fase' });
+    const crist = crystalViejo('x1', 1, 1, { name: 'Cristal de Fase' });
     delete (crist as any).tier;
     const g = await boot(baseSave([crist], { saveVersion: 4 }));
-    check('migracion: un cristal sin nivel tambien lo deduce del nombre',
-      find(g, 'x1')?.tier === 2, 'tier=' + find(g, 'x1')?.tier);
+    // 'Cristal de Fase' era el nivel 2, así que se paga `valorDeUnCristal(2)` y no
+    // `valorDeUnCristal(1)`. Y la pila desaparece: no queda nada en el almacen.
+    check('migracion: un cristal sin nivel lo deduce del nombre para redimirlo',
+      find(g, 'x1') === undefined && s(g).crystals === valorDeUnCristal(2),
+      `crystals=${s(g).crystals} (nivel 2 = ${valorDeUnCristal(2)}, nivel 1 = ${valorDeUnCristal(1)})`);
   }
   // =========================================================================
   //  LOS CONTADORES DE LLAVES: ESTA PRUEBA NO EXISTE, Y POR QUÉ
@@ -271,58 +285,42 @@ async function main() {
     // hay que redimir.
   //
   // =====================================================================
-  //  Y LO QUE QUEDA DE LA MIGRACIÓN: SOLO EL CRISTAL
+  //  Y LO QUE QUEDA DE LA MIGRACIÓN DE CONTADORES: EL CRISTAL, Y SOLO UNA REGLA
   // =====================================================================
+  //
+  //  Aquí estaba la regresión de la migración de contadores a items: "una carga deja
+  //  el material como estaba", "la segunda carga NO lo duplica", "cinco recargas no
+  //  lo multiplican", "solo se recupera lo que falta" y "no se duplica al cargar
+  //  otra vez". Las cinco medían lo mismo —que un contador viejo se materialice en
+  //  items sin crear material de más— y **las cinco han muerto con la regla que las
+  //  sostenía**: si el cristal es un recurso no hay contador que materializar, y una
+  //  partida con `upgradeCrystals: 5` y dos cristales T1 en el almacén ya no es "el
+  //  contador dice más que el almacén": es una partida con dos fuentes que dicen
+  //  cosas distintas, y la pregunta que importa es otra.
+  //
+  //  **NO SE DUPLICA CONTRA `EL CRISTAL ES UN RECURSO`, AL FINAL DEL FICHERO.** La
+  //  redención —que es la regla que las sustituye— se comprueba entera en el
+  //  apartado 4 de ese bloque: que las pilas se pagan por lo que valían, que no
+  //  queda ninguna en el almacén y que recargar no paga otra vez. Es la misma regla,
+  //  y una regla comprobada en dos sitios solo se desincroniza uno de los dos.
   {
-    // LA REGRESION DE LA MIGRACION DE CONTADORES. La migracion de contadores a
-    // items existe para las partidas viejas, donde el contador era un numero
-    // suelto sin nada detras. Si no le resta al contador lo que YA HAY en el
-    // almacen, se ejecuta tambien en las partidas nuevas, y entonces recargar la
-    // pagina duplica el material: 4 cristales -> 8 -> 16 -> 32, y el almacen se
-    // llena de material que el jugador nunca pidio, hasta que el botin empieza a
-    // perderse por falta de hueco.
+    // LA REGLA QUE SÍ ES DISTINTA, Y LA ÚNICA QUE QUEDA: **CON CONTADOR VIEJO Y
+    // PILAS A LA VEZ, PAGAN SOLO LAS PILAS.**
     //
-    // El banco de pruebas anterior no lo veía porque sus partidas de prueba
-    // traian los contadores a cero, que es justo el caso en el que la migracion
-    // no hace nada. Aqui la partida se parece a una de verdad: contador y
-    // almacen dicen lo mismo.
-    //
-    // **YA NO HAY LLAVES QUE MIRAR**, asi que el cristal se queda solo. Sigue
-    // siendo el mismo caso: la migración es de un tipo, y por eso el nombre de
-    // "material" describe exactamente lo que queda.
-    const g = await boot(baseSave([crystal('x1', 1, 4)], { saveVersion: 7 }));
-    check('sin duplicar: una carga deja el material como estaba',
-      s(g).upgradeCrystals === 4 && deType(g, 'crystal') === 1,
-      `crystals=${s(g).upgradeCrystals} items=${deType(g, 'crystal')}`);
-
+    // Al cargar hay dos fuentes posibles: el número guardado y las pilas del
+    // almacén. Sumarlas las dos sería darle al jugador el doble de lo que tenía, y
+    // como la redención corre en CADA carga, una partida con las dos cosas sería una
+    // máquina de imprimir. La regla es que **el almacén manda siempre que tenga
+    // algo**, y el contador viejo solo se mira cuando no hay ni una pila, que es el
+    // caso de las partidas más antiguas: las de antes de que el material fuera item.
+    const g = await boot(baseSave([crystalViejo('x1', 1, 2)], { upgradeCrystals: 5 }));
+    check('migracion: con contador viejo y pilas, pagan solo las pilas',
+      s(g).crystals === 2 * valorDeUnCristal(1),
+      `crystals=${s(g).crystals} (2 pilas de T1 = ${2 * valorDeUnCristal(1)}; el contador decia 5 y no se suma)`);
     const g2 = await reload();
-    check('sin duplicar: la segunda carga NO duplica los cristales',
-      s(g2).upgradeCrystals === 4 && deType(g2, 'crystal') === 1,
-      `crystals=${s(g2).upgradeCrystals} items=${deType(g2, 'crystal')} (${s(g2).warehouse.filter((w: any) => w.type === 'crystal').map((w: any) => w.stackCount).join('+')})`);
-
-    const g3 = await reload();
-    const g4 = await reload();
-    check('sin duplicar: cinco recargas no multiplican el material',
-      s(g3).upgradeCrystals === 4 && s(g4).upgradeCrystals === 4,
-      `3a=${s(g3).upgradeCrystals} 4a=${s(g4).upgradeCrystals}`);
-    check('sin duplicar: y el almacen no crece', wh(g4).length === 1, ids(g4).join(','));
-  }
-  {
-    // El caso parcial: el contador dice MAS que el almacen porque el jugador
-    // vendio material. Lo que falta es lo que hay que recuperar, y lo que ya
-    // esta NO se vuelve a crear.
-    const g = await boot(baseSave([crystal('x1', 1, 2)], {
-      saveVersion: 7, upgradeCrystals: 5
-    }));
-    check('migracion parcial: solo se recupera lo que falta',
-      s(g).upgradeCrystals === 5,
-      `crystals=${s(g).upgradeCrystals} (almacen tenia 2, contador decia 5)`);
-    check('migracion parcial: y se echa a la pila que ya habia',
-      deType(g, 'crystal') === 1 && find(g, 'x1')?.stackCount === 5,
-      `items=${deType(g, 'crystal')} unidades=${find(g, 'x1')?.stackCount}`);
-    const g2 = await reload();
-    check('migracion parcial: y no se duplica al cargar otra vez', s(g2).upgradeCrystals === 5,
-      `crystals=${s(g2).upgradeCrystals}`);
+    check('migracion: y recargar no vuelve a pagar ni el contador ni las pilas',
+      s(g2).crystals === 2 * valorDeUnCristal(1),
+      `crystals=${s(g2).crystals}`);
   }
   {
     // Al CARGAR, un contador de cajas por encima del almacen SI materializa: es
@@ -422,13 +420,18 @@ async function main() {
     // coinciden.
     //
     // ARREGLADO. El boton "Vender" de la hoja de detalle pintaba
-    // `getSellPrice` SIN multiplicar, asi que con una pila de 20 cristales decia
+    // `getSellPrice` SIN multiplicar, asi que con una pila de 20 cajas decia
     // "Vender - 480" y el modal siguiente decia "por 9.600". Ahora la vista pide
     // el total al game loop (`getSellTotal`), que es el mismo calculo que hace
     // el cobro, y no queda ninguna copia de la formula. Lo comprueba
     // `sellCheck`, que si puede porque el numero ya no se calcula en la vista.
-    const g = await boot(baseSave([crate('c1', 1, 4), crystal('x1', 1, 3), crystal('x2', 3, 2)]));
-    for (const [id, unidades] of [['c1', 4], ['x1', 3], ['x2', 2]] as Array<[string, number]>) {
+    //
+    // **EL CRISTAL, QUE ERA EL EJEMPLO DE AQUÍ, YA NO SE VENDE.** Es un recurso: no
+    // está en el almacén, así que no hay id que vender ni precio unitario que mirar.
+    // La regla que queda es la misma para todo lo que sí se vende, y por eso el
+    // ejemplo son dos pilas de cajas de niveles distintos.
+    const g = await boot(baseSave([crate('c1', 1, 4), crate('c2', 6, 2)]));
+    for (const [id, unidades] of [['c1', 4], ['c2', 2]] as Array<[string, number]>) {
       const unitario = g.getSellPrice(id);
       const nanoAntes = nanites(g);
       const r = g.sellItem(id);
@@ -508,8 +511,20 @@ async function main() {
   }
 
   // =========================================================================
-  //  7. La Mejora del recolector: cristal del nivel exacto y coste creciente
+  //  7. La Mejora del recolector: el coste sale del TIER del item y sube con el nivel
   // =========================================================================
+  //
+  // **EL COSTE YA NO DEPENDE DEL CRISTAL, DEPENDE DEL ITEM.** Antes era
+  // `collectorUpgradeCost(nivel)`, un numero escrito sin mirar nada: valia lo mismo
+  // para un T1 y para un T10, porque lo que se pagaba era el nivel del cristal y ese
+  // era siempre el del item. Ahora es `costeDeNivel(tier, nivel)`: el primer
+  // argumento es el **tier del recolector** y el segundo su nivel, y el mismo nivel
+  // 0 cuesta 675 en un T1 y 145.388 en un T10.
+  //
+  // Por eso en TODO este apartado el primer argumento de `costeDeNivel` es el tier
+  // del `collector(...)` de ese mismo `baseSave`, y no un numero que parezca el
+  // debido. Pasarse un 1 donde iba un 3 no rompe la prueba —cuesta menos y el
+  // intento sale igual— asi que el desajuste se esconderia.
   {
     // EL ACIERTO, con el dado clavado. Esta rama no la miraba NINGÚN banco:
     // todos los tests de mejora comprobaban rechazos, que son deterministas
@@ -523,15 +538,17 @@ async function main() {
     // El acierto tiene que leerse por `success`. Si algún día alguien unifica la
     // convención y cambia este campo sin tocar la vista, esta línea se enciende.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 0 }),
-      crystal('x1', 3, 5)
-    ], { nanites: 0, nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] }));
+      collector('r1', 3, { damage: 60, level: 0 })
+    ], {
+      nanites: 0, nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'],
+      crystals: costeDeNivel(3, 0) + 5
+    }));
     g.equipCollector('r1');
-    const coste = collectorUpgradeCost(0);
-    const antes = find(g, 'x1').stackCount;
+    const coste = costeDeNivel(3, 0);
+    const antes = s(g).crystals;
     const danio0 = g.getClickDamage();
     // 0 * 100 = 0 y el techo de la probabilidad es 95: acierta siempre, para
-    // cualquier nivel y cualquier cristal.
+    // cualquier nivel.
     const r = conRoll(0, () => g.upgradeEquippedCollector());
     check('mejora: el acierto se lee por `success` y no por `ok`',
       r.success === true,
@@ -540,16 +557,17 @@ async function main() {
       /exitosa/i.test(r.msg ?? ''), r.msg ?? '');
     check('mejora: el acierto sube el nivel',
       find(g, 'r1').level === 1, 'nivel=' + find(g, 'r1').level);
-    check('mejora: consume los cristales del coste',
-      find(g, 'x1').stackCount === antes - coste,
-      `antes=${antes} ahora=${find(g, 'x1').stackCount} coste=${coste}`);
+    check('mejora: y descuenta el coste del recurso, sin tocar el almacen',
+      s(g).crystals === antes - coste && deType(g, 'crystal') === 0,
+      `antes=${antes} ahora=${s(g).crystals} coste=${coste}`);
     check('mejora: y el nivel nuevo paga más daño', g.getClickDamage() > danio0,
       `${danio0} -> ${g.getClickDamage()}`);
     const g2 = await reload();
     check('mejora: el acierto sobrevive a la recarga', find(g2, 'r1')?.level === 1,
       'nivel=' + find(g2, 'r1')?.level);
-    check('mejora: y el reload no regasta la mejora', find(g2, 'x1')?.stackCount === antes - coste,
-      'stackCount=' + find(g2, 'x1')?.stackCount);
+    check('mejora: y el saldo gastado no vuelve con la recarga',
+      s(g2).crystals === antes - coste,
+      `crystals=${s(g2).crystals} esperado=${antes - coste}`);
   }
   {
     // EL FALLO, también con el dado clavado. 0.999 * 100 = 99.9, por encima
@@ -560,12 +578,11 @@ async function main() {
     // el jugador que fallaba dos veces. La pérdida real es el cristal, que es
     // justo el coste que se eligió arriesgar — y aun así se paga.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 4 }),
-      crystal('x1', 3, 5)
-    ], { nanites: 0 }));
+      collector('r1', 3, { damage: 60, level: 4 })
+    ], { nanites: 0, crystals: costeDeNivel(3, 4) + 5 }));
     g.equipCollector('r1');
-    const coste = collectorUpgradeCost(4);
-    const antes = find(g, 'x1').stackCount;
+    const coste = costeDeNivel(3, 4);
+    const antes = s(g).crystals;
     const danio0 = g.getClickDamage();
     const r = conRoll(0.999, () => g.upgradeEquippedCollector());
     check('mejora: el fallo se lee por `success`', r.success === false,
@@ -575,49 +592,54 @@ async function main() {
       'nivel=' + find(g, 'r1').level);
     check('mejora: el fallo no cambia el daño', g.getClickDamage() === danio0,
       `${danio0} -> ${g.getClickDamage()}`);
-    check('mejora: pero el cristal se paga igual', find(g, 'x1').stackCount === antes - coste,
-      `antes=${antes} ahora=${find(g, 'x1').stackCount} coste=${coste}`);
+    check('mejora: pero el cristal se paga igual', s(g).crystals === antes - coste,
+      `antes=${antes} ahora=${s(g).crystals} coste=${coste}`);
     const g2 = await reload();
     check('mejora: el fallo sobrevive a la recarga', find(g2, 'r1')?.level === 4,
       'nivel=' + find(g2, 'r1')?.level);
-    check('mejora: y el cristal gastado no vuelve', find(g2, 'x1')?.stackCount === antes - coste,
-      'stackCount=' + find(g2, 'x1')?.stackCount);
+    check('mejora: y el cristal gastado no vuelve', s(g2).crystals === antes - coste,
+      'crystals=' + s(g2).crystals);
   }
   {
     // Sin recolector equipado no se mejora, y no se gasta nada.
-    const g = await boot(baseSave([crystal('x1', 1, 5)], { nanites: 0 }));
+    const g = await boot(baseSave([], { nanites: 0, crystals: 1000 }));
     const r = g.upgradeEquippedCollector();
     check('mejora: sin recolector equipado se rechaza', !r.success && !!r.msg, r.msg ?? '');
-    check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 5,
-      String(find(g, 'x1')?.stackCount));
+    check('mejora: y no se gasta ni una unidad de cristal', s(g).crystals === 1000,
+      String(s(g).crystals));
   }
   {
-    // Un cristal de otro nivel no se gasta por uno del nivel del recolector. Antes
-    // esto era "pides el nivel 1 y el juego usa el que le digas"; con F26 el
-    // recolector T3 **exige** el T3, así que el caso se ha vuelto la regla.
+    // **LO QUE ERA "UN CRISTAL DE OTRO NIVEL NO SE GASTA", Y LO QUE LO SUSTITUYE.**
+    //
+    // Antes: un T3 **exigía** cristal T3. El agujero de verdad era que el cristal
+    // equivocado se podía gastar por el bueno, y la regla era que no.
+    //
+    // Ahora no hay cristal equivocado que gastar: hay un número, así que ese
+    // agujero no puede abrirse. El que queda es el mismo error con otro nombre —
+    //**que el presupuesto de un item sirva para otro**— y lo que lo cierra es que
+    // el precio salga del tier del item. Con saldo de sobra para afinar un T1
+    // entero, un T3 se rechaza y el mensaje dice cuánto falta.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 0 }),
-      crystal('x1', 1, 5)
-    ], { nanites: 0 }));
+      collector('r1', 3, { damage: 60, level: 0 })
+    ], { nanites: 0, crystals: 2 * valorDeUnCristal(1) }));
     g.equipCollector('r1');
     const r = g.upgradeEquippedCollector();
-    check('mejora: sin cristal del nivel pedido se rechaza',
-      !r.success && /no tienes/i.test(r.msg ?? ''), r.msg ?? '');
-    check('mejora: y el cristal de otro nivel no se gasta', find(g, 'x1').stackCount === 5,
-      String(find(g, 'x1')?.stackCount));
+    check('mejora: con el presupuesto de un T1, un T3 no se afina',
+      !r.success && r.rolled === false && /Necesitas/i.test(r.msg ?? ''), r.msg ?? '');
+    check('mejora: y el saldo no se toca', s(g).crystals === 2 * valorDeUnCristal(1),
+      `crystals=${s(g).crystals} (un intento de T3 cuesta ${costeDeNivel(3, 0)})`);
   }
   {
     // El techo de un recolector SIN `maxLevel` (o sea, de la tienda) son 20, y
     // es un tope real: en el 20 no se mejora ni se cobran cristales.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: BASE_COLLECTOR_MAX_LEVEL }),
-      crystal('x1', 3, 99)
-    ], { nanites: 0 }));
+      collector('r1', 3, { damage: 60, level: BASE_COLLECTOR_MAX_LEVEL })
+    ], { nanites: 0, crystals: 999_999 }));
     g.equipCollector('r1');
     const r = g.upgradeEquippedCollector();
     check('mejora: en el nivel maximo se rechaza', !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
-    check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 99,
-      String(find(g, 'x1')?.stackCount));
+    check('mejora: y no se gastan cristales', s(g).crystals === 999_999,
+      String(s(g).crystals));
   }
   {
     // EL TECHO LO PONE EL RECOLECTOR, NO UNA CONSTANTE DEL MOTOR.
@@ -633,21 +655,21 @@ async function main() {
     // cuando la curva de coste de sintonización se endureció (1.14 a 1.26 por
     // nivel) el nivel 20 pasó a costar 132 y estas pruebas fallaron sin ningún
     // bug: la partida de test se había quedado sin cristales. El banco tiene que
-    // depender del coste, no de un número que alguien escribió una vez.
-    const paraPasarDe20 = collectorUpgradeCost(20);
+    // depender del coste, no de un número que alguien escribió una vez —y ahora además
+    // el coste depende del TIER, que es el segundo eje de la misma regla.
+    const paraPasarDe20 = costeDeNivel(3, 20);
     const cristalesDe20 = paraPasarDe20 + 10;
 
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 20, maxLevel: 28, potential: 3 }),
-      crystal('x1', 3, cristalesDe20)
-    ], { nanites: 0 }));
+      collector('r1', 3, { damage: 60, level: 20, maxLevel: 28, potential: 3 })
+    ], { nanites: 0, crystals: cristalesDe20 }));
     g.equipCollector('r1');
     const r = conRoll(0, () => g.upgradeEquippedCollector());
     check('mejora: un recolector forjado pasa del 20 si su techo da',
       r.success === true && find(g, 'r1').level === 21,
       `nivel=${find(g, 'r1').level} msg=${r.msg ?? ''}`);
-    check('mejora: y el gasto es real', find(g, 'x1').stackCount === cristalesDe20 - paraPasarDe20,
-      `x1=${find(g, 'x1').stackCount} menos ${paraPasarDe20}`);
+    check('mejora: y el gasto es real', s(g).crystals === cristalesDe20 - paraPasarDe20,
+      `crystals=${s(g).crystals} menos ${paraPasarDe20}`);
     const g2 = await reload();
     check('mejora: y el nivel 21 sobrevive a la recarga', find(g2, 'r1')?.level === 21,
       'nivel=' + find(g2, 'r1')?.level);
@@ -655,15 +677,14 @@ async function main() {
   {
     // Y el techo del item es el tope de verdad: en su propio maxLevel, ni uno mas.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 28, maxLevel: 28 }),
-      crystal('x1', 3, 99)
-    ], { nanites: 0 }));
+      collector('r1', 3, { damage: 60, level: 28, maxLevel: 28 })
+    ], { nanites: 0, crystals: 999_999 }));
     g.equipCollector('r1');
     const r = g.upgradeEquippedCollector();
     check('mejora: en el techo del item se rechaza',
       !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
-    check('mejora: y no se gastan cristales', find(g, 'x1').stackCount === 99,
-      String(find(g, 'x1')?.stackCount));
+    check('mejora: y no se gastan cristales', s(g).crystals === 999_999,
+      String(s(g).crystals));
     // El mensaje nombra el techo REAL, no el 20 de antes: si dice "+200%" cuando
     // el techo son 28, el jugador ve un número que no corresponde con su item.
     check('mejora: el mensaje nombra el techo del item', /\+280%/.test(r.msg ?? ''), r.msg ?? '');
@@ -680,20 +701,20 @@ async function main() {
   }
   {
     // Si no hay cristales suficientes, no se intenta: el item no se gasta a medias.
-    // El coste del nivel 0 es 1, asi que hace falta un nivel ALTO para que la
-    // cantidad no alcance.
+    // Un intento ya cuesta el precio de una caja de su nivel, así que hace falta un
+    // nivel ALTO para que la cantidad no alcance.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 10 }),
-      crystal('x1', 3, 1)
-    ], { nanites: 0 }));
+      collector('r1', 3, { damage: 60, level: 10 })
+    ], { nanites: 0, crystals: 1 }));
     g.equipCollector('r1');
-    const necesita = collectorUpgradeCost(10);
-    check('mejora: el coste crece con el nivel', necesita > 1, 'coste en nivel 10=' + necesita);
+    const necesita = costeDeNivel(3, 10);
+    check('mejora: el coste crece con el nivel', necesita > valorDeUnCristal(3),
+      `coste en nivel 10=${necesita}, y en nivel 0 son ${valorDeUnCristal(3)}`);
     const r = g.upgradeEquippedCollector();
     check('mejora: con menos cristales de los necesarios se rechaza',
       !r.success && /Necesitas/i.test(r.msg ?? ''), r.msg ?? '');
-    check('mejora: y no se queda sin cristales', find(g, 'x1')?.stackCount === 1,
-      'stackCount=' + find(g, 'x1')?.stackCount);
+    check('mejora: y no se queda sin cristales', s(g).crystals === 1,
+      'crystals=' + s(g).crystals);
     check('mejora: y el nivel no cambia', find(g, 'r1').level === 10, 'nivel=' + find(g, 'r1').level);
   }
 
@@ -717,27 +738,27 @@ async function main() {
     check('cajas: y es la de su propio nivel', r.crateType === 8, `crateType=${r.crateType}`);
   }
   {
-    const g = await boot(baseSave([crate('c1', 1), crystal('x1', 1, 2)]));
+    const g = await boot(baseSave([crate('c1', 1)], { crystals: 2 * valorDeUnCristal(1) }));
+    const crystalsAntes = s(g).crystals;
     const r = g.openCrateBox('c1');
     check('cajas: con una caja en el almacen se abre', r.ok, r.msg ?? '');
     check('cajas: la caja se consume', !find(g, 'c1'), ids(g).join(','));
-    // Lo que se comprueba aquí NO es que la pila quede en su cuenta, sino que el
-    // botín caiga en la pila de SU nivel. Antes miraba la pila de llaves y daba 1
-    // siempre, y no porque estuviera bien: la caja común anunciaba llaves de nivel
-    // 0 y el aplicador las forzaba a nivel 1, así que caían en OTRA pila y esta
-    // cuenta pasaba por casualidad. Al arreglarlo, el resultado depende del
-    // sorteo, así que se compara con el premio que devuelve el propio juego y no
-    // con una cuenta fija.
+    // Lo que se comprueba aquí NO es la cuenta del botín, sino A DÓNDE VA. Antes
+    // miraba la pila de llaves y daba 1 siempre, y no porque estuviera bien: la caja
+    // común anunciaba llaves de nivel 0 y el aplicador las forzaba a nivel 1, así que
+    // caían en OTRA pila y esta cuenta pasaba por casualidad. Al arreglarlo, el
+    // resultado depende del sorteo, así que se compara con el premio que devuelve el
+    // propio juego y no con una cuenta fija.
     //
-    // **AHORA LA PILA ES DE CRISTALES**, porque es la del material que existe: el
-    // cristal es lo que la caja anuncia por nivel y lo que el jugador gasta en
-    // sintonizar. La regla es idéntica —el botín cae en la pila de SU nivel—, solo
-    // que escrita sobre un tipo que el juego sigue teniendo.
-    const delBotin = r.reward?.kind === 'crystals' && r.reward.materialTier === 1;
-    const esperado = delBotin ? 2 + r.reward.amount : 2;
-    check('cajas: el botín se apila en la pila del nivel que anuncia',
-      find(g, 'x1')?.stackCount === esperado,
-      `pila=${find(g, 'x1')?.stackCount} esperado=${esperado} premio=${r.reward?.kind}`);
+    // **Y AHORA NO HAY PILA: EL CRISTAL ES UN RECURSO.** El mismo código con otro
+    // destino. Si el premio es de cristal, el contador sube justo lo que dice el
+    // premio; si no, se queda como estaba. Y en ninguno de los dos casos puede
+    // aparecer un item de cristal donde meterlo.
+    const delBotin = r.reward?.kind === 'crystals';
+    const esperado = delBotin ? crystalsAntes + (r.reward?.amount as number) : crystalsAntes;
+    check('cajas: el botín suma al contador de cristal, y no a una pila',
+      s(g).crystals === esperado && deType(g, 'crystal') === 0,
+      `crystals=${s(g).crystals} esperado=${esperado} premio=${r.reward?.kind} items=${deType(g, 'crystal')}`);
     check('cajas: el contador de cajas abiertas sube', s(g).cratesOpened === 1, String(s(g).cratesOpened));
     const g2 = await reload();
     // F31 · LA CAJA ABIERTA PUEDE DEJAR OTRA CAJA, Y EL CONTADOR NO ES EL NÚMERO
@@ -752,9 +773,11 @@ async function main() {
       `abiertas=${s(g2).cratesOpened} items=${deType(g2, 'crate')} contadores=${totalCajas}`);
   }
   {
-    const g = await boot(baseSave([crystal('x1', 1, 1)]));
+    const g = await boot(baseSave([], { crystals: valorDeUnCristal(1) }));
     const r = g.openCrateBox('c1');
     check('cajas: sin caja se rechaza', !r.ok, r.msg ?? '');
+    check('cajas: y el saldo de cristal que hay no se toca',
+      s(g).crystals === valorDeUnCristal(1), `crystals=${s(g).crystals}`);
   }
   {
     // Con el almacen lleno, abrir una caja no puede desbordarlo.
@@ -766,13 +789,12 @@ async function main() {
       `antes=${antes} ahora=${wh(g).length} cap=${g.getCapacity()}`);
   }
   {
-    // LA CAJA ENTREGA EL MATERIAL QUE ANUNCIA, Y NO OTRO.
+    // LA CAJA ENTREGA AL RECURSO LO QUE ANUNCIA, Y NO A OTRO SITIO.
     //
     // Este es el bug que más se parezca a "la ruleta mintiendo", y lo es de
-    // verdad. La tabla declara qué material deja cada cofre (`materialTier`), y el
-    // aplicador del game loop se comía ese segundo argumento y entregaba siempre
-    // nivel 1. El jugador veía un nombre y recibía otro, sin ninguna forma de saber
-    // que eran distintos.
+    // verdad. La tabla declara qué material deja cada cofre, y el aplicador del game
+    // loop se comía ese segundo argumento y entregaba siempre nivel 1. El jugador
+    // veía un nombre y recibía otro, sin ninguna forma de saber que eran distintos.
     //
     // Con el módulo de apilado era peor que cosmético: como todo el material caía
     // en nivel 1, se fundía en UNA sola pila y no había forma de separarlo.
@@ -780,91 +802,95 @@ async function main() {
     // `rollPara` clava el dado en la fila que interesa, así que esto no depende
     // del sorteo ni de cuántas cajas haga falta abrir.
     //
-    // **ESTE BLOQUE Y EL DE ABAJO ERAN EL MISMO, Y AHORA SOLO QUEDA UNO.** Estaba
-    // dos veces: una forzando la fila `keys` y otra la fila `crystals`. Las dos
-    // medían la misma regla —el botín da el material del nivel que anuncia— sobre
-    // dos tipos que en aquel momento existían. Al quitar las llaves solo queda la
-    // fila de cristales, así que las dos se han fundido en esta: se conserva la
-    // comprobación del nivel del botín y la de que no aparezca material del nivel
-    // equivocado, y de la que faltaba se ha cogido la recarga.
-    const g = await boot(baseSave([crate('c1', 8)]));
+    // **LO QUE QUEDA DE LA REGLA ANTIGUA ES EL DESTINO, NO EL NIVEL.** La fila ya no
+    // puede mentir de nivel, porque ya no dice ninguno: no hay dos materiales que
+    // confundir. Lo que queda por comprobar es que el número del botín llegue
+    // entero al contador, sin amontonarse en ninguna parte, y que sobreviva a la
+    // recarga. Que la cantidad equivalga a los mismos intentos de mejora que daba
+    // antes, en los diez niveles, lo comprueba `EL CRISTAL ES UN RECURSO` al final
+    // de este fichero, contra la tabla de botín y no contra una caja abierta.
+    const g = await boot(baseSave([crate('c1', 8)], { crystals: 0 }));
+    const crystalsAntes = s(g).crystals;
     const r = conRoll(rollPara(8, 'crystals'), () => g.openCrateBox('c1'));
     check('cajas: la caja T8 se abre', r.ok, r.msg ?? '');
-    check('cajas: el cristal del botín es del nivel que anuncia',
-      r.reward?.kind === 'crystals' && pilaDe(g, 'crystal', r.reward.materialTier)?.stackCount === r.reward.amount,
-      `anuncia ${r.reward?.materialTier}x${r.reward?.amount} y llegó ` +
-      JSON.stringify(wh(g).filter((w: any) => w.type === 'crystal')
-        .map((w: any) => `${w.name}:${w.tier}x${w.stackCount ?? 1}`)));
-    check('cajas: y no aparece un cristal del nivel equivocado',
-      !wh(g).some((w: any) => w.type === 'crystal' && w.tier !== r.reward?.materialTier),
-      'sobran cristales de otro nivel');
+    check('cajas: el botín de cristal va entero al contador, por lo que anuncia',
+      r.reward?.kind === 'crystals' && s(g).crystals === crystalsAntes + (r.reward?.amount as number),
+      `anuncia ${r.reward?.amount} y el contador subió ${s(g).crystals - crystalsAntes}`);
+    check('cajas: y no aparece ninguna pila de cristal donde meterlo',
+      deType(g, 'crystal') === 0,
+      `items=${deType(g, 'crystal')} (${wh(g).map((w: any) => w.id).join(',')})`);
     const g2 = await reload();
-    check('cajas: y el nivel del cristal sobrevive a la recarga',
-      pilaDe(g2, 'crystal', r.reward?.materialTier)?.stackCount === r.reward?.amount,
-      `pila=${pilaDe(g2, 'crystal', r.reward?.materialTier)?.stackCount}`);
+    check('cajas: y el saldo del botín sobrevive a la recarga',
+      s(g2).crystals === s(g).crystals,
+      `crystals=${s(g2).crystals} antes=${s(g).crystals}`);
   }
   {
     // =====================================================================
-    //  F26 · LA ATONIZACIÓN USA EL CRISTAL DEL MISMO TIER, Y SOLO ESE.
+    //  F26 · LO QUE QUEDA DE LA REGLA DEL CRISTAL DEL MISMO TIER.
     // =====================================================================
     //
-    // Antes esta prueba era "gastar una llave de nivel 2 afina con un cristal de
-    // nivel 2": el selector **elegía** el cristal y el motor obedecía. Ahora no
-    // hay elección —el nivel sale del tier del recolector— así que el caso
-    // interesante es el otro: con un T3 en la mano, el cristal T1 **no** cuenta
-    // aunque haya cinco en el almacén, y la sintonización se rechaza diciendo
-    // cuál falta.
+    // F26 era "la sintonización usa el cristal del mismo tier, y solo ese": el
+    // selector elegía el cristal y el motor se negaba a gastar el de otro nivel. Con
+    // un solo recurso **esa elección ya no existe**, así que la mitad de la regla —el
+    // "solo ese"— no se puede escribir.
     //
-    // Y el motivo por el que esto no es una comodidad: si el T3 pudiera afinarse
-    // con el cristal que se compra en la tienda, las cajas dejarían de ser
-    // necesarias para progresar. Con esta regla, el T8 exige cristal T8, y el
-    // cristal T8 sale de las cajas T8.
+    // La otra mitad sí, y es la que importa, porque es la que convertía las cajas en
+    // algo necesario: **el tier del item pone el precio**, así que un T8 no se
+    // afina con el presupuesto de un T1 aunque el saldo dé de sobra. Un intento de
+    // T8 vale lo que una caja T8. Antes eso se lograba haciendo que el cristal
+    // equivocado no contara; ahora se impide con el número.
+    //
+    // El otro bloque de aquí afirmaba justo eso y ya no se puede repetir, porque con
+    // `collectorUpgradeCost` de un solo argumento los dos items costaban lo mismo.
+    // El caso interesante era "con cinco T1 al lado, el T3 afina con el T3 y el T1
+    // sigue entero"; hoy es "con el presupuesto de un T1, el T3 no afina, y con el
+    // presupuesto de un T3 afina y cobra lo que vale un intento de T3".
     const g = await boot(baseSave([
-      crystal('x1', 1, 5),
       collector('r1', 3, { damage: 60, level: 0 })
-    ]));
+    ], { crystals: valorDeUnCristal(3) }));
     g.equipCollector('r1');
-
-    const r1 = g.upgradeEquippedCollector();
-    check('F26: un T3 sin cristal T3 no se afina',
-      r1.success === false && r1.rolled === false && /Cristal/.test(r1.msg ?? ''),
-      `msg=${r1.msg ?? ''}`);
-    check('F26: y no se gasta nada, ni siquiera el T1 que sí tiene',
-      find(g, 'x1').stackCount === 5, `x1=${find(g, 'x1').stackCount}`);
+    const r = conRoll(0, () => g.upgradeEquippedCollector());
+    check('F26: con el presupuesto de un T3 sí se afina, y cobra lo que vale',
+      r.success === true && find(g, 'r1').level === 1 && s(g).crystals === 0,
+      `nivel=${find(g, 'r1').level} crystals=${s(g).crystals} coste=${costeDeNivel(3, 0)} msg=${r.msg ?? ''}`);
   }
   {
-    // El mismo item con el cristal de SU nivel: ahora sí, y ahora solo ese. Con
-    // los cinco T1 ahí al lado, que es lo que el jugador tiene en el almacén
-    // durante medio juego.
-    const coste = collectorUpgradeCost(0);
+    // **Y EL TECHO DE `MAX_CRYSTAL_TIER` HA DESAPARECIDO, QUE ES LA MEJOR NOTICIA DE
+    // LAS TRES.** El bloque que estaba aquí afirmaba lo contrario: un T12 con
+    // cristales T10 se rechazaba con un mensaje que no admitía arreglo, porque no
+    // existía un cristal T12. La forja es infinita y produce T11 y siguientes, así
+    // que esos items llegaban a su techo de niveles y se quedaban ahí para siempre.
+    //
+    // Ahora la progresión no tiene ese sitio donde pararse: un T12 sube con el mismo
+    // recurso que un T1, por mucho más caro, y un T30 también. Lo que se mide aquí
+    // es exactamente eso, y el precio sale de `costeDeNivel` con el tier del item,
+    // así que el banco no puede pasar por alto lo caro que es.
     const g = await boot(baseSave([
-      crystal('x1', 1, 5), crystal('x3', 3, 5),
-      collector('r1', 3, { damage: 60, level: 0 })
-    ]));
-    g.equipCollector('r1');
-    const r2 = conRoll(0, () => g.upgradeEquippedCollector());
-    check('F26: con el cristal T3 sí se afina, y gasta el T3',
-      r2.success === true && find(g, 'x3').stackCount === 5 - coste,
-      `x3=${find(g, 'x3').stackCount} coste=${coste} msg=${r2.msg ?? ''}`);
-    check('F26: y el T1 sigue entero aunque haya cinco',
-      find(g, 'x1').stackCount === 5, 'x1=' + find(g, 'x1').stackCount);
-  }
-  {
-    // Y un T por encima del último cristal se dice, no se degrada a "usa el T1".
-    // La forja infinita produce T11 y siguientes; mientras no haya cristal para
-    // ellos, la respuesta es que no hay cristal, y no una regla más blanda que
-    // dejara subir un T30 con un cristal de la tienda.
-    const g = await boot(baseSave([
-      crystal('x10', 10, 50),
       collector('r1', 12, { damage: 600, level: 0 })
-    ]));
+    ], { nanites: 0, crystals: costeDeNivel(12, 0) }));
     g.equipCollector('r1');
-    const r = g.upgradeEquippedCollector();
-    check('F26: un T12 sin cristal T12 se rechaza diciendo cuál falta',
-      r.success === false && r.rolled === false && /T12/.test(r.msg ?? ''),
-      `msg=${r.msg ?? ''}`);
-    check('F26: y no se gasta el cristal T10 que sí tiene',
-      find(g, 'x10').stackCount === 50, 'x10=' + find(g, 'x10').stackCount);
+    const r = conRoll(0, () => g.upgradeEquippedCollector());
+    check('F26: un T12 sí se afina, porque ya no hay techo de cristal',
+      r.success === true && find(g, 'r1').level === 1 && s(g).crystals === 0,
+      `nivel=${find(g, 'r1').level} crystals=${s(g).crystals} msg=${r.msg ?? ''}`);
+
+    // Y un T30, que es donde el tope viejo se notaba de verdad. Con lo que cuesta un
+    // intento de T1 no se llega ni a intentarlo, y eso también es parte del invariante.
+    const g30 = await boot(baseSave([
+      collector('r1', 30, { damage: 6000, level: 0 })
+    ], { nanites: 0, crystals: valorDeUnCristal(1) }));
+    g30.equipCollector('r1');
+    const r30 = g30.upgradeEquippedCollector();
+    check('F26: y un T30 con el presupuesto de un T1 se rechaza por caro, no por nivel',
+      r30.success === false && r30.rolled === false && /Necesitas/i.test(r30.msg ?? ''),
+      `msg=${r30.msg ?? ''} (un intento de T30 cuesta ${costeDeNivel(30, 0)})`);
+    check('F26: pero con su propio precio sí sube, que es lo que cambió',
+      (() => {
+        g30.updateState({ crystals: costeDeNivel(30, 0) });
+        const ok = conRoll(0, () => g30.upgradeEquippedCollector());
+        return ok.success === true && find(g30, 'r1').level === 1;
+      })(),
+      `nivel=${find(g30, 'r1').level}`);
   }
   {
     // F18: ABRIR VARIAS SEGUIDAS. El lote de la vista son N llamadas enteras a
@@ -872,14 +898,15 @@ async function main() {
     // comporten: cada una consume lo suyo, el contador sube N y todo
     // sobrevive a la recarga.
     //
-    // El material es de nivel 1, que es el nivel que anuncia la caja común, así
-    // que el botín de esa caja puede sumárselo por detrás y la cuenta no es
-    // exacta —por eso lo que se afirma de la pila es que nunca baja de lo que
-    // había, no una cifra fija. Las cajas sí pueden dar cajas, por eso de la pila
-    // de cajas tampoco se afirma una cuenta cerrada.
+    // La caja es de nivel 1, así que su fila de cristal suelta unidades de T1. El saldo
+    // arranca en 5 de esos y el botín puede sumárselo por detrás, así que lo que se
+    // afirma es que nunca baja de lo que había, no una cifra fija. Las cajas sí
+    // pueden dar cajas, por eso de la pila de cajas tampoco se afirma una cuenta
+    // cerrada.
     const g = await boot(baseSave([
-      crate('c1', 1, 3), crystal('x1', 1, 5)
-    ], { nanites: 0 }));
+      crate('c1', 1, 3)
+    ], { nanites: 0, crystals: 5 * valorDeUnCristal(1) }));
+    const crystalsAntes = s(g).crystals;
     const producidasAntes = s(g).totalNanitesProduced;
     const abiertasAntes = s(g).cratesOpened;
     const resultados = [g.openCrateBox('c1'), g.openCrateBox('c1'), g.openCrateBox('c1')];
@@ -889,23 +916,23 @@ async function main() {
     check('lote: el contador sube una por apertura, ni una más',
       s(g).cratesOpened === abiertasAntes + 3,
       `abiertas=${s(g).cratesOpened} antes=${abiertasAntes}`);
-    // LO QUE QUEDA DEL LOTE, Y POR QUÉ NO ES "UNA CAJA MENOS POR APERTURA".
+    // LO QUE QUEDA DEL LOTE, Y POR QUÉ EL SALDO NO ES UNA CIFRA FIJA.
     //
-    // La caja T1 suelta el cristal T1, así que cada apertura devuelve parte de lo
-    // que cuesta: abrir tres cajas con un solo material es legal, porque la
-    // segunda te devuelve parte de lo que gastó la primera. Y las cajas pueden dar
-    // cajas, así que el total de cajas del almacén al final no tiene por qué ser
-    // cero.
+    // Abrir una caja **no gasta cristal** —eso lo gasta la sintonización—, así que
+    // en principio el saldo solo puede subir. Lo que impide afirmar una cuenta
+    // cerrada es otro motivo: la fila de botín es la que toque en el sorteo, y si no
+    // es la de cristal el saldo no se mueve. Y las cajas pueden dar cajas, así que el
+    // total de cajas del almacén al final no tiene por qué ser cero.
     //
-    // **LO QUE NO PUEDE PASAR ES QUE LAS CUENTAS BAJEN.** Tres aperturas, tres
-    // cajas consumidas, y el material nunca por debajo de lo que había. Eso es lo
+    // **LO QUE NO PUEDE PASAR ES QUE EL SALDO BAJE.** Tres aperturas, tres cajas
+    // consumidas, y el saldo de cristal nunca por debajo de lo que había. Eso es lo
     // que se mide aquí.
     check('lote: la caja se gasta una por apertura, exacta',
       s(g).crates[1] === 0,
       `contador T1=${s(g).crates[1]} unidades=${find(g, 'c1')?.stackCount}`);
-    check('lote: y el material nunca baja de lo que había',
-      (find(g, 'x1')?.stackCount ?? 0) >= 5,
-      `x1=${find(g, 'x1')?.stackCount} (5 de partida, y las cajas solo pueden sumar)`);
+    check('lote: y el saldo de cristal nunca baja de lo que había',
+      s(g).crystals >= crystalsAntes,
+      `crystals=${s(g).crystals} (${crystalsAntes} de partida, y las cajas solo pueden sumar)`);
     check('lote: lo producido nunca baja entre aperturas',
       s(g).totalNanitesProduced >= producidasAntes,
       `producidas=${s(g).totalNanitesProduced} antes=${producidasAntes}`);
@@ -917,11 +944,11 @@ async function main() {
   {
     // Y la condición de parada del lote: sin cajas no hay apertura y no se
     // gasta nada. Es lo que hace que "se abrieron N de M" pare donde toca.
-    const g = await boot(baseSave([crystal('x1', 1, 1)]));
+    const g = await boot(baseSave([], { crystals: valorDeUnCristal(1) }));
     const r = g.openCrateBox('c1');
     check('lote: sin cajas se rechaza', !r.ok && !!r.msg, r.msg ?? '');
-    check('lote: y no se toca el material que hay', find(g, 'x1')?.stackCount === 1,
-      `x1=${find(g, 'x1')?.stackCount}`);
+    check('lote: y no se toca el saldo de cristal', s(g).crystals === valorDeUnCristal(1),
+      `crystals=${s(g).crystals}`);
   }
   {
     // Por debajo del umbral no se puede reciclar.
@@ -936,15 +963,16 @@ async function main() {
     const g = await boot(baseSave([
       crate('c1', 1, 2), crate('c2', 6, 1),
       collector('r1', 3), collector('r2', 3),
-      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 },
-      crystal('x1', 1, 5)
+      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 }
     ], {
       totalNanitesProduced: 50_000_000,
       nanites: 123_456,
+      crystals: 5 * valorDeUnCristal(1),
       cores: 7, totalCores: 12, resets: 3,
       nodeLevels: { core_sink: 2 }, unlockedNodes: ['core_sink'],
       unlockedAchievements: ['first_click'], forgedCount: 4, shards: 6
     }));
+    const crystalsAntes = s(g).crystals;
     const esperado = nextCores({
       totalNanitesProduced: 50_000_000, totalCores: 12, coreGain: s(g).bonus.coreGain
     });
@@ -966,8 +994,33 @@ async function main() {
     check('prestigio: se conservan las esquirlas', s(g).shards === 6, String(s(g).shards));
     // Lo unico que sobrevive al reinicio son las 2 cajas de bienvenida, y son UN
     // item apilado con 2 unidades: la capacidad se cuenta en ranuras.
-    check('prestigio: el almacen se recycle', deType(g, 'crate') === 1 && deType(g, 'crystal') === 0,
-      `cajas=${deType(g, 'crate')} cristales=${deType(g, 'crystal')}`);
+    //
+    // **EL CRISTAL NO ENTRA EN ESTA CUENTA, Y HAY QUE DECIR POR QUÉ.** La comprobación
+    // vieja era `deType(g, 'crystal') === 0`: que el material del almacén no
+    // sobrevive al Ascenso. Ese item ya no existe, así que lo que se afirma es que
+    // del almacén no queda nada de lo que había —los ids de los materiales, los
+    // recolectores y el compañero de la partida— y que tampoco hay item de cristal
+    // que se haya colado por una puerta vieja.
+    //
+    // Y el SALDO va en su propia línea porque es una decisión, no un olvido: el
+    // Ascenso reconstruye la partida desde el estado de partida nueva, y el cristal
+    // es un recurso como las nanitas —se gasta, se gana y no tiene ningún uso que
+    // sobreviva al Ascenso—, así que vuelve al valor de arranque en vez de quedarse
+    // con las 3 375 unidades que tenía.
+    //
+    // **ESTO ESTUVO MAL Y LA PRUEBA LO DIJO.** El motor escribía
+    // `upgradeCrystals: 5`, un campo que ya no leía nadie, en vez de tocar el saldo de
+    // verdad: ascendía, el contador nuevo ponía 5 y las unidades se quedaban. La
+    // aserción de al lado —"el Ascenso no recicla el saldo"— la recogía como si fuera
+    // intencionado. **No lo era: era el bug descrito en voz alta.** Por eso la prueba
+    // va contra el motor y no contra lo que el motor hacía.
+    check('prestigio: el almacen se recycle entero, y no queda ningun item de cristal',
+      deType(g, 'crate') === 1 && deType(g, 'crystal') === 0 &&
+      !find(g, 'r1') && !find(g, 'r2') && !find(g, 'm1'),
+      `cajas=${deType(g, 'crate')} cristales=${deType(g, 'crystal')} ids=${ids(g).join(',')}`);
+    check('prestigio: y el saldo de cristal vuelve al de arranque, como las nanitas',
+      s(g).crystals === 5 && crystalsAntes > 5,
+      `crystals=${s(g).crystals} antes=${crystalsAntes}`);
     check('prestigio: y son las 2 cajas de bienvenida, en una sola pila',
       s(g).crates[1] === 2 && deType(g, 'crate') === 1 &&
       wh(g).find((w: any) => w.type === 'crate')?.stackCount === 2,
@@ -1434,12 +1487,12 @@ async function main() {
     // dispara.
     const g = await boot(baseSave([
       collector('r1', 5, { damage: 100, level: 5 }),
-      crate('c1'), crate('c2'), crystal('x1', 1, 1),
+      crate('c1'), crate('c2'),
       consumable('u1', 'afk', 1, { name: 'Tarjeta AFK' })
-    ], { nanites: 0 }));
+    ], { nanites: 0, crystals: valorDeUnCristal(1) }));
     g.equipCollector('r1');
     for (let i = 0; i < 5; i++) g.click();
-    g.sellItem('x1');
+    g.sellItem('c1');
     g.useConsumable('u1');
     g.openCrateBox('c1');
     g.moveItems([find(g, 'r2')?.id ?? 'r1'], null);
@@ -1530,14 +1583,18 @@ async function main() {
       collector('r2', 3, { damage: 40 }),
       crate('c1', 1, 2),
       crate('c2', 6, 1),
-      crystal('x1', 1, 3),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Común', sellPrice: 100 }
     ], {
       nanites: 100_000,
+      // El cristal entra por `extra`, no por la lista: es un recurso y no se toca el
+      // almacén. La compra de abajo lo sube, y esa subida es lo que hay que ver
+      // llegar al documento.
+      crystals: 3 * valorDeUnCristal(1),
       companions: [ficha('m1')],
       maxCompanionSlots: 4
     }));
+    const crystalsAntes = s(g).crystals;
 
     g.equipCollector('r1');
     for (let i = 0; i < 10; i++) g.click();
@@ -1557,6 +1614,13 @@ async function main() {
       enMemoria === enDisco, enMemoria === enDisco ? '' : 'difieren');
     check('ciclo largo: nanites en memoria = nanitas guardadas',
       s(g).nanites === guardado().nanites, `${s(g).nanites} vs ${guardado().nanites}`);
+    // Y el cristal, que no se ve en el almacén: la compra de arriba lo sube, y lo que
+    // se afirma es que subió y que el documento se quedó con la cifra nueva. Un
+    // recurso que se gasta en memoria y no llega al documento se pierde en cada
+    // refresco, y el almacén no lo delataría porque no está en él.
+    check('ciclo largo: el cristal comprado llega al documento',
+      s(g).crystals > crystalsAntes && guardado().crystals === s(g).crystals,
+      `crystals=${s(g).crystals} (antes ${crystalsAntes}) documento=${guardado().crystals}`);
 
     const g2 = await reload();
     // QUÉ COMPARA Y POR QUÉ NO COMPARA MÁS. Antes comparaba el almacén entero con
@@ -1581,8 +1645,10 @@ async function main() {
     check('ciclo largo: recargar devuelve el mismo almacen',
       forma(wh(g2)) === forma(wh(g)),
       `g2=${forma(wh(g2))}\n       g=${forma(wh(g))}`);
-    check('ciclo longo: recargar devuelve los mismos nanites',
+    check('ciclo largo: recargar devuelve los mismos nanites',
       s(g2).nanites === s(g).nanites, `${s(g2).nanites} vs ${s(g).nanites}`);
+    check('ciclo largo: recargar devuelve el mismo saldo de cristal',
+      s(g2).crystals === s(g).crystals, `${s(g2).crystals} vs ${s(g).crystals}`);
     check('ciclo largo: recargar devuelve el mismo equipado',
       s(g2).equippedCollectorId === s(g).equippedCollectorId,
       `${s(g2).equippedCollectorId} vs ${s(g).equippedCollectorId}`);
@@ -1725,7 +1791,317 @@ async function main() {
       }) === 600_000, `forCores(1)=${nanitesForCores(1, 0)}`);
   }
 
-  resumen('estado, migracion y economia');
+  // ==========================================================================
+//  EL CRISTAL ES UN RECURSO
+// ==========================================================================
+//  LO QUE ESTE BLOQUE PROTEGE, Y POR QUÉ ES MÁS DE LO QUE PARECE
+//
+//  El cambio quita los diez niveles de cristal y los convierte en un número. Eso
+//  se puede hacer de veinte maneras distintas, y casi todas rompen algo sin que
+//  ningún banco se entere. Las cuatro cosas que de verdad importan:
+//
+//  1. QUE UNA CAJA T{n} DÉ LOS MISMOS INTENTOS DE MEJORA QUE DABA ANTES.
+//
+//     Es el invariante central. Antes la caja T{n} soltaba `rand(3n, 5n)`
+//     cristales de nivel n y cada cristal era **un intento**: la regla F26 obligaba
+//     a que fuera del nivel del item, y el coste no dependía del nivel. Ahora la
+//     caja suelta `rand(3n, 5n) × valorDeUnCristal(n)` unidades y un intento de
+//     nivel 0 sobre un item de nivel n cuesta `valorDeUnCristal(n)`.
+//
+//     Los dos lados llevan el mismo factor, así que se divide y queda lo mismo.
+//     **Y ESO SE COMPRUEBA EN LOS DIEZ NIVELES, NO EN UNO**: es exactamente el
+//     tipo de regla que puede estar bien en T1 y mal en T9 sin que nada lo diga.
+//
+//  2. QUE UN T10 CUESTE MUCHÍSIMO MÁS QUE UN T1.
+//
+//     Es lo que pidió el jugador, y no sale solo: sale de que el valor del cristal
+//     sea el precio de la caja de ese nivel, y los precios suben doscientas veces
+//     del T1 al T10.
+//
+//  3. QUE LA REDENCIÓN NO INVENTE NI UN CRISTAL.
+//
+//     Una partida vieja con 5 Cristales Primordiales tenía 5 intentos de mejora
+//     guardados. Si la redención los convierte en otra cosa, se le ha robado algo
+//     o le ha regalado algo. Y si se ejecuta dos veces, se lo ha hecho las dos.
+//
+//  4. QUE YA NO SEA UN ITEM.
+//
+//     No está en el almacén, no ocupa ranura, no se vende y no se puede
+//     Losing. Cada una de esas cuatro cosas tenía su propia función, y las cuatro
+//     se han ido en el mismo cambio que las ha hecho innecesarias.
+//
+//  LO QUE NO SE COMPRUEBA AQUÍ: que el botón de la tienda y el diálogo del
+//  almacén enseñen la misma cifra que el motor cobra. Eso es R3 y lo comprueban
+//  los bancos de vista; aquí lo que se comprueba es que la regla que ambos leen
+//  sea una sola.
+// ==========================================================================
+
+const NIVELES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+/**
+ * Cuántas unidades suelta una caja, tal y como lo calcula la tabla de botín.
+ *
+ * **SE MEDE CON 300 TIRADAS REALES, NO CON LA FÓRMULA.** La fórmula es
+ * `round(rand(3n, 5n) * valor)`, y repetirla aquí sería comparar la regla con
+ * ella misma. Lo que se hace es tirar la tabla de verdad, que es lo que ve el
+ * jugador, y quedarse con el rango.
+ */
+function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: number } {
+  const fila = CRATE_LOOT[tier].find((e: any) => e.id === 'crystals');
+  let min = Infinity;
+  let max = -Infinity;
+  let suma = 0;
+  const tiradas = 300;
+  for (let i = 0; i < tiradas; i++) {
+    // **`resolveLootAmount()` Y NO EL `build` A SECAS, Y POR QUÉ ES LA DIFERENCIA
+    // ENTRE UNA PRUEBA QUE MIDE Y UNA QUE NO.**
+    //
+    // `build()` da la cantidad de autor: `rand(3n, 5n) × valorDeUnCristal(n)`. El
+    // multiplicador de rareza —la escala de la que salen los números de la banda
+    // vieja— lo aplica `resolveLootAmount()`, que es lo que llama el sorteo cuando el
+    // jugador abre la caja. Medir el `build` es medir el 68 % de lo que el jugador se
+    // lleva, y por eso la banda no cuadraba.
+    //
+    // Se llama a la función del juego y no se rehace la cuenta a mano, que es lo que
+    // este kit prohíbe: el número sale del mismo sitio que sale cuando se abre una caja
+    // de verdad, así que si el multiplicador se rompe, se rompe en los dos sitios.
+    const p: any = resolveLootAmount(tier, fila.build({ ownedCosmetics: [] }) as any);
+    if (p.amount < min) min = p.amount;
+    if (p.amount > max) max = p.amount;
+    suma += p.amount;
+  }
+  return { min, max, medio: suma / tiradas };
+}
+
+// --- 1. EL INVARIANTE CENTRAL: los mismos intentos por caja ---------------------------
+{
+  // **POR QUÉ ESTA BANDA Y NO LA DE 3n A 5n.** Porque la del juego viejo no era esa.
+  //
+  // Antes la caja T{n} soltaba `rand(3n, 5n)` cristales **multiplicados por la rareza
+  // del premio**, que para el cristal era una escala propia —T4 y T5 Legendario, T8, T9
+  // y T10 Divino— y no la de la caja. O sea que los intentos por caja no eran
+  // 3n..5n sino 3n·m..5n·m, con m el multiplicador de la rareza.
+  //
+  // La primera versión de esta prueba puso la banda en 3n..5n y se pasaba. No porque
+  // el cambio fuera neutro, sino porque la banda era más estrecha que la de verdad:
+  // si el rango real es 3n·1,75..5n·1,75, comprobar 3n..5n es pedir menos de lo que
+  // hay, y una reducción del 20 % en el botín habría pasado sin quejarse.
+  //
+  // Y está escrita a mano a propósito: el multiplicador va como número, no como
+  // llamada a `RARITY_RANK`, porque si saliera de la misma tabla que usa el botín la
+  // prueba compararía la regla contra ella misma. Estos ocho números son los del
+  // juego de antes del cambio.
+  const RANGA_ANTES = [0, 1, 2, 3, 3, 4, 4, 5, 5, 5];
+  const MULTIPLICADOR_ANTES = RANGA_ANTES.map(r => 1 + r * 0.25);
+  const BANDA_ANTES: Array<[number, number]> = NIVELES.map(
+    (n, i) => [3 * n * MULTIPLICADOR_ANTES[i], 5 * n * MULTIPLICADOR_ANTES[i]]
+  );
+
+  const filas: string[] = [];
+  const fuera: string[] = [];
+
+  for (const n of NIVELES) {
+    const { min, max, medio } = unidadesDeUnaCaja(n);
+    // Una caja da tantos intentos como unidades / lo que cuesta un intento de nivel 0.
+    const intentosMin = min / valorDeUnCristal(n);
+    const intentosMax = max / valorDeUnCristal(n);
+
+    // El mínimo y el máximo tienen que caer **dentro** de la banda vieja, y no
+    // rozarla: la banda viene de un `Math.round` y de una división por
+    // `valorDeUnCristal()`, así que el mismo número puede salir 26,25 por un lado y
+    // 26,249999… por el otro. Sin medio de holgura la prueba falla por aritmética de
+    // coma flotante, que es la peor forma de que una prueba falle porque un día
+    // avisa de un problema donde no lo hay y nadie la vuelve a mirar.
+    const [lo, hi] = BANDA_ANTES[n - 1];
+    if (intentosMin < lo - 0.6 || intentosMax > hi + 0.6) {
+      fuera.push(`T${n}: da ${intentosMin.toFixed(1)}-${intentosMax.toFixed(1)} intentos, banda ${BANDA_ANTES[n - 1][0]}-${BANDA_ANTES[n - 1][1]}`);
+    }
+    filas.push(`T${n}: ${formatNumber(medio)} unidades = ${(medio / valorDeUnCristal(n)).toFixed(1)} intentos`);
+
+    // Y la rareza del botín es el otro medio de la cuenta, así que también se
+    // comprueba contra el número de antes y no contra el que hay ahora. Es la misma
+    // lista a mano que la banda, y por el mismo motivo: sale de la rareza del
+    // multiplicador, así que pedirla a `RARITY_RANK` sería preguntarle al código lo
+    // que el código acaba de decidir.
+    const fila = CRATE_LOOT[n].find((e: any) => e.id === 'crystals');
+    const rareza: string = (fila.build({} as any) as any).rarity;
+    if (RARITY_RANK[rareza] !== RANGA_ANTES[n - 1]) {
+      fuera.push(`T${n}: la rareza del botín es ${rareza}, y era el rango ${RANGA_ANTES[n - 1]}`);
+    }
+  }
+
+  check('cristal: una caja da los MISMOS intentos de mejora que antes, en los diez niveles',
+    fuera.length === 0, fuera.join(' | ') || filas.join(' | '));
+}
+
+// --- 2. UN T10 CUESTA MUCHÍSIMO MÁS QUE UN T1 ----------------------------------------
+{
+  const t1 = costeDeNivel(1, 0);
+  const t10 = costeDeNivel(10, 0);
+  // Más de cien veces. El mínimo razonable con estos precios es "más de cien"; se
+  // pone ese y no "más de doscientas" porque el número exacto depende del redondeo
+  // y lo que se quiere sujetar es la orden de magnitud, no la cifra.
+  check('cristal: un T10 cuesta más de cien veces lo que un T1',
+    t10 > t1 * 100,
+    `T1=${t1} T10=${t10} ratio=${(t10 / t1).toFixed(1)}`);
+
+  // Y el precio de cada nivel sale del precio de la caja de ese nivel: eso es lo que
+  // hace que un intento de T10 valga lo mismo que una caja T10.
+  let anclado = true;
+  const desvio: string[] = [];
+  for (const n of NIVELES) {
+    const esperado = costeDeCaja(n);
+    const real = costeDeNivel(n, 0);
+    if (real !== esperado) { anclado = false; desvio.push(`T${n}: ${real} != ${esperado}`); }
+  }
+  check('cristal: y un intento cuesta lo mismo que una caja de su nivel',
+    anclado, desvio.join(' | ') || `${NIVELES.length} niveles`);
+
+  // **LA CURVA SIGUE SUBIENDO CON EL NIVEL**, que es lo que hace que subir un item
+  // al tope sea una pregunta y no un trámite. Sin esto, `costeDeNivel(1, n)` sería
+  // constante y todos los items del juego costarían lo mismo.
+  let sube = true;
+  for (let k = 0; k < 10; k++) {
+    if (costeDeNivel(5, k + 1) <= costeDeNivel(5, k)) sube = false;
+  }
+  check('cristal: y el coste de un mismo item sube con su nivel',
+    sube, [0, 1, 5, 10, 20].map((k) => `n${k}=${costeDeNivel(5, k)}`).join(' '));
+}
+
+// --- 3. LA PROBABILIDAD, Y LO QUE SE PIERDE CON ELLA ---------------------------------
+{
+  // Es la consecuencia de "un recurso", escrita como prueba para que no se lea como
+  // un descuido: **la sintonización es determinista dado el nivel**.
+  check('cristal: la probabilidad depende solo del nivel, y sube el doble en el 0 que en el 20',
+    chanceDeSintonizacion(0) === 95 && chanceDeSintonizacion(20) === 35,
+    `n0=${chanceDeSintonizacion(0)} n20=${chanceDeSintonizacion(20)}`);
+
+  // Y nunca hay fallo garantizado, ni acierto garantizado: el suelo del 35 % y el
+  // techo del 95 % son los dos extremos, y están puestos a propósito.
+  const extremos = [0, 5, 10, 15, 20, 30, 99].map((k) => chanceDeSintonizacion(k));
+  check('cristal: nunca hay fallo ni acierto garantizado, en ningún nivel',
+    extremos.every((p) => p >= 35 && p <= 95), extremos.join(','));
+}
+
+// --- 4. LA REDENCIÓN: NI UN CRISTAL INVENTADO, NI UNO DESTRUIDO ----------------------
+{
+  // **5 Cristales Primordiales eran 5 intentos de nivel 0 sobre un T10.** Y eso es lo
+  // que tienen que ser después. La comprobación se hace en **intentos**, no en
+  // unidades, porque en unidades el número es 726.940 y no dice nada.
+  const g = await boot(baseSave([
+    crystalViejo('x1', 10, 5),
+    crystalViejo('x2', 1, 3)
+  ]));
+
+  const unidades: number = g.getState().crystals;
+  const esperado = 5 * valorDeUnCristal(10) + 3 * valorDeUnCristal(1);
+
+  check('redencion: las pilas viejas se convierten por lo que valian',
+    unidades === esperado,
+    `unidades=${unidades} esperado=${esperado}`);
+
+  check('redencion: y en intentos de mejora son los mismos que antes',
+    Math.floor(unidades / valorDeUnCristal(10)) === 5 &&
+    Math.floor(unidades / valorDeUnCristal(1)) >= 5,
+    `T10=${Math.floor(unidades / valorDeUnCristal(10))} intentos · vale ${Math.floor(unidades / valorDeUnCristal(1))} intentos de T1`);
+
+  // **Y NO QUEDA NI UN CRISTAL EN EL ALMACÉN.** Si quedara, sería un objeto que ocupa
+  // una ranura y no tiene ningún botón, que es justo lo que dice el comentario de la
+  // redención.
+  const quedan = (wh(g) as any[]).filter((w: any) => w.type === 'crystal');
+  check('redencion: y no queda ninguno en el almacen',
+    quedan.length === 0, `quedan=${quedan.length}`);
+
+  // **Y NO SE PAGA DOS VECES.** La redención es idempotente porque las pilas
+  // desaparecen; si se ejecutara en cada carga, el saldo subiría en cada recarga.
+  const guardado: any = JSON.parse(JSON.stringify(g.getState()));
+  const g2 = await boot(guardado);
+  check('redencion: recargar no paga otra vez',
+    (g2.getState().crystals as number) === unidades,
+    `antes=${unidades} despues=${g2.getState().crystals}`);
+
+  // Y una partida nueva, sin pilas, no recibe nada. Si recibiera, el motor estaría
+  // dando un cristal gratis a todo el mundo.
+  const g3 = await boot(baseSave([], { crystals: 0 }));
+  check('redencion: una partida sin cristales no recibe nada',
+    (g3.getState().crystals as number) === 0,
+    `crystals=${g3.getState().crystals}`);
+}
+
+// --- 5. YA NO ES UN ITEM -------------------------------------------------------------
+{
+  const g = await boot(baseSave([collector('r1', 3), crystalViejo('x1', 3, 2)]));
+  const estado: any = g.getState();
+
+  // No está en el almacén.
+  check('cristal: no hay ningun item de cristal en el almacen',
+    (estado.warehouse as any[]).filter((w: any) => w.type === 'crystal').length === 0,
+    'quedan=' + (estado.warehouse as any[]).filter((w: any) => w.type === 'crystal').length);
+
+  // Y **el número no depende de lo que hubiera en el almacén**, porque no se cuenta
+  // el almacén: es un contador. Eso se ve comparando dos partidas con el mismo
+  // `crystals` y almacenes distintos.
+  const a = await boot(baseSave([], { crystals: 5000 }));
+  const b = await boot(baseSave([collector('r1', 3)], { crystals: 5000 }));
+  check('cristal: el saldo no se deriva del almacen',
+    a.getState().crystals === 5000 && b.getState().crystals === 5000,
+    `${a.getState().crystals} / ${b.getState().crystals}`);
+
+  // Y **no ocupa ranura**, que era la consecuencia de que fuera un item: comprar en
+  // la tienda con el almacén lleno tiene que funcionar.
+  const lleno = await boot(baseSave(
+    [...Array.from({ length: 30 }, (_, i) => collector('c' + i))],
+    { nanites: 10_000_000, warehouseCapacity: 30, crystals: 0 }
+  ));
+  const cabeAntes = lleno.getState().warehouse.length >= lleno.getCapacity();
+  const compra: any = lleno.buyStoreItem('upgradeCrystal');
+  check('cristal: y comprar cristales con el almacen lleno funciona',
+    cabeAntes && compra !== false && (lleno.getState().crystals as number) > 0,
+    `items=${lleno.getState().warehouse.length}/${lleno.getCapacity()} crystals=${lleno.getState().crystals} compra=${JSON.stringify(compra)}`);
+
+  // **Y LO QUE ENTREGA CADA UNIDAD COMPRADA ES UN INTENTO DE T1**, que es lo mismo
+  // que entregaba antes. Con la caja T1 a 675 y la carta a 200, 675 nanitas en la
+  // tienda dan lo mismo que una caja: las dos cosas dan 3-5 intentos.
+  const coste = STORE_ITEMS.upgradeCrystal.cost;
+  check('cristal: y la tienda entrega los mismos intentos que antes',
+    Math.floor(valorDeUnCristal(1) / coste) === Math.floor(675 / coste) &&
+      (lleno.getState().crystals as number) >= valorDeUnCristal(1),
+    `carta=${coste} entrega=${valorDeUnCristal(1)} por unidad · ${(valorDeUnCristal(1) / coste).toFixed(1)} intentos por caja de 675`);
+}
+
+// --- 6. LA FORJA DEJA CRISTALES CUANDO FALLA, Y VALEN LO QUE VALÍAN ---------------------
+{
+  // El consuelo de un fallo da `2 + n` **intentos**, no unidades. La comprobación es
+  // en intentos a propósito: en unidades el número sería `12 × 145.388` y no diría nada
+  // de si el fallo sigue compensando.
+  const conTier = async (tier: number) => {
+    const g = await boot(baseSave([
+      collector(`a${tier}`, tier, { potential: 3, damage: 100 }),
+      collector(`b${tier}`, tier, { potential: 3, damage: 100 })
+    ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+    const r: any = conRoll(0.999, () => g.forgeCollector([`a${tier}`, `b${tier}`]));
+    const c: number = g.getState().crystals;
+    return { intentos: c / valorDeUnCristal(tier), unidades: c, r };
+  };
+
+  const t1 = await conTier(1);
+  const t10 = await conTier(10);
+  check('forja: el fallo deja los mismos intentos que antes, en los dos extremos',
+    Math.round(t1.intentos) === 3 && Math.round(t10.intentos) === 12,
+    `T1=${t1.intentos.toFixed(1)} intentos · T10=${t10.intentos.toFixed(1)} intentos`);
+
+  // Y el acierto no deja nada, que si no la ruleta sería una máquina de imprimir
+  // cristales.
+  const g = await boot(baseSave([
+    collector('a', 3, { potential: 3, damage: 100 }),
+    collector('b', 3, { potential: 3, damage: 100 })
+  ], { nanites: 0, warehouseCapacity: 40, shards: 0, crystals: 0 }));
+  conRoll(0.001, () => g.forgeCollector(['a', 'b']));
+  check('forja: el acierto NO deja cristales de consuelo',
+    (g.getState().crystals as number) === 0,
+    `crystals=${g.getState().crystals}`);
+}
+resumen('estado, migracion y economia');
 }
 
 export default main();

@@ -45,7 +45,7 @@ import {
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
 import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
-import { collectorUpgradeCost } from './data/crafting';
+import { costeDeNivel, valorDeUnCristal } from './data/crafting';
 
 // Se re-exportan las que el resto del juego ya importaba de aquí, con el mismo
 // motivo que `TIER_SYSTEM` unas líneas más arriba: romper diez imports de golpe
@@ -54,7 +54,7 @@ import { collectorUpgradeCost } from './data/crafting';
 // llegar al motor.
 export { STORE_ITEMS, CRATE_TYPES, COLLECTOR_BASE_COSTS, COMPANION_SLOT_COSTS };
 export { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS };
-export { collectorUpgradeCost };
+export { costeDeNivel, valorDeUnCristal };
 export type { CrateType, BuffKey };
 
 /**
@@ -69,19 +69,25 @@ export type { CrateType, BuffKey };
  * haría es abrir una segunda puerta a la misma regla: alguien lo tocaría creyendo
  * que es la fuente, y no lo es.
  */
-export function previewUpgradeChance(level: number, crystalPower: number): number {
-  return crystalSuccessChance(level, crystalPower);
+export function previewUpgradeChance(level: number): number {
+  return chanceDeSintonizacion(level);
 }
 
 /**
- * Coste de la sintonización al nivel dado, en unidades de cristal.
+ * Coste de la sintonización, en unidades del recurso de cristal.
  *
  * Igual que el anterior: el juego cobra esto, la vista lo enseña. Duplicar el
  * cálculo en la interfaz sería una forma de que el botón dijera una cifra y el
  * cobro otra.
+ *
+ * **Y POR QUÉ AHORA NECESITA EL TIER.** Antes no lo necesitaba porque el coste era
+ * el mismo para todos los items: el nivel del cristal, no el del item, era lo que se
+ * pagaba. Con un solo cristal el nivel del item **es** el eje del precio, así que una
+ * función de un solo argumento sería media regla: la vista no podría enseñar el
+ * botón sin saber qué item tiene delante, y acabaría enseñando el coste de otro.
  */
-export function previewUpgradeCost(level: number): number {
-  return collectorUpgradeCost(level);
+export function previewUpgradeCost(tier: number, level: number): number {
+  return costeDeNivel(tier, level);
 }
 // `KeyDef` y `CrystalDef` se importaban aquí y ya no se usan: el precio de
 // reventa del material salía de `def.cost`, y al salir de `STORE_ITEMS` se han
@@ -95,9 +101,7 @@ export function previewUpgradeCost(level: number): number {
 // migración: si algún día se borra la redención, este import se puede borrar con
 // ella —y no antes.
 import {
-  CRYSTAL_DEFS,
-  MAX_CRYSTAL_TIER, crystalTierFromName,
-  crystalSuccessChance, crystalPowerFromName, keyTierFromName
+  CRISTAL_NOMBRE, crystalTierFromName, chanceDeSintonizacion, keyTierFromName
 } from './data/items';
 
 
@@ -105,6 +109,13 @@ import {
 // bloqueaba la partida por un mensaje informativo. Ahora es un toast no bloqueante.
 
 // Las migraciones se anotan de más nueva a más vieja.
+//
+// La 10 es la de la **redención de los cristales**. Los cristales dejan de ser items
+// con diez niveles y pasan a ser un recurso, un número, como las nanitas. Una
+// partida vieja tiene pilas de cristal en el almacén con su nivel, y hay que
+// convertirlas en unidades **por lo que valían**: un cristal de nivel n valía un
+// intento de subida y ahora un intento cuesta `valorDeUnCristal(n)`, así que la
+// conversión es exacta. Está junto a la de las llaves, y por el mismo motivo.
 //
 // La 9 es la de la **redención de las llaves**. Una partida guardada antes de
 // quitarlas tiene llaves en el almacén, y en el mejor de los casos muchas: la
@@ -139,7 +150,7 @@ import {
 //
 // Un número que hay que ir a cambiar a mano en dos sitios es un número que algún
 // día se cambia en uno y se olvida del otro.
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /**
  * Tope de seguridad de celdas de hueco guardadas.
@@ -452,7 +463,7 @@ export async function createGameLoop(
       banner: 'banner_none',
       unlocked: ['title_default', 'frame_none', 'banner_none'] as string[]
     },
-    upgradeCrystals: 5,
+    crystals: 5,
     warehouseCapacity: 15,
     maxCompanionSlots: 1,
     // Ids de items delante de los cuales el jugador ha dejado un hueco. Ver
@@ -464,11 +475,11 @@ export async function createGameLoop(
     afkExpiresAt: 0, // Tiempo de expiración del buff AFK (10 min por tarjeta)
     // F31 · Diez niveles, todos a cero menos el T1, que es la caja de arranque.
     crates: { ...contadorDeCajasVacio(), 1: 2 },
-    // Contadores DERIVADOS del almacén. Los calcula `syncMaterialCounters()`.
-    // Se guardan porque el árbol de pasivas los lee y porque las partidas
-    // viejas los traen; nunca son la fuente de verdad.
-    crystalsByTier: { 1: 5 } as Record<number, number>,
-    crystalTotal: 5,
+    // El cristal ya no tiene contadores derivados: **es un número**, como las
+    // nanitas. Antes eran tres cosas —`crystalsByTier` (diez cubos), `crystalTotal` y
+    // `upgradeCrystals`— y los tres los recalculaba `syncMaterialCounters()` a partir
+    // de los items del almacén. Con un recurso no hay de dónde derivar: el número ES
+    // la verdad, y por eso no hay nada que pueda desincronizarse.
     // **LOS DOS ITEM DE PARTIDA VAN EQUIPADOS DE ORIGEN.** Antesepersiana
     // equiparlos, y el efecto era que un jugador nuevo veía su recolector y su
     // compañero en el almacén, sin puesta ninguna, sin ingreso y sin un botón que
@@ -797,7 +808,26 @@ const NO_OCUPA_RANURA = ['companionSlot1', 'companionSlot2', 'companionSlot3'];
  */
 function cabeLaCompra(itemKey: string, unidades = 1): boolean {
   if (NO_OCUPA_RANURA.includes(itemKey)) return true;
-  return cabeEnAlmacen(previewStoreItem(itemKey), unidades);
+  const item = previewStoreItem(itemKey);
+  // **UNA CARTA QUE NO CREA UN ITEM NO PIDE RANURA, Y ESTA ES LA REGLA, NO UN
+  // CASO SUELTO.** `previewStoreItem` devuelve `null` exactamente cuando la carta
+  // no mete nada en el almacén, así que la pregunta "¿cabe?" no tiene a qué
+  // aplicarse y la respuesta correcta es que sí, siempre.
+  //
+  // El caso que había era la carta del cristal: antes creaba un item apilable y
+  // llenaba el almacén, y ahora suma unidades a `state.crystals`. Sin esta línea,
+  // `cabeEnAlmacen(null, n)` caía en `isStackable(null) === false` y comparaba las
+  // ranuras ocupadas con la capacidad, así que **con el almacén lleno la compra
+  // se rechazaba**: el mismo bug que Justificó quitar el item, reproducido por la
+  // puerta de atrás. Un jugador con el almacén lleno se quedaba sin poder comprar
+  // el material que necesita para subir de nivel.
+  //
+  // Y se escribe como regla y no como `if (itemKey === 'upgradeCrystal')` porque la
+  // siguiente carta que sea un recurso ——y la habrá—— hereda la respuesta correcta
+  // sin tener que acordarse de venir aquí. Una lista de excepciones obliga a
+  // recordar; una regla, no.
+  if (!item) return true;
+  return cabeEnAlmacen(item, unidades);
 }
 
 /**
@@ -833,7 +863,15 @@ function previewStoreItem(itemKey: string): any {
   // El nivel de la llave sale de la carta, igual que en `buyStoreItem`. Con
   // `STORE_MATERIAL_TIER` fijo aquí, la preview anunciaba nivel 0 mientras la
   // compra creaba nivel 1: botón encendido y compra rechazada (R3).
-  if (itemKey === 'upgradeCrystal') return { type: 'crystal', name: CRYSTAL_DEFS[STORE_MATERIAL_TIER].name, stackable: true };
+  // **EL CRISTAL NO DEVUELVE NADA AQUÍ, Y ES LA CONSECUENCIA DE QUE SEA UN RECURSO.**
+  // Esta función responde "qué item crea esta carta", y la del cristal es "ninguno":
+  // la carta suma unidades a `state.crystals`. Antes devolvía un item apilable, y por
+  // eso comprar cristales **pedía hueco en el almacén**, que es absurdo: un jugador
+  // con las cuatrocientas ranuras llenas no podía comprar el material que necesita
+  // para subir de nivel.
+  //
+  // Devolver `null` es lo que esta función dice cuando una carta no crea un item, así
+  // que no hace falta un caso especial.
   // F31 · Una sola carta de caja, `crateT1`. Antes el `if` era "cualquier cosa que
   // acabe en Crate y cuyo nombre sea una caja conocida", lo que servía para cuatro
   // cartas y con diez cajas habría servido para cuatro también, en silencio.
@@ -870,19 +908,23 @@ function consumeWarehouseItem(itemId: string, amount = 1): number {
 }
 
 /**
- * Añade N cristales del nivel indicado.
+ * Suma unidades de cristal al recurso.
  *
- * Si el almacén tiene hueco se mete un item apilado; si está lleno, el botín
- * se pierde. Se avisa por consola porque es el momento donde el jugador pierde
- * algo sin haberlo decidido, y no hay dónde ponerlo en un aviso en pantalla.
+ * **UNA SOLA FUNCIÓN Y UN SOLO ARGUMENTO, Y ANTES HABÍA DOS PARA EL MISMO EFECTO.**
+ * Antes había `grantKeys()` y `grantCrystals()`, las dos encima de un
+ * `grantMaterial(kind, tier, amount)` que acababa en `createMaterialItem()`. Las
+ * llaves se han ido; queda la otra mitad, sin la mitad del código de la otra mitad.
  *
- * **ESTE ERA EL PUNTO DE ENTRADA DE LAS LLAVES Y AHORA ES EL DE LOS CRISTALES
- * SOLOS.** No se ha creado una función nueva al quitar las llaves: se ha quitado
- * una mitad de la que ya existía. La otra mitad, el cristal, es la que compra la
- * tienda y la que sueltan las cajas, así que sigue teniendo dos llamadores.
+ * **YA NO HAY NIVEL QUE RECIBIR, PORQUE EL RECURSO NO TIENE NIVEL.** Quien llama
+ * convierte antes: la caja multiplica por `valorDeUnCristal()` al tirar, y la
+ * forja también. Aquí solo se suma, y un número que se suma es difícil de equivocar.
+ *
+ * Y **el almacén ya no puede estar lleno**, que era el motivo por el que esta función
+ * tenía un aviso por consola: un recurso no ocupa ranura.
  */
-function grantCrystals(tier: number, amount: number) {
-  grantMaterial(tier, amount);
+function grantCrystals(units: number) {
+  if (!Number.isFinite(units) || units <= 0) return;
+  state.crystals += Math.round(units);
 }
 
 /**
@@ -894,123 +936,45 @@ function grantCrystals(tier: number, amount: number) {
  * se ve a otro por su nombre: habría que escribir `this.unlockCosmetic`, y
  * `this` no existe dentro de una función que se pasa como callback. Con la
  * función aparte, los dos caminos llaman a la misma y no pueden divergir.
+ *
+ * **Y ESTA FUNCIÓN SE PERDIÓ UNA VEZ EN ESTE MISMO CAMBIO, POR ESO ESTÁ AQUÍ.**
+ * El corte que borró el bloque del material buscaba el cierre de
+ * `syncMaterialCounters()` aceptando una llave a dos espacios, y se paró en el
+ * `  });` de un `forEach`. Como consequence pilló de más y **esta función quedó
+ * fuera**, junto con media docena de la carga. Lo que se vio fueron 536 errores de
+ * "cannot find name" que no tenían nada que ver con los cristales, y que se
+ * tardaron tres pasadas de scripts en encontrar.
+ *
+ * El arreglo no fue mirar el fichero, sino **reaplicar los cambios de uno en uno
+ * desde HEAD comprobando `tsc` con cada uno**, porque un error de sintaxis no
+ * señala el sitio donde se cometió el error: señala el final del fichero.
  */
 function desbloquearCosmetico(cosmeticId: string): boolean {
   if (state.cosmetics.unlocked.includes(cosmeticId)) return false;
   state.cosmetics.unlocked.push(cosmeticId);
   return true;
 }
-
-function grantMaterial(tier: number, amount: number) {
-  if (amount <= 0) return;
-
-  const item = createMaterialItem(tier);
-  item.stackCount = amount;
-
-  if (!addToWarehouse(item)) {
-    console.warn('[inventario] Sin hueco en el almacén: se pierden ' + amount + ' x cristal T' + tier + '.');
-  }
-}
-
-/**
- * Crea un item de cristal listo para el almacén.
+/*
+ * BORRADO ENTERO DE ESTE FICHERO, Y POR QUÉ NO QUEDA NI UNA LÍNEA DE MATERIAL
  *
- * Vive aquí y no en `data/items.ts` porque necesita un id único y un precio de
- * reventa, y el precio depende de `STORE_ITEMS`, que está en este archivo. La
- * tabla de niveles y probabilidades sí está en `data/items.ts`.
+ * · `grantMaterial()` y `createMaterialItem()`. El camino del cristal como item.
+ * · `precioReventaMaterial()`. Reapareció durante el cambio de las llaves, cuando
+ *   `key` y `crystal` compartían función, y se va con el cristal: **un recurso no
+ *   tiene precio de reventa**, porque no se vende. No se ha dejado ni convertida en
+ *   un caso especial.
+ * · `syncMaterialCounters()`. La que recountaba el almacén cada vez que algo tocaba
+ *   el material, en cinco sitios distintos. Existía porque el almacén era la fuente
+ *   de verdad y los contadores una vista; con un recurso **no hay vista que
+ *   mantener**, y una función que calcula un número que ya está en `state.crystals`
+ *   es un sitio más donde pueden discrepar.
+ * · El aviso por consola de "se pierden N cristales sin hueco". El almacén lleno ya
+ *   no puede afectar a un recurso, así que el caso que lo justificaba ya no existe.
  *
- * **LO QUE ESTA FUNCIÓN YA NO PIDE ES EL TIPO, Y POR QUÉ.** Antes tenía un
- * `kind: 'key' | 'crystal'` y una rama por tipo, con el prefijo del id y el
- * `type` del item saliendo de ahí. Con un solo tipo eso son dos sitios donde
- * escribir la misma palabra dos veces, y el día que saliera un tercero habría
- * que acordarse de las dos. El `'crystal'` va escrito.
+ * **LO QUE SE CONSERVA, Y ES POR QUÉ ESTE FICHERO SIGUE TENIENDO UN HUECO AQUÍ:**
+ * la redención de los items de cristal de una partida vieja, más abajo, que necesita
+ * `crystalTierFromName()` para saber qué nivel tenía cada pila. Cuando esa
+ * migración se borre, `items.ts` se queda sin niveles de cristal también.
  */
-function createMaterialItem(tier: number): any {
-  const def = CRYSTAL_DEFS[tier];
-  const sellPrice = precioReventaMaterial();
-
-  return {
-    id: `crystal_t${tier}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    name: def.name,
-    type: 'crystal',
-    details: def.details,
-    rarity: def.rarity,
-    // El nivel viaja en el item para poder ordenar y filtrar sin releer el
-    // nombre. Las partidas viejas no lo tienen: se rellena al migrar.
-    tier,
-    sellPrice,
-    stackable: true,
-    stackCount: 1
-  };
-}
-
-/**
- * Lo que se recupera al vender un cristal.
- *
- * Una cuarta parte del precio de la carta de la tienda, que es la MISMA cuenta
- * que ya usan las cajas, los consumibles y las cartas de compañero y recolector
- * (`Math.floor(cost / 4)`). Material, cajas y consumibles son lo mismo: cosas
- * que se gastan. Por eso comparten la regla, y por eso comprar y vender nunca
- * sale rentable.
- *
- * POR QUÉ NO SALE DE `CRYSTAL_DEFS`, QUE ES DONDE ESTÁN LOS PRECIOS. Porque en esa
- * tabla `cost` es `null` para todo lo que no se vende en la tienda, y el material
- * que suelta una caja es justo eso. Con un número inventado en el `??` pasaba esto:
- *
- *   - Cristal comprado por 60, revendido por 4.320.  +4.260 por operación.
- *
- * Eso no es un desajuste de balance: es una máquina de imprimir nanitas
- * comprando y vendiendo en bucle, sin límite y sin ganar nada. Y ningún banco lo
- * veía, porque `buyCheck` comprueba que el botón y el cargo coincidan —que es otra
- * cosa— y no que vender un item sea una pérdida.
- *
- * El precio de venta tampoco sale de aquí, y a propósito: el juego ya sabe lo
- * que el jugador pagó, porque lo acaba de restar. Lo que no puede saber es de
- * dónde vino un item que no compró, y por eso la reventa es una propiedad del
- * item y no un recuerdo de su procedencia.
- */
-function precioReventaMaterial(): number {
-  const precio = STORE_ITEMS.upgradeCrystal.cost;
-  if (!precio) return 0;
-  return Math.floor(precio / 4);
-}
-
-/**
- * Cuenta el almacén por tipo de material y reconstruye los contadores.
- *
- * Los contadores `state.upgradeCrystals` y `state.crystalsByTier` ya no son la
- * fuente de verdad —lo es el almacén—, pero se siguen manteniendo porque el árbol
- * de pasivas y las compras los leen, y porque las partidas viejas los traen.
- *
- * Convivir con un valor desincronizado es exactamente el bug que había con las
- * cajas, así que aquí NO hay conversión de "huérfanos a items": si el contador
- * dice más de lo que hay en el almacén, se ajusta el contador. El almacén gana
- * siempre.
- */
-function syncMaterialCounters() {
-  const crystalByTier: Record<number, number> = {};
-  let crystalTotal = 0;
-
-  state.warehouse.forEach((w: any) => {
-    if (w.type === 'crystal') {
-      const t = typeof w.tier === 'number' ? w.tier : 1;
-      crystalByTier[t] = (crystalByTier[t] || 0) + (w.stackCount || 1);
-      crystalTotal += (w.stackCount || 1);
-    }
-  });
-
-  state.crystalsByTier = crystalByTier;
-
-  // El cristal básico es el único que se compra, así que es el que se gasta en
-  // las sintonizaciones: los superiores son de premio y el jugador elige.
-  state.upgradeCrystals = crystalByTier[1] || 0;
-  state.crystalTotal = crystalTotal;
-
-  // Rellena el campo `tier` de los items guardados antes de que existiera.
-  state.warehouse.forEach((w: any) => {
-    if (w.type === 'crystal' && typeof w.tier !== 'number') w.tier = crystalTierFromName(w.name || '');
-  });
-}
 
 /**
  * LA REDENCIÓN DE LAS LLAVES, Y POR QUÉ NO SE BORRAN.
@@ -1165,7 +1129,19 @@ const AFK_THRESHOLD_MS = 60000;
       state.unlockedAchievements = data.unlockedAchievements ?? [];
       state.totalInfraestructure = data.totalInfraestructure ?? 0;
       state.cratesOpened = data.cratesOpened ?? 0;
-      state.upgradeCrystals = data.upgradeCrystals ?? 5;
+      // **EL CRISTAL SE CARGA DEL CAMPO NUEVO, Y SI NO ESTÁ, DE LA PARTIDA VIEJA.** Una
+  // partida de antes no tiene `crystals`: tiene `crystalTotal` y diez cubos. La
+  // redemption de más abajo convierte las pilas del almacén, y aquí solo se recurre a
+  // los contadores viejos **para una partida que no tuviera ni una sola pila**, que es
+  // el caso de las partidas más antiguas, las de antes de que el material fuera item.
+  //
+  // **Y NO SE SUMAN LOS DOS.** Sumar el contador y las pilas sería darle el doble: el
+  // almacén es la fuente de verdad siempre que tenga algo, y el contador solo cuando
+  // el almacén está vacío.
+  const hayPilasDeCristal = (data.warehouse as any[]).some((w: any) => w.type === 'crystal');
+  state.crystals = typeof data.crystals === 'number'
+    ? data.crystals
+    : (hayPilasDeCristal ? 0 : (data.crystalTotal ?? data.upgradeCrystals ?? 5));
       state.warehouseCapacity = data.warehouseCapacity ?? 15;
       state.maxCompanionSlots = data.maxCompanionSlots ?? 1;
       // F31 · EL CONTADOR DE CAJAS PASA DE CUATRO NOMBRES A DIEZ NIVELES.
@@ -1319,50 +1295,24 @@ const AFK_THRESHOLD_MS = 60000;
        * migración es de un tipo solo y su nombre de "material" describe exactamente
        * lo que queda: el cristal.
        */
-      let materialNeedsMigration = false;
-
-      /**
-       * Cuántas unidades de un material HAY ya en el almacén, por nivel.
+      /*
+       * BORRADA: LA MIGRACIÓN DE LOS CONTADORES DE MATERIAL.
        *
-       * Es lo que hace que esta migración no se ejecute en cada arranque. La
-       * migración es para partidas viejas, donde el contador era un número suelto
-       * sin ningún item detrás. En una partida que YA tiene items de llave, el
-       * contador y el almacén dicen lo mismo, y materializar el contador entero
-       * cada vez que se carga metía un item más por unidad: recargar la página
-       * duplicaba las llaves, y a la tercera recarga el almacén estaba lleno de
-       * llaves que el jugador nunca pidió. Con los cristales, igual.
+       * Convertía `data.upgradeCrystals` y `data.crystalsByTier` —contadores sueltos
+       * de partidas antiguas— en items del almacén. Existía porque el material era un
+       * item y el almacén era la fuente de verdad.
        *
-       * Lo que hay que materializar es la DIFERENCIA entre lo que promete el
-       * contador y lo que ya está: los huérfanos. El bucle de arriba acaba de
-       * resolver el `tier` de los items viejos, así que aquí ya se puede contar.
+       * **AHORA EL MATERIAL ES UN RECURSO Y NO HAY CONTADORES.** La carga lee
+       * `data.crystals`, y si una partida no lo trae pero trae el almacén con
+       * `data.crystalTotal`, es una partida tan vieja que el material todavía no era
+       * item — la redención de más abajo no encuentra ninguna pila y el contador es
+       * lo único que hay.
+       *
+       * Lo que **no** hacía falta y no se ha dejado: una función que cuenta el
+       * almacén y luego decide cuánto falta. Con un recurso el número del guardado es
+       * la verdad, y una vista derivada suyo solo puede estorbarl.
        */
-      const yaEnAlmacen = (tier: number): number => {
-        let total = 0;
-        for (const w of state.warehouse as any[]) {
-          if (w.type !== 'crystal') continue;
-          const t = typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '');
-          if (t !== tier) continue;
-          total += w.stackable ? (w.stackCount || 1) : 1;
-        }
-        return total;
-      };
 
-      const meterMaterial = (tier: number, cantidad: number) => {
-        const huerfanos = Math.max(0, cantidad - yaEnAlmacen(tier));
-        if (huerfanos <= 0) return;
-        const item = createMaterialItem(tier);
-        item.stackCount = huerfanos;
-        // `addToWarehouse` y no `push`: los huérfanos van a la pila de cristales
-        // que ya hubiera, y solo abren una nueva si de verdad no cabe en ninguna.
-        if (!addToWarehouse(item)) return;
-        materialNeedsMigration = true;
-      };
-
-      meterMaterial(1, data.upgradeCrystals ?? 5);
-      meterMaterial(2, data.crystalsByTier?.[2] ?? 0);
-      meterMaterial(3, data.crystalsByTier?.[3] ?? 0);
-      meterMaterial(4, data.crystalsByTier?.[4] ?? 0);
-      if (materialNeedsMigration) warehouseNeedsMigration = true;
 
       /**
        * MIGRACIÓN: las llaves se redimen, y no se borran.
@@ -1410,9 +1360,67 @@ const AFK_THRESHOLD_MS = 60000;
         }
       }
 
+/**
+ * LA REDENCIÓN DE LOS CRISTALES VIEJOS, Y POR QUÉ NO ES UN SUMARIO.
+ *
+ * Una partida guardada antes de este cambio tiene **items de cristal en el
+ * almacén**, con nombre y con su nivel, y a veces muchos: eran apilables pero
+ * siempre cabían en una ranura, así que un jugador que los coleccionaba acababa
+ * con diez pilas de nivel distinto.
+ *
+ * **NO SE PUEDEN DESPERDICAR Y NO SE PUEDEN DEJAR.**
+ *
+ * Dejarlos sería meter basura en el almacén: objetos que ocupan una ranura, que
+ * aparecen en la rejilla y que **no tienen ningún botón**, porque ya no hay un
+ * selector de cristal ni un item que gastar. Borrarlos sería robarle al jugador
+ * algo que compró y que le costó cajas abrir.
+ *
+ * Así que se convierten en el recurso, y la cuenta sale de la misma regla que usa
+ * el resto del juego:
+ *
+ *     unidades += unidadesDeLaPila × valorDeUnCristal(nivelDeLaPila)
+ *
+ * **Y ESO ES EXACTAMENTE LO QUE VALÍAN.** Un cristal de nivel n valía **un intento
+ * de subir de nivel** a cualquier item, porque F26 obligaba a que fuera del mismo
+ * nivel y el coste no dependía del nivel. Con un recurso único, un intento de nivel
+ * 0 sobre un item de nivel n cuesta `valorDeUnCristal(n)`. Los dos lados llevan el
+ * mismo número, así que la conversión es exacta y no una aproximación.
+ *
+ * Un jugador con 5 Cristales Primordiales pasa a tener `5 × 145.388`, y eso le da
+ * exactamente los 5 intentos que le daban. Ni uno más ni uno menos.
+ *
+ * **Y NO USA `if (savedVersion < 10)` POR LA MISMA RAZÓN QUE LA DE LAS LLAVES:** es
+ * idempotente por construcción, porque las pilas desaparecen del almacén y la
+ * segunda carga no encuentra ninguna. La versión sube igualmente, para que el
+ * cambio quede anotado.
+ *
+ * Va **DESPUÉS** de la redención de las llaves y **ANTES** de partir las pilas, por
+ * el mismo motivo que aquella: si se hiciera después, `partirPilas` contaría
+ * cristales que están a punto de convertirse en un número.
+ */
+{
+  const pilasDeCristal = (state.warehouse as any[]).filter((w: any) => w.type === 'crystal');
+  if (pilasDeCristal.length > 0) {
+    let unidades = 0;
+    for (const pila of pilasDeCristal) {
+      // El nivel sale del campo `tier` o, si no lo tiene —partidas más viejas—, del
+      // nombre. Es el mismo criterio que usaba el motor, así que una pila vale
+      // aquí lo mismo que valía antes.
+      const nivel = typeof pila.tier === 'number' ? pila.tier : crystalTierFromName(pila.name || '');
+      unidades += valorDeUnCristal(nivel) * (pila.stackable ? (pila.stackCount || 1) : 1);
+    }
+    state.crystals += unidades;
+    state.warehouse = (state.warehouse as any[]).filter((w: any) => w.type !== 'crystal');
+    warehouseNeedsMigration = true;
+    console.info(
+      `[inventario] Los cristales son ahora un recurso: ${pilasDeCristal.length} pila(s) ` +
+      `convertida(s) en ${unidades} unidades.`
+    );
+  }
+}
+
       /**
        * MIGRACIÓN: fusionar las pilas repetidas de las partidas ya jugadas.
-       *
        * Cada botín de cristal, caja o consumible se guardaba como un item NUEVO en
        * vez de sumar sus unidades a la pila que ya había. Una partida con 19
        * cristales de Afino tenía 19 entradas: la rejilla las agrupaba en una celda
@@ -1642,8 +1650,7 @@ const AFK_THRESHOLD_MS = 60000;
         totalClicks: 0,
         totalInfraestructure: 0,
         cratesOpened: 0,
-        crystalsByTier: state.crystalsByTier,
-        upgradeCrystals: state.upgradeCrystals,
+        crystals: state.crystals,
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
@@ -1982,7 +1989,6 @@ const AFK_THRESHOLD_MS = 60000;
   // migración de partidas antiguas y el regalo de partida nueva. A partir de
   // aquí, `state.crates` solo se recalcula.
   materializePendingCrates();
-  syncMaterialCounters();
   // Las tarjetas AFK también se derivan del almacén al cargar. Antes se leía
   // `afkCards` del guardado y ya está: como el contador contaba items en vez de
   // unidades, quien tuviera tarjetas apiladas arrastraba el error indefinidamente,
@@ -2443,8 +2449,7 @@ const AFK_THRESHOLD_MS = 60000;
         totalClicks: state.totalClicks,
         totalInfraestructure: state.totalInfraestructure,
         cratesOpened: state.cratesOpened,
-        crystalsByTier: state.crystalsByTier,
-        upgradeCrystals: state.upgradeCrystals,
+        crystals: state.crystals,
         warehouseCapacity: state.warehouseCapacity,
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
@@ -3077,7 +3082,6 @@ const AFK_THRESHOLD_MS = 60000;
       syncCompanionsToWarehouse();
       syncWarehouseGaps();
       syncCrateCounters();
-      syncMaterialCounters();
       refreshAfkCardCount();
       rebuildAchievementBonuses();
       recalculatePassiveIncome();
@@ -3232,7 +3236,6 @@ const AFK_THRESHOLD_MS = 60000;
       }
 
       syncCrateCounters();
-      syncMaterialCounters();
       refreshAfkCardCount();
       syncCompanionsToWarehouse();
       recalculatePassiveIncome();
@@ -3429,18 +3432,15 @@ const AFK_THRESHOLD_MS = 60000;
       const level = Math.max(0, Math.floor(Number(comp.level) || 0));
       const tierItem = Math.max(1, Math.floor(Number(comp.tier) || 1));
       const crystalTier = tierItem;
-
-      // El mismo techo declarado que el del recolector, y con el mismo motivo: la
-      // forja es infinita y producecompaneros por encima del último cristal. No es
-      // un bug, es un techo, y se dice en vez de degradar la regla de F26.
-      if (crystalTier > MAX_CRYSTAL_TIER) {
-        return {
-          success: false,
-          rolled: false,
-          msg: `Hace falta el Cristal T${crystalTier}, y el más alto que existe es el T${MAX_CRYSTAL_TIER}. Un T${tierItem} todavía no se puede subir.`
-        };
-      }
-
+      // **EL TECHO DE `MAX_CRYSTAL_TIER` SE HA IDO AQUÍ IGUAL QUE EN EL
+      // RECOLECTOR, Y POR EL MISMO MOTIVO:** la forja es infinita, así que produce
+      // compañeros por encima del T10, y antes **esos no se podían subir de nivel**. El
+      // motivo del techo era que no había cristal T11; sin niveles de cristal no hay
+      // ese motivo, y un techo cuya razón ha desaparecido es un tope que solo cuesta
+      // progreso.
+      //
+      // Lo que sí se queda es el techo de niveles del compañero, que es otra cosa y
+      // lo de más abajo.
       // **EL TECHO LO PONE LA MISMA FUNCIÓN QUE LO APLICA**, con la ficha como
       // fuente. Si la ficha dijera 25 y el motor aceptara 20, el jugador vería una
       // barra que llega a 25 y gastaría cristales en algo que no pasa.
@@ -3449,28 +3449,23 @@ const AFK_THRESHOLD_MS = 60000;
         return { success: false, rolled: false, msg: `${comp.name} está al nivel máximo (+${Math.round(tope * 10)}%).` };
       }
 
-      const crystal = state.warehouse.find((w: any) =>
-        w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '')) === crystalTier);
-      if (!crystal) {
-        const nombre = CRYSTAL_DEFS[crystalTier]?.name ?? 'Cristal';
-        return { success: false, rolled: false, msg: `No tienes ${nombre}.` };
-      }
-
-      const crystalCost = costeDeNivelDeCompanio(level);
-      const units = crystal.stackCount || 1;
+      // **EL COSTE ES LA MISMA FUNCIÓN QUE EL DEL RECOLECTOR, CON SU TIER PUESTO.**
+      // `costeDeNivelDeCompanio` es un alias de `costeDeNivel`, no una curva propia, y
+      // ya no tiene sentido ni tener dos: hay un recurso y una curva.
+      const crystalCost = costeDeNivelDeCompanio(tierItem, level);
+      const units = state.crystals;
       if (units < crystalCost) {
         return {
           success: false,
           rolled: false,
-          msg: `Necesitas ${crystalCost} x ${CRYSTAL_DEFS[crystalTier].name} (tienes ${units}).`
+          msg: `Necesitas ${crystalCost} de ${CRISTAL_NOMBRE} (tienes ${units}).`
         };
       }
 
-      consumeWarehouseItem(crystal.id, crystalCost);
-      syncWarehouseGaps();
-      syncMaterialCounters();
+      state.crystals -= crystalCost;
 
-      const successChance = crystalSuccessChance(level, CRYSTAL_DEFS[crystalTier]?.power ?? 1);
+      // Y la probabilidad es la misma función por el mismo motivo.
+      const successChance = chanceDeSintonizacion(level);
       const roll = Math.random() * 100;
 
       if (roll <= successChance) {
@@ -3511,41 +3506,31 @@ const AFK_THRESHOLD_MS = 60000;
       const level = item.level || 0;
 
       // =====================================================================
-      //  F26 · EL CRISTAL ES EL DEL MISMO TIER, Y NO HAY EXCEPCIÓN.
+      //  EL CRISTAL ES UN RECURSO, Y EL TIER DEL ITEM ES LO QUE PONE EL PRECIO
       // =====================================================================
       //
-      // ANTES: el selector enviaba el nivel del cristal que el jugador elegía, y
-      // el motor se lo creationsaba. Eso convertía la sintonización en una
-      // pregunta de multiplicadores —"¿gasto el x1.75 o el x2.75?"— sobre un
-      // recolector que da igual en las dos: un T7 afinado con un cristal T1 era
-      // exactamente igual a un T1. Y el jugador tenía que hacer la cuenta para
-      // elegir, sin ningún sitio donde ver el resultado.
+      // **LO QUE ESTA FUNCIÓN HACÍA ANTES, EN ORDEN, PARA QUE SE VEA LO QUE SE VA:**
       //
-      // AHORA: el nivel del cristal lo decide el tier del recolector. No es un
-      // valor por defecto ni un parámetro que la vista pueda mandar: **no llega
-      // como argumento.** La vista no puede pedir otro cristal porque no hay otro
-      // que pedir, así que la regla entera no se puede desincronizar con lo que
-      // el botón enseña (R3).
+      //   1. Leía el tier del recolector y lo llamaba `crystalTier`, para obligar a que
+      //      el cristal fuera del mismo nivel (F26).
+      //   2. Rechazaba cualquier item por encima del T10, porque no había cristal T11.
+      //   3. Buscaba en el almacén la pila de cristal de ese nivel y la consumía.
+      //   4. Cobraba `collectorUpgradeCost(level)` —1, 2, 2, 3…— de esa pila.
+      //   5. La probabilidad la multiplicaba el `power` del cristal elegido.
       //
-      // LO QUE RESUELVE DE VERDAD, y no es la comodidad de la interfaz: es que
-      // las cajas altas dejan de ser un adorno. Si un T8 exige cristal T8 y el
-      // cristal T8 sale de las cajas T8, abrir cajas pasa a ser la única forma de
-      // seguir mejorando. Antes el T8 se mejoraba con el cristal de la tienda.
+      // **LO QUE HACE AHORA, Y ES MENOS CÓDIGO PORQUE HAY MENOS REGLAS:**
+      //
+      //   · El precio sale de `costeDeNivel(tierDelItem, level)`, y **el tier del item
+      //     sigue siendo lo único que lee de él**, pero ya no para elegir el cristal
+      //     sino para decidir cuánto cuesta. Un T10 cuesta mucho más que un T1, que
+      //     es exactamente lo que pedía el cambio.
+      // · El techo de `MAX_CRYSTAL_TIER` **desaparece**, y no es un descuido: es la
+      //     mejor noticia de las dos. La forja es infinita y produce T11 y siguientes;
+      //     antes esos items **no se podían subir de nivel**, y el juego respondía con un
+      //     mensaje que no admitía arreglo. Ahora un T30 se sube con el mismo recurso
+      //     que un T1, por mucho más caro. El techo dejó de ser un sitio donde la
+      //     progresión se paraba.
       const tierItem = Math.max(1, Math.floor(Number((item as any).tier) || 1));
-      const crystalTier = tierItem;
-
-      // Un recolector por encima del último cristal no se puede sintonizar, y
-      // se dice. Pasa con lo que hace la forja infinita, que produce T11 y
-      // siguientes. Es un techo declarado, no un bug: la opción no es degradar
-      // la regla de F26 para que un T30 se pueda subir con un cristal T1, sino
-      // decirlo y que quede pendiente añadir el cristal que le falta.
-      if (crystalTier > MAX_CRYSTAL_TIER) {
-        return {
-          success: false,
-          rolled: false,
-          msg: `Hace falta el Cristal T${crystalTier}, y el más alto que existe es el T${MAX_CRYSTAL_TIER}. Un T${tierItem} todavía no se puede sintonizar.`
-        };
-      }
       // EL TOPE LO PONE EL RECOLECTOR, Y LO PONE LA MISMA REGLA QUE LO CREA.
       //
       // Antes se comparaba contra un `MAX_COLLECTOR_LEVEL = 20` fijo de este
@@ -3563,40 +3548,31 @@ const AFK_THRESHOLD_MS = 60000;
       const tope = collectorMaxLevel((item as any).maxLevel);
       if (level >= tope) return { success: false, rolled: false, msg: `Recolector al nivel máximo (+${tope * 10}%).` };
 
-      // El cristal se busca por nivel en el almacén, no en un contador suelto.
-      // Un cristal T7 no se gasta por uno T1: por eso hay que encontrar el item
-      // exacto y consumirlo, en vez de restar una unidad.
-      //
-      // Y SI EL ITEM NO TIENE NIVEL, SE LEE POR SU NOMBRE. Antes el nivel por
-      // defecto era 1, lo que convertía cualquier cristal viejo o manipulado en
-      // un T1 —y con la regla de F26 eso es un T1 fantasma que el juego cree que
-      // tienes. `crystalTierFromName` es el mismo criterio que usa la migración,
-      // así que los dos caminos dicen lo mismo.
-      const crystal = state.warehouse.find((w: any) =>
-        w.type === 'crystal' && (typeof w.tier === 'number' ? w.tier : crystalTierFromName(w.name || '')) === crystalTier);
-      if (!crystal) {
-        const nombre = CRYSTAL_DEFS[crystalTier]?.name ?? 'Cristal';
-        return { success: false, rolled: false, msg: `No tienes ${nombre}.` };
-      }
-
-      // Coste en cristales creciente: antes era 1 por nivel, así que 20 niveles
-      // salían por 20 cristales y el timing de mejora era irrelevante
-      const crystalCost = collectorUpgradeCost(level);
-      const units = crystal.stackCount || 1;
+      // **LO QUE SE COBRA ES UN NÚMERO DE `state.crystals`, NO UN ITEM DEL ALMACÉN.**
+      // No hay ni que buscar una pila ni que consumirla: el recurso no está en ninguna
+      // parte, y por eso la operación no puede fallar por falta de hueco ni dejar un
+      // item a medio gastar.
+      const crystalCost = costeDeNivel(tierItem, level);
+      const units = state.crystals;
       if (units < crystalCost) {
         return {
           success: false,
           rolled: false,
-          msg: `Necesitas ${crystalCost} x ${CRYSTAL_DEFS[crystalTier].name} (tienes ${units}).`
+          msg: `Necesitas ${crystalCost} de ${CRISTAL_NOMBRE} (tienes ${units}).`
         };
       }
 
-      consumeWarehouseItem(crystal.id, crystalCost);
-      syncWarehouseGaps();
-      syncMaterialCounters();
+      state.crystals -= crystalCost;
 
-      // La probabilidad la fija el cristal: mejor cristal, más probabilidad.
-      const successChance = crystalSuccessChance(level, CRYSTAL_DEFS[crystalTier]?.power ?? 1);
+      // **LA PROBABILIDAD LA PONE EL NIVEL, Y SOLO EL NIVEL.** Antes el `power` del
+      // cristal la multiplicaba y venía a ser lo que el jugador elegía. Con un solo
+      // recurso no hay de dónde sacar un factor, y la regla queda a la vista: en el
+      // nivel 0 se acierta el 95 % y en el 20 el 35 %. El riesgo es real y sube con
+      // cada subida, lo que pasa es que ya **no hay forma de comprar seguridad**.
+      //
+      // Es la consecuencia de "un recurso", y está escrita aquí para que el día que
+      // alguien eche en falta la elección se lea por qué no la hay.
+      const successChance = chanceDeSintonizacion(level);
       const roll = Math.random() * 100;
 
       if (roll <= successChance) {
@@ -3758,26 +3734,31 @@ const AFK_THRESHOLD_MS = 60000;
       // descuenta las nanitas es peor que un bug visible, porque el jugador
       // pierde el saldo sin ver por qué.
       if (itemKey === 'upgradeCrystal') {
-        // El cristal es un item del almacén. Antes era solo un contador: el
-        // jugador no lo veía, no lo podía ordenar y no ocupaba ranura.
+        // **ESTA RAMA YA NO CREA NADA EN EL ALMACÉN, Y ESO LA HACE MÁS CORTA QUE
+        // NINGUNA OTRA DEL FICHERO.** El cristal es un recurso: la compra suma
+        // unidades a `state.crystals` y ya está. No hay item, ni ranura, ni fusión de
+        // pilas, ni hueco que comprobar.
         //
-        // **LO QUE AQUÍ HABÍA Y NO ES ESTO.** Esta rama era la de "llave o
-        // cristal", y el nivel lo decidía la carta (`keyT2` → nivel 2) porque
-        // con una constante única la carta se llamaba "Llave de Cifrado" y
-        // entregaba la Reforzada: el nombre, el precio y el item eran tres
-        // cosas distintas y ninguna se deducía de las otras dos (B7). Con una
-        // sola carta el problema se va solo, porque ya no hay dos cartas que
-        // puedan mentir la una sobre la otra.
-        const item = createMaterialItem(STORE_MATERIAL_TIER);
-        // F14 · el lote entra de una vez: `addToWarehouse` lo funde con la
-        // pila que haya. Las unidades no piden ranura nueva (una pila es una
-        // ranura), así que la pregunta de espacio de arriba sigue valiendo.
-        item.stackCount = n;
-        if (!addToWarehouse(item)) { state.nanites += cost; return false; }
-        syncMaterialCounters();
+        // **Y `previewStoreItem()` devuelve `null` para esta carta**, que es por lo que
+        // la pregunta de espacio de más arriba no se ha tenido que tocar: sin item que
+        // crear, no hay ranura que pueda faltar.
+        //
+        // **LO QUE ENTREGA CADA UNIDAD COMPRADA.** La carta cuesta 200 y entrega
+        // `valorDeUnCristal(1)` unidades, o sea **un intento entero de subir de nivel
+        // un item de T1**. Antes entregaba un cristal de T1, que también era un
+        // intento. La tienda cuesta lo mismo y da lo mismo, en número de intentos:
+        // el cambio no ha caro ni un intento de mejora al jugador que compraba, que es
+        // lo que se comprobaba con 200 nanitas contra una caja de 675 que da 3-5
+        // intentos.
+        state.crystals += valorDeUnCristal(STORE_MATERIAL_TIER) * n;
         onUpdate(state, isAfk);
         saveToFirebase();
-        return item;
+        // **LO QUE DEVUELVE LA COMPRA, Y POR QUÉ NO ES UN ITEM.** La vista usa el
+        // valor de retorno para decir "comprado" y para la animación; como no hay item,
+        // se devuelve un descriptor con la misma forma que el resto de cartas. Que no
+        // tenga `type` ni `id` es lo correcto: no hay nada en el almacén que
+        // identificar.
+        return { units: valorDeUnCristal(STORE_MATERIAL_TIER) * n, label: CRISTAL_NOMBRE };
       } else if (itemKey === 'crateT1') {
         // F31 · La caja es un item real del almacén: sin esto no se puede abrir.
         // Y es la ÚNICA que se vende. Las otras nueve salen de las anteriores, que
@@ -3935,7 +3916,15 @@ const AFK_THRESHOLD_MS = 60000;
         // las llaves de caja caían en nivel 1, se fundían en UNA sola pila. La
         // rúnica de la legendaria entraba en la misma celda que la de Cifrado de
         // la común y no había forma de separarlas ni de recuperarlas.
-        crystals: (n, materialTier) => { grantCrystals(materialTier, n); },
+        // **UN ARGUMENTO, Y EL QUE SE CONVIERTE LO ES EL QUE TIRA LA CAJA.** El
+        // aplicador ya no recibe el nivel del cristal porque no hay cristales con
+        // nivel: `crateLoot` multiplica por `valorDeUnCristal()` al construir el
+        // botín, así que el número que llega ya está en unidades y solo se suma.
+        //
+        // El segundo argumento que quedaba aquí era el que el motor descartaba antes:
+        // se traducía a un 1 fijo y la ruleta anunciaba un nivel que el item no
+        // tenía. Ahora no hay nada que anunciar.
+        crystals: (n) => { grantCrystals(n); },
         hasSpace: () => countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity(),
         // El cosmético no es un item: no pasa por `addItem` ni por el almacén.
         // Se desbloquea aquí y lo persiste el `saveToFirebase` de más abajo, que
@@ -3965,7 +3954,6 @@ const AFK_THRESHOLD_MS = 60000;
       // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el
       // almacén y los contadores desincronizados.
       syncCrateCounters();
-      syncMaterialCounters();
       refreshAfkCardCount();
       recalculatePassiveIncome();
       onUpdate(state, isAfk);
@@ -4102,7 +4090,19 @@ const AFK_THRESHOLD_MS = 60000;
         totalClicks: keptClicks,
         totalInfraestructure: 0,
         cratesOpened: keptCratesOpened,
-        upgradeCrystals: 5,
+        // **EL CRISTAL VUELVE AL VALOR INICIAL, COMO TODO LO QUE SE BORRA AQUÍ.**
+        // El Ascenso reconstruye la partida desde el estado de partida nueva, y por eso
+        // los saldos se escriben con el número con el que empiezan, no con el que
+        // tienen: las nanitas a 0 porque empiezan a 0, y el cristal a 5 porque
+        // empiezan a 5. Es el mismo kit de arranque, no una decisión sobre cuánto
+        // regalarle al jugador.
+        //
+        // Antes este campo se llamaba `upgradeCrystals` y el motor lo escribía sin
+        // tocar el cristal de verdad, que era un item del almacén y lo borraba el
+        // `Object.assign` de `warehouse: []` de más abajo. Se notaba al ascender: el
+        // contador de una partida nueva ponía 5 y el almacén podía bringir lo que
+        // hubiera sobrevivido.
+        crystals: 5,
         warehouseCapacity: 15,
         maxCompanionSlots: keptCompanionSlots,
         afkCards: 0,
@@ -4250,8 +4250,15 @@ const AFK_THRESHOLD_MS = 60000;
       // Se entregan por `grantCrystals()`, la misma vía que usan las cajas: así el
       // almacén sigue siendo la fuente de verdad y los contadores se derivan, en
       // vez de escribir un contador suelto que se desincroniza al recargar.
-      const consuelo = result.crystals || 0;
-      if (consuelo > 0) grantCrystals(mat.tier!, consuelo);
+      const intentos = result.crystals || 0;
+      // **EL CONSUELLO SE CONVIERTE AQUÍ Y NO EN `cristalesDeConsuelo()`.** Esa
+      // función devuelve *intentos de nivel 0*, no unidades, y el que paga el
+      // dinero es quien lo entrega. Multiplicar dentro de la regla habría dejado la
+      // mitad de los llamadores sin factor, y la forja valdría casi cero en los
+      // niveles altos sin que nada lo delatara: es un número que se ve grande y vale
+      // poco.
+      const consuelo = intentos * valorDeUnCristal(mat.tier!);
+      if (consuelo > 0) grantCrystals(consuelo);
       onUpdate(state, isAfk);
       saveToFirebase();
       return {
@@ -4325,8 +4332,11 @@ const AFK_THRESHOLD_MS = 60000;
       // fusión de compañeros también cuesta dos objetos de tier, así que también
       // tiene que dejar algo. Y lo deja la misma función, para que las dos
       // compensaciones no puedan separarse.
-      const consuelo = result.crystals || 0;
-      if (consuelo > 0) grantCrystals(mat.tier!, consuelo);
+      const intentos = result.crystals || 0;
+      // Y lo mismo en la fusión de compañeros, por el mismo motivo: **las dos
+      // ramas de fallo dan lo mismo**, y eso tiene una prueba que las compara.
+      const consuelo = intentos * valorDeUnCristal(mat.tier!);
+      if (consuelo > 0) grantCrystals(consuelo);
       onUpdate(state, isAfk);
       saveToFirebase();
       return {

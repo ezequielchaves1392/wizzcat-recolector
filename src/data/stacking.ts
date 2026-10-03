@@ -38,7 +38,7 @@
 // de aquí NO es borrarlo: es dejar de tratarlo como moneda. Lo que importa es que
 // un item de tipo 'key' que se colara en el almacén **no se fundiría** con otro,
 // porque `isStackable` ya no lo reconoce.
-export const STACKABLE_TYPES = ['consumable', 'crate', 'crystal'] as const;
+export const STACKABLE_TYPES = ['consumable', 'crate'] as const;
 
 /**
  * Unidades que caben en la esquina de una celda antes de recortar el número.
@@ -61,7 +61,7 @@ export const STACKABLE_TYPES = ['consumable', 'crate', 'crystal'] as const;
  * puede es ser **más alto**: eso sí que mentiría al revés.
  */
 export const MAX_STACK: Record<string, number> = {
-  consumable: 20, crate: 99, crystal: 99
+  consumable: 20, crate: 99
 };
 
 /**

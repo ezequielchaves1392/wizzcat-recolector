@@ -14,7 +14,12 @@
 import { createGameLoop } from '../src/gameLoop';
 import { countOccupiedSlots } from '../src/data/stacking';
 import { CRATE_TYPES, CRATE_TIERS, type CrateType } from '../src/data/store';
-import { CRYSTAL_DEFS } from '../src/data/items';
+// El cristal ya no tiene niveles, así que la fábrica de abajo escribe un nombre y un
+// precio fijos. Se importan solo las dos cosas que un banco necesita del recurso: el
+// nombre y cuánto vale una unidad para el item del nivel dado —que es lo que hace el
+// banco que mide "intentos de mejora" en lugar de "unidades sueltas".
+import { CRISTAL_NOMBRE } from '../src/data/items';
+import { valorDeUnCristal } from '../src/data/crafting';
 
 export type Row = { name: string; ok: boolean; detail: string };
 
@@ -302,10 +307,39 @@ export const key = (id: string, name = 'Llave de Cifrado', stack = 1, over: any 
   sellPrice: 480, stackable: true, stackCount: stack, ...over
 });
 
-export const crystal = (id: string, tier = 1, stack = 1, over: any = {}) => ({
-  id, name: CRYSTAL_DEFS[tier].name, type: 'crystal', details: 'x',
-  rarity: CRYSTAL_DEFS[tier].rarity, tier, sellPrice: 180, stackable: true, stackCount: stack, ...over
+/**
+ * Un item de cristal como lo tenía una partida guardada antes de que el cristal fuera
+ * un recurso. **Solo sirve para probar la redención**: el motor convierte esas pilas en
+ * unidades al cargar, así que un banco no puede usarlas para nada más.
+ *
+ * El precio sale de `valorDeUnCristal(tier) / 4` porque es la regla que había antes —el
+ * precio de reventa de un material era un cuarto del de su carta— y para una partida
+ * vieja que llegase hasta aquí da igual. La cifra que importa es el nivel, que es lo
+ * que la redención lee.
+ *
+ * El nombre va escrito a mano por el mismo motivo que el de las llaves: lo que
+ * interesa es el nombre viejo, y sacarlo de una tabla que ya no existe no probaría
+ * nada.
+ */
+export const crystalViejo = (id: string, tier = 1, stack = 1, over: any = {}) => ({
+  id, name: NOMBRES_VIEJOS[tier] ?? CRISTAL_NOMBRE, type: 'crystal', details: 'x',
+  rarity: 'Común' as any, tier,
+  sellPrice: Math.round(valorDeUnCristal(tier) / 4), stackable: true, stackCount: stack, ...over
 });
+
+/** Los diez nombres que tenían los cristales, del más bajo al más alto. */
+const NOMBRES_VIEJOS: Record<number, string> = {
+  1: 'Cristal de Afino',
+  2: 'Cristal de Fase',
+  3: 'Cristal de Entropía',
+  4: 'Cristal Singular',
+  5: 'Cristal Espectral',
+  6: 'Cristal Cuántico',
+  7: 'Cristal Prisma',
+  8: 'Cristal del Vacío',
+  9: 'Cristal de la Singularidad',
+  10: 'Cristal Primordial'
+};
 
 export const consumable = (id: string, buffId: string, stack = 1, over: any = {}) => ({
   id,
@@ -334,8 +368,6 @@ export function baseSave(items: any[], extra: any = {}) {
   // juego, así que un banco no puede probar una caja que el juego no recognises.
   const crates: Record<number, number> = {};
   for (const t of CRATE_TIERS) crates[t] = 0;
-  const crystalsByTier: Record<number, number> = {};
-  let upgradeCrystals = 0;
   let afkCards = 0;
 
   for (const w of items) {
@@ -343,22 +375,26 @@ export function baseSave(items: any[], extra: any = {}) {
       const m = /caja t(\d+)/.exec((w.name || '').toLowerCase());
       if (!m) continue;
       crates[Number(m[1])] = (crates[Number(m[1])] ?? 0) + (w.stackCount || 1);
-    } else if (w.type === 'crystal') {
-      crystalsByTier[w.tier ?? 1] += w.stackCount || 1;
-      if ((w.tier ?? 1) === 1) upgradeCrystals += w.stackCount || 1;
     } else if (w.type === 'consumable' && w.buffId === 'afk') {
       afkCards += w.stackCount || 1;
     }
   }
 
   return {
-    saveVersion: 7,
+    // 9, no 7. Con 7 no se cruzaba la redención de las llaves, así que un banco que
+    // montaba llaves las tenía en el almacén; y con 9 tampoco se cruzaba la del
+    // cristal. El número tiene que estar por encima de las dos migraciones para que
+    // `baseSave()` simule una partida actual.
+    saveVersion: 9,
     nanites: 1000,
     totalNanitesProduced: 0,
     warehouse: items,
     crates,
-    crystalsByTier,
-    upgradeCrystals,
+    // El cristal es un recurso. **El banco puede pasar la cifra que quiera por
+    // `extra`**, que va al final y gana; y si la omite, el motor usa la partida
+    // nueva. Lo que **no** se pone es un valor derivado del almacén, porque eso era
+    // lo que hacía este sitio antes: el contador se calculaba aquí, en el banco, y el
+    // juego lo recalculaba en su sitio, y los dos se separaban.
     afkCards,
     companions: [],
     activeCompanions: [],
@@ -401,13 +437,17 @@ export function baseSave(items: any[], extra: any = {}) {
  * lanza ningún aviso: por eso hacía falta una prueba que lo leyera bien.
  *
  * No es una reimplementación de ninguna regla del juego, que es lo que este kit
- * prohíbe: el umbral lo sigue poniendo `crystalSuccessChance` y el dado lo
+ * prohíbe: el umbral lo sigue poniendo `chanceDeSintonizacion()` y el dado lo
  * sigue tirando el game loop. Aquí solo se quita la varianza, que es justo lo
  * que hace que una prueba sea intermitente.
  *
- * Los dos extremos son seguros sin conocer la fórmula: el techo de
- * `crystalSuccessChance` es 95, así que `0` acierta siempre y `0.999` falla
- * siempre, para cualquier nivel y cualquier cristal.
+ * **Y CON UN SOLO CRISTAL ESTO ES MÁS SEGURO, NO MENOS.** Antes el umbral
+ * dependía del multiplicador del cristal, así que "acertar siempre" y "fallar
+ * siempre" no se mortgage guarantee nada: había que mirar el `power` del cristal que
+ * tuviera el banco. Ahora la probabilidad depende **solo del nivel**, y sus dos
+ * extremos son 95 y 35, así que `0` acierta siempre y `0.999` falla siempre para
+ * cualquier nivel. Es la misma razón por la que antes se podía afirmar sin conocer
+ * la fórmula, y ahora además es la única.
  */
 export function conRoll(valor: number, fn: () => any): any {
   const original = Math.random;

@@ -19,8 +19,9 @@
 //  apertura deja una llave en el almacén.
 // ==========================================================================
 
-import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, crystal, distintos } from './kit';
+import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, distintos } from './kit';
 import { STORE_ITEMS, costeDeCaja, CRATE_TYPES, type CrateType } from '../src/data/store';
+import { CRISTAL_NOMBRE } from '../src/data/items';
 import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
 import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
@@ -191,9 +192,14 @@ async function main() {
       kind: 'crate', amount, name: CRATE_TYPES[tier as CrateType].name, label: `+${amount}`,
       details: 'x', rarity: CRATE_TYPES[tier as CrateType].rarity, icon: 'crate', exclusive: false
     });
-    const cri = (tier: number, amount: number): CrateReward => ({
-      kind: 'crystals', amount, name: `Cristal T${tier}`, label: `+${amount}`,
-      details: 'x', rarity: 'Raro', icon: 'crystal', materialTier: tier, exclusive: false
+    // **YA NO HAY NIVELES, Y POR QUÉ LA FABRICA NO PIDE UNO.** El cristal es un
+    // recurso: un nombre, una rareza y una cantidad. La fila real del botín
+    // (`CRATE_LOOT`) construye exactamente esto —`amount` en unidades ya
+    // convertidas y sin `materialTier`—, y una fábrica que añadiera un nivel
+    // estaría probando un objeto que el juego ya no construye.
+    const cri = (amount: number): CrateReward => ({
+      kind: 'crystals', amount, name: CRISTAL_NOMBRE, label: `+${amount}`,
+      details: 'x', rarity: 'Raro', icon: 'crystal', exclusive: false
     });
     const dron = (id: string): CrateReward => ({
       kind: 'companion', amount: 1, name: 'Dron Explorador', label: 'Dron Explorador',
@@ -209,12 +215,31 @@ async function main() {
       diezNanitas.length === 1 && diezNanitas[0].total === 9000,
       JSON.stringify({ filas: diezNanitas.length, total: diezNanitas[0]?.total }));
 
-    // Los materiales se agrupan POR LO QUE SON, no por su nombre: el cristal T3
-    // de la T3 y el de la T4 son el mismo material.
-    const dosCri = resumenDePremios([cri(3, 4), cri(3, 6), cri(4, 2)]);
-    check('resumen: los cristales del mismo nivel se suman',
-      dosCri.length === 2 && dosCri.find(f => f.reward.materialTier === 3)?.total === 10,
-      JSON.stringify(dosCri.map(f => `T${f.reward.materialTier}:${f.total}`)));
+    // **LOS CRISTALES SON UN RECURSO, Y POR QUÉ AHORA SOLO HAY UNA FILA.** Antes
+    // esta comprobación miraba que el cristal T3 de la T3 y el de la T4 fueran dos
+    // filas distintas, porque el material tenía nivel y cada nivel era otra cosa.
+    // Sin niveles la clave de agrupación es **solo el tipo**: la fila de cristal
+    // lleva un único nombre y una única rareza, así que tres premios de cristal son
+    // tres filas o son una con la suma, y lo segundo es lo que quiere el jugador.
+    //
+    // **Y NO HAY UNA MITAD "PERO LAS DE DISTINTO NIVEL NO".** Esa comprobación era
+    // media verdad: la clave de fila del cristal todavía lleva `materialTier ?? 1`,
+    // que con el botín real siempre vale 1 porque ninguna entrada lo trae. Así que
+    // el agrupamiento correcto hoy es el de una fila, y lo que se afirma aquí es
+    // justo eso: tres premios de cristal se suman en una sola fila.
+    const tresCri = resumenDePremios([cri(400), cri(600), cri(200)]);
+    check('resumen: los cristales son UNA fila con la suma, porque son un recurso',
+      tresCri.length === 1 && tresCri[0].total === 1200,
+      JSON.stringify(tresCri.map(f => `${f.reward.name}:${f.total} en ${f.veces} veces`)));
+
+    // **Y LA CIFRA QUE SUMA ES LA QUE DICE LA ETIQUETA.** El botín entrega unidades
+    // ya convertidas —una caja da `rand(3n, 5n) × valorDeUnCristal(n)`— así que la
+    // suma de la fila es unidades y no intentos. Confundir las dos cosas es el
+    // error que haría que el jugador creyera que le sale un 1.000× más de lo que
+    // sale, y es por eso que el banco mide la fila y no "lo que eso compra".
+    check('resumen: y lo que suma son las unidades, no los intentos de mejora',
+      tresCri[0].total === 1200 && Number(tresCri[0].reward.label.replace(/[^\d]/g, '')) === 400,
+      `total=${tresCri[0].total} etiqueta="${tresCri[0].reward.label}"`);
 
     // Y las cajas, que son la otra mitad de lo que se suma. Dos cajas T2 sí son la
     // misma fila —el jugador quiere saber cuántas se lleva, no cuántas veces
@@ -244,7 +269,7 @@ async function main() {
     // los dos drones NO (2). Una versión anterior de esta prueba contaba cuatro y
     // fallaba.
     const mezcla = resumenDePremios([
-      nanita(900), nanita(700), cri(1, 3), caja(2, 1), dron('d1'), dron('d2'), caja(2, 1)
+      nanita(900), nanita(700), cri(3), caja(2, 1), dron('d1'), dron('d2'), caja(2, 1)
     ]);
     check('resumen: siete premios dan cinco filas (2 nanitas juntas, 2 drones sueltos)',
       mezcla.length === 5, `filas=${mezcla.length} · ${JSON.stringify(mezcla.map(f => `${f.reward.kind}:${f.total}`))}`);
