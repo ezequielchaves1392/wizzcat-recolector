@@ -1259,6 +1259,52 @@ async function main() {
         wh(g2).some((w: any) => w.tier === 11 && w.damage === item?.damage),
         ids(g2).join(','));
     }
+    {
+      // =====================================================================
+      //  LA REGLA DE LA FORJA, FIJADA EN LOS DIEZ NIVELES A LA VEZ
+      // =====================================================================
+      //
+      // ESTA PRUEBA NACE DE UN "T7 + T7 me dio un T11" QUE NO SE PUDO REPRODUCIR.
+      //
+      // El motor hace `newTier = tier + 1`, así que un T7 da un T8 y un T11 solo puede
+      // salir de un T10. Con la prueba del T10 de arriba, y con que el banco midiese el
+      // nivel nuevo, parecía que no había hueco para el fallo. Se reprodujo por
+      //Levels —forjando los diez pares y mirando lo que sale en el almacén— y los diez
+      // dieron exactamente `T{n+1}`. **Lo que sí aparecía, medido, era que los dos
+      // materiales desaparecían del almacén en los dos casos**, así que la segunda mitad
+      // del aviso tampoco era un fallo del motor.
+      //
+      // La explicación más probable es la que el propio juego sugiere: la forja es +1,
+      // y encadenarla es **la manera de subir de nivel**, porque no hay otra. T7+T7 da T8,
+      // T8+T8 da T9, T9+T9 da T10 y T10+T10 da T11: cuatro forjas, y la cuarta da un
+      // T11. Pero "creo que son cuatro" no es una comprobación, y por eso esta prueba
+      // existe: **si algún día la forja saltara más de un nivel, aquí se ve al tiro, en
+      // los diez niveles a la vez y no en el que se queja un jugador.**
+      //
+      // El dado se clava a 0 porque el techo del acierto es 95 y con eso acierta siempre.
+      // Y se mide **el almacén**, no el valor de retorno: el valor de retorno lo podría
+      // liar otro, y lo que le importa al jugador es lo que se queda en la rejilla.
+      const conBlueprint = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
+      const porNivel: string[] = [];
+      const fuera: string[] = [];
+      for (let t = 1; t <= 10; t++) {
+        const gg = await boot(baseSave([
+          collector('a', t, { damage: 100 }), collector('b', t, { damage: 100 })
+        ], conBlueprint));
+        conRoll(0, () => gg.forgeCollector(['a', 'b']));
+        const enAlmacen = wh(gg).filter((w: any) => w.type === 'collector');
+        const forjada =enAlmacen.find((w: any) => String(w.id).startsWith('forged_'));
+        // Y el almacén entero, porque "sobran dos T7" también sería un fallo: la
+        // forja tiene que consumir a los dos materiales.
+        const quedan =enAlmacen.map((w: any) => `T${w.tier}`).sort().join(',');
+        if (!forjada || forjada.tier !== t + 1 ||enAlmacen.length !== 1) {
+          fuera.push(`T${t}: sale T${forjada?.tier ?? 'nada'} y quedan [${quedan}]`);
+        }
+        porNivel.push(`T${t}→T${forjada?.tier ?? '?'}`);
+      }
+      check('forja: dos de T{n} dan un T{n+1} y solo queda la forjada, en los diez niveles',
+        fuera.length === 0, fuera.join(' | ') || porNivel.join(' '));
+    }
 
     // El equipado no se puede fusionar: perderlo seria un castigo doble.
     //

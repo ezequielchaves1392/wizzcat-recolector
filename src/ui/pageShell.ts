@@ -173,6 +173,8 @@ export function pageShell(opts: PageShellOptions, body: string): string {
     <div class="fixed inset-0 app-bg flex flex-col font-sans select-none overflow-hidden">
       ${appHeaderHTML({
         route: opts.route,
+        // El botón del ranking en móvil: en escritorio ya está en el nav, y por eso el
+        // nav de escritorio lo tiene filtrado. Es la misma regla que en la base.
         title: opts.title,
         subtitle: opts.subtitle,
         icon: opts.icon as any,

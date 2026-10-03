@@ -391,7 +391,25 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
       }
       case 'tier': {
         sfx.nav();
-        ui.tier = Number(btn.dataset.tier);
+        const nuevo = Number(btn.dataset.tier);
+        // **CAMBIAR DE NIVEL VACÍA EL YUNQUE, IGUAL QUE CAMBIAR DE TIPO, Y NO ES
+        // COSMÉTICO.** El yunque guarda ids, no objetos, así que sobrevive a cualquier
+        // redibujado: al pulsar otra pestaña, la rejilla pasa a enseñar los materiales de
+        // ese nivel **mientras el yunque sigue con los del anterior**. La pantalla queda
+        // diciendo dos cosas a la vez —"estoy viendo unos T10" y "en el yunque hay unos
+        // T7"— y el que tenga que resolver la contradicción es el jugador.
+        //
+        // Vaciarlo es la respuesta obvia, pero solo si **se dice**. Un yunque que se
+        // vacía solo parece un fallo, así que el aviso va antes de que se vacíe.
+        if (ui.selected.length) {
+          showToast(
+            `Yunque vaciado: cambiaste de T${ui.tier} a T${nuevo} y los materiales ` +
+            `tenían que ser del mismo nivel.`,
+            'info'
+          );
+          ui.selected = [];
+        }
+        ui.tier = nuevo;
         redraw();
         break;
       }

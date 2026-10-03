@@ -119,35 +119,18 @@ export function renderLayoutHTML(
         // Sin estado no hay recursos: es el caso de la pantalla de acceso y del
         // navTest, que montan este layout sin partida detrás.
         resources: state ?? false,
+        // Los controles de la esquina son de la CABECERA, no de la base: el audio, el
+        // tema y el ranking son el mismo interruptor en el mismo sitio en las siete
+        // pantallas, que es lo mismo que se le pidió a los saldos y por el mismo motivo.
+        //
+        // **LA BASE ES LA ÚNICA QUE SALE**, porque es la única donde hay una sesión que
+        // cerrar. Ese botón es la única diferencia entre las siete cabeceras, y es una
+        // diferencia de verdad: en un sector no hay nada que cerrar.
+        // Y `actions` se queda aquí sin nada que poner, porque la base no tiene
+        // acciones propias: su único contenido es la pantalla de juego.
         actions: `
-            <!--
-              AUDIO: los dos interruptores son independientes y cada uno lleva
-              su PROPIO icono. Antes los dos pintaban el altavoz, así que en
-              móvil —donde la etiqueta de texto no cabe— eran dos botones
-              idénticos y no se sabía cuál era cuál.
 
-                música -> nota musical  (lo que pone, no lo que suena)
-                SFX    -> altavoz       (icono de parlante)
-
-              Apagado baja al icono de silencio y el texto dice "Off": el
-              estado se lee de un vistazo, sin depender del title, que en
-              táctil no aparece hasta mantener pulsado.
-
-              data-audio en vez de dos ids distintos: un solo manejador por
-              delegación cubre los dos, y el estado se lee con querySelector
-              sin acoplarse al id.
-            -->
-            <button id="music-btn" data-audio="music"
-              aria-pressed="${isMusicEnabled()}"
-              aria-label="${isMusicEnabled() ? 'Apagar música' : 'Encender música'}"
-              title="${isMusicEnabled() ? 'Apagar música' : 'Encender música'}"
-              class="w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center
-                     gap-1.5 cursor-pointer text-[11px] transition
-                     ${isMusicEnabled() ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-70'}">
-              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isMusicEnabled() ? 'music' : 'mute')}</span>
-              <span class="hidden md:inline font-mono">${isMusicEnabled() ? 'Música' : 'Off'}</span>
-            </button>
-            </button>`
+          `
       })}
 
       <!-- ===================== ZONA DE JUEGO ===================== -->
@@ -315,33 +298,17 @@ export function renderLayoutHTML(
                   pointer-events-none"
            style="bottom: calc(5.5rem + env(safe-area-inset-bottom))"></div>
 
-      <!-- ===================== PANEL DE TEMA (MÓVIL) ===================== -->
-      <div id="theme-sheet" class="lg:hidden fixed inset-0 z-40 hidden">
-        <div class="absolute inset-0 bg-black/65 backdrop-blur-sm" id="theme-sheet-overlay"></div>
-        <div class="absolute bottom-0 left-0 right-0 card-glass-elevated rounded-t-2xl
-                    p-5 pb-8 flex flex-col gap-3"
-             style="padding-bottom: calc(2rem + env(safe-area-inset-bottom));
-                    animation: riseIn 280ms cubic-bezier(0.16, 1, 0.3, 1) both">
-          <div class="flex items-center justify-between">
-            <h3 class="font-['Orbitron'] font-bold text-sm accent-text">Tema visual</h3>
-            <button id="close-theme-sheet" class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer"
-                    aria-label="Cerrar">
-              <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
-            </button>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            ${THEMES.map(t => `
-              <button data-theme-option="${t.value}"
-                class="theme-option h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer
-                       flex items-center justify-center gap-1.5 transition-colors"
-                style="${t.value === savedTheme ? 'border-color:' + t.tone + ';color:' + t.tone : ''}">
-                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${t.tone}"></span>
-                ${t.label}
-              </button>
-            `).join('')}
-          </div>
-        </div>
-      </div>
+      <!--
+        BORRADO: EL PANEL DE TEMA DE AQUÍ.
+
+        Era el panel de tema, con lg:hidden, y en escritorio lo sustituía un
+        select que hacía lo mismo. Ahora los dos están en la hoja de ajustes de la
+        cabecera —que se pinta en las siete pantallas—, así que este bloque era la tercera
+        forma de cambiar el tema y la única que no funcionaba desde un sector.
+
+        Lo que queda es una hoja con las tres cosas juntas: audio, tema y salida. Tres
+        sitios para lo mismo era justo lo que se quería evitar.
+      -->
     </div>
   `;
 }

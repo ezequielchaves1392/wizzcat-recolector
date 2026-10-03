@@ -21,14 +21,20 @@ export function wirePreviewAudio(app: HTMLElement) {
     const musica = isMusicEnabled();
     const efectos = isSfxEnabled();
 
+    // **EL MISMO FORMATO QUE ESCRIBE `settingsSheetHTML()`, Y POR QUÉ TIENE QUE COINCIDIR.**
+    // Estos botones ya no viven en la cabecera: viven en la hoja de ajustes, que usa
+    // celdas de rejilla con su texto siempre visible. Con las clases de antes —w-9, texto
+    // oculto en móvil— el interruptor salía diminuto y sin su palabra, que es peor que no
+    // verlo porque parece un botón roto.
+    const PINTAR = 'h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer' +
+      ' flex items-center justify-center gap-1.5 transition-colors';
+
     const mb = app.querySelector('#music-btn');
     if (mb) {
       mb.innerHTML =
         `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(musica ? 'music' : 'mute')}</span>` +
-        `<span class="hidden md:inline font-mono">${musica ? 'Música' : 'Off'}</span>`;
-      mb.className = musica
-        ? 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-main)]'
-        : 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-muted)] opacity-70';
+        `<span>${musica ? 'Música' : 'Música off'}</span>`;
+      mb.className = PINTAR + (musica ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
       mb.setAttribute('aria-pressed', String(musica));
       mb.setAttribute('aria-label', musica ? 'Apagar música' : 'Encender música');
     }
@@ -37,22 +43,40 @@ export function wirePreviewAudio(app: HTMLElement) {
     if (sb) {
       sb.innerHTML =
         `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(efectos ? 'sound' : 'mute')}</span>` +
-        `<span class="hidden md:inline font-mono">${efectos ? 'SFX' : 'Off'}</span>`;
-      sb.className = efectos
-        ? 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-main)]'
-        : 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-muted)] opacity-70';
+        `<span>${efectos ? 'Efectos' : 'Efectos off'}</span>`;
+      sb.className = PINTAR + (efectos ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
       sb.setAttribute('aria-pressed', String(efectos));
       sb.setAttribute('aria-label', efectos ? 'Silenciar efectos' : 'Activar efectos');
     }
   };
 
   app.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-audio]') as HTMLElement | null;
-    if (!btn) return;
-    e.preventDefault();
-    primeAudio();
-    if (btn.dataset.audio === 'music') toggleMusic();
-    else toggleMute();
+    const target = e.target as HTMLElement;
+
+    // **ABRIR Y CERRAR LA HOJA, QUE ANTES NO SE PODÍA COMPROBAR AQUÍ.**
+    //
+    // En el juego lo abre y lo cierra el `app.onclick` de `renderBase`, que no existe en el
+    // preview. Sin esto, la hoja se veía bien y no respondía a nada —y es exactamente el
+    // fallo que sale al revisar la cabecera, en el banco en lugar de en el producto.
+    const hoja = () => app.querySelector('[data-ajustes]');
+    if (target.closest('[data-cerrar-ajustes]')) {
+      e.preventDefault();
+      hoja()?.classList.add('hidden');
+      return;
+    }
+    if (target.closest('[data-abrir-ajustes]')) {
+      e.preventDefault();
+      hoja()?.classList.remove('hidden');
+      return;
+    }
+
+    const btn = target.closest('[data-audio]') as HTMLElement | null;
+    if (btn) {
+      e.preventDefault();
+      primeAudio();
+      if (btn.dataset.audio === 'music') toggleMusic();
+      else toggleMute();
+    }
   });
 
   onAudioStateChange(pintar);

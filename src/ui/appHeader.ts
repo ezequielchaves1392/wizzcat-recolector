@@ -53,6 +53,8 @@
 import { ic, type IconName } from './icons';
 import { routeTitle, type Route } from './router';
 import { navDesktopHTML } from './navBars';
+import { isMusicEnabled, isSfxEnabled } from '../utils/audio';
+import { THEMES, getSavedTheme } from '../theme';
 import { formatNumber } from '../utils/format';
 
 // --------------------------------------------------------------------------
@@ -167,6 +169,13 @@ export interface AppHeaderOptions {
    * deshacer una decisión, no mejorarla. Aquí no hay hueco para él, y el que no está
    * escrito no se puede pintar por descuido.
    */
+  /**
+   * Lo que esta pantalla pone **además** de lo común.
+   *
+   * El audio, el tema y la salida están en la hoja de ajustes, que es de la cabecera y
+   * va en las siete. Aquí solo cabe lo que es de un sector —el botón que abre la ayuda
+   * de la Forja, la píldora de núcleos del prestigio— y por eso es opcional.
+   */
   actions?: string;
   /** Los saldos. `false` los quita, que es el caso de la pantalla de acceso. */
   resources?: any | false;
@@ -174,6 +183,145 @@ export interface AppHeaderOptions {
   buffsHudId?: string;
   /** Fila de buffs de móvil, DEBAJO de la fila. Solo la base. */
   mobileBuffsId?: string;
+}
+
+/**
+ * LA HOJA DE AJUSTES, Y POR QUÉ ES UNA HOJA Y NO TRES BOTONES EN LA CABECERA.
+ *
+ * **LO QUE RESUELVE, Y SON TRES COSAS A LA VEZ.**
+ *
+ * · **La asimetría.** El audio, el tema y la salida estaban solo en la base, así que al
+ *   entrar a cualquier sector desaparecían. Y el tema era peor de lo que parecía: su
+ *   panel era `lg:hidden` y estaba en `layout.ts`, o sea que **desde un sector no se
+ *   podía cambiar el tema de ninguna manera**. Un botón que solo existe en la base es un
+ *   botón que hay que recordar dónde está.
+ * · **El ancho.** Con los tres en línea, la fila pasa de "título, saldos, nav" a
+ *   "título, saldos, audio, audio, tema, salida, nav". Medido: el nav **volvía a
+ *   moverse**, porque al desbordarse la fila su borde derecho dejaba de ser el padding
+ *   de la cabecera. Con un botón se vuelve a la medida anterior, que era la buena.
+ * · **La fila.** Con un botón, la fila es idéntica en las siete y su contenido también.
+ *   Lo que el jugador aprende una vez vale para todas.
+ *
+ * **LO QUE SE PIERDE, Y SE DICE PORQUE ES REAL.** Silenciar la música pasa de un toque
+ * a dos. Se justifica así: el audio molesta en cualquier sector por igual, pero molesta
+ * en momentos concretos, y en esos momentos el jugador está mirando el recolector, no
+ * buscando ajustes.
+ *
+ * **Y NO HAY UNA HOJA POR COSA.** Una hoja con las tres cosas es lo que hace que
+ * "Ajustes" signifique algo; tres hojas distintas obligan a saber cuál abrir.
+ *
+ * **EL BOTÓN NO LLEVA LA PALABRA "AJUSTES": LLEVA UN ENGRANAJE CON `aria-label`.** Un
+ * engranaje con nombre accesible es el patrón que ya se reconoce, y ocupa 36 px en vez
+ * de los 250 que ocupaban los tres controles. El nombre va en el `title` para el ratón
+ * y en el `aria-label` para el lector de pantalla, que son los dos que lo necesitan.
+ */
+export function headerSettingsButton(): string {
+  return `
+    <button data-abrir-ajustes
+            class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
+            aria-label="Ajustes" title="Ajustes">
+      <span class="[&>span>svg]:w-[18px] [&>span>svg]:h-[18px]">${ic('gear')}</span>
+    </button>`;
+}
+
+/**
+ * LA HOJA. Va dentro de `<header>` porque la cabecera es lo que las siete pantallas
+ * pintan, y así hay un solo sitio donde puede estar.
+ *
+ * **`hidden` EN EL NODO, Y NO `lg:hidden`: EL MOTIVO ES EL CONTRARIO AL DE ANTES.** El
+ * panel viejo era `lg:hidden` porque en escritorio había un `<select>` que hacía lo mismo
+ * y en móvil el `select` no cabía. Ahora no hay `select`: la hoja es la **única** forma de
+ * cambiar el tema, así que tiene que existir en todos los anchos.
+ *
+ * Y el nodo **no se desmonta al cerrar**: el botón le quita `hidden` y el de cerrar se la
+ * vuelve a poner. Así los ids —`#music-btn`, `#mute-btn`— siguen siendo los mismos para
+ * `paintAudioButtons()`, que los busca por id para repintarlos al cambiar el estado. Si la
+ * hoja se desmontara, ese pintor no los encontraría y los interruptores se quedarían con
+ * el icono de antes de apagarlos.
+ *
+ * **LA POSICIÓN ES UNA Y LA MISMA EN TODOS LOS ANCHOS, Y ES A PROPÓSITO.** Abajo en
+ * móvil, que es donde llega el pulgar; centrada en escritorio, que es donde se lee. Dos
+ * clases y una regla, en vez de dos hojas.
+ */
+export function settingsSheetHTML(): string {
+  const tema = getSavedTheme();
+  return `
+    <div data-ajustes class="fixed inset-0 z-[80] hidden">
+      <div class="absolute inset-0 bg-black/65 backdrop-blur-sm" data-cerrar-ajustes></div>
+      <div class="absolute bottom-0 left-0 right-0 lg:absolute lg:bottom-auto lg:left-1/2 lg:top-1/2
+                  lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-[22rem]
+                  card-glass-elevated rounded-t-2xl lg:rounded-2xl p-5 pb-8 lg:pb-5 flex flex-col gap-4"
+           style="padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+                  animation: riseIn 280ms cubic-bezier(0.16, 1, 0.3, 1) both">
+        <div class="flex items-center justify-between">
+          <h3 class="font-['Orbitron'] font-bold text-sm accent-text">Ajustes</h3>
+          <button data-cerrar-ajustes
+                  class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer"
+                  aria-label="Cerrar">
+            <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
+          </button>
+        </div>
+
+        <!--
+          AUDIO: los dos interruptores son independientes y cada uno lleva su PROPIO
+          icono. Antes los dos pintaban el altavoz, así que eran dos botones idénticos y
+          no se sabía cuál era cuál.
+
+            música -> nota musical  (lo que pone, no lo que suena)
+            SFX    -> altavoz       (icono de parlante)
+
+          Apagado baja al icono de silencio y el texto lo dice, porque el estado se lee
+          de un vistazo sin depender del title —que en táctil no aparece hasta mantener
+          pulsado—.
+
+          data-audio en vez de dos manejadores: uno solo por delegación cubre los dos. Los
+          ids se quedan porque paintAudioButtons() los busca por id para repintarlos.
+        -->
+        <div class="grid grid-cols-2 gap-2">
+          <button id="music-btn" data-audio="music"
+            aria-pressed="${isMusicEnabled()}"
+            aria-label="${isMusicEnabled() ? 'Apagar música' : 'Encender música'}"
+            class="h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer
+                   flex items-center justify-center gap-1.5 transition-colors
+                   ${isMusicEnabled() ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-70'}">
+            <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isMusicEnabled() ? 'music' : 'mute')}</span>
+            <span>${isMusicEnabled() ? 'Música' : 'Música off'}</span>
+          </button>
+
+          <button id="mute-btn" data-audio="sfx"
+            aria-pressed="${isSfxEnabled()}"
+            aria-label="${isSfxEnabled() ? 'Silenciar efectos' : 'Activar efectos'}"
+            class="h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer
+                   flex items-center justify-center gap-1.5 transition-colors
+                   ${isSfxEnabled() ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)] opacity-70'}">
+            <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(isSfxEnabled() ? 'sound' : 'mute')}</span>
+            <span>${isSfxEnabled() ? 'Efectos' : 'Efectos off'}</span>
+          </button>
+        </div>
+
+        <div>
+          <div class="label-caps mb-2">Tema visual</div>
+          <div class="grid grid-cols-2 gap-2">
+            ${(THEMES ?? []).map((th: any) => `
+              <button data-theme-option="${th.value}"
+                class="theme-option h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer
+                       flex items-center justify-center gap-1.5 transition-colors"
+                style="${th.value === tema ? 'border-color:' + th.tone + ';color:' + th.tone : ''}">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${th.tone}"></span>
+                ${th.label}
+              </button>`).join('')}
+          </div>
+        </div>
+
+        <button data-logout
+          class="h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer
+                 flex items-center justify-center gap-1.5 transition-colors
+                 border border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20">
+          <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('logout')}</span>
+          Cerrar sesión
+        </button>
+      </div>
+    </div>`;
 }
 
 /**
@@ -217,6 +365,7 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
         </div>
 
         ${opts.resources !== false ? resourceBarHTML(opts.resources) : ''}
+        ${headerSettingsButton()}
         ${opts.actions ? `<div class="flex items-center gap-1.5 flex-shrink-0">${opts.actions}</div>` : ''}
 
         ${navDesktopHTML(opts.route)}
@@ -225,5 +374,7 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
       ${opts.mobileBuffsId ? `
         <div id="${opts.mobileBuffsId}"
              class="xl:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>` : ''}
+
+      ${settingsSheetHTML()}
     </header>`;
 }

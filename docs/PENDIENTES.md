@@ -1030,7 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1827**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1828**, todas en verde._
 
 ### La chrome, y por qué se ha medido
 
@@ -1074,6 +1074,35 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 
       ahí no daba `undefined` por accidente, daba `undefined` siempre. El estado entra
       ahora como argumento explícito, que es lo que toca cuando no se puede resolver por
       dentro.
+
+- [x] **Una hoja de ajustes con audio, tema y salida, en las siete pantallas.** El
+      engranaje está en la cabecera común, así que el mismo botón abre lo mismo en todas.
+      Antes el audio y la salida estaban **solo en la base** y el tema tenía dos sitios —
+      un panel en móvil y un selector en escritorio— y los dos estaban en `layout.ts`, o
+      sea que **desde un sector no se podía cambiar el tema de ninguna manera**. Tres
+      caminos para lo mismo, y uno que no funcionaba.
+      Resuelve también el ancho: con los tres controles en línea la fila pasaba a "título,
+      saldos, audio, audio, tema, salida, nav" y **el nav volvía a moverse**, porque al
+      desbordarse la fila su borde derecho dejaba de ser el padding. Medido antes y
+      después a 1200 y 1440: `navX` y el borde derecho son idénticos en las siete.
+      Y el tema **no cierra la hoja** al aplicarse: cambiarlo probando cuatro era un bucle.
+
+- [x] **La forja: la regla fijada en los diez niveles, y el yunque que no se contradice.**
+      Un "T7 + T7 me dio un T11" que **no se pudo reproducir**: por los diez niveles sale
+      T{n+1}, y los dos materiales desaparecen del almacén en acierto y en fallo. Lo más
+      probable es la cadena —T7+T7 da T8, T8+T8 da T9, T9+T9 da T10 y T10+T10 da T11—,
+      que es la única manera de subir de nivel porque la forja es +1. Aun así ahora hay
+      una prueba de los diez niveles, porque "creo que son cuatro" no es una comprobación.
+      Y sí había un defecto real alrededor: **puedes cambiar de pestaña de nivel con el
+      yunque lleno**, así que la rejilla enseñaba los materiales de un nivel mientras el
+      yunque seguía con los del anterior. Ahora la hoja se vacía y **se dice**, porque un
+      yunque que se vacía solo parece un fallo.
+
+- [x] **El preview delegaba la cabecera solo en la base.** `wirePreviewAudio()` estaba
+      dentro del `default`, así que en el almacén, la Forja o el mercado los
+      interruptores y la hoja de ajustes se veían bien y **no hacían nada**. Es el mismo
+      fallo que el recolector equipado que faltaba en el mock: el banco visual
+      aprobando cosas que el producto no hace. Movido después del `switch`, para las siete.
 
 - [x] **El botón del compañero abre la MISMA hoja que el del recolector.** Antes caían
       en sitios distintos: el del recolector abría la hoja de sintonización —coste, saldo,

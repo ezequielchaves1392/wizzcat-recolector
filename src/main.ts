@@ -23,7 +23,7 @@ import { renderProfilePage } from './ui/profilePage';
 import { renderPrestigePage } from './ui/prestigePage';
 import { Router, type Route } from './ui/router';
 
-import { applyTheme, getSavedTheme, setTheme, type ThemeName } from './theme';
+import { applyTheme, getSavedTheme, setTheme, THEMES, type ThemeName } from './theme';
 import { showConfirmModal } from './utils/modal';
 import {
   sfx, isSfxEnabled, isMusicEnabled, toggleMute, toggleMusic, primeAudio,
@@ -658,6 +658,25 @@ function renderBase(onNavigate: (r: Route) => void) {
       return;
     }
 
+    // La hoja de ajustes, antes que la navegación y antes que el cierre de sesión,
+    // porque los tres viven dentro de ella y el cierre es un `[data-logout]` que está
+    // más abajo en el DOM: si el cierre se comprobara después de la navegación, el clic
+    // en "Cerrar sesión" caería en el `closest('[data-nav]')` equivocado.
+    //
+    // Y abrir y cerrar en el MISMO manejador, no en dos: la cabecera se reconstruye al
+    // cambiar de sector y cualquier listener registrado a mano se queda en el nodo viejo.
+    if (target.closest('[data-cerrar-ajustes]')) {
+      e.preventDefault();
+      document.querySelector('[data-ajustes]')?.classList.add('hidden');
+      return;
+    }
+    if (target.closest('[data-abrir-ajustes]')) {
+      e.preventDefault();
+      sfx.nav();
+      document.querySelector('[data-ajustes]')?.classList.remove('hidden');
+      return;
+    }
+
     if (target.closest('[data-logout]')) {
       e.preventDefault();
       void doLogout();
@@ -687,30 +706,38 @@ function renderBase(onNavigate: (r: Route) => void) {
     const music = isMusicEnabled();
     const sfxOn = isSfxEnabled();
 
+    // **EL FORMATO DE AQUÍ TIENE QUE SER EL DE LA HOJA, Y ANTES NO LO ERA.** Estos dos
+    // botones quedaban en la cabecera con clases de botón de icono —w-9, texto oculto en
+    // móvil— y esta función los repintaba con esas mismas clases. Al moverlos a la hoja,
+    // que usa otros, este pintor habría seguido escribiendo las de la cabecera encima: el
+    // interruptor se vería diminuto dentro de una celda de la rejilla y el texto nunca
+    // aparecería.
+    //
+    // Es el mismo motivo por el que la nota de arriba dice que hay una sola función que
+    // decide cómo se ve cada estado, y por el que el marcado **no** debería estar en las
+    // dos: el que está aquí y el que escribe `settingsSheetHTML()` tienen que decir lo
+    // mismo, y por eso los dos están en este fichero y a la vista.
+    const PINTAR = 'h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer' +
+      ' flex items-center justify-center gap-1.5 transition-colors';
+
     const musicBtn = document.querySelector('#music-btn');
     if (musicBtn) {
       musicBtn.innerHTML =
         `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(music ? 'music' : 'mute')}</span>` +
-        `<span class="hidden md:inline font-mono">${music ? 'Música' : 'Off'}</span>`;
-      musicBtn.className = music
-        ? 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-main)]'
-        : 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-muted)] opacity-70';
+        `<span>${music ? 'Música' : 'Música off'}</span>`;
+      musicBtn.className = PINTAR + (music ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
       musicBtn.setAttribute('aria-pressed', String(music));
       musicBtn.setAttribute('aria-label', music ? 'Apagar música' : 'Encender música');
-      musicBtn.setAttribute('title', music ? 'Apagar música' : 'Encender música');
     }
 
     const sfxBtn = document.querySelector('#mute-btn');
     if (sfxBtn) {
       sfxBtn.innerHTML =
         `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(sfxOn ? 'sound' : 'mute')}</span>` +
-        `<span class="hidden md:inline font-mono">${sfxOn ? 'SFX' : 'Off'}</span>`;
-      sfxBtn.className = sfxOn
-        ? 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-main)]'
-        : 'w-9 h-9 md:w-auto md:h-9 md:px-2.5 rounded-lg btn-ghost flex items-center justify-center gap-1.5 cursor-pointer text-[11px] transition text-[var(--text-muted)] opacity-70';
+        `<span>${sfxOn ? 'Efectos' : 'Efectos off'}</span>`;
+      sfxBtn.className = PINTAR + (sfxOn ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
       sfxBtn.setAttribute('aria-pressed', String(sfxOn));
       sfxBtn.setAttribute('aria-label', sfxOn ? 'Silenciar efectos' : 'Activar efectos');
-      sfxBtn.setAttribute('title', sfxOn ? 'Silenciar efectos' : 'Activar efectos');
     }
   };
 
@@ -769,24 +796,37 @@ function renderBase(onNavigate: (r: Route) => void) {
   document.querySelector('#active-buffs-hud')?.addEventListener('click', handleBuffCancel);
   document.querySelector('#buffs-hud-mobile')?.addEventListener('click', handleBuffCancel);
 
-  // ---- Panel de tema (móvil) ----
-  const sheet = document.querySelector('#theme-sheet');
-  const openSheet = () => sheet?.classList.remove('hidden');
-  const closeSheet = () => sheet?.classList.add('hidden');
-  document.querySelector('#theme-btn-mobile')?.addEventListener('click', openSheet);
-  document.querySelector('#close-theme-sheet')?.addEventListener('click', closeSheet);
-  document.querySelector('#theme-sheet-overlay')?.addEventListener('click', closeSheet);
-  sheet?.querySelectorAll('[data-theme-option]').forEach(btn => {
+  // ---- Hoja de ajustes ----
+  //
+  // **ABRE Y CIERRE POR DELEGACIÓN, EN EL MISMO `app.onclick` DE ARRIBA, Y NO CON
+  // `addEventListener` POR NODO.** El botón está en la cabecera, y la cabecera se
+  // reconstruye cada vez que se cambia de sector: cualquier listener registrado a mano
+  // se queda colgado del nodo viejo y no vuelve a dispararse. El botón de cerrar y el
+  // fondo usan `data-cerrar-ajustes` y el que abre usa `data-abrir-ajustes`, así que los
+  // dos caminos salen del mismo `closest()`.
+  //
+  // Y el nodo **no se desmonta**: se le quita y se le pone `hidden`. Es lo que permite
+  // que `paintAudioButtons()` encuentre `#music-btn` y `#mute-btn` por id después de haber
+  // cambiado el estado; si la hoja se quitara del DOM, los interruptores se quedarían con
+  // el icono de antes de apagarlos.
+  //
+  // El tema se aplica **sin cerrar** la hoja, al revés que antes. Antes el panel de móvil
+  // se cerraba al elegir, y eso obligaba a reabrirlo para ver el siguiente: cambiar el
+  // tema probando cuatro es un bucle, no una decisión.
+  const ajustes = document.querySelector('[data-ajustes]');
+  ajustes?.querySelectorAll('[data-theme-option]').forEach(btn => {
     btn.addEventListener('click', () => {
       setTheme(btn.getAttribute('data-theme-option') as ThemeName);
-      closeSheet();
+      // El botón elegido se marca por el color del tema, y el resto se queda igual: solo
+      // hace falta volver a pintar los que ya existían.
+      ajustes.querySelectorAll('[data-theme-option]').forEach((otro: any) => {
+        const activo = THEMES.find((t: any) => t.value === getSavedTheme());
+        otro.style.cssText = otro.getAttribute('data-theme-option') === getSavedTheme()
+          ? `border-color:${activo?.tone};color:${activo?.tone}`
+          : '';
+      });
     });
   });
-
-  // ---- Tema (escritorio) ----
-  const themeSelector = document.querySelector('#theme-selector') as HTMLSelectElement | null;
-  if (themeSelector) themeSelector.value = getSavedTheme();
-  themeSelector?.addEventListener('change', (e) => setTheme((e.target as HTMLSelectElement).value as ThemeName));
 
   // ---- Audio: suspende en segundo plano para no gastar batería ----
   // El listener vive en `document`, que sobrevive a los re-renders de la

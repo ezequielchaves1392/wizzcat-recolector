@@ -383,12 +383,6 @@ switch (vista) {
       onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
     }, undefined, MOCK);
 
-    // Los interruptores de audio se conectan aquí también. En el juego lo hace
-    // `renderBase` con un listener delegado en `#app`; el preview pinta la
-    // misma cabecera pero sin esa delegación, así que sin esto los botones se
-    // ven bien y no hacen nada, que es justo lo que hay que comprobar al
-    // revisar un cambio de audio.
-    wirePreviewAudio(app);
     // El cuarto argumento es la cifra REAL que aporta cada compañero, con los
     // multiplicadores ya puestos. Sin él, `renderPanel` cae a `comp.power` y el
     // preview enseñaría "+65/s" donde el juego pinta otra cosa: el banco visual
@@ -402,6 +396,20 @@ switch (vista) {
     renderPanel(MOCK, 1962, MOCK.maxCompanionSlots + MOCK.bonus.companionSlots, ingresoDe);
     renderBuffHudForPreview(MOCK);
 }
+
+// LA DELEGACIÓN DE LA CABECERA, UNA VEZ Y PARA LAS SIETE VISTAS.
+//
+// El juego la monta `renderBase`, con un solo `app.onclick` que cubre `data-nav`,
+// `data-audio`, `data-logout` y la hoja de ajustes. El preview pinta las mismas
+// cabeceras sin esa delegación, así que sin esto los botones se veían bien y no
+// hacían nada.
+//
+// **ESTO ESTABA DENTRO DEL `DEFAULT`, Y ESO ERA OTRO BUG.** Solo la base quedaba
+// cableada: en el almacén, en la Forja o en el mercado los interruptores y la hoja de
+// ajustes no respondían. Es el mismo fallo que se vio con el recolector equipado que
+// faltaba en el mock —el banco visual aprobando cosas que el producto no hace— y se
+// repite porque las dos veces estaba en el sitio que se daba por supuesto.
+wirePreviewAudio(app);
 
 // Navegación entre vistas del preview: permite recorrer todas sin volver a la
 // barra de direcciones. No existe en el juego real.
