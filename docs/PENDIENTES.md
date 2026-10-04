@@ -272,9 +272,19 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       filtra por `ui.tipo`, así que un recolector no aparece en la pestaña de compañeros.
       Falta lo que tú describes, que es el aviso: si hay un compañero en el yunque, al tocar
       un recolector tiene que decir **por qué** no lo acepta, no simplemente no aparecer.
-- [ ] **B12 · El yunque de fusión quedó raro.** Son tres huecos en fila y se leen como un
-      campo de texto vacío. Es **estética**, y es de las tres la única que no toca una regla,
-      así que puede ir en cualquier momento.
+- [x] **B12 · El yunque de fusión quedó raro.** **No era estética: era un número escrito en
+      un sitio que no lo era.** La rejilla del yunque tenía `grid-template-columns: repeat(3,
+      1fr)` en el CSS desde los tiempos de la receta de tres, y cuando la receta pasó a dos
+      la rejilla siguió con tres: los dos huecos caían a la izquierda y la tercera columna se
+      leía como un campo de texto vacío al lado del yunque. El `MATERIALES_POR_FUSION` lo
+      lee la página y el CSS no puede leerlo, así que ahora lo pinta la página en un
+      `style` y el CSS solo pone el resto del molde. De paso el ancho de cada hueco está
+      acotado a 5,5 rem y centrado, porque con `1fr` en un monitor los dos cuadrados de
+      `aspect-ratio: 1` medían medio metro de alto cada uno.
+      Y el "2 del mismo tier → 1 del siguiente" de la cabecera también sale de la receta:
+      estaba escrito a mano, que es el segundo sitio donde podía quedarse viejo.
+      Comprobado en `preview.html?vista=forja` a 390×844 y a 1440×900: dos huecos, centrados,
+      sin columna fantasma.
 - [ ] **B13 · La barra de progreso de los buffs miente cuando usas varios.** **Causa raíz
       encontrada, y es una sola:** la barra se calcula como `restante / durationMs`, donde
       `durationMs` es la duración **de una unidad**, pero el motor **acumula**: usar tres

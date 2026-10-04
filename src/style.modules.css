@@ -262,10 +262,21 @@
    Forja
    -------------------------------------------------------------------------- */
 
-/* Rejilla de 3 huecos: el molde donde caen los materiales */
+/* El molde donde caen los materiales.
+   **SIN NÚMERO DE COLUMNAS AQUÍ, Y POR QUÉ.** Estaba en `repeat(3, 1fr)` desde que
+   la receta pedía tres, y cuando la receta pasó a ser dos la rejilla siguió con
+   tres: los dos huecos caían a la izquierda y la tercera columna se leía como un
+   campo de texto vacío a la derecha del yunque. Ese es B12 entero —"son tres huecos
+   en fila y se leen como un campo de texto"— y el arreglo correcto no es poner dos
+   columnas, sino que **el número venga de `MATERIALES_POR_FUSION`**, que es el módulo
+   que impone la receta. Lo pinta la página, en `style`.
+
+   Y el ancho se limita a 5.5 rem por hueco con el conjunto centrado: con `1fr` a
+   ancho de escritorio, dos cuadrados de `aspect-ratio: 1` medían medio metro de alto
+   cada uno. Un yunque no crece con la pantalla. */
 .forge-anvil {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem;
   border-radius: 1rem;

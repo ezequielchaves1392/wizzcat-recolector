@@ -376,10 +376,23 @@ function nivelDe(w: any): number {
 
     <section class="card-glass rounded-2xl p-3 md:p-4 mb-3">
       ${sectionHead('Yunque de fusión', 'anvil', `
-        <span class="text-[9px] font-mono text-[var(--text-muted)] hidden sm:inline">2 del mismo tier → 1 del siguiente</span>
+        <!-- EL "2 DEL MISMO TIER" TAMBIEN SALE DE LA RECETA. Con el numero escrito
+             en el span y otro en el yunque, un cambio de MATERIALES_POR_FUSION dejaba
+             media pagina diciendo la receta vieja. Una receta no se escribe en dos sitios. -->
+        <span class="text-[9px] font-mono text-[var(--text-muted)] hidden sm:inline">${MATERIALES_POR_FUSION} del mismo tier → 1 del siguiente</span>
       `)}
 
-      <div class="forge-anvil">${Array.from({ length: MATERIALES_POR_FUSION }, (_, i) => slot(i)).join('')}</div>
+      <!-- **EL NÚMERO DE COLUMNAS LO PONE LA RECETA, Y POR AQUÍ.** Estaba en el CSS como
+           repeat(3, 1fr) desde los tiempos de la receta de tres, y cuando la receta
+           pasó a dos la rejilla siguió con tres: los dos huecos caían a la izquierda y
+           la tercera columna se leía como un campo de texto vacío al lado del yunque.
+           B12 entero. Ahora sale de MATERIALES_POR_FUSION, que es el módulo que impone la
+           receta, y el ancho de cada hueco está acotado porque un yunque no crece con la
+           pantalla. -->
+      <div class="forge-anvil"
+           style="grid-template-columns: repeat(${MATERIALES_POR_FUSION}, minmax(0, 5.5rem))">
+        ${Array.from({ length: MATERIALES_POR_FUSION }, (_, i) => slot(i)).join('')}
+      </div>
 
       <div class="mt-3">
         <div class="flex items-center justify-between gap-2 mb-1.5">
