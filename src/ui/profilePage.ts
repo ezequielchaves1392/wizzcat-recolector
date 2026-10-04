@@ -15,8 +15,7 @@
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShell';
 import { COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
-import { titleStyleFor } from './identity';
-import { getSkipRoulette, setSkipRoulette } from '../roulettePrefs';
+import { titleStyleFor, avatarStack } from './identity';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { estrellasDe } from '../data/crafting';
 import { formatNumber } from '../utils/format';
@@ -57,21 +56,19 @@ export function identityCard(opts: {
   const initials = (opts.name || '?').trim().slice(0, 2).toUpperCase();
 
   const title = COSMETICS_BY_ID[opts.cosmetics.title];
-  const frame = COSMETICS_BY_ID[opts.cosmetics.frame];
-  const banner = COSMETICS_BY_ID[opts.cosmetics.banner];
 
   const titleStyle = titleStyleFor(title);
 
+  // **EL AVATAR LO PINTA `avatarStack()`, EL MISMO QUE LA CABECERA Y EL RANKING.**
+  //
+  // Aquí había una segunda copia del markup del avatar con sus tres `span`, y las dos
+  // copias ya se habían separado: la de aquí no tachaba el halo cuando no había banner
+  // —dejaba un `avatar-frame` invisible ocupando el sitio— y la otra sí. Con el halo, el
+  // marco y el núcleo en un solo sitio, el perfil y el ranking enseñan lo mismo por
+  //construccion y no por casualidad.
   return `
     <div class="flex items-center gap-3 min-w-0">
-      <div class="avatar-stack ${dims} flex-shrink-0">
-        <span class="avatar-frame w-full h-full rounded-full ${banner?.id && banner.id !== 'banner_none'
-          ? '' : 'opacity-0'}"
-              style="${banner && banner.id !== 'banner_none' ? `transform:scale(1.9);opacity:.5;${cosmeticStyle(banner)}` : ''}"></span>
-        <span class="avatar-core w-[78%] h-[78%] ${glyph}">${initials}</span>
-        <span class="avatar-frame w-full h-full rounded-full"
-              style="${frame ? cosmeticStyle(frame) : ''}"></span>
-      </div>
+      ${avatarStack(initials, opts.cosmetics, dims, glyph)}
       <div class="min-w-0 flex-1">
         <div class="font-['Orbitron'] font-bold text-[13px] md:text-sm text-[var(--text-main)] truncate leading-tight">
           ${opts.name}
@@ -323,24 +320,6 @@ export function renderProfilePage(
       ` : ''}
     </section>
 
-    <!-- Ajustes: vive aquí y no dentro de la ruleta, porque un control dentro
-         de algo que se puede saltar no se alcanza nunca. Y en el Perfil y no
-         en el panel de tema, porque ese panel es solo móvil: el
-         check tiene que existir en las dos versiones. -->
-    <section class="card-glass rounded-2xl p-3 md:p-4 mt-3">
-      ${sectionHead('Ajustes', 'gear', '')}
-      <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
-        <input type="checkbox" data-setting="skip-roulette" class="w-5 h-5 flex-shrink-0 accent-[var(--accent)]"
-               ${getSkipRoulette() ? 'checked' : ''}
-               aria-describedby="skip-roulette-hint">
-        <span class="min-w-0">
-          <span class="block text-[12px] font-bold text-[var(--text-main)]">Saltar la animación de la ruleta</span>
-          <span id="skip-roulette-hint" class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
-            Va directo al cartel del premio, en cajas y sintonizador. El premio no cambia: ya estaba decidido.
-          </span>
-        </span>
-      </label>
-    </section>
   `;
 
   const root = mountInto(container, pageShell({
@@ -354,15 +333,6 @@ export function renderProfilePage(
   // --- Eventos ---
   wireNav(root, { go });
   root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
-  // El check es un `input` real: su estado lo lleva el propio navegador y la
-  // preferencia vive en `localStorage`, así que no hay que re-pintar nada al
-  // cambiarlo. Se lee de la misma fuente al montar, y por eso sobrevive al
-  // re-render igual que sobrevive a la recarga.
-  root.querySelector<HTMLInputElement>('[data-setting="skip-roulette"]')?.addEventListener('change', (e) => {
-    sfx.nav();
-    setSkipRoulette((e.target as HTMLInputElement).checked);
-  });
-
   root.querySelectorAll<HTMLElement>('[data-cos-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
       sfx.nav();

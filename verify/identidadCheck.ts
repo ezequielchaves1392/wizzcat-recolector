@@ -21,6 +21,7 @@
 
 import { check, resumen, boot, baseSave, reload, s } from './kit';
 import { miniIdentity } from '../src/ui/identity';
+import { identityCard } from '../src/ui/profilePage';
 import { BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT } from '../src/services/rankingService';
 import { coresGastadosEnArbol } from '../src/data/tree';
 
@@ -107,8 +108,42 @@ async function main() {
       html.includes('Campeón'), 'sin Campeón');
     check('identidad: el marco viaja en el estilo del avatar',
       html.includes('var(--accent)'), 'sin el borde de Neón');
-    check('identidad: el banner va de halo, no de fondo entero',
-      html.includes('scale(1.9)'), 'sin halo');
+    // **EL BANNER VA DETRÁS DEL NÚCLEO Y SE ESCALA, QUE ES LO QUE LO HACE HALO Y NO
+    // FONDO ENTERO.** Se comprueba el orden y no el número del escalado: el número
+    // exacto es una decisión de aspecto —1,9 era el valor viejo y ahora es 1,7 para lo
+    // circular y 1,32 para lo que no lo es, porque el banner se ve de más al 50 %— y una
+    // prueba clavada en un 1,9 solo sirve para avisar cuando se cambia el gusto, que no
+    // es un fallo. El orden sí es una regla: el banner detrás del núcleo o no es un
+    // banner.
+    const iBanner = html.indexOf('transform:scale(');
+    const iNucleo = html.indexOf('avatar-core');
+    check('identidad: el banner va de halo detrás del núcleo, no de fondo entero',
+      iBanner !== -1 && iNucleo !== -1 && iBanner < iNucleo,
+      `banner=${iBanner} nucleo=${iNucleo}`);
+    // Y el marco, ENCIMA del núcleo: el banner es el fondo del retrato y el marco es
+    // el borde. Si el marco se colara debajo, el avatar lo taparía.
+    const iMarco = html.lastIndexOf('avatar-frame');
+    check('identidad: el marco va encima del núcleo, y el banner debajo',
+      iMarco > iNucleo, `marco=${iMarco} nucleo=${iNucleo}`);
+    // **Y QUE EL PERFIL USE EL MISMO AVATAR QUE LA CABECERA.** El markup estaba
+    // copiado en `identityCard()` y las dos copias ya se habían separado. La prueba
+    // compara el trozo de avatar de las dos funciones, y es la que falla el día que
+    // alguien toca uno de los dos y no el otro.
+    //
+    // **CON LOS MISMOS TAMAÑOS A PROPÓSITO.** El perfil pinta el avatar a 56 px y la
+    // cabecera a 32, y eso es lo correcto; comparar el markup entero fallaría siempre.
+    // Lo que se compara es el resto —el halo, el marco y su estilo—, que es lo que se
+    // separó.
+    const misma = miniIdentity('Ab', {
+      title: 'title_champion', frame: 'frame_neon', banner: 'banner_abyss'
+    }, { hideDefaultTitle: true, avatarClass: 'w-14 h-14', glyphClass: 'text-lg' });
+    const perfil = identityCard({
+      name: 'Ab',
+      cosmetics: { title: 'title_champion', frame: 'frame_neon', banner: 'banner_abyss' }
+    });
+    const trozo = (h: string) => h.slice(h.indexOf('avatar-stack'), h.indexOf('avatar-core') + 40);
+    check('identidad: el perfil y la cabecera pintan el mismo avatar',
+      trozo(misma) === trozo(perfil), 'perfil=' + trozo(perfil).slice(0, 110));
     const defecto = miniIdentity('Ab', {
       title: 'title_default', frame: 'frame_none', banner: 'banner_none',
     }, { hideDefaultTitle: true });

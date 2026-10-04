@@ -27,6 +27,7 @@
 // ==========================================================================
 
 import { ic } from './icons';
+import { getSkipRoulette } from '../roulettePrefs';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
 import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION } from '../data/crafting';
 import { formatNumber } from '../utils/format';
@@ -648,6 +649,14 @@ function runForge(game: any, materials: any[], stones: number, nano: boolean, re
 
 /** Ruleta de la forja: 18 celdas, la 9ª alineada con la aguja. */
 function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean) {
+  // F17 · LA PREGUNTA SE HACE UNA VEZ Y ANTES DE PINTAR NADA.
+  //
+  // El trompo de la forja es el único de los tres que **no miraba la preferencia**, y no
+  // por una regla propia: se escribió antes de que existiera y nadie volvió a ella.
+  // Sin esto, un jugador que apaga el trompo se lo come veinte veces seguidas porque el
+  // ajuste dice "saltar la ruleta" y la forja no es una ruleta según el jugador.
+  const saltar = getSkipRoulette();
+
   const overlay = document.createElement('div');
   overlay.className = 'fixed inset-0 z-[75] flex flex-col items-center justify-center p-6';
   overlay.style.cssText = 'background: rgb(0 0 0 / 0.8); backdrop-filter: blur(8px);';
@@ -694,7 +703,6 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
       <div class="text-center label-caps" style="color:${tone}">
         ${success ? 'Forja completada' : 'El yunque se enfrió'}
       </div>
-      <div class="forge-roulette">
         <div class="flex gap-1.5 pl-8" id="forge-track" style="will-change:transform">${cells}</div>
       </div>
       <div class="text-center flex flex-col gap-1">
@@ -706,16 +714,23 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
 
   document.body.appendChild(overlay);
 
-  const track = overlay.querySelector('#forge-track') as HTMLElement;
-  const reel = overlay.querySelector('.forge-roulette') as HTMLElement;
+  const track = overlay.querySelector('#forge-track') as HTMLElement | null;
+  const reel = overlay.querySelector('.forge-roulette') as HTMLElement | null;
 
+  // **CON EL TROMPO SALTADO NO HAY CINTA, Y POR ESO NO HAY NADA QUE COLOCAR.** Los dos
+  // nodos se buscan igual y salen `null`, y `place()` abria el `children[9]` de un `null`.
+  // La cuenta del taper tampoco se pone: es el sonido del trompo girando, y sin trompo
+  // sonaria veinte veces por forja solo.
   let ticks = 0;
   const maxTicks = 22;
-  const tickTimer = window.setInterval(() => {
-    ticks++;
-    sfx.forgeTick(ticks / maxTicks);
-    if (ticks >= maxTicks) window.clearInterval(tickTimer);
-  }, 70);
+  let tickTimer = 0;
+  if (!saltar) {
+    tickTimer = window.setInterval(() => {
+      ticks++;
+      sfx.forgeTick(ticks / maxTicks);
+      if (ticks >= maxTicks) window.clearInterval(tickTimer);
+    }, 70);
+  }
 
   // Posicionamiento de la ruleta.
   //
@@ -740,8 +755,12 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
 
   const place = () => {
     if (positioned) return;
-    const cell = track.children[WIN] as HTMLElement | undefined;
-    if (!cell) return;
+    // **SIN CINTA NO HAY NADA QUE COLOCAR, Y POR ESO LA COMPROBACION DE LOS DOS.**
+    // La celda sale de la pista y la aguja sale del carrete: con el trompo saltado no
+    // existe ninguna de las dos, y `children[9]` de un `null` es un fallo de ejecucion
+    // en el momento del resultado, que es el peor sitio posible para uno.
+    const cell = track?.children[WIN] as HTMLElement | undefined;
+    if (!cell || !track || !reel) return;
     positioned = true;
 
     const cellW = parseFloat(getComputedStyle(cell).width) || 56;
@@ -756,20 +775,22 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
 
   // Comprobación: mide dónde quedó la celda y corrige la diferencia
   const verify = () => {
-    const cell = track.children[WIN] as HTMLElement | undefined;
-    if (!cell) return;
+    const cell = track?.children[WIN] as HTMLElement | undefined;
+    if (!cell || !reel) return;
     const cr = cell.getBoundingClientRect();
     const rr = reel.getBoundingClientRect();
     const needle = rr.left + reel.clientLeft + reel.clientWidth / 2;
     const delta = (cr.left + cr.width / 2) - needle;
-    if (Math.abs(delta) < 1) return;
+    if (Math.abs(delta) < 1 || !track) return;
     const current = parseFloat(track.style.getPropertyValue('--forge-travel')) || 0;
     track.style.setProperty('--forge-travel', `${(current + delta).toFixed(1)}px`);
   };
 
-  requestAnimationFrame(() => { place(); verify(); });
-  window.setTimeout(() => { place(); verify(); }, 60);
-  window.setTimeout(verify, 220);
+  if (!saltar) {
+    requestAnimationFrame(() => { place(); verify(); });
+    window.setTimeout(() => { place(); verify(); }, 60);
+    window.setTimeout(verify, 220);
+  }
 
   window.setTimeout(() => {
     window.clearInterval(tickTimer);
@@ -778,4 +799,11 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
     overlay.style.opacity = '0';
     window.setTimeout(() => overlay.remove(), 340);
   }, 2200);
+  window.setTimeout(() => {
+    window.clearInterval(tickTimer);
+    onDone();
+    overlay.style.transition = 'opacity 320ms ease';
+    overlay.style.opacity = '0';
+    window.setTimeout(() => overlay.remove(), 340);
+  }, saltar ? 900 : 2200);
 }

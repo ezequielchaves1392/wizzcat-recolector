@@ -1109,8 +1109,12 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         break;
       }
       case 'av-tipo': {
-        const btn = (e.target as HTMLElement).closest('[data-av-tipo]') as HTMLElement | null;
-        const tipo = btn?.dataset.avTipo as TipoDeVentaAuto | undefined;
+        // **EL TIPO VIENE EN `data-av-tipo`, Y `data-act` ES LA PUERTA.** El delegado de
+        // este archivo entra por `closest('[data-act]')`, asi que un boton que solo
+        // tuviera `data-av-tipo` no llegaba aqui: **se veía el interruptor, se pulsaba y
+        // no pasaba nada**. Por eso el boton lleva los dos atributos y no uno que haga
+        // las dos cosas.
+        const tipo = btn.dataset.avTipo as TipoDeVentaAuto | undefined;
         if (!tipo) return;
         const cfg = game.getAutoVenta?.() ?? AUTO_VENTA_POR_DEFECTO;
         sfx.pick();
@@ -1870,7 +1874,7 @@ function filtroDeAutoVentaHTML(game: any): string {
     return `
       <button class="px-2.5 h-8 rounded-lg text-[10px] font-mono cursor-pointer transition
                      ${marcado ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}"
-              data-av-tipo="${t}" aria-pressed="${marcado}">${nombreDeTipoDeAuto(t)}</button>`;
+              data-act="av-tipo" data-av-tipo="${t}" aria-pressed="${marcado}">${nombreDeTipoDeAuto(t)}</button>`;
   };
 
   const opcion = (valor: number, texto: string, actual: number) => `
@@ -1880,7 +1884,7 @@ function filtroDeAutoVentaHTML(game: any): string {
     <div class="mt-2 rounded-xl px-2.5 py-2 border"
          style="border-color: color-mix(in srgb, var(--accent) 25%, transparent)">
       <button class="w-full flex items-center justify-between gap-2 cursor-pointer"
-              data-av-activa aria-pressed="${cfg.activa}">
+              data-act="av-activa" aria-pressed="${cfg.activa}">
         <span class="text-[10px] font-mono font-bold ${cfg.activa ? 'accent-text' : 'text-[var(--text-muted)]'}">
           Vender el botín que no quieras
         </span>

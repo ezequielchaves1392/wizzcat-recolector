@@ -51,6 +51,7 @@
 // ==========================================================================
 
 import { ic, type IconName } from './icons';
+import { getSkipRoulette } from '../roulettePrefs';
 import { routeTitle, type Route } from './router';
 import { navDesktopHTML } from './navBars';
 import { isMusicEnabled, isSfxEnabled } from '../utils/audio';
@@ -346,6 +347,40 @@ export function settingsSheetHTML(): string {
             <span>${isSfxEnabled() ? 'Efectos' : 'Efectos off'}</span>
           </button>
         </div>
+
+                <!--
+          SALTAR LA ANIMACIÓN DE LA RULETA, Y POR QUÉ ESTÁ AQUÍ Y NO EN EL PERFIL.
+
+          Estaba en el Perfil, en una sección "Ajustes" propia, y era el único sitio
+          del juego donde se podía cambiar. Tres razones para moverlo:
+
+          · **El engranaje está en las siete pantallas y el Perfil es una.** Saltar la
+            ruleta es lo que se hace siempre que se abren veinte cajas; pedir abrir el
+            Perfil para ello es un viaje por cada ajuste.
+          · **Un control dentro de algo que se puede saltar no se alcanza nunca** — esa
+            razón siempre se tenía, pero iba en la dirección contraria: el Perfil es un
+            sitio al que se va, y aquí el ajuste está donde ya estás.
+          · **La sección del Perfil que lo contenía se queda sin nada que poner.** Un
+            "Ajustes" con un solo control al final de una página de logros es ruido; el
+            sitio de los ajustes es la hoja que se llama Ajustes.
+
+          Y la casilla es un input real, no un botón: el estado lo lleva el navegador y
+          la preferencia vive en el almacenamiento local, así que no hay que repintar
+          nada al cambiarla. Se lee de la misma fuente al montar, y por eso sobrevive al
+          re-render igual que sobrevive a la recarga.
+        -->
+        <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
+          <input type="checkbox" data-setting="skip-roulette"
+                 class="w-5 h-5 flex-shrink-0 accent-[var(--accent)]"
+                 ${getSkipRoulette() ? 'checked' : ''}
+                 aria-describedby="skip-roulette-hint">
+          <span class="min-w-0">
+            <span class="block text-[12px] font-bold text-[var(--text-main)]">Saltar la ruleta</span>
+            <span id="skip-roulette-hint" class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5 leading-relaxed">
+              Va directo al cartel, en cajas, en el sintonizador y en la forja. El premio no cambia: ya estaba decidido.
+            </span>
+          </span>
+        </label>
 
         <div>
           <div class="label-caps mb-2">Tema visual</div>

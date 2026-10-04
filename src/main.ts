@@ -1,4 +1,5 @@
 import { renderBuffHud, resetBuffHud, buffLabel } from './ui/buffHud';
+import { setSkipRoulette } from './roulettePrefs';
 import { renderPanel } from './ui/playerPanel';
 import { formatNumber } from './utils/format';
 import './style.css';
@@ -56,6 +57,17 @@ let lastIdentityKey = '';const router = new Router();
  * botones, tres de ellos borrados.
  */
 const audioUnsubscribers = new Set<() => void>();
+
+/**
+ * Que la delegacion de ajustes ya esta puesta.
+ *
+ * Un `addEventListener` acumula, y `initGame()` corre **otra vez** al volver a entrar:
+ * sin este guarda, un jugador que cierra sesion y vuelve a entrar tendria dos
+ * delegados, y con dos la hoja se abre y se cierra en el mismo clic y no se ve nada.
+ * Es el bug de multiplicador par de esta misma funcion, que es el que ya se pago dos
+ * veces aqui. Ver `instalaDelegacionDeAjustes()`.
+ */
+let ajustesDelegados = false;
 
 function clearAudioUnsubscribers() {
   audioUnsubscribers.forEach(fn => {
@@ -574,6 +586,64 @@ async function initGame(user: any, username?: string) {
  * se congelaba mientras mirabas tus cosas.
  */
 /**
+ * Repinta los dos botones de audio con el estado real.
+ *
+ * Se llama tras cada cambio de estado y **no** re-renderiza la vista entera: un
+ * re-render destruye el HUD de buffs y las escuchas del click del recolector, y perderse
+ * eso por cambiar un icono no compensa.
+ *
+ * ## POR QUE ESTA EN EL AMBITO DEL MODULO Y NO DENTRO DE `renderBase`
+ *
+ * Porque la llamaban los dos interruptores, y como solo se llamaba en la base, cambiar la
+ * musica desde el almacen no repintaba el boton: **el estado de audio y lo que se veian
+ * dejaban de ser la misma cosa en seis de las siete pantallas**. Una funcion que decide
+ * como se ve un estado tiene que estar donde el estado vive, y el estado no es de la
+ * base.
+ *
+ * Y hay una sola funcion que decide como se ve cada estado: cuando el estado se pintaba
+ * en dos sitios --el HTML de `layout.ts` y el manejador del toggle-- cualquier cambio de
+ * estilo tenia que hacerse dos veces, y ya se habia desincronizado: el boton de musica
+ * nunca cambiaba de icono.
+ */
+function paintAudioButtons() {
+  const music = isMusicEnabled();
+  const sfxOn = isSfxEnabled();
+
+  // **EL FORMATO DE AQUI TIENE QUE SER EL DE LA HOJA, Y ANTES NO LO ERA.** Estos dos
+  // botones quedaban en la cabecera con clases de boton de icono --w-9, texto oculto en
+  // movil-- y esta funcion los repintaba con esas mismas clases. Al moverlos a la hoja,
+  // que usa otros, este pintor habria seguido escribiendo las de la cabecera encima: el
+  // interruptor se veria diminuto dentro de una celda de la rejilla y el texto nunca
+  // apareceria.
+  //
+  // Es el mismo motivo por el que el marcado **no** deberia estar en las dos: el que esta
+  // aqui y el que escribe `settingsSheetHTML()` tienen que decir lo mismo, y por eso los
+  // dos estan en este fichero y a la vista.
+  const PINTAR = 'h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer' +
+    ' flex items-center justify-center gap-1.5 transition-colors';
+
+  const musicBtn = document.querySelector('#music-btn');
+  if (musicBtn) {
+    musicBtn.innerHTML =
+      `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(music ? 'music' : 'mute')}</span>` +
+      `<span>${music ? 'Música' : 'Música off'}</span>`;
+    musicBtn.className = PINTAR + (music ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
+    musicBtn.setAttribute('aria-pressed', String(music));
+    musicBtn.setAttribute('aria-label', music ? 'Apagar música' : 'Encender música');
+  }
+
+  const sfxBtn = document.querySelector('#mute-btn');
+  if (sfxBtn) {
+    sfxBtn.innerHTML =
+      `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(sfxOn ? 'sound' : 'mute')}</span>` +
+      `<span>${sfxOn ? 'Efectos' : 'Efectos off'}</span>`;
+    sfxBtn.className = PINTAR + (sfxOn ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
+    sfxBtn.setAttribute('aria-pressed', String(sfxOn));
+    sfxBtn.setAttribute('aria-label', sfxOn ? 'Silenciar efectos' : 'Activar efectos');
+  }
+}
+
+/**
  * ABRE Y CIERRA LA HOJA DE AJUSTES, Y ESTE LISTENER SOBREVIVE A LOS CAMBIOS DE RUTA.
  *
  * ## POR QUÉ ESTÁ FUERA DEL `app.onclick` DE LA BASE
@@ -603,9 +673,49 @@ async function initGame(user: any, username?: string) {
  * Y `data-cerrar-ajustes` y `data-abrir-ajustes` salen del mismo `closest()`, porque los
  * dos botones y el fondo del diálogo comparten atributo y no hay nada más que consultar.
  */
+
 function instalaDelegacionDeAjustes() {
+  if (ajustesDelegados) return;
+  ajustesDelegados = true;
+
   app.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
+    // ---------------------------------------------------------------------------------
+    //  LOS INTERRUPTORES DE AUDIO, Y POR QUÉ ESTABAN EN EL `onclick` DE LA BASE
+    // ---------------------------------------------------------------------------------
+    //
+    // **ESTOS BOTONES NO RESPONDÍAN FUERA DE LA BASE, Y NO ES UN CASO RARO: son seis de
+    // las siete pantallas.** El abrir, el cerrar y el tema se movieron aquí hace un rato
+    // porque tenían este mismo fallo, y **los tres que quedaban detrás se quedaron**:
+    // música, efectos y cerrar sesión. Los dos interruptores se veían, se pulsaban y no
+    // pasaba nada, porque `renderRoute()` hace `app.onclick = null` en cada cambio de
+    // ruta y el manejador que los atendía solo existía en la base.
+    //
+    // Y hay una segunda mitad que es la que más cuesta ver: **aunque el clic llegara, el
+    // icono no se repintaría**, porque `paintAudioButtons()` estaba como función local de
+    // `renderBase()` y su suscripción estaba en `audioUnsubscribers`, que
+    // `renderRoute()` limpia en cada ruta. Es decir: el estado de audio y lo que se veía
+    // solo cuadraban juntos en la base.
+    //
+    // `primeAudio()` va antes del toggle y por el motivo de siempre: **el AudioContext no
+    // se puede crear sin un gesto del usuario**, y un toggle que lo crea después de un
+    // `await` nace suspendido para siempre. El preview ya lo hacía — por eso allí sí
+    // funcionaba — y aquí no.
+    const audioBtn = target.closest('[data-audio]') as HTMLElement | null;
+    if (audioBtn) {
+      e.preventDefault();
+      primeAudio();
+      if (audioBtn.dataset.audio === 'music') toggleMusic();
+      else toggleMute();
+      return;
+    }
+
+    if (target.closest('[data-logout]')) {
+      e.preventDefault();
+      void doLogout();
+      return;
+    }
+
     if (target.closest('[data-cerrar-ajustes]')) {
       e.preventDefault();
       // **EL NODO SE BUSCA AQUÍ Y NO SE GUARDA.** Ver el párrafo de arriba: la hoja se
@@ -643,6 +753,43 @@ function instalaDelegacionDeAjustes() {
           : '';
       });
     }
+  });
+
+  // -------------------------------------------------------------------------------------
+  //  EL REPARTO DE LOS INTERRUPTORES, Y POR QUÉ ESTÁ FUERA DE `audioUnsubscribers`
+  // -------------------------------------------------------------------------------------
+  //
+  // `clearAudioUnsubscribers()` existe para soltar a los suscriptores que **apuntan al
+  // DOM de la vista anterior** — el del sonido del click del recolector, que es lo único
+  // que había — y `renderRoute()` lo llama en cada cambio de ruta. Este no apunta a nada de
+  // eso: `paintAudioButtons()` busca `#music-btn` y `#mute-btn` **en el momento de
+  // pintarlos**, y si no están no hace nada.
+  //
+  // Meterlo en ese conjunto sería devolver el bug por la puerta de atrás: en el almacén el
+  // suscriptor ya no existiría, que es exactamente la mitad del fallo que se acaba de
+  // corregir. Vive al lado de la delegación, que es donde puede vivir: **una vez por
+  // sesión, mirando el nodo en el momento**, igual que el resto de lo de la hoja.
+  onAudioStateChange(paintAudioButtons);
+  paintAudioButtons();
+
+  // -------------------------------------------------------------------------------------
+  //  LA CASILLA DE SALTAR LA RULETA, Y POR QUÉ ESCUCHA `change` Y NO `click`
+  // -------------------------------------------------------------------------------------
+  //
+  // Es un `input` real y su estado lo lleva el navegador. Atenderlo en el `click` del
+  // delegado de arriba funciona con el ratón y con el dedo, pero **no con el teclado**:
+  // el espacio sobre una casilla no produce `click`, produce `change`. Y una casilla que
+  // no se puede marcar con el teclado es un control roto para quien navega así.
+  //
+  // Va como `addEventListener` aparte y no dentro del `click` porque **son eventos
+  // distintos**: un `change` no se puede capturar en un `click` sin leer el atributo
+  // `checked` en el momento del clic, que es el camino corto y el que se equivoca en
+  // cuanto el navegador cambia el orden de uno de los dos.
+  app.addEventListener('change', (e) => {
+    const mark = (e.target as HTMLElement).closest?.('[data-setting]') as HTMLElement | null;
+    if (!mark || mark.dataset.setting !== 'skip-roulette') return;
+    sfx.nav();
+    setSkipRoulette((mark as HTMLInputElement).checked);
   });
 }
 
@@ -726,100 +873,12 @@ function renderBase(onNavigate: (r: Route) => void) {
   app.onclick = (e) => {
     const target = e.target as HTMLElement;
 
-    // Los interruptores de audio se comprueban ANTES que la navegación: los
-    // botones viven en la cabecera, que está dentro de `app`, así que sin este
-    // orden el click caería en el `closest('[data-nav]')` equivocado.
-    const audioBtn = target.closest('[data-audio]') as HTMLElement | null;
-    if (audioBtn) {
-      e.preventDefault();
-      if (audioBtn.dataset.audio === 'music') toggleMusic();
-      else toggleMute();
-      return;
-    }
-
-    // La hoja de ajustes **NO ESTÁ AQUÍ**, Y ESTA LÍNEA ES EL MOTIVO.
-    //
-    // Antes el abrir y el cerrar vivían en este `onclick`, que es el de la BASE. Y
-    // `renderRoute()` hace `app.onclick = null` en cada cambio de ruta: este manejador
-    // solo existía en la base y en ninguna de las otras seis pantallas. Con la hoja
-    // metida en la cabecera de las siete, eso daba un botón de ajustes **visible en
-    // todas y que solo respondía en una** —que es exactamente lo que se vio—.
-    //
-    // **POR QUÉ NO SE ARREGLA VOLVIÉNDOLO A UN `addEventListener` AQUÍ.** Porque esta
-    // función se llama en cada vuelta a la base, y un `addEventListener` por vuelta
-    // acumula un manejador más: el mismo clic abriría y cerraría la hoja N veces, y con
-    // un número par no se vería. Va en `instalaDelegacionDeAjustes()`, que se llama una
-    // sola vez al arrancar, y su comentario explica el porqué.
-    if (target.closest('[data-logout]')) {
-      e.preventDefault();
-      void doLogout();
-      return;
-    }
-
     const nav = target.closest('[data-nav]') as HTMLElement | null;
     if (!nav) return;
     e.preventDefault();
     sfx.nav();
     onNavigate(nav.dataset.nav as Route);
   };
-
-  /**
-   * Repinta los dos botones de audio con el estado real.
-   *
-   * Se llama tras cada toggle en vez de re-renderizar la vista entera: un
-   * re-render destroys el HUD de buffs y las escuchas del click del
-   * recolector, y perderse eso por cambiar un icono no compensa.
-   *
-   * Hay una sola función que decide cómo se ve cada estado. Cuando el estado
-   * se pintaba en dos sitios —el HTML de `layout.ts` y el manejador del
-   * toggle— cualquier cambio de estilo tenía que hacerse dos veces, y ya se
-   * había desincronizado: el botón de música nunca cambiaba de icono.
-   */
-  const paintAudioButtons = () => {
-    const music = isMusicEnabled();
-    const sfxOn = isSfxEnabled();
-
-    // **EL FORMATO DE AQUÍ TIENE QUE SER EL DE LA HOJA, Y ANTES NO LO ERA.** Estos dos
-    // botones quedaban en la cabecera con clases de botón de icono —w-9, texto oculto en
-    // móvil— y esta función los repintaba con esas mismas clases. Al moverlos a la hoja,
-    // que usa otros, este pintor habría seguido escribiendo las de la cabecera encima: el
-    // interruptor se vería diminuto dentro de una celda de la rejilla y el texto nunca
-    // aparecería.
-    //
-    // Es el mismo motivo por el que la nota de arriba dice que hay una sola función que
-    // decide cómo se ve cada estado, y por el que el marcado **no** debería estar en las
-    // dos: el que está aquí y el que escribe `settingsSheetHTML()` tienen que decir lo
-    // mismo, y por eso los dos están en este fichero y a la vista.
-    const PINTAR = 'h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer' +
-      ' flex items-center justify-center gap-1.5 transition-colors';
-
-    const musicBtn = document.querySelector('#music-btn');
-    if (musicBtn) {
-      musicBtn.innerHTML =
-        `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(music ? 'music' : 'mute')}</span>` +
-        `<span>${music ? 'Música' : 'Música off'}</span>`;
-      musicBtn.className = PINTAR + (music ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
-      musicBtn.setAttribute('aria-pressed', String(music));
-      musicBtn.setAttribute('aria-label', music ? 'Apagar música' : 'Encender música');
-    }
-
-    const sfxBtn = document.querySelector('#mute-btn');
-    if (sfxBtn) {
-      sfxBtn.innerHTML =
-        `<span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic(sfxOn ? 'sound' : 'mute')}</span>` +
-        `<span>${sfxOn ? 'Efectos' : 'Efectos off'}</span>`;
-      sfxBtn.className = PINTAR + (sfxOn ? ' text-[var(--text-main)]' : ' text-[var(--text-muted)] opacity-70');
-      sfxBtn.setAttribute('aria-pressed', String(sfxOn));
-      sfxBtn.setAttribute('aria-label', sfxOn ? 'Silenciar efectos' : 'Activar efectos');
-    }
-  };
-
-  // El propio módulo de audio avisa de cualquier cambio, venga de donde venga
-  // (un toggle, o el estado guardado que se aplica al montar). Así el botón
-  // nunca queda mostrando algo que ya no es verdad.
-  const unsubscribeAudio = onAudioStateChange(paintAudioButtons);
-  audioUnsubscribers.add(unsubscribeAudio);
-  paintAudioButtons();
 
   // ---- Click del recolector ----
   let clickStreak = 0;
