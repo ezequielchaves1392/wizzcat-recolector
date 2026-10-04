@@ -64,6 +64,9 @@ export const ICONS = {
   recycle: svg('<path d="M7 7h3l-2.5-2.5"/><path d="M4 9a8 8 0 0 1 13.5-3"/><path d="M17 17h-3l2.5 2.5"/><path d="M20 15a8 8 0 0 1-13.5 3"/>'),
   core: svg('<circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="8"/><path d="M12 1.5v2.5M12 20v2.5M1.5 12H4M20 12h2.5"/>'),
   graph: svg('<path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 3.5-4 3 2.5L20 7"/>'),
+  // La balanza de la valoracion: un poste, el fiel y dos platos. Se eligio esta y no
+  // un grafico porque el bloque explica **cuanto vale** el item, no como sube su valor.
+  scale: svg('<path d="M12 4v16"/><path d="M5 7h14"/><path d="M7 20h10"/><path d="M5 7 2 14h6L5 7Z"/><path d="M19 7l-3 7h6l-3-7Z"/>'),
   flask: svg('<path d="M10 3h4"/><path d="M10.5 3v6L5 19a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 19l-5.5-10V3"/><path d="M8 15h8"/>'),
   hammer: svg('<path d="m14 5 5 5"/><path d="m12.5 6.5 5 5"/><path d="M17.5 3.5 21 7l-2 2-3.5-3.5 2-2Z"/><path d="m11 8-8 8 4 4 8-8"/>'),
   scroll: svg('<path d="M6 4h11a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M5 6a2 2 0 0 0-2 2v1h4"/><path d="M9 9h7M9 13h7M9 17h4"/>'),

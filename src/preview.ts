@@ -31,7 +31,7 @@ import { renderPrestigePage } from './ui/prestigePage';
 import { renderRankings } from './components/rankings';
 import { TIER_SYSTEM } from './data/tiers';
 import { sellPrice } from './data/valuation';
-import { baseSuccessChance } from './data/crafting';
+import { baseSuccessChance, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
 
 const params = new URLSearchParams(location.search);
 const width = params.get('w');
@@ -74,6 +74,11 @@ const collector = (tier: number, over: Partial<any> = {}) => {
     details: `Recolección por click: +${range[1]}`,
     rarity,
     tier,
+    // El potencial **suele venir**, porque en la partida lo tiene todo item
+    // forjado o de caja y la carga lo pone. El mock no lo traia y las estrellas de
+    // la ficha salian del valor por defecto de la funcion, no del item: eso es un
+    // banco visual aprobando una pantalla que el producto no tiene.
+    potential: 3,
     level: Math.min(20, tier * 2),
     damage: range[1],
     stackable: false,
@@ -122,11 +127,11 @@ const MOCK: any = {
     collector(6, { id: 'd', name: 'Pulso Nebula', level: 6, damage: 35 }),
     collector(5, { id: 'e', name: 'Cincel Orbital', level: 20, damage: 28, maxLevel: 20 }),
     collector(4, { id: 'f', name: 'Bastón de Chispas', level: 8, damage: 20 }),
-    { id: 'c1', name: 'Avatar del Vacío', type: 'companion', details: 'Recolección por segundo: +65/s', rarity: 'Divino', tier: 10, power: 65 },
-    { id: 'c2', name: 'Oráculo Tribal', type: 'companion', details: 'Multiplicador global +75%', rarity: 'Legendario', tier: 8, power: 0.75 },
-    { id: 'c3', name: 'Titán de Acero', type: 'companion', details: 'Recolección por segundo: +68/s', rarity: 'Legendario', tier: 9, power: 68 },
-    { id: 'c4', name: 'Dron Explorador', type: 'companion', details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6 },
-    { id: 'c5', name: 'Fénix de Datos', type: 'companion', details: 'Recolección por segundo: +40/s', rarity: 'Mítico', tier: 9, power: 40 },
+    { id: 'c1', name: 'Avatar del Vacío', type: 'companion', potential: 3, details: 'Recolección por segundo: +65/s', rarity: 'Divino', tier: 10, power: 65 },
+    { id: 'c2', name: 'Oráculo Tribal', type: 'companion', potential: 3, details: 'Multiplicador global +75%', rarity: 'Legendario', tier: 8, power: 0.75 },
+    { id: 'c3', name: 'Titán de Acero', type: 'companion', potential: 3, details: 'Recolección por segundo: +68/s', rarity: 'Legendario', tier: 9, power: 68 },
+    { id: 'c4', name: 'Dron Explorador', type: 'companion', potential: 3, details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6 },
+    { id: 'c5', name: 'Fénix de Datos', type: 'companion', potential: 3, details: 'Recolección por segundo: +40/s', rarity: 'Mítico', tier: 9, power: 40 },
     { id: 'cr1', name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', stackable: true, stackCount: 3 },
     { id: 'st1', name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: 7 },
     { id: 'nn1', name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 2 },
@@ -241,6 +246,45 @@ const fakeGame: any = {
     // el preview es lo mismo que se vera en la partida.
     if (w.type === 'collector') return sellPrice(w, { sellMult: 1 + MOCK.bonus.sellMult });
     return Math.floor((w.sellPrice || 1500) * (1 + MOCK.bonus.sellMult));
+  },
+  // El stat principal de la ficha, con las MISMAS funciones que el motor. Si aquí se
+  // pusiera un numero inventado, el preview enseñaria una ficha que el producto no tiene,
+  // que es el mismo fallo que el recolector equipado que faltaba en el mock.
+  getStatPrincipal: (id: string) => {
+    const w: any = MOCK.warehouse.find((x: any) => x.id === id);
+    if (!w) return null;
+    if (w.type === 'collector') {
+      return {
+        tipo: 'collector',
+        valor: Math.round((w.damage || 0) * multiplicadorDeNivel(w.level)),
+        etiqueta: 'Recolección por click',
+        prefijo: '+',
+        sufijo: '',
+        desglose: desgloseDeStat(w.tier, w.damage || 0, potencialNormalizado(w.potential), w.level,
+          Math.round((w.damage || 0) * multiplicadorDeNivel(w.level)))
+      };
+    }
+    if (w.type === 'companion') {
+      const comp: any = MOCK.companions.find((c: any) => c.id === w.id);
+      const tipo = comp?.type ?? w.companionType ?? 'click';
+      const power = Number(comp?.power ?? w.power) || 0;
+      const esMult = tipo === 'multiplier';
+      return {
+        tipo: 'companion',
+        subtipo: tipo,
+        valor: esMult
+          ? Math.round((1 + power) * 100) / 100
+          : poderEfectivoDeCompanio({ power, level: w.level }),
+        etiqueta: esMult ? 'Multiplica el ingreso'
+          : tipo === 'passive' ? 'Producción por segundo'
+            : 'Ingreso por segundo',
+        prefijo: esMult ? '×' : '+',
+        sufijo: esMult ? '' : '/s',
+        desglose: esMult ? [] : desgloseDeStat(w.tier, power, potencialNormalizado(w.potential), w.level,
+          esMult ? 0 : poderEfectivoDeCompanio({ power, level: w.level }))
+      };
+    }
+    return null;
   },
   getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
   getForgeInfo: () => ({ craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),

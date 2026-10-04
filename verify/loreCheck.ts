@@ -88,6 +88,9 @@ async function main() {
   // -----------------------------------------------------------------------
   //  4. LA LÍNEA DE TIPO DICE LO QUE SE COBRA.
   // -----------------------------------------------------------------------
+  //  Sigue viva para la tienda, que es donde se decide comprar sin abrir la ficha.
+  //  En la ficha del almacén **ya no se usa**: el stat va en grande y ponerlo dos
+  //  veces era justo lo que se pidió quitar.
   {
     check('tipo: el passive enseña su +N/s',
       lineaTipoCompanion('passive', 65).includes('+65/s'),
@@ -99,6 +102,36 @@ async function main() {
       lineaTipoCompanion('multiplier', 0.35).includes('×1.35') &&
       !lineaTipoCompanion('multiplier', 0.35).includes('+'),
       lineaTipoCompanion('multiplier', 0.35));
+  }
+
+  // -----------------------------------------------------------------------
+  //  5. EL LORE NO DICE NÚMEROS NI LO QUE HACE EL OBJETO.
+  // -----------------------------------------------------------------------
+  //
+  //  Las dos reglas nacen de lo mismo: **el stat está al lado, en grande**, y un
+  //  número al lado de la cifra grande no es información, es una contradicción con
+  //  opción de elegir. Y una frase que explica el efecto es la misma cifra otra
+  //  vez, con las reglas del efecto dentro de una frase de sabor.
+  //
+  //  **NINGUNA DE LAS DOS COSAS ERA CIERTA HOY.** No habia ni un numero en 67
+  //  entradas —esa parte ya estaba bien—, pero tres frases decian lo que hace el
+  //  objeto: una prometía que un arma nunca falla, otra decía que su compañero multiplica
+  //  y una tercera anunciaba ser el mayor ingreso del juego. Las tres escritas, y las
+  //  tres se contradicen con la etiqueta que ahora va al lado: un recolector que se
+  //  equivoca al tirar no falla nunca.
+  {
+    const conNumero = Object.entries(LORE).filter(([, t]) => /\d/.test(t));
+    check('lore: ninguno dice un numero, porque el stat va al lado en grande',
+      conNumero.length === 0,
+      conNumero.map(([n]) => n).join(', ') || 'ninguno');
+
+    // Palabras que suenan a "esto es lo que hace". No es una lista perfecta —el
+    // sabor puede decir cualquier cosa— pero es la que pilla las tres que había.
+    const HACE = /\b(multiplica|mayor ingreso|no falla|nunca falla|aporta \+)\b/i;
+    const dice = Object.entries(LORE).filter(([, t]) => HACE.test(t));
+    check('lore: ninguno explica lo que hace el objeto, que ya lo dice la etiqueta',
+      dice.length === 0,
+      dice.map(([n, t]) => n + ' -> ' + t).join(' | ') || 'ninguno');
   }
 
   resumen('lore: cada nombre tiene el suyo y ninguno sobra');

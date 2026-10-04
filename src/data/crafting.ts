@@ -920,9 +920,82 @@ export function nivelMaximoDeCompanio(potential?: number | null, maxLevel?: numb
  * comparten las dos fichas. La cuenta del ingreso del compañero vive en
  * `recalculatePassiveIncome()` y el del recolector en `cuentaDeClickSinBuff()`,
  * pero las dos multiplican con esta misma regla.
+ *
+ * ## POR QUÉ EL RECOLECTOR TAMBIÉN LA LLAMA, Y ESTO NO ERA COSA DE NADA
+ *
+ * La cuenta del click multiplicaba por 1 + nivel por 0,10 **escrito en la línea**, con
+ * su propio redondeo o sin él. Ahora delega aquí. El motivo no es la elegancia: es que
+ * la ficha del almacén tenía que enseñar el daño final —base, potencial y mejora
+ * juntos—, y la única forma de que el número grande del inventario y el número que se
+ * cobra al hacer clic **sean el mismo** es que los dos multiplicen con la misma función.
+ * Copiar ese 0,10 en la vista habría sido una segunda regla, y se separaría de la
+ * primera en cuanto una de las dos cambie.
  */
 export function multiplicadorDeNivel(level: number | undefined | null): number {
   return 1 + Math.max(0, Math.floor(Number(level) || 0)) * 0.10;
+}
+/**
+ * LOS TÉRMINOS DE LA SUMA DEL STAT, Y POR QUÉ SE DERIVAN Y NO SE REPITEN.
+ *
+ * Es lo que enseña el hover del número grande: de dónde sale ese "+84". La lista tiene que
+ * **cuadrar con el número que tiene encima**, y para eso no puede volver a leer la base del
+ * tier por su cuenta. La primera versión lo hacía, y con un daño guardado que no coincide
+ * exactamente con la fórmula del tier —y no coincide, porque la carga lo deja en su propio
+ * valor— la lista decía "Base T2: 30, Potencial: ×1,60" y daba 48 donde el stat ponía 52.
+ * Tres números en la misma ficha y uno que no sale de los otros dos.
+ *
+ * Así que la lista sale **al revés**: el potencial es una regla fija, se aplica hacia atrás
+ * para encontrar la base que el item lleva, y de ahí en adelante todo se multiplica hacia
+ * delante.
+ *
+ * **Y LA BASE NO SE REDONDEA, PORQUE REDONDEARLA ROMPE EL ÚNICO COMPROMISO IMPORTANTE.**
+ * La primera versión hacía `Math.round(baseDelItem / multPot)` y con el mismo item la lista
+ * daba 31 × 1,40 × 1,90 = 82,4 mientras el número grande ponía 84. Un redondeo de un dígito
+ * en el medio de una suma es exactamente el descuadre que esta lista existe para evitar, y
+ * el que peor se ve es porque los tres números están uno debajo del otro y parecen sumar.
+ * Con un decimal la cuenta cuadra hasta el redondeo final, que es el único redondeo que hay
+ * en la cadena y se ve: el total es un entero.
+ *
+ * **ESTÁ AQUÍ Y NO EN LA VISTA PORQUE LA VISTA NO DEBE PODER INVENTARSE ESTA LISTA.** Y
+ * tampoco en el motor: estuvo primero dentro de la fábrica del juego, y el resultado fue
+ * el de siempre —que el `preview`, que monta su propio juego falso, no lo tenía, así que el
+ * hover salía en el almacén y no en el preview, y parecía un bug de una pantalla—. La regla
+ * que describe una suma va junto a la suma.
+ *
+ * `total` lo pasa quien compone el stat y **no se recalcula aquí**: si esta función
+ * redondeara por su cuenta, el hover y el número grande podrían no coincidir en el último
+ * dígito, que es el peor sitio para un descuadre de uno.
+ */
+export function desgloseDeStat(
+  tier: number,
+  baseDelItem: number,
+  potencial: number,
+  nivel: number,
+  total: number
+): Array<{ texto: string; valor: string }> {
+  const multPot = 1 + 0.2 * potencial;
+  const multNivel = multiplicadorDeNivel(nivel);
+  // **UN DECIMAL, NUNCA REDONDEO ENTERO.** Ver el comentario de arriba: redondear aquí
+  // descuadraba la lista en el dígito que la lista existe para no descuadrar.
+  const baseImplicita = baseDelItem / multPot;
+  const baseTxt = Number.isInteger(baseImplicita)
+    ? String(baseImplicita)
+    : String(Number(baseImplicita.toFixed(1)));
+  const filas: Array<{ texto: string; valor: string }> = [
+    { texto: 'Base T' + Math.max(1, Math.floor(Number(tier) || 1)), valor: baseTxt }
+  ];
+  // La fila del potencial sale solo si el multiplicador mueve la cifra. Hoy siempre mueve,
+  // porque el potencial normalizado da 1,60 con tres estrellas; el caso de un multiplicador
+  // de exactamente 1 no ocurre, y está contempla para que no haya que volver a pensarlo.
+  if (Math.abs(multPot - 1) > 0.0001) {
+    filas.push({ texto: `Potencial ${potencial}★`, valor: '×' + multPot.toFixed(2) });
+  }
+  if (nivel > 0) {
+    filas.push({ texto: 'Nivel ' + nivel, valor: '×' + multNivel.toFixed(2) });
+  }
+  // El último término es el total, y la vista lo pinta en negrita: cierra la cuenta.
+  filas.push({ texto: 'Total', valor: String(total) });
+  return filas;
 }
 
 /**

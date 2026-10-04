@@ -1030,7 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1837**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1849**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -1072,6 +1072,91 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 
       partida vieja con `shards: 9999` carga igual, el estado no las arrastra, el documento
       las pierde al cargar sin tocar nada y no vuelven al recargar.
 
+### La ficha del inventario, y el stat que enseña
+
+- [x] **El stat principal va en grande, con su etiqueta al lado y dentro de un borde.**
+      Y es **el final**: base, potencial y mejora juntos. Antes la ficha enseñaba el daño
+      que el item trae guardado, que es la cifra con la que salió de la caja y **no sube
+      con los cristales**: subías de nivel y el número no se movía, y el daño de verdad
+      aparecía después, en otro sitio. Dos cifras para lo mismo y la que mandaba no era
+      la que se veía.
+      **El número no se calcula en la vista.** Sale de `game.getStatPrincipal(itemId)`,
+      que compone con las mismas funciones con las que el motor cobra el clic
+      (`multiplicadorDeNivel()`) y el ingreso del compañero (`poderEfectivoDeCompanio()`).
+      La cuenta del click multiplicaba por el 0,10 **escrito en la línea**, y ahora delega
+      en la misma función; la razón no es la elegancia, es que el número grande del
+      inventario y el del clic solo pueden ser uno si los dos multiplican igual.
+      **Y NO LLEGA A IGUALAR AL CLIC, Y ES LO CORRECTO.** El clic multiplica por el árbol,
+      los logros, los afijos y los compañeros; el stat es **lo que el objeto es y lo que
+      se le ha subido con cristales**. Si llevara lo otro, cambiar de carta cambiaría el
+      stat del item y no habría forma de comparar dos recolectores. Comprobado: con la
+      partida de prueba el clic es ×1,3 el stat, y la **proporción es la misma** para los
+      dos items, que es lo que dice que las dos cuentas no se han separado.
+
+- [x] **La descripción del item es el stat, no un texto con la cifra dentro.**
+      `details` es una **cadena escrita al crear el item**, así que para un recolector
+      nunca volvía a coincidir con su daño. Con el stat en grande la ficha tenía **dos
+      números distintos para lo mismo y uno mentía**. Para el resto de tipos la línea se
+      queda, porque ahí no es una cifra: es la única descripción que tienen.
+
+- [x] **Nivel y barra de progreso en los dos, y en el nivel cero.** Antes la barra era
+      solo del recolector y solo si el nivel era mayor que cero, así que un compañero —al
+      que los cristales también le suben el nivel— no tenía ni una palabra de progreso.
+      Y "Nivel 0 / 20" con la barra vacía dice algo que "no hay nivel" no dice: que existe
+      un techo.
+
+- [x] **El stat también en la esquina de la celda, para comparar sin abrir.** Con veinte
+      objetos en la rejilla, comparar dos era: tocar uno, acordarse del número, tocar el
+      otro. Va en `absolute` arriba a la derecha porque **la celda es cuadrada y ya está
+      llena** —icono, nombre y tier— y una cuarta fila la desbordaba. La primera versión
+      intentó la fila reservada y todos los altos se fueron a 106 y 120 px.
+      **Y LA UNIDAD LA PONE EL MOTOR**, porque aquí se repitió el error: la primera
+      versión añadía "/s" a todo lo que no fuera multiplicador, y cualquier T5 salió con
+      "84/s" cuando el recolector cobra **por clic**. Dos grandezas enseñadas como la misma.
+
+- [x] **El hover del número grande explica de dónde sale la suma.**
+      Es CSS pelado, con `group`/`group-hover`, **sin un solo listener**: la ficha se
+      repinta en cada cambio y un listener hay que engancharlo otra vez en el nodo que
+      `mountInto()` recrea; uno perdido es un hover que a veces funciona, que es la forma
+      más difícil de detectar de un bug. **Y abre también con el foco**, porque en móvil no
+      hay hover, así que el bloque lleva `tabindex` y un toque lo enfoca.
+      La lista **sale al revés**: el potencial es una regla fija y se aplica hacia atrás
+      para encontrar la base que el item lleva. La primera versión la leía del tier y con
+      un daño guardado que no coincide con la fórmula daba 48 donde el stat ponía 52. Y al
+      redondear esa base a entero, 31 × 1,40 × 1,90 daba 82 donde ponía 84: un
+      redondeo de un dígito en medio de una suma es justo lo que esa lista existe para
+      que no pase, y es el que peor se ve porque los tres números están apilados y parecen
+      sumar. Con un decimal, la cuenta cuadra hasta el único redondeo que queda, que es el
+      del total.
+      Vive en `data/crafting.ts` y no en el motor porque **el preview monta su propio juego
+      falso**: con la función dentro de la fábrica, el hover salía en el almacén y no en
+      el preview, y parecía un bug de una pantalla.
+
+- [x] **La valoración sin toggle y sin la línea de base.** El `<details>` sobraba dos
+      veces: cerrado obligaba a un clic para ver cuánto valía el item, que es justo el
+      dato que se pide **antes** de vender, y abierto por defecto lo único que aportaba
+      era una flechita para cerrar algo que no hace falta cerrar. Ahora es un bloque fijo
+      con borde, la etiqueta a la izquierda y la cifra a la derecha.
+      **Y LA LÍNEA "Base T2: 480" NO ESTÁ**, porque el "Base T2" de la valoración es el
+      **valor** y el número grande de arriba es el **daño**: dos grandezas distintas con
+      el mismo nombre, una debajo de la otra. Aquí quedan solo los multiplicadores, que es
+      lo que explica el precio; de dónde sale el daño lo explica el hover, y cada lista
+      dice lo suyo.
+
+- [x] **Las estrellas de potencial solo para lo que tiene potencial, y el lore sin
+      números ni "qué brinda".** Las estrellas se pintaban siempre, y la función con un
+      potencial ausente devuelve tres: **una caja de botín, una llave y una carta salían
+      con tres estrellas**, potencial para algo que no se puede subir.
+      Del lore, **ninguna de las 67 entradas tenía un número** —esa parte ya estaba bien—,
+      pero tres frases decían lo que hace el objeto: un arma que "nunca falla", un
+      compañero que "multiplica" y un ítem que se anunciaba como "el mayor ingreso del
+      juego". Las tres escritas, y las tres contradichas por la etiqueta que ahora va al
+      lado. Ahora las dos reglas están **fijadas con pruebas** en `loreCheck`.
+
+- [x] **El mock del preview se puso al día, tres veces.** Los recolectores y compañeros
+      del `preview` no traían potencial y el stat no traía desglose ni unidad, así que el
+      banco visual aprobaba una pantalla que el producto no tiene. Es el mismo fallo que el
+      recolector equipado que faltaba en el mock.
 ### La chrome, y por qué se ha medido
 
 - [x] **El nav no se mueve al cambiar de sector.** Medido antes y después en las siete

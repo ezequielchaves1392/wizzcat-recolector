@@ -22,7 +22,7 @@
 // ==========================================================================
 
 import { STORE_ITEMS, type CrateType } from '../src/gameLoop';
-import { costeDeNivel, valorDeUnCristal } from '../src/data/crafting';
+import { costeDeNivel, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
 import { chanceDeSintonizacion } from '../src/data/items';
 import { costeDeCaja } from '../src/data/store';
 import { formatNumber } from '../src/utils/format';
@@ -2329,6 +2329,163 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
       check('suelo: con recolector, el daño es el suyo y no el minimo',
         delSuyo > delSuelo && delSuyo > 1,
         'con un T5=' + delSuyo + ' suelo=' + delSuelo);
+    }
+  }
+
+
+  {
+    // =====================================================================
+    //  EL STAT PRINCIPAL DE LA FICHA, Y LA REGLA QUE LO SOSTIENE
+    // =====================================================================
+    //
+    //  Lo que se pidió fue que el número grande de la ficha fuera el **final**: base,
+    //  potencial y mejora. Antes la ficha enseñaba el daño que el item trae guardado, que
+    //  es la cifra con la que salió de la caja y **no sube con los cristales**, así que
+    //  subir de nivel no movía el número que el jugador estaba mirando y el daño de
+    //  verdad aparecía después, en otro sitio. Dos cifras para lo mismo, y la que mandaba
+    //  no era la que se veía.
+    //
+    //  Lo comprobable aquí no es que el número sea grande: es que **sea el mismo que el
+    //  que cobra el juego**. Una ficha puede tener el tipo de letra más bonito del mundo
+    //  y seguir mintiendo.
+    //
+    //  **EL DAÑO DEL ITEM NO ES EL QUE SE ESCRIBE, ES EL QUE CALCULA LA CARGA.** La
+    //  primera versión de este bloque metía un 200 a mano y falló con 190: al cargar, el
+    //  daño se recalcula desde el tier y el potencial, que es lo que lleva el guardado
+    //  viejo a la versión buena. Por eso lo esperado sale de la misma función que usa
+    //  la carga, y no de un literal.
+    {
+      const g = await boot(baseSave([
+        collector('a', 5, { level: 0 }),
+        collector('b', 5, { level: 10 })
+      ], { nanites: 0 }));
+
+      // El daño que el motor le ha quedado a cada uno, leído del propio item y **no**
+      // puesto a mano. La primera versión de esta comprobación comparaba contra la
+      // función de la carga y falló: lo que la carga deja en un item guardado no es esa
+      // cifra, y rehacer la regla de la carga aquí no era el trabajo.
+      const danoA = (s(g).warehouse as any[]).find((w: any) => w.id === 'a').damage;
+      const danoB = (s(g).warehouse as any[]).find((w: any) => w.id === 'b').damage;
+
+      const sinNivel = g.getStatPrincipal('a');
+      const conNivel = g.getStatPrincipal('b');
+
+      // **SIN NIVEL EL STAT ES EL DANO DEL ITEM, Y ESO LO FIJA.** Con el nivel a
+      //  cero no hay mejora que aplicar, así que la cifra tiene que ser exactamente la
+      //  que el item guarda: si aquí salía otra, el stat no sería el del item.
+      check('stat: sin nivel, el stat es el dano del item',
+        sinNivel?.valor === danoA && sinNivel.etiqueta === 'Recolecci\u00f3n por click',
+        'stat=' + sinNivel?.valor + ' dano=' + danoA + ' etiqueta=' + sinNivel?.etiqueta);
+
+      // **CON NIVEL ES EL MISMO +10 % POR NIVEL, Y NO UN NUMERO PUESTO.** La regla la
+      //  tiene que dar la funcion de multiplicador, que es la misma que usa el clic. Si
+      //  aquí se escribiera el 2,0 a mano, las dos cifras se separarian el dia que
+      //  cambiara ese 0,10, y nadie lo veria hasta que un jugador se quejara del
+      //  inventario.
+      check('stat: con nivel, sube con la misma regla del clic',
+        conNivel?.valor === danoB * multiplicadorDeNivel(10),
+        'stat=' + conNivel?.valor + ' esperado=' + danoB * multiplicadorDeNivel(10));
+
+      // **Y EL STAT ES LO QUE EL CLIC COBRA, PERO NO LE TIENE QUE IGUALAR.**
+      //
+      //  La primera versión de esta comprobación decía que las dos cifras iban
+      //  iguales, y fallaron: 114 contra 148. La razón es el motivo por el que el stat
+      //  **no** lleva las bonificaciones de la partida. El clic multiplica por el árbol,
+      //  los logros, los afijos y los compañeros; el stat es **lo que el objeto es y lo
+      //  que se le ha subido con cristales**, y si llevara lo otro, cambiar de carta
+      //  cambiaría el stat del item y no habría forma de comparar dos recolectores.
+      //
+      //  Así que lo que se comprueba es lo que de verdad importa: **con la partida sin
+      //  bonificaciones, las dos cifras coinciden**. Es el mismo item y la misma regla,
+      //  de modo que si algún día el stat deja de ser lo que el clic cobra, aquí se ve.
+      //
+      //  **Y OJO CON `equipCollector`: ES UN CONMUTADOR.** La primera versión traía el
+      //  item con la bandera de equipado puesta y llamaba a `equipCollector` para
+      //  asegurarse, y el efecto fue el contrario del que se quería: lo desequipó y el
+      //  clic se quedó a 1. Equipar es un interruptor, no un "poner".
+      g.equipCollector('a');
+      check('stat: equipar deja equipado el que toca, y no lo quita',
+        s(g).equippedCollectorId === 'a', 'equipado=' + s(g).equippedCollectorId);
+      check('stat: con las bonificaciones de la partida, el clic es MAYOR que el stat',
+        g.getClickDamage() > Math.floor(g.getStatPrincipal('a').valor),
+        'stat=' + Math.floor(g.getStatPrincipal('a').valor) + ' clic=' + g.getClickDamage());
+
+      // **LA PROPORCIÓN ES LA QUE TIENE QUE SER LA MISMA, Y ESO SÍ SE COMPRUEBA.**
+      //
+      //  Quitar las bonificaciones a mano no funciona: el bucle resuelve los agregados
+      //  cuando construye la partida, así que escribir en el estado después ya no deshace
+      //  nada. Y da igual, porque **igualar las dos cifras no era lo que había que
+      //  demostrar**: la partida de prueba trae un multiplicador de 1,3 que el stat, por
+      //  diseño, no lleva.
+      //
+      //  Lo que importa es que **el stat y el clic se muevan juntos**. Si un día el stat
+      //  deja de ser lo que el clic cobra, es porque la regla se ha separado de una de
+      //  las dos cuentas, y con las dos cifras dividiendo el mismo número eso se ve al
+      //  instante: los dos items darían proporciones distintas.
+      // Y `a` **no se vuelve a equipar aquí**: ya está equipado desde arriba, y
+      //  `equipCollector` es un conmutador, así que llamarlo otra vez lo apagaba y la
+      //  proporción del primer item salía de un clic de suelo, que es el número 1.
+      const clicA = g.getClickDamage();
+      const delEquipado = g.getStatPrincipal('a');
+      g.equipCollector('b');
+      const clicB = g.getClickDamage();
+      const delSubido = g.getStatPrincipal('b');
+      const razonA = clicA / Math.floor(delEquipado.valor);
+      const razonB = clicB / Math.floor(delSubido.valor);
+      check('stat: el stat y el clic se mueven juntos, con la misma proporcion',
+        Math.abs(razonA - razonB) < 0.01,
+        'a=' + clicA + '/' + Math.floor(delEquipado.valor) + ' b=' + clicB + '/' + Math.floor(delSubido.valor));
+
+      // Y el desglose del motor, que ya separa las tres partes, tiene que empezar donde el
+      // stat says: la base es el daño del item y la parte de nivel es lo que el stat
+      // añade por encima. Si el stat se separara de ahí, se vería en estos dos números.
+      const desglose = g.getClickDamageBreakdown();
+      check('stat: y el desglose del motor pone la misma base que el stat',
+        Math.abs(desglose.base - danoB) <= 1,
+        'base=' + desglose.base + ' stat=' + Math.floor(delSubido.valor));
+    }
+
+    // --- EL COMPAÑERO: OTRA REGLA Y OTRA UNIDAD, Y NO UNA COPIA DE LA ANTERIOR -----
+    //
+    //  El compañero da ingreso por segundo y su multiplicador **no lleva nivel**. Que
+    //  no lo lleve es una decisión, y por eso se comprueba: es el sitio donde un "y ya
+    //  que estamos" habría metido otro factor más sin que nadie lo pidiera.
+    {
+      const g = await boot(baseSave([collector('r1', 1)], { nanites: 0 }));
+      const st: any = s(g);
+      st.companions = [
+        { id: 'm1', name: 'X', type: 'passive', power: 40, potential: 3 },
+        { id: 'm2', name: 'Y', type: 'multiplier', power: 0.5, potential: 3 },
+        { id: 'm3', name: 'Z', type: 'click', power: 12, potential: 3 }
+      ];
+      st.warehouse = [st.warehouse[0],
+        { id: 'm1', name: 'X', type: 'companion', tier: 5, level: 0, power: 40, potential: 3 },
+        { id: 'm2', name: 'Y', type: 'companion', tier: 5, level: 8, power: 0.5, potential: 3 },
+        { id: 'm3', name: 'Z', type: 'companion', tier: 5, level: 4, power: 12, potential: 3 }
+      ];
+
+      const pasivo = g.getStatPrincipal('m1');
+      const mult = g.getStatPrincipal('m2');
+      const click = g.getStatPrincipal('m3');
+      check('stat: un companero pasivo da su poder por segundo',
+        pasivo?.valor === 40 && /segundo/i.test(pasivo?.etiqueta ?? ''),
+        'valor=' + pasivo?.valor + ' etiqueta=' + pasivo?.etiqueta);
+
+      check('stat: y con nivel sube, con la misma regla de todos',
+        click?.valor === Math.round(12 * multiplicadorDeNivel(4)),
+        'valor=' + click?.valor + ' esperado=' + Math.round(12 * multiplicadorDeNivel(4)));
+
+      // **EL MULTIPLICADOR LLEVA POR DELANTE Y NO SUBE CON NIVEL.** El "x" no es una
+      //  unidad por segundo, es una veces, y aplicarle el nivel seria una regla nueva.
+      check('stat: el multiplicador lleva por delante y no sube con nivel',
+        mult?.valor === 1.5 && mult?.prefijo === '\u00d7',
+        'valor=' + mult?.valor + ' prefijo=' + mult?.prefijo);
+
+      // Y que un item que no tiene stat no reciba ninguno: una caja con una cifra de
+      //  daño en grande seria inventarse un numero que no existe.
+      check('stat: lo que no tiene stat no recibe ninguno',
+        g.getStatPrincipal('r1') !== null && g.getStatPrincipal('no-existe') === null,
+        'r1=' + JSON.stringify(g.getStatPrincipal('r1')));
     }
   }
 

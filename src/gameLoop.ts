@@ -14,7 +14,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -2359,7 +2359,7 @@ const AFK_THRESHOLD_MS = 60000;
     // estaría igual de bloqueado y con un item en la mano, que es más difícil de
     // entender.
     const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, item.damage || 0);
-    const levelMultiplier = 1 + ((item.level || 0) * 0.10);
+    const levelMultiplier = multiplicadorDeNivel(item.level);
     const conNivel = base * levelMultiplier;
     const total = base
       * levelMultiplier
@@ -3039,6 +3039,120 @@ const AFK_THRESHOLD_MS = 60000;
      * enseñe sin tener que deducirlo restando. Ver `desgloseDeClick()`.
      */
     getClickDamageBreakdown: () => desgloseDeClick(),
+    /**
+     * EL STAT PRINCIPAL DE UN ITEM, YA SUMADO. Lo que la ficha del almacén enseña en
+     * grande: base, potencial y mejora, juntos.
+     *
+     * ## POR QUÉ ESTO ESTÁ AQUÍ Y NO EN LA VISTA
+     *
+     * Porque hay una cifra que el juego cobra y otra que se enseña, y solo puede ser
+     * una. El daño que se lleva el item es `danioDeRango(tier, potencial)` —la base con
+     * el potencial ya aplicado— y lo que la ficha llamaba "daño" era ese número **sin
+     * las mejoras de nivel**: el jugador subía con cristales, el número grande no se
+     * movía, y el daño de verdad aparecía después, en otro sitio. Dos cifras para la
+     * misma cosa, y la que manda no era la que se veía.
+     *
+     * Aquí se suman con **las mismas funciones con las que el motor calcula el daño**:
+     * `multiplicadorDeNivel()`, que es la misma que multiplica el ingreso del compañero,
+     * y `poderEfectivoDeCompanio()`, que es la del compañero. Si mañana cambia el 0,10,
+     * cambia en los tres sitios a la vez porque los tres llaman.
+     *
+     * **LO QUE NO ENTRA, Y POR QUÉ NO ENTRA.** Ni los buffs, ni los logros, ni el
+     * multiplicador del árbol, ni los afijos, ni los compañeros activos: eso son
+     * bonificaciones *de la partida*, no del objeto. Un recolector con tres cartas de
+     * clic x2 teachla 24, pero ese 24 no es suyo: es suyo la mitad, y si la ficha lo
+     * dijera, cambiar de carta cambiaría el stat del item y no habría forma de comparar
+     * dos recolectores. Lo que sí entra es **lo que el item es y lo que se le ha subido
+     * con cristales**, que es lo único que hace que un item valga más que otro.
+     *
+     * `etiqueta` dice **qué es** el número, y no es decorativo: el compañero tiene tres
+     * tipos con reglas distintas y sin la etiqueta el 35 del `multiplier` se lee igual
+     * que el 35 del `passive`, cuando uno multiplica y el otro produce.
+     *
+     * `prefijo` y `sufijo` los pone el motor y no la vista, porque **no todas las cifras son
+     * de la misma clase**: el multiplicador lleva "×" delante y nada detrás, el compañero
+     * lleva "/s" y el recolector nada, porque cobra por clic y no por segundo. Poner el
+     * "/s" en la vista lo habría puesto también en el recolector, que es una falsedad
+     * —la primera versión de la esquina de la celda lo hizo y cualquier T5 salió con
+     * "84/s"— y hace que dos cifras de grandezas distintas parezcan comparables.
+     *
+     * Y **la unidad va dentro de la etiqueta y no detrás**, para lo que sí la tiene:
+     * "Producción en pasivo" + "/s" se lee "Producción en pasivo/s", que no significa
+     * nada. El "/s" es de la cifra y la etiqueta es una frase.
+     *
+     * `desglose` son **los términos de la suma**, en el orden en que se aplican, y es lo
+     * que enseña el hover del número grande. Sale de aquí y no de la vista porque los
+     * términos **son las reglas**: si la vista los escribiera, habría una segunda copia
+     * de la cuenta —base, potencial, nivel— que se separa de la primera el día que
+     * cambie el 0,20 o el 0,10, y el jugador vería un hover que no cuadra con el número
+     * que tiene encima.
+     *
+     * Y es la respuesta a una pregunta que el número grande despierta solo: "de dónde
+     * sale esto". Un "+13" sin explicación obliga a abrir la caja de la forja para
+     * descubrirlo, y la caja no lo dice.
+     */
+    getStatPrincipal: (itemId: string) => {
+      const w: any = (state.warehouse as any[]).find((x: any) => x.id === itemId);
+      if (!w) return null;
+      if (w.type === 'collector') {
+        const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(w.damage) || 0);
+        const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
+        const pot = potencialNormalizado(w.potential);
+        return {
+          tipo: 'collector' as const,
+          valor: Math.round(base * multiplicadorDeNivel(nivel)),
+          etiqueta: 'Recolección por click',
+          // **EL "+" PORQUE ES LO QUE APORTA, Y NO UNA CIFRA SUELTA.** Un 174 a secas en
+          // una esquina de celda se lee como un identificador, como un número de serie o
+          // como el precio de algo. "+174" dice que eso es lo que suma, que es la
+          // pregunta que uno se hace al mirar un recolector en el almacén.
+          prefijo: '+',
+          // **SIN UNIDAD, PORQUE NO LA TIENE.** El recolector cobra **por clic** y el
+          // compañero **por segundo**: son dos grandezas distintas, y una "/s" detrás
+          // del daño del recolector haría comparables dos números que no lo son. La
+          // primera versión de la esquina de la celda la puso igual para los dos y
+          // cualquier T5 salió con "84/s", que es mentira en la propia etiqueta.
+          sufijo: '',
+          desglose: desgloseDeStat(w.tier, base, pot, nivel, Math.round(base * multiplicadorDeNivel(nivel)))
+        };
+      }
+      if (w.type === 'companion') {
+        const comp: any = (state.companions as any[]).find((c: any) => c.id === w.id);
+        const tipo = comp?.type ?? w.companionType ?? 'click';
+        const power = Number(comp?.power ?? w.power) || 0;
+        const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
+        const esMult = tipo === 'multiplier';
+        const valor = esMult
+          // El multiplicador **no lleva nivel**: multiplicar el ingreso el doble y
+          // además por un 1,3 sería una regla nueva que nadie pidió. Sale de aquí y no
+          // de la vista porque es el mismo `power` que usa el reparto del ingreso.
+          ? Math.round((1 + power) * 100) / 100
+          : poderEfectivoDeCompanio({ power, level: nivel });
+        return {
+          tipo: 'companion' as const,
+          subtipo: tipo,
+          valor,
+          // **LA ETIQUETA LLEVA LA UNIDAD DENTRO Y NO DETRÁS CON UNA "/S".** Se probó
+          // "Produce en pasivo" + "/s" y se lee "Produce en pasivo/s", que no significa
+          // nada: el "/s" pertenece a la cifra y la etiqueta es una frase. Que la frase
+          // diga ya "por segundo" evita el sufijo, y de paso cada etiqueta es
+          // autosuficiente si algún día se enseña sin el número al lado.
+          etiqueta: esMult ? 'Multiplica el ingreso'
+            : tipo === 'passive' ? 'Producción por segundo'
+              : 'Ingreso por segundo',
+          // El multiplicador lleva "×" delante y no "+": no suma nada, cambia por
+          // cuántas veces se cuenta lo de los demás. Ponerle un "+" sería la misma
+          // falsedad al revés.
+          prefijo: esMult ? '×' : '+',
+          sufijo: esMult ? '' : '/s',
+          // El multiplicador **no lleva desglose porque no hay suma que desglosar**: sale
+          // entero de su `power`. Una lista de un solo término para explicar de dónde
+          // sale 1,75 es relleno, y el hover vacío se lee como que falta el dato.
+          desglose: esMult ? [] : desgloseDeStat(w.tier, power, potencialNormalizado(w.potential), nivel, valor)
+        };
+      }
+      return null;
+    },
     /**
      * Cuánto aporta ESTE compañero al ingreso pasivo, ya con los
      * multiplicadores, y con el reparto justo de la fracción.

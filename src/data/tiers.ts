@@ -188,7 +188,7 @@ export const LORE: Record<string, string> = {
   // --------------------------------------------------------- RECOLECTORES T6
   'Excalibur': 'Solo un digno la empuña. Eres tú.',
   'Mjolnir': 'El trueno obedece a quien la levanta.',
-  'Gungnir': 'Nunca falla. Literalmente.',
+  'Gungnir': 'El mango recuerda todas las manos que no lo volvieron a agarrar.',
   // --------------------------------------------------------- RECOLECTORES T7
   'Lanza del Destino': 'Apunta al futuro y el futuro paga.',
   'Espada del Crepúsculo': 'Corta entre el día y la noche de la veta.',
@@ -206,9 +206,9 @@ export const LORE: Record<string, string> = {
   'La Última Palabra': 'Después de ella no hay más veta.',
   'El Todo y La Nada': 'Extrae del todo. Guarda la nada.',
   // ------------------------------------------------- EXCLUSIVOS DE CAJA
-  'Fantasma Cuántico': 'Existe y no existe, y en ambos estados multiplica.',
+  'Fantasma Cuántico': 'Existe y no existe, y en los dos estados se queda.',
   'Oráculo Tribal': 'Los ancianos predijeron tu riqueza.',
-  'Avatar del Vacío': 'El mayor ingreso individual del juego: la nada, trabajando.',
+  'Avatar del Vacío': 'La nada trabajando, y cobrando por ello.',
   'Fénix de Datos': 'Renace de cada reinicio con más hambre.',
   'Centinela Eterno': 'Juró guardar tu base hasta el fin de los ciclos.',
   'Espectro Azulado': 'Solo sale de la legendaria. Por eso brilla.',

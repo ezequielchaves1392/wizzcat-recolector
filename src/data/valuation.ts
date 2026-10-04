@@ -215,11 +215,23 @@ export function fusionImprovesDensity(
   return collectorValue(output, opts) > densidadEntrada * 1.15;
 }
 
-/** Resumen legible para la tarjeta del item. */
+/**
+ * Resumen legible para la tarjeta del item.
+ *
+ * **LA LÍNEA DE BASE NO ESTÁ, Y ESTA ES LA RAZÓN.** Se quitó porque la ficha ya enseña
+ * el stat principal en grande, y el "Base T2: 480" de la valoración рядía con él: dos
+ * números que se llamaban "base" y no eran el mismo. Peor: el de la valoración es el
+ * **valor** y el del stat es el **daño**, y son dos grandezas distintas con el mismo
+ * nombre. Un jugador que lee "Base 480" debajo de un "+13" no tiene forma de saber que
+ * uno son nanitas de venta y el otro daño por clic.
+ *
+ * Y el daño por clic ya tiene su propio desglose, en el hovering del número grande, que
+ * ese sí enseña de dónde sale la suma. Aquí solo queda **por qué vale lo que vale**: los
+ * multiplicadores. Una lista de multiplicadores sin el número de partida es exactamente
+ * lo que un desglose debe ser, y es lo que se ve.
+ */
 export function valuationBreakdown(collector: CollectorItem, opts: ValuationOptions = {}): string[] {
   const out: string[] = [];
-  const base = valorBaseTier(Math.max(1, collector.tier)) ?? 200;
-  out.push(`Base T${collector.tier}: ${fmt(base)}`);
   if (collector.level) out.push(`Nivel ${collector.level}: ×${levelValueMult(collector.level, collectorMaxLevel(collector.maxLevel)).toFixed(2)}`);
   out.push(`Rareza ${collector.rarity}: ×${(RARITY_VALUE_MULT[collector.rarity] ?? 1).toFixed(2)}`);
   if (collector.potential) out.push(`Potencial ${collector.potential}★: ×${potentialValueMult(collector.potential).toFixed(2)}`);

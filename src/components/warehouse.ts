@@ -73,7 +73,7 @@ const UNIDAD_SINGULAR: Record<string, string> = {
 // MISMA para saber si un item cabe. Con una copia aquí, el contador de ranuras y
 // la rejilla acaban contando cosas distintas otra vez.
 import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits, textoDeCantidad, topeDePila } from '../data/stacking';
-import { lorePara, lineaTipoCompanion } from '../data/tiers';
+import { lorePara } from '../data/tiers';
 
 // Estado de la pantalla. Sobrevive a los re-render.
 const ui = {
@@ -124,7 +124,51 @@ function draw(
   }
   const selected = ui.selectedId ? warehouse.find((w: any) => w.id === ui.selectedId) : null;
 
-  // --- Celdas -----------------------------------------------------------
+  /**
+ * EL STAT EN LA ESQUINA DE LA CELDA, Y POR QUÉ ES EL MISMO NÚMERO QUE EL DE LA FICHA.
+ *
+ * **LO QUE PIDE ES PODER COMPARAR SIN ABRIR.** Antes, para saber cuánto daba un
+ * recolector había que tocarlo y leer la ficha, y comparar dos era: volver atrás,
+ * tocar el otro y recordar el primero. Con veinte objetos en la rejilla eso no es mirar,
+ * es trabajar. La esquina es el sitio: está en todas, no tapa el nombre y se lee de un
+ * vistazo en diagonal.
+ *
+ * **Y SALE DEL MOTOR, DE LA MISMA FUNCIÓN QUE LA FICHA.** No es el daño guardado ni
+ * la descripción del item: es `getStatPrincipal()`, el mismo. Si la celda calculara su
+ * propia cifra acabarían siendo dos números que se separan el día que cambie la regla, y
+ * el peor día para descubrirlo sería un jugador comparando dos recolectores en la rejilla.
+ * **La unidad también la pone el motor**, porque aquí se repitió el error: la primera
+ * versión añadía "/s" a todo lo que no fuera multiplicador, y cualquier recolector salió
+ * con "84/s" cuando cobra **por clic**. Dos grandezas distintas enseñadas como la misma.
+ *
+ * **LA ESQUINA NO SE SOLAPA CON EL CONTADOR DE PILA PORQUE NUNCA COINCIDEN.** El contador
+ * es de lo apilable —cajas, llaves, cartas— y el stat es de lo que tiene stat —recolectores
+ * y compañeros—, y un item no está en las dos listas. Aun así el contador se pinta
+ * primero, y por eso va detrás: si algún día un tipo ganara las dos cosas, el contador es
+ * el que ya estaba y no debe saltar de sitio.
+ *
+ * **NO VA FLOTANDO: ES LA PRIMERA FILA DE LA CELDA.** La primera versión lo puso
+ * `absolute` arriba a la derecha, y con el multiplicador —que es la etiqueta más ancha,
+ * 35 píxeles— **tapaba el icono**: medido, se solapaban tanto a 1280 como a 390, y el
+ * icono de la rareza es justo lo que dice a qué clase pertenece el item. Flotando
+ * encima no hay forma de saber cuánto va a ocupar el número antes de ponerlo, y aquí el
+ * ancho depende del valor.
+ *
+ * Como fila reservada en todas las celdas —las que no tienen stat dejan la fila
+ * vacía— el ancho no importa y los iconos de toda la rejilla quedan a la misma altura.
+ */
+function statCelda(w: any, game: any): string {
+  const stat = game.getStatPrincipal?.(w.id);
+  if (!stat) return '';
+  const esMult = stat.subtipo === 'multiplier';
+  const cifra = (stat.prefijo ?? '')
+    + (esMult ? Number(stat.valor).toFixed(2).replace(/0$/, '') : formatNumber(stat.valor));
+  return `<span class="absolute top-1 right-1 text-[10px] leading-none font-mono font-bold accent-text
+                       bg-[var(--bg-panel)] rounded px-1 py-px tabular"
+                title="${stat.etiqueta}">${cifra}${stat.sufijo ?? ''}</span>`;
+}
+
+// --- Celdas -----------------------------------------------------------
   const cell = (g: { item: any; count: number }, i: number) => {
     const w = g.item;
     const isSel = w.id === ui.selectedId;
@@ -152,6 +196,7 @@ function draw(
           ${` ${estrellasDe(w.potential)}`}
         </span>
         ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-panel)] rounded px-0.5">${texto}</span>` : ''}
+        ${statCelda(w, game)}
         ${isEquipped ? `<span class="absolute bottom-0.5 left-1 text-[9px] font-mono text-amber-400">EQ</span>` : ''}
       </button>
     `;
@@ -331,30 +376,99 @@ function detailSheet(item: any, state: any, game: any): string {
 /**
  * Lore y tipo del item, para compañeros y recolectores (F13).
  *
- * El lore sale del nombre (`lorePara`): cada nombre que puede llegar al
- * almacén tiene el suyo. Y el tipo del compañero sale de su ficha, con la
- * cifra que cobra (`lineaTipoCompanion`): el lore es sabor y esto es lo que
- * decide si se equipa. Sin ficha se asume `click`, que es lo que vende la
- * tienda; los `passive` y `multiplier` solo salen de cajas y siempre traen
- * ficha con su tipo.
+ * El lore sale del nombre (`lorePara`): cada nombre que puede llegar al almacén tiene
+ * el suyo.
+ *
+ * **LO QUE ANTES IBAN AQUÍ Y YA NO: LA LÍNEA DEL TIPO DEL COMPAÑERO.** Decía
+ * "Aporta +18/s al clickear", y ahora el stat principal va en grande justo encima con
+ * esa misma cifra y esa misma etiqueta. Dos veces el mismo número en la misma ficha, a
+ * dos tipos de letra distintos, es exactamente lo que hace que un jugador no sepa cuál
+ * de los dos es el bueno. El tipo no se pierde: pasa a ser la **etiqueta** del número
+ * grande, que es donde tiene que estar, y el multiplicador sigue sin llevar "+" porque no
+ * se cobra: multiplica. Lo que queda aquí es solo el sabor, que para eso es el lore.
  */
 function loreLine(item: any, state: any): string {
   const lore = lorePara(item.name);
-  const tipo = item.type === 'companion'
-    ? `<div class="text-[10px] font-mono accent-text mt-1">${lineaTipoCompanion(
-        (state.companions as any[]).find((c: any) => c.id === item.id)?.type
-          ?? item.companionType ?? 'click',
-        (state.companions as any[]).find((c: any) => c.id === item.id)?.power
-          ?? item.power ?? 0
-      )}</div>`
-    : '';
-  if (!lore && !tipo) return '';
+  if (!lore) return '';
   return `
     <div class="rounded-lg px-2.5 py-1.5 mb-2.5"
          style="background: color-mix(in srgb, var(--accent) 7%, transparent);
                 border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent)">
-      ${lore ? `<p class="text-[11px] italic leading-relaxed" style="color: var(--text-main)">“${lore}”</p>` : ''}
-      ${tipo}
+      <p class="text-[11px] italic leading-relaxed" style="color: var(--text-main)">“${lore}”</p>
+    </div>`;
+}
+
+/**
+ * EL STAT PRINCIPAL, EN GRANDE, CON SU ETIQUETA AL LADO Y EN UN BORDE.
+ *
+ * **POR QUÉ VA EN LA FICHA Y NO EN EL CUADRADO DE LA REJILLA.** La rejilla enseña el
+ * tipo, la rareza y el tier: lo que hace falta para *elegir cuál mirar*. Una vez que has
+ * abierto la ficha ya no estás eligiendo: estás decidiendo si te lo llevas, y para eso
+ * hace falta una sola respuesta, arriba del todo y del tamaño del título. El borde es lo
+ * que la separa del resto de la ficha: sin él es un número más en una columna de texto.
+ *
+ * **EL NÚMERO NO SE CALCULA AQUÍ.** Viene de `game.getStatPrincipal(item.id)`, que lo
+ * compone con las mismas funciones con las que el motor cobra el clic y el ingreso. La
+ * versión anterior de esta ficha enseñaba el daño **sin** las mejoras de nivel —la cifra
+ * del item recién salido de la caja—, así que subir con cristales no movía el número que
+ * el jugador estaba mirando, y el daño de verdad aparecía después, en otro sitio.
+ *
+ * **Y LA UNIDAD LA PONE EL MOTOR, NO ESTA FUNCIÓN.** Aquí no se añade ni un "/s" ni un
+ * "×": llegan en el stat. Se probó primero con el sufijo en la vista y se leía "Produce
+ * en pasivo/s", que no significa nada —el "/s" es de la cifra y la etiqueta es una
+ * frase—, así que ahora la unidad va dentro de la etiqueta y la vista solo pinta.
+ *
+ * ## EL HOVER DEL DESGLOSE, Y POR QUÉ ES CSS Y NO UN LISTENER
+ *
+ * Pasa el ratón —o pon el dedo— por encima del número y sale la lista de dónde viene
+ * la suma. Es **HTML y CSS pelados**, con `group` y `group-hover`, sin un solo listener:
+ *
+ * · La ficha se repinta en cada cambio de estado y cualquier listener hay que
+ *   engancharlo otra vez, en el nodo que `mountInto()` recrea. Un listener perdido es un
+ *   hover que a veces funciona, que es la forma más difícil de detectar de un bug.
+ * · Un tooltip propio sería además un estado: abierta, cerrada, y su posición.
+ * · Y `title` no sirve aquí: tarda un segundo en aparecer y es un rectángulo del sistema
+ *   con el texto del navegador, no el del juego.
+ *
+ * **ABRE TAMBIÉN CON EL FOCO, PORQUE EN MÓVIL NO HAY HOVER.** El bloque lleva `tabindex`,
+ * así que un toque lo enfoca y la lista sale, y con teclado se llega con el tabulador.
+ * Sin eso, en el móvil el desglose sería inalcanzable y la mitad de la razón de existir
+ * se pierde.
+ */
+function statPrincipalHTML(stat: any): string {
+  if (!stat) return '';
+  const esMult = stat.subtipo === 'multiplier';
+  const cifra = (stat.prefijo ?? '')
+    + (esMult ? Number(stat.valor).toFixed(2).replace(/0$/, '') : formatNumber(stat.valor));
+  const filas: any[] = stat.desglose ?? [];
+  const conDesglose = filas.length > 1;
+  return `
+    <div class="${conDesglose ? 'group relative cursor-help' : ''} rounded-xl px-3 py-2 mb-2.5"
+         style="border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+                background: color-mix(in srgb, var(--accent) 8%, transparent)"
+         ${conDesglose ? 'tabindex="0" title="De dónde sale este número"' : ''}>
+      <div class="flex items-baseline gap-2 flex-wrap">
+        <span class="font-['Orbitron'] font-bold text-2xl accent-text tabular leading-none">${cifra}</span>
+        <span class="text-[10px] font-mono text-[var(--text-muted)]">${stat.etiqueta}</span>
+        ${conDesglose ? `<span class="text-[9px] font-mono text-[var(--text-muted)] opacity-60"
+                                aria-hidden="true">ⓘ</span>` : ''}
+      </div>
+      ${conDesglose ? `
+        <div class="hidden group-hover:block group-focus-within:block absolute z-30 left-0 right-0 top-full
+                    mt-1.5 rounded-lg px-2.5 py-2 text-left shadow-lg"
+             style="background: var(--bg-panel); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
+          <div class="label-caps mb-1">De dónde sale</div>
+          <ul class="space-y-0.5">
+            ${filas.map((f, i) => `
+              <li class="flex items-baseline justify-between gap-3 text-[10px] font-mono
+                         ${i === filas.length - 1
+                           ? 'accent-text font-bold border-t border-[var(--border-color)] pt-1 mt-0.5'
+                           : 'text-[var(--text-muted)]'}">
+                <span>${f.texto}</span>
+                <span class="tabular">${f.valor}</span>
+              </li>`).join('')}
+          </ul>
+        </div>` : ''}
     </div>`;
 }
 
@@ -398,7 +512,6 @@ function detailContent(item: any, state: any, game: any): string {
   const sellTotal = game.getSellTotal?.(item.id)
     ?? Math.floor((game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0) * stackUnits(item));
   const maxStack = MAX_STACK[item.type] ?? 1;
-  const maxLevel = collectorMaxLevel(item.maxLevel);
 
   const affixList = (item.affixes || []).map((id: string) => {
     const a = AFFIX_BY_ID[id];
@@ -411,6 +524,26 @@ function detailContent(item: any, state: any, game: any): string {
   }).join('');
 
   const valuation = isCollector ? valuationBreakdown(item) : [];
+
+  // **EL STAT PRINCIPAL, Y POR QUÉ SE PIDE AL MOTOR.** El número grande es la respuesta a
+  // "¿esto cuánto da?", y la respuesta la tiene el motor: es la misma cuenta que usa al
+  // hacer clic y al repartir el ingreso. Antes esta ficha pintaba `item.damage`, que es la
+  // cifra del item recién salido de la caja y **no sube con los cristales**, así que el
+  // jugador subía de nivel y veía el mismo número, y el daño de verdad aparecía en otro
+  // sitio. `getStatPrincipal` también devuelve `null` para lo que no sea recolector ni
+  // compañero, y por eso el stat no se pinta en una caja, una llave o una carta.
+  const statPrincipal = (isCollector || isCompanion)
+    ? game.getStatPrincipal?.(item.id)
+    : null;
+
+  // **EL NIVEL Y SU TECHO, PARA LOS DOS, Y SIEMPRE.** Antes la barra era solo del
+  // recolector y solo si el nivel era mayor que cero, de modo que un compañero —al que
+  // los cristales también le suben el nivel— no tenía ni una palabra de progreso, y un
+  // recolector recién comprado tampoco. Aquí sale en los dos casos y en el nivel cero,
+  // porque "Nivel 0 / 20" con la barra vacía dice algo que no dice "no hay nivel": que
+  // existe un techo, y por tanto que subirlo es una decisión y no una casualidad.
+  const nivelDel = isCompanion ? nivelComp : Math.max(0, Math.floor(Number((item as any).level) || 0));
+  const topeDel = isCompanion ? topeComp : collectorMaxLevel(item.maxLevel);
 
   return `
         <div class="flex items-start gap-2.5 mb-3">
@@ -426,7 +559,17 @@ function detailContent(item: any, state: any, game: any): string {
               <span class="text-[10px] font-mono ${rarityClass(item.rarity)}">${item.rarity}</span>
               ${item.tier ? `<span class="text-[10px] font-mono text-[var(--text-muted)]">T${item.tier}</span>` : ''}
               <span class="text-[10px] font-mono text-[var(--text-muted)]">${TYPE_LABEL[item.type] ?? 'Objeto'}</span>
-              ${`<span class="text-[10px] text-amber-400">${estrellasDe(item.potential)}</span>`}
+              <!--
+                LAS ESTRELLAS SOLO PARA LO QUE TIENE POTENCIAL. Se pintaban siempre, y
+                la función de estrellas con un potencial ausente devuelve el valor por
+                defecto, que es tres. Así que **una caja de botín, una llave y una carta
+                salían con tres estrellas**: potencial para algo que no se puede subir.
+                El defecto no era bonito, era información falsa en la etiqueta más
+                resaltada de la ficha.
+              -->
+              ${(isCollector || isCompanion) && item.potential
+                ? `<span class="text-[10px] text-amber-400">${estrellasDe(item.potential)}</span>`
+                : ''}
             </div>
           </div>
           <button class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
@@ -447,9 +590,29 @@ function detailContent(item: any, state: any, game: any): string {
           </div>
         ` : ''}
 
-        <p class="text-[11px] text-[var(--text-main)] leading-relaxed mb-2.5">
-          ${item.details || 'Sin descripción'}
-        </p>
+        <!--
+          LA DESCRIPCIÓN, Y POR QUÉ LOS RECOLECTORES Y COMPAÑEROS NO TIENEN NINGUNA.
+
+          El campo details es una **cadena escrita cuando el item se creó**, y eso la
+          convierte en una segunda copia del stat que además se queda vieja: un
+          recolector sube de nivel con cristales y su details sigue diciendo el daño del
+          nivel 0. Con el stat principal en grande, la ficha enseñaba **dos números
+          distintos para lo mismo y uno de los dos mentía**.
+
+          Para el resto de tipos la línea se queda, porque ahí no es una cifra: es la
+          única descripción que tienen. "Contiene recompensas máximas", "Sube 12 puntos
+          la probabilidad" — eso no está en ninguna otra parte.
+
+          Y si algún día un recolector viniera sin details, tampoco sale el "Sin
+          descripción": no es que no tenga texto, es que el texto es el stat de arriba.
+        -->
+        ${!(isCollector || isCompanion) ? `
+          <p class="text-[11px] text-[var(--text-main)] leading-relaxed mb-2.5">
+            ${item.details || 'Sin descripción'}
+          </p>
+        ` : ''}
+
+        ${statPrincipalHTML(statPrincipal)}
 
         ${isCollector || isCompanion ? loreLine(item, state) : ''}
 
@@ -465,10 +628,10 @@ function detailContent(item: any, state: any, game: any): string {
           </div>
         ` : ''}
 
-        ${isCollector && (item.level ?? 0) > 0 ? `
+        ${(isCollector || isCompanion) && topeDel > 0 ? `
           <div class="mb-2.5">
-            <div class="label-caps mb-1">Nivel ${item.level} / ${maxLevel}</div>
-            <div class="meter is-tall"><span style="width:${(item.level / maxLevel) * 100}%"></span></div>
+            <div class="label-caps mb-1">Nivel ${nivelDel} / ${topeDel}</div>
+            <div class="meter is-tall"><span style="width:${Math.min(100, Math.max(0, (nivelDel / topeDel) * 100))}%"></span></div>
           </div>
         ` : ''}
 
@@ -481,27 +644,47 @@ function detailContent(item: any, state: any, game: any): string {
 
         ${valuation.length ? `
           <!--
-            POR QUÉ VA ABIERTO. Estaba en un <details> cerrado, y el jugador
-            tenía que abrir la flechita para ver cuánto valía su item. Es
-            información que se pide antes de vender: nadie mira la valoración
-            después de haber vendido. Y esconderla detrás de un clic hace que la
-            mayoría de las fichas enseñen un precio sin explicar de dónde sale.
+            LA VALORACIÓN YA NO ES UN ACORDEÓN.
 
-            El <details> NO se quita, y esa es la parte importante: cerrar el
-            desglose sigue siendo posible cuando la ficha es larga y occupies el
-            alto. Abrir por defecto y poder cerrar no es lo mismo que no dejar
-            cerrar.
+            Estaba dentro de un \<details\>, primero cerrado y luego abierto por defecto. Las
+            dos cosas sobraban. Cerrado obligaba a un clic para ver cuánto valía el item, que
+            es justo el dato que se pide **antes** de vender: nadie mira la valoración
+            después de haber vendido. Y abierto por defecto, lo único que aportaba el
+            \<summary\> era una flechita que abre y cierra algo que no hacía falta cerrar —
+            y en una ficha larga, con las acciones al final, cerrar el desglose síaba bien.
 
-            Y no es un <summary> que haya que enganchar: el elemento nativo ya se
-            abre y se cierra solo, sin un solo listener. Un acordeón propio sería
-            un estado más que mantener y una tecla más que pulsar.
+            Así que ahora es un bloque fijo: la etiqueta, las filas y el precio de venta,
+            que es para lo que sirve la valoración. Un \<details\> son dos estados —abierto
+            y cerrado— y un estado más que mantener para esconder algo que ya está
+            sospechoso.
+
+            **Y LA LÍNEA DE BASE YA NO ESTÁ.** La quitó la regla, porque "Base T2: 480" es
+            el **valor** y el número grande de arriba es el **daño**: dos grandezas con el
+            mismo nombre debajo la una de la otra. Aquí solo quedan los multiplicadores, que
+            es lo que explica el precio. De dónde sale el daño lo explica el hover del
+            número grande, y cada lista dice lo suyo.
           -->
-          <details class="mb-2.5" open>
-            <summary class="label-caps cursor-pointer select-none">Valoración</summary>
-            <ul class="mt-1.5 space-y-0.5">
-              ${valuation.map(v => `<li class="text-[10px] font-mono text-[var(--text-muted)]">${v}</li>`).join('')}
+          <div class="mb-2.5 rounded-xl px-2.5 py-2"
+               style="border: 1px solid var(--border-color);
+                      background: color-mix(in srgb, var(--text-main) 3%, transparent)">
+            <div class="label-caps mb-1.5 flex items-center gap-1.5">
+              <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 opacity-70">${ic('scale')}</span>
+              Valoración
+            </div>
+            <ul class="space-y-1">
+              ${valuation.map(v => {
+                // "Nivel 12: ×2.60" -> la etiqueta a la izquierda y la cifra a la derecha.
+                const corte = v.lastIndexOf(': ');
+                const etiqueta = corte > 0 ? v.slice(0, corte) : v;
+                const valor = corte > 0 ? v.slice(corte + 2) : '';
+                return `
+                  <li class="flex items-baseline justify-between gap-3">
+                    <span class="text-[10px] font-mono text-[var(--text-muted)]">${etiqueta}</span>
+                    ${valor ? `<span class="text-[10px] font-mono tabular accent-text">${valor}</span>` : ''}
+                  </li>`;
+              }).join('')}
             </ul>
-          </details>
+          </div>
         ` : ''}
 
         <div class="flex flex-col gap-1.5 mt-3">
