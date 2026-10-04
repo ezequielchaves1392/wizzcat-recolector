@@ -108,20 +108,23 @@ export function renderPanel(
         </div>
       ` : "";
 
-      // **EL "+5" DE LA PARTIDA VA MÁS PEQUEÑO Y MÁS APAGADO A PROPÓSITO.** Es la mitad
-      // que el jugador no controla con este item: se la quita si cambia de arma. Si
-      // fuera del mismo tamaño, "lo que da mi recolector" y "lo que da mi partida" se
-      // leerían como la misma cifra, que es exactamente la confusión que el "30+5"
-      // viene a resolver.
+      // **LAS DOS PARTES, DEL MISMO TAMAÑO.** Se probó primero con la segunda más pequeña y más
+      // apagada, pensando que "lo que da mi recolector" y "lo que da mi partida" no son la
+      // misma cifra, y es al revés: **la segunda parte es parte del daño que pega el clic**.
+      // Achicarlaroduce el número más grande de la pantalla a cambio de una distinción que
+      // la lista de abajo ya explica mejor, con los dos grupos separados y etiquetados.
+      //
+      // Lo que sí separa las dos es el **signo**: "+942 +889" se lee como una suma, y es
+      // lo que hace el jugador cuando quiere las dos por separado —cambiar de arma o bajar
+      // un buff— las lee restando. El signo del medio va atenuado para que se entienda que
+      // separa y no suma; las cifras van las dos en accent-text y en el mismo cuerpo.
       const danoHTML = `
-        <div class="flex items-baseline gap-1 justify-end">
-          <span class="font-['Orbitron'] font-bold text-2xl md:text-3xl leading-none"
-                style="color: var(--accent)">+${formatNumber(intrinseco)}</span>
-          ${deLaPartida > 0 ? `
-            <span class="text-sm md:text-base font-bold leading-none opacity-60"
-                  style="color: var(--accent)"
-                  title="Bonificaciones de la partida: compañeros, logros, árbol y buffs">
-              +${formatNumber(deLaPartida)}</span>` : ""}
+        <div class="flex items-baseline justify-end leading-none"
+             title="Lo que da el recolector, más las bonificaciones de la partida">
+          <span class="font-['Orbitron'] font-bold text-2xl md:text-3xl"
+                style="color: var(--accent)">+${formatNumber(intrinseco)}${deLaPartida > 0
+        ? `<span class="opacity-55 px-0.5">+</span>${formatNumber(deLaPartida)}`
+        : ''}</span>
         </div>`;
       collectorContainer.innerHTML = `
         <div class="flex items-center gap-3">
