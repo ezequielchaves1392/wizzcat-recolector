@@ -6,6 +6,7 @@ import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './servi
 import { rollCrateReward } from './components/crateLoot';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
+import { cosmeticsAlcanzables } from './data/cosmetics';
 import { SECRET_ACHIEVEMENTS } from './data/achievements';
 // Los tiers viven en data/ porque los usan también el crafteo, el mercado y la
 // valoración. Se re-exportan aquí para no romper los imports existentes.
@@ -2103,6 +2104,12 @@ const AFK_THRESHOLD_MS = 60000;
   // `afkCards` del guardado y ya está: como el contador contaba items en vez de
   // unidades, quien tuviera tarjetas apiladas arrastraba el error indefinidamente,
   // guardado a guardado. Derivar al cargar lo deja bien sin tocar los items.
+
+  // **Y DESPUÉS DE LOS LOGROS, LOS COSMÉTICOS.** El orden importa: la vía del logro
+  // pregunta por `state.unlockedAchievements`, y `checkAchievements()` es lo que la
+  // rellena. Al revés, un jugador con logros de hace meses no recuperaría nada nunca,
+  // porque la lista ya estaba llena cuando se evaluó.
+  reconciliaCosmeticos();
   refreshAfkCardCount();
   checkAchievements();
 
@@ -2126,9 +2133,51 @@ const AFK_THRESHOLD_MS = 60000;
     }
   }
 
+/**
+   * REPARTE LOS COSMÉTICOS QUE EL CATÁLOGO DECLARA Y NADIE REPARTÍA.
+   *
+   * El catálogo de cosmeticos tiene **cuatro vías** --logro, núcleo, ranking y caja-- y
+   * solo la caja llegaba al jugador. Las otras tres no las leía nadie: el catálogo decía
+   * "se desbloquea con un logro" y **el logro no repartía nada**, así que el Tóxico, el
+   * Carmesí, el Atardecer y el Neón eran inalcanzables para siempre. El jugador lo ve en la
+   * lista de cosméticos del Perfil, con la razón al lado, y no hay forma de llegar.
+   *
+   * ## POR QUÉ ES UNA RECONCILIACIÓN Y NO UN DESBLOQUEO EN EL MOMENTO
+   *
+   * Porque **el logro ya estaba en el guardado cuando se escribió esto.** Un jugador que
+   * llevaba semanas con el Carmesí bloqueado tiene el logro `ascendant` desbloqueado de
+   * hace meses, y un código que solo reparta en el momento del logro no le daría nada
+   * nunca: **el logro no vuelve a saltar**. Reconciliar es preguntarle al estado lo mismo
+   * que se le pregunta en cada carga, y por eso un cosmético perdido se recupera solo.
+   *
+   * ## Y POR QUÉ NO AVISA
+   *
+   * **porque al cargar puede ser un montón.** Un jugador con 30 de núcleos y 12 de logros
+   * recibe seis de golpe, y seis avisos apilados tapando la pantalla es peor que ninguno.
+   * La lista del Perfil es donde se ven.
+   *
+   * La regla de quién está entera en `cosmeticsAlcanzables()`, con el motivo de cada
+   * vía escrita. Aquí solo se recorre.
+   */
+  function reconciliaCosmeticos(): string[] {
+    const nuevos: string[] = [];
+    for (const cos of cosmeticsAlcanzables({
+      unlockedAchievements: state.unlockedAchievements,
+      totalCores: state.totalCores
+    })) {
+      if (desbloquearCosmetico(cos.id)) nuevos.push(cos.id);
+    }
+    return nuevos;
+  }
+
   function checkAchievements() {
     const newly = evaluateAchievements(state, achievementState);
     if (newly.length === 0) return;
+
+    // El logro entra en la lista y **después se reparte lo que ese logro abre.** Al revés, la
+    // vía `achievement` miraría una lista a la que todavía no le falta su id, y el cosmético
+    // se quedaría bloqueado hasta la siguiente recarga.
+    reconciliaCosmeticos();
     for (const ach of newly) {
       if (!state.unlockedAchievements.includes(ach.id)) state.unlockedAchievements.push(ach.id);
       onAchievement?.(ach);

@@ -197,9 +197,26 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
    lleno.
 5. **La nanopartícula cuesta 90 000 en la tienda (`gameLoop.ts:186`) y 220 000 en
    `valuation.ts:145`.** El valor de la tienda es el que se cobra.
-6. ~~**Los cosméticos nunca se desbloquean.**~~ **ARREGLADO.** `unlockCosmetic` ya
-   tiene llamadores (`gameLoop.ts:2550` y `:2873`) y las cajas reparten cosméticos
-   vía `crateCosmetics` (`data/cosmetics.ts:173`). Lo cubre `lootCheck`.
+6. **Los cosméticos de logro, núcleo y ranking no se repartían nunca.** **MEDIO
+   ARREGLADO, y la primera mitad de este "ARREGLADO" era falsa.** El catálogo declara
+   **cuatro vías** --logro, núcleo, ranking y caja-- y solo la caja llegaba al jugador:
+   las cajas sortean por `crateCosmetics()` y **nada leía las otras tres**. El Tóxico y el
+   Carmesí ponían "se desbloquea con un logro" y el logro no repartía nada, así que eran
+   inalcanzables para siempre y el jugador lo veía en su propia lista con el candado.
+   El Atardecer (20 núcleos) y el Neón (40) tampoco: ningún camino los abría.
+
+   Ahora `cosmeticsAlcanzables()` (en `data/cosmetics.ts`) decide por estado, y el motor
+   **reconcilia al cargar y cada vez que se gana un logro**. Reconciliar y no desbloquear
+   en el momento, porque **el logro ya estaba en el guardado**: un jugador con el Carmesí
+   bloqueado desde hace semanas no lo recuperaría nunca de otro modo, porque el logro no
+   vuelve a saltar. Los núcleos se comparan con `totalCores` y no con el saldo, que baja
+   al gastar: por saldo el cosmético se perdería al comprar un nodo.
+
+   **Queda fuera la vía `ranking`** (5 cosméticos), a propósito: "permaneciste 7 días en
+   el Top 1" no se puede responder con el estado de una partida, y decide lo contrario
+   exige el histórico de posiciones. `viasSinResolver()` lo declara y hay un banco que
+   afirma que es la **única** vía sin reconciliar, para que la próxima que se añada
+   aparezca ahí el mismo día. Lo cubren 16 pruebas nuevas en `identidadCheck`.
 7. ~~**Las esquirlas se acumulan y nunca se gastan.**~~ **ARREGLADO.** Eran una
    moneda sin salida: la forja se paga con dos recolectores, así que se acumulaban,
    se guardaban entre ascensiones y no servían para nada. **Se han borrado** del
@@ -348,7 +365,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 3 | `crystalPicker` lee `res.ok` en vez de `res.success` | **arreglada** (queda unificar las dos convenciones de resultado) |
 | 4 | Dos tablas de precio de caja | sigue |
 | 5 | La nanopartícula cuesta 90 000 en un sitio y 220 000 en otro | sigue |
-| 6 | Los cosméticos nunca se desbloquean | **arreglada** |
+| 6 | Los cosméticos de logro y núcleo no se repartían nunca | **medio**: quedan los 5 de ranking, declarados |
 | 7 | Las esquirlas nunca se gastan | **arreglada** (fuera del juego; el fallo paga cristales) |
 | 8 | `crateLuck` y `offlineClicks` no se consumen | sigue |
 | 9 | Código muerto | sigue |

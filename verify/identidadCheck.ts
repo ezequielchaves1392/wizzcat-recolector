@@ -19,15 +19,17 @@
 //  el `avatar-stack` de verdad y es `preview.html` con viewport real.
 // ==========================================================================
 
-import { check, resumen, boot, baseSave, reload, s } from './kit';
+import { check, resumen, boot, baseSave, reload, s, collector } from './kit';
 import { miniIdentity } from '../src/ui/identity';
 import { identityCard } from '../src/ui/profilePage';
+import { COSMETICS, cosmeticsAlcanzables, viasSinResolver } from '../src/data/cosmetics';
 import { BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT } from '../src/services/rankingService';
 import { coresGastadosEnArbol } from '../src/data/tree';
 
 const RANK_DOC = 'rankings/test';
 
 async function main() {
+  const alcanzables = (e: any) => cosmeticsAlcanzables(e);
   // -----------------------------------------------------------------------
   //  1. LO EQUIPADO LLEGA AL DOCUMENTO DEL RANKING.
   //
@@ -270,6 +272,110 @@ async function main() {
     check('F29: y explica qué mide sin dar la receta',
       pistaDefinitivo.includes('resumen') || pistaDefinitivo.includes('combina'),
       pistaDefinitivo.slice(0, 90));
+  }
+
+  // ---------------------------------------------------------------------------
+  //  LOS CAMINOS DEL CATÁLOGO, Y QUE NO QUEDE NINGUNO MUERTO
+  //
+  //  El hallazgo: el catálogo declaraba cuatro vías de desbloqueo y **solo la caja
+  //  repartía algo**. El Tóxico y el Carmesí ponían "se desbloquea con un logro" y el
+  //  logro no repartía nada: eran inalcanzables para siempre, y el jugador lo veía en su
+  //  propia lista de cosméticos con el candado al lado.
+  //
+  //  Lo que se comprueba aquí son las tres cosas que crean el bug: que la regla de la vía
+  //  funciona, que el motor la llama, y **que no queda ninguna vía sin reconciliar** salvo
+  //  la de ranking, que se declara a propósito y por qué.
+  // ---------------------------------------------------------------------------
+  {
+    // **LA VÍA DEL LOGRO.** Con el logro dentro, el cosmético es alcanzable; sin él, no.
+    check('cosmeticos: el logro abre su cosmetico',
+      alcanzables({ unlockedAchievements: ['ascendant'] }).some((c: any) => c.id === 'banner_crimson'),
+      alcanzables({ unlockedAchievements: ['ascendant'] }).map((c: any) => c.id).join(','));
+    check('cosmeticos: y sin el logro, no',
+      !alcanzables({ unlockedAchievements: [] }).some((c: any) => c.id === 'banner_crimson'));
+    // Un logro que no existe no abre nada: es la coacción del Catálogo de logros aplicada
+    // aquí, y sin ella un `value` mal escrito abriría un cosmético cualquiera.
+    check('cosmeticos: un id de logro que no existe no abre nada',
+      alcanzables({ unlockedAchievements: ['no_existe'] }).length === 0,
+      alcanzables({ unlockedAchievements: ['no_existe'] }).map((c: any) => c.id).join(','));
+
+    // **LA VÍA DEL NÚCLEO, Y CON `totalCores`, NO CON EL SALDO.** El saldo baja al
+    // gastar, así que un cosmético por saldo se perdería al comprar un nodo.
+    check('cosmeticos: 20 nucleos attained abren el Atardecer',
+      alcanzables({ totalCores: 20 }).some((c: any) => c.id === 'banner_sunset') &&
+      !alcanzables({ totalCores: 19 }).some((c: any) => c.id === 'banner_sunset'),
+      '19=' + alcanzables({ totalCores: 19 }).map((c: any) => c.id).join(','));
+    // **Y EL `value: 0` NO ES "GRATIS".** El Singularidad lo declara con cero porque su
+    // vía era "comprar el nodo", que esta función no puede preguntar. Con `0` el filtro lo
+    // daría a todo el mundo al cargar, y es un título Divino.
+    check('cosmeticos: un tope de nucleos 0 no abre nada',
+      !alcanzables({ totalCores: 99999 }).some((c: any) => c.id === 'title_singularity'),
+      alcanzables({ totalCores: 99999 }).map((c: any) => c.id).join(','));
+
+    // **LA VÍA SECRETA ES LA VÍA DEL LOGRO.** Los dos ids `secret` del catálogo son
+    // ids de logro, y por eso la misma pregunta los abre.
+    check('cosmeticos: un logro secreto abre su banner',
+      alcanzables({ unlockedAchievements: ['hidden'] }).some((c: any) => c.id === 'banner_hidden'),
+      alcanzables({ unlockedAchievements: ['hidden'] }).map((c: any) => c.id).join(','));
+
+    // **Y LA DE CAJA NO SE CUENTA AQUI.** `crateCosmetics()` es la que la reparte, y si esta
+    // también la mirara, el cosmético de caja se daría dos veces por caminos distintos.
+    check('cosmeticos: los de caja no se reparten por vía de estado',
+      !alcanzables({ unlockedAchievements: [], totalCores: 99999 })
+        .some((c: any) => c.unlock.kind === 'crate'),
+      alcanzables({ totalCores: 99999 }).filter((c: any) => c.unlock.kind === 'crate').map((c: any) => c.id).join(','));
+    check('cosmeticos: ni los de {"sin marco"}, que nacen puestos',
+      !alcanzables({ totalCores: 99999 }).some((c: any) => c.unlock.kind === 'default'));
+
+    // **LA ÚLTIMA, Y ES LA IMPORTANTE: NO QUEDA NINGÚN VÍA SIN RECONCILIAR EN SILENCIO.**
+    // `viasSinResolver()` declara la de ranking con su motivo. Si alguien añade una vía
+    // nueva al catálogo y no la implementa, esta lista la enseña el mismo día; sin ella,
+    // //  el cosmético aparece en la pantalla del jugador como inalcanzable y nadie lo sabe.
+    const vias = viasSinResolver();
+    check('cosmeticos: la unica vía sin reconciliar es el ranking, y se declara',
+      vias.length === 1 && vias[0].kind === 'ranking' && vias[0].count === 5,
+      JSON.stringify(vias));
+
+    // Y que el ranking sean los únicos cinco: los de top 1, top 3 y top 10.
+    check('cosmeticos: los cinco del ranking son los de permanencia en la tabla',
+      COSMETICS.filter((c: any) => c.unlock.kind === 'ranking').length === 5);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  EL MOTOR LO LLAMA, Y ESO ES LO QUE NO SE COMPRUEBA SIN UN JUEGO
+  // ---------------------------------------------------------------------------
+  {
+    // Un guardado con logros ya dentro tiene que **reconciliar al cargar**, no solo cuando
+    // salta el logro. Es el caso real: el jugador lleva semanas con el Carmesí bloqueado.
+    const g = await boot(baseSave([collector('r1')], {
+      unlockedAchievements: ['ascendant', 'jackpot', 'smith_25', 'first_click'],
+      totalCores: 250
+    }));
+    const tiene = s(g).cosmetics.unlocked as string[];
+    check('cosmeticos: al cargar, un logro viejo abre su cosmetico',
+      tiene.includes('banner_crimson'), tiene.join(','));
+    // **250 NÚCLEOS, QUE ES LO QUE NECESITA EL NEÓN.** Con 30 el catalogue abria cinco y el
+    // marco de 40 seguía bloqueado: la prueba estaba contando con un número que no
+    // daba para lo que afirmaba.
+    check('cosmeticos: y tambien los de los demas logros, de una sola pasada',
+      tiene.includes('banner_toxic') && tiene.includes('frame_ember') && tiene.includes('frame_steel'),
+      tiene.join(','));
+    check('cosmeticos: y los de nucleos del guardado viejo',
+      tiene.includes('banner_sunset') && tiene.includes('frame_neon'), tiene.join(','));
+    // La Corona y el titulo Divino son de **ranking**, la vía que no se reconcilia.
+    check('cosmeticos: cargar NO abre nada de la vía del ranking',
+      !tiene.includes('banner_crown') && !tiene.includes('frame_gold') && !tiene.includes('title_champion'),
+      tiene.join(','));
+    check('cosmeticos: el de singularidad sigue bloqueado, porque su vía no es núcleos',
+      !tiene.includes('title_singularity'), tiene.join(','));
+
+    // Y que **no se rompa al volver a cargar**: la reconciliación es idempotente porque
+    // `desbloquearCosmetico()` ya devuelve false de lo que estaba, y no duplica la lista.
+    const antes = tiene.length;
+    const g2 = await reload();
+    check('cosmeticos: recargar no duplica la lista de desbloqueados',
+      (s(g2).cosmetics.unlocked as string[]).length === antes,
+      `antes=${antes} despues=${(s(g2).cosmetics.unlocked as string[]).length}`);
   }
 
   resumen('identidad: lo equipado llega al ranking');

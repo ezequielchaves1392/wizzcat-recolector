@@ -90,7 +90,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 29 bancos = 1821 pruebas. El total es estable: una prueba que depende del dado no se cuenta: no se ha ejecutado.
+npm run verify    # 29 bancos = 1838 pruebas. El total es estable: una prueba que depende del dado no se cuenta: no se ha ejecutado.
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en

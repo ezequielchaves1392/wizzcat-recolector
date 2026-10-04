@@ -185,6 +185,75 @@ export const COSMETICS_BY_TYPE = (type: Cosmetic['type']) => COSMETICS.filter(c 
 export const crateCosmetics = (crate: CrateCosmeticSource): Cosmetic[] =>
   COSMETICS.filter(c => c.unlock.kind === 'crate' && c.unlock.value === crate);
 
+/**
+ * LOS CAMINOS QUE EL MOTOR CONOCE, Y CUALES RECONCILIA.
+ *
+ * El catálogo declara **cuatro** vías: `default`, `achievement`, `cores`, `ranking` y
+ * `crate`. Las cinco existen como dato y **solo dosllegaaban al jugador**: los de
+ * `default`, que nacen desbloqueados, y los de `crate`, que los sortea el botín
+ * (`crateCosmetics()`). Las otras tres no las leía nadie: el catálogo decía "se
+ * desbloquea con un logro" y el logro no repartía nada, así que el Tóxico, el
+ * Carmesí, el Atardecer y el Neón eran inalcanzables para siempre.
+ *
+ * Aquí está lo que se reconcilia y lo que no, y el motivo está en cada uno:
+ *
+ * · `achievement` y `secret` — **lo mismo.** Los ids de `secret` (`ghost`, `hidden`)
+ *   son ids de logro, y los dos están en `SECRET_ACHIEVEMENTS`. Se concede con la
+ *   misma pregunta: ¿está el id en los logros desbloqueados?
+ * · `cores` — con `totalCores`, **no con el saldo.** El saldo baja cuando gastas, así
+ *   que un cosmético por saldo se venderia solo al comprar un nodo; `totalCores` es el
+ *   histórico de núcleos ganados y no baja nunca, que es lo que hace que "20 núcleos"
+ *   sea un logro de permanencia y no una meta.
+ * · `ranking` — **NO SE RECONCILIA, Y ES A PROPÓSITO.** Depende del documento público
+ *   del ranking y de un histórico de posiciones que el juego no guarda: "Permaneciste
+ *   7 días en el Top 1" no se puede responder con el estado de una partida. Se deja
+ *   declarado y sin repartir, y `viasSinResolver()` lo enseña, para que no se perda.
+ *
+ * El `value` de `cores` tiene que ser **mayor que cero**. El Singularidad lo declara
+ * con `value: 0` porque la vía original era "comprar el nodo", que esta función no
+ * puede preguntar: con `0` el filtro lo daría a todo el mundo al cargar, y es un
+ * título Divino.
+ */
+export function cosmeticsAlcanzables(estado: {
+  unlockedAchievements?: string[];
+  totalCores?: number;
+}): Cosmetic[] {
+  const logros = new Set(estado.unlockedAchievements ?? []);
+  const total = estado.totalCores ?? 0;
+  return COSMETICS.filter((c) => {
+    switch (c.unlock.kind) {
+      case 'default':
+      case 'crate':
+        return false; // los dos los resuelve otro camino
+      case 'achievement':
+      case 'secret':
+        return logros.has(String(c.unlock.value));
+      case 'cores':
+        const pedido = Number(c.unlock.value);
+        return Number.isFinite(pedido) && pedido > 0 && total >= pedido;
+      case 'ranking':
+        return false; // ver la cabecera: no hay con qué comprobarlo
+      default:
+        return false;
+    }
+  });
+}
+
+/**
+ * Las vías que el catálogo declara y el motor **no** reconcilia.
+ *
+ * Existe para que un banco pueda afirmar que no hay ningún camino muerto sin mirar la
+ * lista a mano, y para que la próxima vía que se añada aparezca aquí el mismo día que
+ * se escribe en vez de tres meses después.
+ */
+export function viasSinResolver(): { kind: string; count: number }[] {
+  const cuenta = new Map<string, number>();
+  for (const c of COSMETICS) {
+    if (c.unlock.kind === 'ranking') cuenta.set(c.unlock.kind, (cuenta.get(c.unlock.kind) ?? 0) + 1);
+  }
+  return [...cuenta].map(([kind, count]) => ({ kind, count }));
+}
+
 /** CSS inline a partir del mapa de estilos del cosmético. */
 export function cosmeticStyle(cos: Cosmetic | undefined): string {
   if (!cos) return '';
