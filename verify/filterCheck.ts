@@ -22,6 +22,8 @@
 // ==========================================================================
 
 import { visibleStacksFor, moveItemTo, matchesFilter } from '../src/components/warehouse';
+import { materialesDeForja } from '../src/ui/forgePage';
+import { bandaDeProbabilidad, CORTE_PROBABILIDAD_ALTA, CORTE_PROBABILIDAD_MEDIA } from '../src/data/items';
 import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave,
@@ -174,6 +176,141 @@ async function main() {
     check('orden stat: el orden es el del stat que se ve en la celda',
       leido(porClic).every((v: number, i: number, arr: number[]) => i === 0 || arr[i - 1] >= v),
       porClic.map((id: string) => id + '=' + stat(id)?.valor).join(' '));
+  }
+
+  // =========================================================================
+  //  1b. El mismo orden, en la Forja
+  // =========================================================================
+  //
+  //  La rejilla de la Forja ordenaba por `(a.tier - b.tier) || (b.damage || b.power)`,
+  //  y eso es el **valor de base**: el `damage` de un recolector es
+  //  `danioDeRango(tier, potencial)` sin el multiplicador de nivel, y el `power` de un
+  //  compañero es su poder sin `multiplicadorDeNivel`. El resultado era que un compañero
+  //  de nivel 20 con poder 2 quedaba debajo de uno de nivel 0 con poder 3, y el número
+  //  que ordenaba no era ninguno de los que se veían en la celda.
+  //
+  //  Estas pruebaspin el orden por el stat FINAL, que es el mismo que pinta la celda. Y
+  //  lo pinen con los dos casos que el orden por base no distinguishesía: el nivel dentro
+  //  del mismo poder, y el potencial dentro del mismo tier.
+  {
+    const g = await boot(baseSave([
+      // Los tres del mismo tier y **el mismo daño de base**: 10. Solo se diferencian en
+      // el nivel, así que el orden por base los deja en el orden de entrada y el final los
+      // ordena de verdad. El nivel se fija DESPUÉS de cargar, porque la carga recalcula el
+      // daño del recolector a partir del tier y el potencial.
+      collector('n0'), collector('n5'), collector('n20'),
+      // Dos del mismo tier con distinto potencial: el daño de base ya sale distinto, así
+      // que este caso lo resolvía el orden viejo también. Está para que se vea que sigue
+      // funcionando.
+      collector('p1'), collector('p5'),
+      companion('c0'), companion('c20'), companion('mult')
+    ], { warehouseCapacity: 30 }));
+
+    const wh = s(g).warehouse as any[];
+    const fijaNivel = (id: string, nivel: number) => { wh.find((w: any) => w.id === id).level = nivel; };
+    // `collector(id, tier, potential?)`: los tres del principio van al mismo daño de base.
+    fijaNivel('n0', 0); fijaNivel('n5', 5); fijaNivel('n20', 20);
+
+    // Y las fichas, que es de donde el motor saca el tipo y el poder. **EL MISM0 PODER
+    // CON NIVELES DISTINTOS**: es el caso exacto que el orden por base no veía.
+    s(g).companions = [
+      ficha('c0', 4, { type: 'passive', power: 10 }),
+      ficha('c20', 4, { type: 'passive', power: 10 }),
+      ficha('mult', 4, { type: 'multiplier', power: 2 })
+    ];
+    // El poder sale de la ficha, y la ficha tiene que ir en el mismo sitio que en el
+    // almacén: `getStatPrincipal()` busca el compañero por id para saber su tipo.
+    const c20 = wh.find((w: any) => w.id === 'c20');
+    c20.level = 20;
+    if (c20.power !== 10) c20.power = 10;
+
+    // **LA PREMISA, O ESTAS PRUEBAS NO COMPRUEBAN NADA.** Si los tres recolectores no
+    // tienen el mismo daño de base, el orden viejo acertaría por casualidad y la prueba
+    // pasaría sin estar midiendo el nivel. Un "sale bien" que viene de un fixture
+    // equivocado es verde y no está midiendo el defecto.
+    const baseDe = (id: string) => wh.find((w: any) => w.id === id).damage;
+    check('forja: los tres del mismo tier tienen el mismo dano de base',
+      baseDe('n0') === baseDe('n5') && baseDe('n5') === baseDe('n20'),
+      `n0=${baseDe('n0')} n5=${baseDe('n5')} n20=${baseDe('n20')}`);
+
+    const stat = g.getStatPrincipal;
+    const ordenRec = materialesDeForja(g, 'collector').map((w: any) => w.id);
+    const ordenCom = materialesDeForja(g, 'companion').map((w: any) => w.id);
+
+    // **Y QUE EL NIVEL REALMENTE CAMBIE EL STAT.** Si `getStatPrincipal()` no multiplicara
+    // por el nivel, los tres valdrían lo mismo y el orden sería el de entrada otra vez,
+    // verde por el motivo equivocado.
+    check('forja: el stat final sale mas alto con mas nivel, con la misma base',
+      (stat('n20')?.valor ?? 0) > (stat('n5')?.valor ?? 0) &&
+      (stat('n5')?.valor ?? 0) > (stat('n0')?.valor ?? 0),
+      `n0=${stat('n0')?.valor} n5=${stat('n5')?.valor} n20=${stat('n20')?.valor}`);
+
+    // **EL ORDEN ES EL DEL VALOR FINAL, NO EL DE LA BASE.**
+    check('forja: con la misma base, el de mas nivel va primero',
+      ordenRec.slice(0, 3).join(',') === 'n20,n5,n0', ordenRec.join(','));
+
+    // **Y EL ORDEN ES EL DEL NÚMERO QUE SE VE**, que es lo que hace que la lista cuadre
+    // con lo que hay delante de los ojos. La misma comprobación que en el almacén.
+    const leido = ordenRec.map((id: string) => stat(id)?.valor ?? -1);
+    check('forja: el orden es el del stat que se ve en la celda',
+      leido.every((v: number, i: number, arr: number[]) => i === 0 || arr[i - 1] >= v),
+      ordenRec.map((id: string) => id + '=' + stat(id)?.valor).join(' '));
+
+    // **Y ENTRE COMPAÑEROS, IGUAL: EL NIVEL CUENTA.**
+    check('forja: entre companeros, con el mismo poder gana el de mas nivel',
+      ordenCom.slice(0, 2).join(',') === 'c20,c0', ordenCom.join(','));
+
+    // **EL MULTIPLICADOR AL FINAL, Y NO UN CERO.** Su stat es "tres veces lo de los
+    // demás" y da 3, que es MÁS que el 10 del pasivo: si se tratara como una cifra más,
+    // saldría el primero por error.
+    check('forja: el multiplicador va el ultimo aunque su numero sea mayor',
+      ordenCom[ordenCom.length - 1] === 'mult',
+      `orden=${ordenCom.join(',')} mult=${stat('mult')?.valor}`);
+
+    // **Y NINGÚN MATERIAL SE PIERDE.** Ordenar es reordenar: si un item no aparece, el
+    // jugador ha perdido un material del almacén sin que nadie le avise.
+    check('forja: ordenar no pierde ningun material',
+      ordenRec.length === 5 && ordenCom.length === 3,
+      `rec=${ordenRec.join(',')} com=${ordenCom.join(',')}`);
+  }
+
+  // =========================================================================
+  //  1c. Las bandas de la probabilidad, que es lo que decide el color
+  // =========================================================================
+  //
+  //  La hoja de sintonización enseña la probabilidad en grande y con color, y el color
+  //  sale de `bandaDeProbabilidad()`. La regla del corte vive en `data/items.ts` y no en la
+  //  vista, así que aquí se puede comprobar: si el corte viviera en el componente, el mismo
+  //  número sería rojo en una pantalla y verde en otra y no habría forma de enterarse.
+  {
+    // **LOS TRES TRAMOS, Y LOS CORTES EXACTOS.** El 80 es verde y el 79,999 no; con la
+    // probabilidad de sintonización, que es entera, eso nunca se nota, pero el corte
+    // exacto es lo que dice la regla y lo que hay que fijar.
+    check('banda: de 80 para arriba es alta',
+      bandaDeProbabilidad(80) === 'alta' && bandaDeProbabilidad(95) === 'alta' &&
+      bandaDeProbabilidad(79.999) !== 'alta',
+      `80=${bandaDeProbabilidad(80)} 95=${bandaDeProbabilidad(95)} 79.999=${bandaDeProbabilidad(79.999)}`);
+    check('banda: de 50 a 80 es media',
+      bandaDeProbabilidad(50) === 'media' && bandaDeProbabilidad(79) === 'media' &&
+      bandaDeProbabilidad(79.999) === 'media',
+      `50=${bandaDeProbabilidad(50)} 79=${bandaDeProbabilidad(79)} 79.999=${bandaDeProbabilidad(79.999)}`);
+    check('banda: por debajo de 50 es baja',
+      bandaDeProbabilidad(49.999) === 'baja' && bandaDeProbabilidad(0) === 'baja',
+      `49.999=${bandaDeProbabilidad(49.999)} 0=${bandaDeProbabilidad(0)}`);
+
+    // **UN NÚMERO ROTO ES LA BANDA QUE NO PROMETE, NUNCA "NO SE SABE".** Un NaN
+    // comparado con 80 es false y con 50 tambien, asi que el primer corte se come los dos
+    // casos: sin el `|| 0` de la entrada, un fallo del motor se pintaria como una
+    // probabilidad sin banda, que es exactamente lo que este diseno quiere evitar.
+    check('banda: un numero que no es un numero es baja, no una banda cualquiera',
+      bandaDeProbabilidad(NaN) === 'baja' && bandaDeProbabilidad(undefined as any) === 'baja',
+      `NaN=${bandaDeProbabilidad(NaN)} undefined=${bandaDeProbabilidad(undefined as any)}`);
+
+    // **Y LA BANDA NO SE SACA DE NINGÚN OTRO SITIO.** Se llama a la función que la hoja
+    // llama, y el corte se lee de las constantes que la hoja no vuelve a escribir.
+    check('banda: el corte sale de la constante, y la hoja no lleva el suyo',
+      CORTE_PROBABILIDAD_ALTA === 80 && CORTE_PROBABILIDAD_MEDIA === 50,
+      `alta=${CORTE_PROBABILIDAD_ALTA} media=${CORTE_PROBABILIDAD_MEDIA}`);
   }
 
   // =========================================================================

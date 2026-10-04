@@ -50,7 +50,8 @@ import { showTuningRoulette, tuningRoll } from './tuningRoulette';
 import { rarityClass } from './crateLoot';
 import { previewUpgradeChance, previewUpgradeCost } from '../gameLoop';
 import { collectorMaxLevel, nivelMaximoDeCompanio, costeDeNivel } from '../data/crafting';
-import { CRISTAL_NOMBRE } from '../data/items';
+import { CRISTAL_NOMBRE, bandaDeProbabilidad } from '../data/items';
+import type { BandaDeProbabilidad } from '../data/items';
 
 /** Qué se está sintonizando. El único sitio donde se diferencian las dos ramas. */
 export type ObjetivoDeSintonizacion =
@@ -169,6 +170,37 @@ export function showSintonizacion(
   const alcanza = tienes >= coste;
   const prob = previewUpgradeChance(nivel);
 
+  // **LA PROBABILIDAD, EN GRANDE Y CON COLOR, Y LA REGLA DEL COLOR NO ESTÁ AQUÍ.**
+  // Antes de este cambio el número iba en la línea gris de debajo del nombre, en
+  // `text-[10px]`, mezclado con el nivel y el coste: un dato que es la razón entera por
+  // la que se está mirando la hoja aparecía como el cuarto dato de una línea de letra
+  // pequeña, y la diferencia entre un 87 % y un 41 % —que son decisiones opuestas— no se
+  // veía a nada.
+  //
+  // El corte (de 80 en verde, de 50 en ámbar) lo decide `bandaDeProbabilidad()`, en
+  // `data/items.ts`, que es donde vive la probabilidad que se está mostrando. Aquí solo
+  // se traduce el tramo a un color y a una palabra, que es lo único que una vista puede
+  // inventarse: si el corte viviera en este fichero, la misma regla tendría dos sitios y
+  // el banco solo podría comprobar uno.
+  const banda = bandaDeProbabilidad(prob);
+  // **EL COLOR VA COMO PROPIEDAD, PORQUE EL TINTE LO NECESITA Y LAS CLASES NO LO DAN.**
+  // El fondo del bloque es un `color-mix` con el color de la banda, y un `color-mix` no
+  // se puede escribir con una clase de Tailwind. La primera versión lo hizo con
+  // `currentColor`, que es el color de texto del bloque —el del texto normal, no el de
+  // la banda—, y el tinte salía siempre del mismo gris. Por eso la banda trae su color
+  // en hexadecimal y el `style` lo usa para las dos cosas: el tinte y el texto.
+  //
+  // Los tres hex son los de las clases de texto que ya usa el proyecto para lo mismo:
+  // `emerald-400`, `amber-400` y `rose-400`. El "amarillo" del enunciado es ámbar, que es
+  // el amarillo del juego, y no se ha metido un cuarto color.
+  const ASPECTO_BANDA: Record<BandaDeProbabilidad, { color: string; caja: string; palabra: string }> = {
+    alta: { color: '#34d399', caja: 'border-emerald-500/40', palabra: 'alta' },
+    media: { color: '#fbbf24', caja: 'border-amber-500/40', palabra: 'media' },
+    baja: { color: '#fb7185', caja: 'border-rose-500/40', palabra: 'baja' },
+  };
+  const aspecto = ASPECTO_BANDA[banda];
+  const textoBanda = `color:${aspecto.color}`;
+
   const overlay = document.createElement('div');
   // `sheet-overlay` + `sheet-panel` (ver `style.css`): abajo en el móvil, que es
   // donde el pulgar llega, y centrado en escritorio. Estas cuatro utilidades
@@ -186,13 +218,28 @@ export function showSintonizacion(
             Sintonizar ${equipo.name}
           </h3>
           <p class="text-[10px] font-mono text-[var(--text-muted)] mt-0.5">
-            Nivel ${nivel} → ${nivel + 1} · ${formatNumber(coste)} de ${CRISTAL_NOMBRE} · ${prob}% de éxito
+            Nivel ${nivel} → ${nivel + 1} · ${formatNumber(coste)} de ${CRISTAL_NOMBRE}
           </p>
         </div>
         <button data-cerrar class="hit-expand w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
                 aria-label="Cerrar">
           <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
         </button>
+      </div>
+
+      <!-- LA PROBABILIDAD, QUE ES POR QUÉ SE ABRE ESTA HOJA.
+           Un bloque con borde y tinte del color de la banda, el número en
+           'Orbitron' grande y tabular para que no baile, y la palabra al lado.
+           El tinte es un 10 % del color sobre transparente en vez de un fondo
+           sólido: el 'card-glass' de la hoja ya tiene su propio fondo, y una
+           capa opaca encima lo tapaba y la hoja perdía el cristal de debajo. -->
+      <div class="rounded-xl border ${aspecto.caja} px-3 py-2.5 flex items-center gap-3"
+           style="background: color-mix(in srgb, ${aspecto.color} 10%, transparent)">
+        <span class="font-['Orbitron'] font-bold text-2xl leading-none tabular" style="${textoBanda}">${prob}%</span>
+        <span class="min-w-0">
+          <span class="block text-[11px] font-bold leading-tight" style="${textoBanda}">Probabilidad ${aspecto.palabra}</span>
+          <span class="block text-[9px] text-[var(--text-muted)] leading-tight mt-0.5">de que esta mejora salga</span>
+        </span>
       </div>
 
       <button data-sintonizar ${alcanza ? '' : 'disabled style="opacity:.45"'}

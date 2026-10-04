@@ -34,6 +34,7 @@ import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from '../components/crateLoot';
+import { statCelda } from '../components/warehouse';
 
 /** Estado de la pantalla. Vive aquí para sobrevivir a los re-renders. */
 interface ForgeUIState {
@@ -77,14 +78,71 @@ export function renderForgePage(container: HTMLElement, game: any, go?: (r: any)
   draw(container, game, go);
 }
 
+/**
+ * Los materiales de un tipo, en el orden en el que los enseña la rejilla.
+ *
+ * **ESTÁ FUERA DE `draw()` PORQUE MIENTE SI NO, Y PORQUE ASÍ LA COMPRUEBA UN BANCO.**
+ * `visibleStacksFor()` del almacén se extrajo por el mismo motivo: una regla de orden
+ * que vive dentro de una función que pinta no la puede comprobar nadie, porque para
+ * llamarla hay que tener un DOM. Aquí el orden es una regla —qué va antes que qué— y las
+ * reglas se comprueban.
+ *
+ * ## EL ORDEN ES POR EL VALOR FINAL, Y NO POR EL DE BASE
+ *
+ * Era `(a.tier - b.tier) || (b.damage || b.power)`: primero por tier y, a igualdad de
+ * tier, por el daño o el poder **de fábrica**. Esos dos campos son lo que el item trae
+ * sin que le hayas subido nada: el `damage` de un recolector es `danioDeRango(tier,
+ * potencial)` sin el multiplicador de nivel, y el `power` de un compañero es su poder de
+ * base, sin `multiplicadorDeNivel`.
+ *
+ * Lo que pasaba en pantalla es que un compañero de nivel 20 con poder 2 quedaba **debajo**
+ * de uno de nivel 0 con poder 3. Y el número que ordenaba no era ninguno de los que se
+ * veían en la celda, así que el orden no se podía comprobar ni con los números a la vista.
+ * Ahora ordena `getStatPrincipal()`, que es el motor y es lo mismo que pinta la celda: si
+ * la celda y el orden se separan, es el mismo defecto de siempre con dos sitios.
+ *
+ * **Y EL TIER PASA A DESEMPATE, QUE ES LO QUE ERA.** La rejilla solo pinta los materiales
+ * de `ui.tier`, así que ordenar por tier era ordenar por una constante: no decidía nada y
+ * ocupaba la primera comparación. Sigue haciendo falta como desempate porque `materiales`
+ * sí mezcla tiers, y sin él el orden entre dos materiales iguales depende del guardado.
+ *
+ * **Y EL MULTIPLICADOR SE QUEDA AL FINAL, CON EL MISMO MOTIVO QUE EN EL ALMACÉN.** Su stat
+ * es "1,75 veces lo de los demás", no unidades por segundo; ordenarlo contra un pasivo de
+ * 65/s compara dos grandezas distintas con el mismo tipo de letra. Un `null` no es un
+ * cero: es "en este eje no hay cifra", y tratarlo como cero lo pondría delante de todo.
+ * `sort` es estable en V8, así que devolver 0 conserva el orden de entrada y entre ellos no
+ * hay que hacer nada más.
+ */
+export function materialesDeForja(game: any, tipo: string): any[] {
+  /** El stat final del material, o `null` si en este eje no tiene cifra. */
+  const valorFinalDe = (w: any): number | null => {
+    const s = game.getStatPrincipal?.(w.id);
+    if (!s) return null;
+    if (w.type === 'companion' && (s as any).subtipo === 'multiplier') return null;
+    return s.valor;
+  };
+  return (((game.getState().warehouse as any[]) || [])
+    .filter(w => w.type === tipo))
+    .sort((a, b) => {
+      const va = valorFinalDe(a);
+      const vb = valorFinalDe(b);
+      if (va === null && vb === null) return (b.tier || 0) - (a.tier || 0);
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va !== vb) return vb - va;
+      return (b.tier || 0) - (a.tier || 0);
+    });
+}
+
 function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   const state = game.getState();
   const info = game.getForgeInfo();
   const N = NOMBRES[ui.tipo];
 
-  const materiales = ((state.warehouse as any[]) || [])
-    .filter(w => w.type === ui.tipo)
-    .sort((a, b) => (a.tier - b.tier) || ((b.damage || b.power || 0) - (a.damage || a.power || 0)));
+  // El orden de la rejilla vive en `materialesDeForja()`, fuera de esta funcion, para
+  // que un banco lo pueda comprobar sin un DOM. El porque de que sea por el valor
+  // final y no por el de base esta en su JSDoc.
+  const materiales = materialesDeForja(game, ui.tipo);
 
   const tiers = Array.from(new Set(materiales.map(w => w.tier))).sort((a, b) => a - b);
 
@@ -166,6 +224,14 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
         <span class="text-[9px] font-mono text-[var(--text-muted)]">
           T${w.tier} · ${estrellasDe(w.potential)}${equipped ? ' · EQ' : ''}
         </span>
+        <!-- **LA ESQUINA CON EL STAT FINAL, Y ES LA MISMA FUNCIÓN QUE LA DEL ALMACÉN.**
+             La celda enseña el tier y las estrellas, y con eso se ordenaba por la base:
+             el nivel no aparecía por ninguna parte. Ahora la rejilla se ordena por el
+             stat final, y un orden por un número que no se ve es un orden que el jugador
+             no puede comprobar ni siquiera con los números delante. La función está
+             exportada del almacén a propósito: dos copias de este badge acabarían
+             enseñando cosas distintas el día que cambie la regla. -->
+        ${statCelda(w, game)}
       </button>`;
   };
 

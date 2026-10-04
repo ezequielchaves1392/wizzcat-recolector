@@ -124,49 +124,6 @@ function draw(
   }
   const selected = ui.selectedId ? warehouse.find((w: any) => w.id === ui.selectedId) : null;
 
-  /**
- * EL STAT EN LA ESQUINA DE LA CELDA, Y POR QUÉ ES EL MISMO NÚMERO QUE EL DE LA FICHA.
- *
- * **LO QUE PIDE ES PODER COMPARAR SIN ABRIR.** Antes, para saber cuánto daba un
- * recolector había que tocarlo y leer la ficha, y comparar dos era: volver atrás,
- * tocar el otro y recordar el primero. Con veinte objetos en la rejilla eso no es mirar,
- * es trabajar. La esquina es el sitio: está en todas, no tapa el nombre y se lee de un
- * vistazo en diagonal.
- *
- * **Y SALE DEL MOTOR, DE LA MISMA FUNCIÓN QUE LA FICHA.** No es el daño guardado ni
- * la descripción del item: es `getStatPrincipal()`, el mismo. Si la celda calculara su
- * propia cifra acabarían siendo dos números que se separan el día que cambie la regla, y
- * el peor día para descubrirlo sería un jugador comparando dos recolectores en la rejilla.
- * **La unidad también la pone el motor**, porque aquí se repitió el error: la primera
- * versión añadía "/s" a todo lo que no fuera multiplicador, y cualquier recolector salió
- * con "84/s" cuando cobra **por clic**. Dos grandezas distintas enseñadas como la misma.
- *
- * **LA ESQUINA NO SE SOLAPA CON EL CONTADOR DE PILA PORQUE NUNCA COINCIDEN.** El contador
- * es de lo apilable —cajas, llaves, cartas— y el stat es de lo que tiene stat —recolectores
- * y compañeros—, y un item no está en las dos listas. Aun así el contador se pinta
- * primero, y por eso va detrás: si algún día un tipo ganara las dos cosas, el contador es
- * el que ya estaba y no debe saltar de sitio.
- *
- * **NO VA FLOTANDO: ES LA PRIMERA FILA DE LA CELDA.** La primera versión lo puso
- * `absolute` arriba a la derecha, y con el multiplicador —que es la etiqueta más ancha,
- * 35 píxeles— **tapaba el icono**: medido, se solapaban tanto a 1280 como a 390, y el
- * icono de la rareza es justo lo que dice a qué clase pertenece el item. Flotando
- * encima no hay forma de saber cuánto va a ocupar el número antes de ponerlo, y aquí el
- * ancho depende del valor.
- *
- * Como fila reservada en todas las celdas —las que no tienen stat dejan la fila
- * vacía— el ancho no importa y los iconos de toda la rejilla quedan a la misma altura.
- */
-function statCelda(w: any, game: any): string {
-  const stat = game.getStatPrincipal?.(w.id);
-  if (!stat) return '';
-  const esMult = stat.subtipo === 'multiplier';
-  const cifra = (stat.prefijo ?? '')
-    + (esMult ? Number(stat.valor).toFixed(2).replace(/0$/, '') : formatNumber(stat.valor));
-  return `<span class="absolute top-1 right-1 text-[10px] leading-none font-mono font-bold accent-text
-                       bg-[var(--bg-panel)] rounded px-1 py-px tabular"
-                title="${stat.etiqueta}">${cifra}${stat.sufijo ?? ''}</span>`;
-}
 
 // --- Celdas -----------------------------------------------------------
   const cell = (g: { item: any; count: number }, i: number) => {
@@ -737,17 +694,22 @@ function detailContent(item: any, state: any, game: any): string {
             <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="upgrade" ${isEquipped ? '' : 'disabled style="opacity:.4"'}
                     title="${isEquipped ? '' : 'Equípala primero'}">
-              Mejorar con cristales
+              Mejorar con cristal
             </button>
           ` : ''}
 
           ${isCompanion ? `
+            <!-- **EL BOTÓN DICE QUÉ HACE Y EL RESTO VA EN LA HOJA.** Antes ponía
+                 "Subir a nivel N · 1.234 de cristal", y ese texto era la mitad de una
+                 decisión que la hoja ya enseña entera: el nivel al que sube, el coste y
+                 la probabilidad. Con el coste dentro del botón el botón se acortaba a
+                 sí mismo, y además se veía distinto en cada compañero, lo que rompía el
+                 patrón del recolector justo debajo, que dice lo mismo. Los dos botones
+                 hacen lo mismo y los dos dicen lo mismo. -->
             <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
                     data-act="upgrade-companion"
                     title="Sube el nivel con el cristal, igual que el recolector">
-              ${nivelComp >= topeComp
-                ? 'Nivel máximo'
-                : `Subir a nivel ${nivelComp + 1} · ${formatNumber(costeDeNivelDeCompanio(tierComp, nivelComp))} de cristal`}
+              ${nivelComp >= topeComp ? 'Nivel máximo' : 'Mejorar con cristal'}
             </button>
           ` : ''}
 
@@ -1144,6 +1106,63 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
  */
 function visibleStacks(game: any, state: any): Array<{ item: any; ids: string[]; count: number }> {
   return visibleStacksFor(game, state, ui.filter, ui.sort);
+}
+
+  /**
+ * EL STAT EN LA ESQUINA DE LA CELDA, Y POR QUÉ ES EL MISMO NÚMERO QUE EL DE LA FICHA.
+ *
+ * **LO QUE PIDE ES PODER COMPARAR SIN ABRIR.** Antes, para saber cuánto daba un
+ * recolector había que tocarlo y leer la ficha, y comparar dos era: volver atrás,
+ * tocar el otro y recordar el primero. Con veinte objetos en la rejilla eso no es mirar,
+ * es trabajar. La esquina es el sitio: está en todas, no tapa el nombre y se lee de un
+ * vistazo en diagonal.
+ *
+ * **Y SALE DEL MOTOR, DE LA MISMA FUNCIÓN QUE LA FICHA.** No es el daño guardado ni
+ * la descripción del item: es `getStatPrincipal()`, el mismo. Si la celda calculara su
+ * propia cifra acabarían siendo dos números que se separan el día que cambie la regla, y
+ * el peor día para descubrirlo sería un jugador comparando dos recolectores en la rejilla.
+ * **La unidad también la pone el motor**, porque aquí se repitió el error: la primera
+ * versión añadía "/s" a todo lo que no fuera multiplicador, y cualquier recolector salió
+ * con "84/s" cuando cobra **por clic**. Dos grandezas distintas enseñadas como la misma.
+ *
+ * **LA ESQUINA NO SE SOLAPA CON EL CONTADOR DE PILA PORQUE NUNCA COINCIDEN.** El contador
+ * es de lo apilable —cajas, llaves, cartas— y el stat es de lo que tiene stat —recolectores
+ * y compañeros—, y un item no está en las dos listas. Aun así el contador se pinta
+ * primero, y por eso va detrás: si algún día un tipo ganara las dos cosas, el contador es
+ * el que ya estaba y no debe saltar de sitio.
+ *
+ * **VA FLOTANDO EN LA ESQUINA, Y ESTE PÁRRAFO ESTABA CONTRADICIENDO AL CÓDIGO.**
+ * Aquí decía "no va flotando: es la primera fila de la celda" y dos líneas más abajo el
+ * badge es `absolute top-1 right-1`. Las dos cosas no pueden ser verdad, y el texto se
+ * quedó de cuando se probó la primera fila y no ocupaba bien: el motivo de que al final
+ * flotara **no está escrito en ninguna parte**, así que queda escrito aquí lo que sí se
+ * sabe, que es lo que se midió. Con el multiplicador —la etiqueta más ancha, 35
+ * píxeles— el número llegó a tapar el icono, que es justo lo que dice a qué clase
+ * pertenece el item.
+ *
+ * Lo que **no** se solapa nunca es el contador de pila, por el motivo de dos párrafos
+ * arriba: son dos clases de item que no se cruzan. Y quien siga moviendo este badge
+ * debería medirlo a 1280 y a 390 antes de darlo por bueno: un badge que se sale de la
+ * celda en un móvil pequeño es peor que un badge que tapa el icono.
+ *
+ * ## ESTÁ EXPORTADA, Y POR QUÉ
+ *
+ * Porque la celda de material de la Forja pinta **la misma esquina con la misma
+ * función**, y no una copia. La razón es el orden: la rejilla de la Forja se ordena por
+ * el stat final, y si el número no estuviera a la vista el jugador vería una lista
+ * ordenada por algo que no puede ver ni comprobar. La prueba de que el orden es el del
+ * número que se ve es la que hace que valga; sin el número, esa prueba no tiene a qué
+ * referirse.
+ */
+export function statCelda(w: any, game: any): string {
+  const stat = game.getStatPrincipal?.(w.id);
+  if (!stat) return '';
+  const esMult = stat.subtipo === 'multiplier';
+  const cifra = (stat.prefijo ?? '')
+    + (esMult ? Number(stat.valor).toFixed(2).replace(/0$/, '') : formatNumber(stat.valor));
+  return `<span class="absolute top-1 right-1 text-[10px] leading-none font-mono font-bold accent-text
+                       bg-[var(--bg-panel)] rounded px-1 py-px tabular"
+                title="${stat.etiqueta}">${cifra}${stat.sufijo ?? ''}</span>`;
 }
 
 /**

@@ -164,6 +164,49 @@ export function chanceDeSintonizacion(level: number): number {
   return Math.min(95, base);
 }
 
+/**
+ * Los tres tramos en los que se lee una probabilidad, y el número que separa cada uno.
+ *
+ * **POR QUÉ ESTÁN AQUÍ Y NO EN LA VISTA.** Lo que se pinta es el color, que es una
+ * decisión de aspecto; lo que decide el color es **qué porcentaje cuenta como buena**,
+ * y eso es una regla del juego, igual que el 35 % del suelo o el 95 % del techo. Si el
+ * corte viviera en el componente, el mismo número sería rojo en la hoja de sintonización
+ * y verde en la forja, y no habría ninguna forma de comprobarlo con un banco. Aquí vive
+ * la regla y en la vista solo hay un `switch` que traduce el tramo a una clase, que es lo
+ * único que una vista puede inventarse.
+ *
+ * **LOS CORTES, Y POR QUÉ SON ESTOS.** De verde a partir de 80, de 50 a 80 en ámbar, y
+ * por debajo de 50 en rojo. No son redondos por gusto: 50 es donde una tirada deja de
+ * ser una moneda al aire y pasa a tener mal sabor, y 80 es donde se puede decir sin
+ * mentir que sale casi siempre. Un 78 en ámbar y un 82 en verde, que es exactamente lo
+ * que se busca: el corte se nota y el número manda.
+ *
+ * **OJO CON EL 80, QUE ESTÁ EN EL LÍMITE.** La banda alta es `>= 80`, o sea que 80 es
+ * verde y 79,999 es ámbar. Con la probabilidad de sintonización, que es entera, eso
+ * nunca se nota; pero un banco mide el corte exacto y por eso está escrito con `>=` y no
+ * con `>`.
+ */
+export const CORTE_PROBABILIDAD_ALTA = 80;
+export const CORTE_PROBABILIDAD_MEDIA = 50;
+
+export type BandaDeProbabilidad = 'alta' | 'media' | 'baja';
+
+/**
+ * En qué tramo cae una probabilidad en porcentaje.
+ *
+ * Un número que no es un número es **baja**, que es la banda que no promete: si el
+ * motor devolviera un `NaN` por un fallo suyo, la vista tiene que enseñarlo como lo
+ * peor y no como "no se sabe". Un `NaN` comparado con `80` es `false` y con `50` también,
+ * así que el primer corte se come los dos; el `|| 0` de la entrada es lo que lo deja
+ * escrito y no heredado.
+ */
+export function bandaDeProbabilidad(prob: number): BandaDeProbabilidad {
+  const p = Number(prob) || 0;
+  if (p >= CORTE_PROBABILIDAD_ALTA) return 'alta';
+  if (p >= CORTE_PROBABILIDAD_MEDIA) return 'media';
+  return 'baja';
+}
+
 /*
  * BORRADO DE ESTE FICHERO, Y POR QUÉ NO SE DEJA "POR SI ACASO":
  *

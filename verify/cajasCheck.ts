@@ -97,12 +97,21 @@ async function main() {
     // **Y LA CAJA SE CONSUME, QUE ES LA MITAD DE ABRIRLA.** El bug viejo —el que
     // ya se corrigió una vez— era abrir sin gastar: la caja se quedaba en la
     // rejilla y el contador de aperturas subía igual.
+    //
+    // **ESTE CONTEO ERA POR TIPO Y NO POR ID, Y POR ESO LA PRUEBA DEPENDÍA DEL DADO.**
+    // Contaba las cajas del almacén antes y después, así que si el botín era **otra
+    // caja** el contador no bajaba: 1 antes, 1 después, y la prueba fallaba sin que
+    // hubiera pasado nada. Pasaba en uno de cada varias tiradas de la suite, que es la
+    // peor forma de que una prueba se rompa: no la rompe un cambio, la rompe el azar.
+    // Ahora se pregunta por la caja concreta, que es lo que dice el enunciado.
     const g = await boot(baseSave([crate('c1', 3)], { nanites: 0 }));
-    const antes = (wh(g) as any[]).filter((w: any) => w.type === 'crate').length;
-    g.openCrateBox('c1');
-    const despues = (wh(g) as any[]).filter((w: any) => w.type === 'crate').length;
+    const estaLaCaja = () => (wh(g) as any[]).some((w: any) => w.id === 'c1');
+    const antes = estaLaCaja();
+    const rAbrir: any = g.openCrateBox('c1');
+    const despues = estaLaCaja();
     check('abrir: la caja sale del almacen al abrirla',
-      antes === 1 && despues === 0, `antes=${antes} despues=${despues}`);
+      antes === true && despues === false && rAbrir?.ok === true,
+      `antes=${antes} despues=${despues} ok=${rAbrir?.ok}`);
 
     // Y un id que no está no rompe nada ni cobra nada.
     const g2 = await boot(baseSave([crate('c1', 3)], { nanites: 0 }));
