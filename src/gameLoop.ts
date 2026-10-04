@@ -2192,6 +2192,30 @@ const AFK_THRESHOLD_MS = 60000;
    */
   function consumeMaterialesDeForja(materialIds: string[]) {
     state.warehouse = state.warehouse.filter((x: any) => !materialIds.includes(x.id));
+    // **Y EL COMPAÑERO TIENE DOS SITIOS, ASI QUE HAY QUE BORRARLO DE LOS DOS.**
+    //
+    // Un recolector vive solo en el almacén. Un compañero vive en `state.companions` —que
+    // es lo que paga el ingreso y lo que ve el panel— y en el almacén, donde solo hay una
+    // copia para que se pueda vender y se vea en la rejilla. Esta función quitaba la copia.
+    //
+    // Y `syncCompanionsToWarehouse()` **crea la entrada de cada compañero que siga en
+    // `state.companions`**, así que la copia volvía sola: en el acierto, en la misma
+    // llamada, porque el sincronismo se ejecuta justo después de consumir; y en el fallo,
+    // en la siguiente acción que sincronice.
+    //
+    // O sea que **fusionar dos compañeros no costaba los dos**, que era una forja gratis, y
+    // las fichas seguían vivas dando ingreso pasivo: un compañero que no está en ningún
+    // almacén pero que sigue pagando. Las tres ramas —acierto y fallo— llaman a esta misma
+    // función, así que arreglarlo aquí lo arregla en las dos y no cabe arreglarlo dos veces.
+    //
+    // **Y SE SACA DE LOS ACTIVOS, POR SI ALGUNA VEZ SE LLEGARAN A ESTAR.** Hoy no puede
+    // pasar: `materialesDeForja()` rechaza un compañero activo. Se deja la línea porque
+    // un id en `activeCompanions` sin ficha es un ingreso fantasma, y si algún día la regla
+    // que lo impide se relaja, esta es la línea que lo cierra.
+    state.companions = state.companions.filter((c: any) => !materialIds.includes(c.id));
+    state.activeCompanions = (state.activeCompanions as string[]).filter(
+      (id) => !materialIds.includes(id)
+    );
   }
 
   /** Duración de una tarjeta AFK: 10 min base + extra del árbol. */
@@ -4176,6 +4200,25 @@ const AFK_THRESHOLD_MS = 60000;
       const crateType = getCrateTypeFromName(caja.name || '') as CrateType | null;
       if (!crateType) return { ok: false, msg: 'No se reconoce el tipo de esta caja.' };
 
+      // **NO SE ABRE UNA CAJA CUANDO NO CABE SU PREMIO, Y EL VETO ESTÁ ANTES DE COBRAR.**
+      //
+      // `addToWarehouse()` devuelve `false` cuando el almacén está lleno y el botín se pierde
+      // sin avisar: la ruleta enseña un objeto que no ha entrado en ninguna parte. Con el
+      // almacén a cero huecos, eso solo puede pasar si la caja está en una pila —entonces la
+      // celda se queda al consumir una unidad y no se libera nada—, así que esa es la
+      // comprobación y no una más amplia: si la caja está sola, su propia celda se libera y
+      // el premio cabe, y aun así se puede abrir.
+      //
+      // **UN HUECO ES SUFICIENTE, NO UNO POR CAJA.** Cada apertura consume una caja y trae
+      // como mucho un item, o sea que lo peor es un hueco por apertura, no más. Por eso con
+      // un hueco libre siempre se puede abrir una, y el tope del lote lo calcula
+      // `maximoDeApertura()`, que es donde vive la regla.
+      const libreAlConsumir = countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity();
+      const enPila = stackUnits(caja) > 1;
+      if (!libreAlConsumir && enPila) {
+        return { ok: false, msg: 'No queda espacio en el almacén para el botín. Vende o libera una ranura.' };
+      }
+
       consumeWarehouseItem(caja.id, 1);
       syncWarehouseGaps();
       state.cratesOpened += 1;
@@ -4206,13 +4249,20 @@ const AFK_THRESHOLD_MS = 60000;
         // se traducía a un 1 fijo y la ruleta anunciaba un nivel que el item no
         // tenía. Ahora no hay nada que anunciar.
         crystals: (n) => { grantCrystals(n); },
-        hasSpace: () => countOccupiedSlots(state.warehouse) < effectiveWarehouseCapacity(),
         // El cosmético no es un item: no pasa por `addItem` ni por el almacén.
         // Se desbloquea aquí y lo persiste el `saveToFirebase` de más abajo, que
         // corre en la misma operación que el resto del botín.
         unlockCosmetic: (cosmeticId) => desbloquearCosmetico(cosmeticId),
         ownedCosmetics: () => state.cosmetics.unlocked,
         addItem: (item) => {
+          // **AQUÍ ESTÁ LA PÉRDIDA SILENCIOSA QUE SE HA QUITADO DE ENCIMA.** Con el almacén
+          // lleno, `addToWarehouse()` devuelve `false`, el item no entra y la tirada sigue
+          // como si nada: el jugador ve un objeto en la ruleta que no tiene en ninguna parte
+          // y no hay ningún motivo. Ahora no se puede llegar a ese estado porque
+          // `openCrateBox()` veta la apertura cuando el botín no cabe, y el tope del lote
+          // sale de `maximoDeApertura()` con los huecos libres. **El retorno se sigue
+          // respetando** —un `false` aquí no se ignora— y el veto está un nivel más arriba,
+          // donde se puede decir por qué.
           if (!addToWarehouse(item as any)) return false;
           // El item trae `companionType` y `power` ya resueltos por crateLoot.
           // Antes se deducían parseando `details` con regex y el multiplicador

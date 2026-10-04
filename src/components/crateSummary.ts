@@ -65,12 +65,35 @@ export const MAX_APERTURA_LOTE = 20;
  * único sitio del proyecto donde las pruebas no llegan. Es R2 en la forma más
  * silenciosa: la regla no estaba duplicada, estaba escondida.
  */
-export function maximoDeApertura(cajas: number): number {
+export function maximoDeApertura(cajas: number, huecosLibres = Infinity): number {
   return Math.max(
     0,
     Math.min(
       Math.floor(cajas) || 0,
-      MAX_APERTURA_LOTE
+      MAX_APERTURA_LOTE,
+      // **EL TERCER MÍNIMO ES EL ESPACIO, Y ES EL QUE FALTABA.** Abrir veinte cajas con el
+      // almacén lleno es pedir un botín que no cabe: `addToWarehouse()` devuelve `false`,
+      // el premio **se pierde sin decir nada** y el jugador ve una tirada con veinte líneas
+      // donde un objeto no está. Es la peor clase de fallo de una lotería: el jugador cree
+      // que ha perdido el premio por mala suerte, y la culpa es del inventario.
+      //
+      // **POR QUÉ EL NÚMERO DE HUECOS Y NO EL DE CAJAS.** Cada apertura consume una caja y
+      // puede traer un item que ocupe una ranura, o sea que lo peor que puede pasar es
+      // **un hueco más por apertura**. Con los huecos que hay de límite, ninguna apertura
+      // puede quedarse sin sitio. Y por qué no "huecos más uno": abrir una caja que está
+      // sola en su celda libera ese hueco, pero si está en una pila de veinte la celda se
+      // queda y el hueco sigue haciendo falta. El caso que no depende de la pila es el que
+      // manda, y por eso el límite es el número de huecos y no un "más" para aprovechar el
+      // caso fácil.
+      //
+      // `Infinity` es el valor por defecto para que esta función siga siendo la regla de
+      // "cuántas cajas tienes" cuando se llama sin saber el almacén —los bancos, y quien
+      // solo quiera el tope—. **Y SOLO `Infinity` SIGNIFICA "NO LO SE"**, con una
+      // comparación exacta y no con "no es un número": un `NaN` también sale de la
+      // comprobación, y tratarlo como "sin límite" dejaría abrir veinte cajas con el
+      // almacén lleno, que es justo lo que este mínimo viene a impedir. Un `NaN` de huecos
+      // son cero huecos —la respuesta que no promete nada— y por eso cae por `|| 0`.
+      (huecosLibres === Infinity ? MAX_APERTURA_LOTE : Math.max(0, Math.floor(huecosLibres) || 0))
     )
   );
 }

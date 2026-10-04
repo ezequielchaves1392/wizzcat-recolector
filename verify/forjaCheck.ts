@@ -19,7 +19,7 @@
 //  afijos—, así que una prueba que tire una vez mide el azar, no la regla.
 // ==========================================================================
 
-import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll } from './kit';
+import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll, reload } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { successChance, baseSuccessChance } from '../src/data/crafting';
 import { poderDeCompanero } from '../src/data/crafting';
@@ -538,6 +538,59 @@ async function main() {
     check('compañero: y pierde los dos materiales, como el recolector',
       !ids(gf).includes('f1') && !ids(gf).includes('f2'),
       ids(gf).join(','));
+
+    // --- Y NO VUELVEN DESPUÉS, QUE ES DONDE ESTABA EL DEFECTO ----------------------
+    //
+    //  La comprobación de arriba mira el almacén **en el instante**. Pasa, porque
+    //  `consumeMaterialesDeForja()` sí borra las entradas del almacén. El problema es que un
+    //  compañero tiene dos sitios: la ficha en `state.companions`, que es la que paga el
+    //  ingreso y la que ve el panel, y una entrada en el almacén, que es una copia. La
+    //  función de consumo solo tocaba la copia.
+    //
+    //  Y `syncCompanionsToWarehouse()` **crea la entrada de cada compañero que sigue en
+    //  `state.companions`**. O sea que los dos materiales se iban y volvían: en el acierto,
+    //  en la misma llamada, porque el sincronismo se ejecuta justo después; y en el fallo,
+    //  en la siguiente acción que sincronice. Un fallo de forja que devuelve los materiales
+    //  es un fallo que no cuesta nada, y un acierto que fabrica un objeto sin perder dos
+    //  parte el coste neto por tier.
+    //
+    //  **RECARGAR ES LA MANERA DE PROBARLO**, porque la carga sincroniza. Y recargar es
+    //  exactamente lo que hace el jugador que cierra el juego y vuelve.
+    const gr = await boot(baseSave([
+      companion('r1', 3), companion('r2', 3)
+    ], { warehouseCapacity: 20 }));
+    s(gr).companions = [ficha('r1', 3), ficha('r2', 3)];
+    check('compañero: y el del fallo tambien parte de un fixture real',
+      s(gr).companions.length === 2,
+      `companions=${s(gr).companions.map((c: any) => c.id).join(',')}`);
+    conRoll(0.999, () => gr.forgeCompanion(['r1', 'r2']));
+    await reload();
+    check('compañero: en el fallo, los materiales NO vuelven al recargar',
+      !ids(gr).includes('r1') && !ids(gr).includes('r2'),
+      ids(gr).join(','));
+
+    // Y en el acierto, donde el sincronismo se ejecuta en la misma llamada: no hace falta
+    // recargar para verlo, y por eso la comprobación de arriba no lo cazaba.
+    const ga = await boot(baseSave([
+      companion('w1', 3), companion('w2', 3)
+    ], { warehouseCapacity: 20 }));
+    // **LAS FICHAS SE PONEN DESPUÉS DE CARGAR, Y POR QUÉ.** Van en el array del juego y no
+    // en el guardado: la carga lee `data.companions`, y el helper del banco escribe la
+    // ficha como un item más del almacén. Con las fichas en el guardado, `state.companions`
+    // llegaba vacío y **las tres comprobaciones de abajo pasaban en verde sin mirar nada** —
+    // "no están" porque nunca entraron. Una comprobación que no parte de una premisa
+    // comprobada no es una comprobación.
+    s(ga).companions = [ficha('w1', 3), ficha('w2', 3)];
+    check('compañero: el fixture tiene las dos fichas en su array antes de forjar',
+      s(ga).companions.length === 2,
+      `companions=${s(ga).companions.map((c: any) => c.id).join(',')}`);
+    conRoll(0.001, () => ga.forgeCompanion(['w1', 'w2']));
+    check('compañero: y en el acierto tampoco, que el sincronismo es inmediato',
+      !ids(ga).includes('w1') && !ids(ga).includes('w2'),
+      ids(ga).join(','));
+    check('compañero: y las fichas tambien se van, no solo las entradas del almacen',
+      !s(ga).companions.some((c: any) => c.id === 'w1' || c.id === 'w2'),
+      s(ga).companions.map((c: any) => c.id).join(','));
 
     // --- Y el poder es el del constructor, no una cuenta suelta --------------------
     // La razón de que `crearCompanioDeTier()` se sharee entre la tienda, la caja y

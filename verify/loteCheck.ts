@@ -19,7 +19,7 @@
 //  apertura deja una llave en el almacén.
 // ==========================================================================
 
-import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, distintos } from './kit';
+import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, distintos, collector } from './kit';
 import { STORE_ITEMS, costeDeCaja, CRATE_TYPES, type CrateType } from '../src/data/store';
 import { CRISTAL_NOMBRE } from '../src/data/items';
 import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
@@ -172,6 +172,54 @@ async function main() {
     check('lote: un número de cajas que no sea entero se recorta, y un NaN cae a cero',
       maximoDeApertura(3.9) === 3 && maximoDeApertura(NaN) === 0,
       `tres coma nueve=${maximoDeApertura(3.9)} NaN=${maximoDeApertura(NaN)}`);
+
+    // -------------------------------------------------------------------------
+    //  2b. EL TERCER MÍNIMO: EL ESPACIO DEL ALMACÉN
+    // -------------------------------------------------------------------------
+    //
+    //  Abrir veinte cajas con el almacén lleno es pedir un botín que no cabe. Lo que
+    //  pasaba antes es que **`addToWarehouse()` devolvía `false`, el item no entraba y no
+    //  había ningún aviso**: el jugador veía un objeto en la ruleta que no tenía en ninguna
+    //  parte, y la tirada seguía su curso como si nada. En una lotería, un premio que
+    //  desaparece sin decir por qué es lo más difícil que puede pasar.
+    //
+    //  Y el espacio tiene que ser el TERCER mínimo y no un añadido suelto, porque la regla
+    //  vive en `maximoDeApertura()`: si el tope quedara en el diálogo, habría dos reglas y
+    //  la del diálogo no la comprobaría ningún banco.
+    {
+      // **LO MÁS IMPORTANTE: SIN ESPACIO NO SE OFRECE NADA.** Con el almacén lleno, un
+      //  selector que va de 1 a 20 es una promesa que el motor no puede cumplir.
+      check('lote: sin huecos libres no se ofrece abrir ninguna',
+        maximoDeApertura(20, 0) === 0,
+        `huecos=0 ofrece=${maximoDeApertura(20, 0)}`);
+
+      // **Y CON HUECOS, EL MÍNIMO DE LOS TRES MANDA.** Con 3 huecos no se ofrecen 20
+      //  aperturas aunque haya 99 cajas y el tope del lote sea 20.
+      check('lote: con tres huecos no se ofrecen mas de tres, por muchas cajas que haya',
+        maximoDeApertura(99, 3) === 3,
+        `huecos=3 con 99 cajas=${maximoDeApertura(99, 3)}`);
+
+      // **UN HUECO BASTA PARA UNA CAJA.** Cada apertura consume una caja y trae como mucho
+      //  un item, así que lo peor es un hueco por apertura: con uno libre siempre se puede
+      //  abrir una, y por eso el límite no es "huecos más uno".
+      check('lote: con un hueco basta para abrir una',
+        maximoDeApertura(99, 1) === 1,
+        `huecos=1=${maximoDeApertura(99, 1)}`);
+
+      // **NO SE PIDE SABER EL ALMACÉN PARA QUE LA FUNCIÓN SIGA SIENDO LA DE LAS CAJAS.**
+      // El primer intento convirtió el valor por defecto en un cero y devolvía siempre 0:
+      // una función de "cuántas puedo" que devuelve 0 no dice que no puedes, dice que no hay
+      //  nada que hacer. Las llamadas que no saben el almacén siguen viendo el tope.
+      check('lote: sin saber el espacio, la regla sigue siendo la de las cajas',
+        maximoDeApertura(99) === MAX_APERTURA_LOTE && maximoDeApertura(8) === 8,
+        `sin espacio 99=${maximoDeApertura(99)} ocho=${maximoDeApertura(8)}`);
+
+      // **Y UN NÚMERO DE HUECOS RARO NO ROMPE NADA.** Un `NaN` o un negativo son cero
+      // huecos, no un `NaN` de aperturas: el mismo motivo por el que las cajas se recortan.
+      check('lote: huecos raros caen a cero, que es lo que significa',
+        maximoDeApertura(20, NaN) === 0 && maximoDeApertura(20, -4) === 0,
+        `NaN=${maximoDeApertura(20, NaN)} negativo=${maximoDeApertura(20, -4)}`);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -441,6 +489,65 @@ async function main() {
     const r: any = g.openCrateBox('c2');
     check('cadena: la T2 se abre sola, y sale un T2',
       r.ok === true && r.crateType === 2, `ok=${r.ok} nivel=${r.crateType} msg=${r.msg ?? ''}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  5. EL VETO DEL MOTOR: NINGÚN PREMIO SE PIERDE EN SILENCIO
+  // -------------------------------------------------------------------------
+  //
+  //  El tope del lote es una cortesía; esto es la garantía. Aunque alguien llame a
+  //  `openCrateBox()` directamente saltándose el diálogo —y el almacén, el admin y los bancos
+  //  lo hacen—, **una caja cuyo botín no cabe no se abre**, y se dice por qué.
+  {
+    // **CON UNA PILA Y EL ALMACÉN LLENO, NO SE ABRE.** La caja está en una celda con otras, así
+    //  que consumir una unidad no libera ninguna ranura y el premio no tendría dónde entrar.
+    // **LA CAPACIDAD CUENTA LA CAJA.** Con seis recolectores y una caja en un almacén de seis
+    // ranuras, la caja no cabe y `enforceWarehouseCapacity()` la tira: el primer fixture
+    // fallaba con un "no está en el almacén" que no tenía nada que ver con lo que se
+    // probaba. Siete ranuras para siete items es un almacén **lleno**, que es lo que hace
+    // falta.
+    const lleno = 6;
+    const g = await boot(baseSave([
+      crate('pila', 2, 5),
+      ...Array.from({ length: lleno }, (_, i) => collector(`lleno${i}`, 1))
+    ], { nanites: 0, warehouseCapacity: 7 }));
+    const antes = ids(g).length;
+    check('caja: el fixture esta lleno de verdad, con la caja dentro',
+      antes === 7 && wh(g).some((w: any) => w.type === 'crate'),
+      `items=${antes} ids=${ids(g).join(',')}`);
+    // **EL ID DE LA PILA, LEÍDO DEL ALMACÉN Y NO ESCRITO A MANO.** El helper del banco compone
+    // el id de la caja, y escribirlo a mano fue como esta comprobación empezaba a fallar con
+    // un "no está en el almacén" que no tenía nada que ver con lo que estaba probando.
+    const todos = ids(g);
+    const idPila = todos.find((i: string) => wh(g).find((w: any) => w.id === i)?.type === 'crate')!;
+    const r = g.openCrateBox(idPila);
+    check('caja: con el almacen lleno y la caja en pila, no se abre',
+      r.ok === false && /espacio/i.test(r.msg ?? ''),
+      `ids=${todos.join(',')} id=${idPila} ok=${r.ok} msg=${r.msg ?? ''}`);
+    check('caja: y no se gasta la caja, porque no se ha abierto nada',
+      ids(g).length === antes, `antes=${antes} despues=${ids(g).length}`);
+
+    // **CON UN HUECO, SÍ.** Un hueco basta: la apertura consume una caja y trae como mucho un
+    // item, así que con uno libre siempre cabe.
+    const conHueco = await boot(baseSave([
+      crate('suelta', 2, 1),
+      ...Array.from({ length: 5 }, (_, i) => collector(`c${i}`, 1))
+    ], { nanites: 0, warehouseCapacity: 6 }));
+    const rLibre = conHueco.openCrateBox('suelta');
+    check('caja: con un hueco libre si se puede abrir',
+      rLibre.ok === true,
+      `ok=${rLibre.ok} msg=${rLibre.msg ?? ''}`);
+
+    // **Y CON LA CAJA SOLTA NO HACE FALTA NI UN HUECO**, porque su propia celda se libera al
+    // consumirla. Esa es la razón de que el veto mire las dos cosas y no solo el espacio.
+    const sola = await boot(baseSave([
+      crate('sola', 2, 1),
+      ...Array.from({ length: 5 }, (_, i) => collector(`d${i}`, 1))
+    ], { nanites: 0, warehouseCapacity: 6 }));
+    const rSola = sola.openCrateBox('sola');
+    check('caja: una caja sola se abre sin hueco, porque libera su celda',
+      rSola.ok === true,
+      `ok=${rSola.ok} msg=${rSola.msg ?? ''}`);
   }
 
   resumen('lote: compra multiple, tope de apertura y la lista de lo que salió');

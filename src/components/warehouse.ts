@@ -1594,7 +1594,25 @@ function confirmarYabrir(
   // suelto, y eso era R2 en la forma más silenciosa que hay: la regla no estaba
   // duplicada, estaba **escondida** en el único sitio del proyecto al que ningún
   // banco puede llegar.
-  const max = maximoDeApertura(stackUnits(item));
+  //
+  // **Y AHORA TAMBIÉN SABE CUÁNTO ESPACIO QUEDA.** El tercer mínimo de `maximoDeApertura()`
+  // es el almacén, porque abrir veinte cajas llena es pedir un botín que no cabe: el item
+  // que no entra **se pierde sin decir nada** y la ruleta enseña un objeto que nadie tiene.
+  // Aquí se lo pregunta al motor, que es quien cuenta las ranuras ocupadas; el diálogo no
+  // cuenta Slots porque no es su regla.
+  const huecos = Math.max(
+    0,
+    (game.getCapacity?.() ?? 0) - countOccupiedSlots(game.getState().warehouse as any[])
+  );
+  const max = maximoDeApertura(stackUnits(item), huecos);
+
+  // **Y SI NO HAY NI PARA UNA, SE DICE POR QUÉ EN VEZ OFRECER UN DIÁLOGO VACÍO.** Con el
+  // almacén sin huecos, un selector que va de 1 a 20 y se abre en 20 es una promesa que el
+  // motor no puede cumplir.
+  if (huecos <= 0 && stackUnits(item) > 1) {
+    showToast('No queda espacio en el almacén para el botín. Vende algo o libera una ranura.', 'error');
+    return;
+  }
   if (max <= 1) {
     showConfirmModal(
       mensajeAbrirCaja(item.name),

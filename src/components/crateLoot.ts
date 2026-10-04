@@ -1239,7 +1239,18 @@ export type LootApplier = {
   nanites: (n: number) => void;
   crystals: (n: number, tier: number) => void;
   addItem: (item: any) => boolean;
-  hasSpace: () => boolean;
+  /**
+   * **ESTE CAMPO ESTABA AQUÍ Y NO LO USABA NADIE.**
+   *
+   * Parecía una guarda —"¿queda sitio?"— y de hecho era la respuesta a la pregunta
+   * equivocada: el sitio no lo decide el sorteo, lo decide quién pide la apertura. Por eso
+   * el veto vive en el motor y el tope del lote en `maximoDeApertura()`, y aquí lo que
+   * decide es qué hacer con un botín: **`addItem` devuelve `false` cuando no cabe**, y quien
+   * llama tiene que.handlerlo.
+   *
+   * Se quitó porque un campo muerto que parece una protección es peor que no tenerlo:
+   * quien lo lea lo cuenta como una guarda y no mira más atrás.
+   */
   /** Desbloquea un cosmético. `false` si ya lo tenía. */
   unlockCosmetic: (cosmeticId: string) => boolean;
   /** Cosméticos que ya tiene, para no sortear un duplicado. */
