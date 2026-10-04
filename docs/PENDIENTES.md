@@ -151,8 +151,21 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       sobrevive al Prestigio. **Decisión tuya:** ¿se sube con núcleos o con items de caja?
 - [ ] **F41 · Prestigio: qué se conserva y qué no.** Ya se conservan logros, núcleos,
       cosméticos y el histórico; falta **la lista escrita** y un banco que la compruebe.
-- [ ] **F42 · Fuera la pasiva offline.** Se elimina entera: la `grantAfkCatchUp()` y su
-      reloj. El juego no da ingreso sin que estés mirando.
+- [x] **F42 · Fuera la pasiva offline.** Hecho, y era **la tercera de las tres**, que es la
+      que de verdad daba dinero. Las otras dos ya estaban: sin presencia no hay tick, y sin
+      tick no hay ingreso. La que faltaba era **el cobro al volver**: `grantAfkCatchUp()`
+      pagaba el pasivo acumulado del tiempo ausente mientras la tarjeta AFK estaba puesta.
+      Eso es ingreso sin mirar la pantalla, que es exactamente lo que la regla prohíbe.
+      **Se borra la función entera y no solo su llamada**, porque dejar una función sin
+      usar es dejar la puerta abierta con el nombre puesto —y el nombre ("catch up",
+      "ponerse al día") decía justo lo contrario de su efecto, que es la forma más fácil de
+      que alguien la deje ahí "porque parece justo".
+      **Lo que NO se toca es el reloj**: la tarjeta AFK sigue comprando tiempo, que es lo
+      que es, y sus topes siguen vivos. Lo que no existe es que ese tiempo se convierta solo
+      en nanitas: para eso hay que pulsar. `tickCheck` (+8), y en el propio bloque se dice
+      **qué no está verificado**: el manejador de presencia no se puede lanzar desde un
+      banco porque `domStub.ts` tiene `addEventListener` como no-op, y fabricar una API de
+      pruebas para comprobar que no hay código sería añadir código al motor para eso.
 
 ### Lote 4 · CONSUMIBLES
 

@@ -1247,9 +1247,14 @@ function redencionDeUnaLlave(tier: number): number {
 
   let isAfk = false;
   let lastActiveTimestamp = Date.now();
-  // Momento (reloj monótono) en que el jugador dejó de estar presente en la pantalla.
-  // 0 = está presente. Se usa performance.now() porque no lo afecta cambiar la
-  // hora del sistema, a diferencia de Date.now().
+// Los dos flancos de la presencia, y por qué el de "vuelve" ya no cobra nada.
+  //
+  // `awayAt` es el instante en que el jugador dejó de estar presente, medido con
+  // `performance.now()`. **Se sigue guardando aunque ya no sirva para cobrar**, porque es
+  // lo que distingue "acabaste de irte" de "llevas un rato fuera": sin él no se sabe si
+  // hay que arrancar el bucle por primera vez o si ya estaba parado. Un booleano
+  // haría lo mismo con menos información, y en el momento de—fromatear— el booleano es
+  // justo lo que no se puede depurar: dice que alguien estuvo fuera, no cuándo.
   let awayAt = 0;
   // B9 · 60 SEGUNDOS, Y POR QUÉ NO 45.
 //
@@ -3007,21 +3012,47 @@ const AFK_THRESHOLD_MS = 60000;
     return document.visibilityState === 'visible' && document.hasFocus();
   }
 
-  // Cobra el pasivo del tiempo que el jugador estuvo ausente, pero solo si había
-  // un buff AFK vigente. Se acota por tres lados para que no se pueda inflar:
-  //   - tiempo real ausente medido con reloj monótono (no manipulable con la hora)
-  //   - parte restante real del buff AFK
-  //   - tope absoluto del buff (30 min)
-  function grantAfkCatchUp(fromAwayAt: number) {
-    const awayMs = performance.now() - fromAwayAt;
-    const buffRemainingMs = Math.max(0, state.afkExpiresAt - Date.now());
-    const grantMs = Math.min(awayMs, buffRemainingMs, MAX_AFK_BUFF_DURATION_MS);
-    if (grantMs <= 0) return;
-
-    recalculatePassiveIncome();
-    if (state.passiveIncome <= 0) return;
-    state.nanites += (grantMs / 1000) * state.passiveIncome;
-  }
+/**
+ * SIN INGRESO PASIVO CUANDO EL JUGADOR NO ESTÁ MIRANDO.
+ *
+ * ## LA REGLA Y POR QUÉ ESTÁ DONDE ESTÁ
+ *
+ * El juego no da ingreso sin que estés mirando la pantalla. Eso son **tres** cosas y
+ * antes eran dos, con la tercera escondida en un sitio al que nadie miraba:
+ *
+ * · **No hay tick.** Sin presencia no hay intervalo, así que no hay nada que multiplique.
+ * · **No hay cobro a la vuelta.** Durante la ausencia el tick está parado, y eso ya
+ *   significa cero.
+ * · **Y no hay "ponerse al día" al volver.** Esto es lo que faltaba: al volver se cobra
+ *   el pasivo acumulado con laTarjeta AFK puesta. Se vé como "el juego me ha pagado
+ *   mientras no lo miraba", y el jugador tiene razón: **es ingreso sin mirar**.
+ *
+ * ## POR QUÉ LA TERCERA PARTE ES LA IMPORTANTE
+ *
+ * Las dos primeras son gratis: para de correr el bucle. La tercera es la que cuesta,
+ * porque es código escrito a propósito —`grantAfkCatchUp()` existed para esto— y
+ * borrarlo es quitar una función, no desactivar una bandera.
+ *
+ * Y el nombre mentía: "catch up" es "ponerse al día", que es exactamente lo contrario de
+ * lo que la regla quiere. Una función cuyo nombre dice lo contrario de su efecto es la
+ * forma más fácil de que alguien la deje ahí "porque parece justo".
+ *
+ * ## QUÉ PASA CON LA TARJETA AFK
+ *
+ * Sigue comprando lo que compra: **tiempo de AFK**, no ingreso. Al volver con la tarjeta
+ * puesta, el contador de segundos de AFK sigue contando porque el tiempo real pasa, y
+ * eso es lo que la tarjeta es. Lo que **no** existe es que ese tiempo se convierta solo
+ * en nanitas: para eso hay que pulsar.
+ *
+ * Y por eso `MAX_AFK_BUFF_DURATION_MS` y los tres topes siguen vivos: son el tope del
+ * reloj, no del ingreso.
+ *
+ * ## LO QUE NO SE TOCA
+ *
+ * `handlePresenceChange()` sigue haciendo su trabajo: parar el bucle, marcar `isAfk` para
+ * que la interfaz enseñe la pausa, y arrancarlo otra vez al volver. Quitar la pausa sin
+ * quitar el cobro sería dejar el juego calculaizando con el bucle parado.
+ */
 
   const handlePresenceChange = () => {
     if (!isPlayerPresent()) {
@@ -3037,8 +3068,15 @@ const AFK_THRESHOLD_MS = 60000;
     }
 
     // El jugador volvió a la pantalla
+    // **Y NO SE COBRA NADA AL VOLVER.** El bucle estaba parado, así que no se ha
+    // acumulado nada que cobrar: el ingreso pasivo se gana minuto a minuto con el
+    // juego a la vista. Antes aquí iba `grantAfkCatchUp(awayAt)`, que pagó el tiempo
+    // ausente con la tarjeta AFK puesta --"ponerse al día" en la prosa del código--, y
+    // eso es ingreso sin mirar la pantalla, que es justo lo que la regla de este
+    // fichero prohíbe. Se borra la llamada **y la función**, no solo la llamada: dejar la
+    // función sin usar es dejar la puerta abierta con el nombre puesto.
     if (awayAt > 0) {
-      grantAfkCatchUp(awayAt);
+      // El AFK sigue contando segundos: la tarjeta compra tiempo, no ingreso.
       awayAt = 0;
     }
     const elapsed = Date.now() - lastActiveTimestamp;

@@ -50,7 +50,10 @@
 //  pasando por debajo.
 // ==========================================================================
 
-import { check, resumen, boot, nanites, baseSave, ficha } from './kit';
+import { check, resumen, boot, reload, nanites, baseSave, ficha, consumable, s } from './kit';
+// Los dos números del reloj de AFK, que F42 deja vivos a propósito: el tope es del
+// reloj y el cobro era del ingreso, y son dos cosas que solo separe un comentario.
+import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS } from '../src/gameLoop';
 
 /** Un intervalo que el game loop ha pedido, con su periodo. */
 type Intervalo = { fn: () => void; ms: number };
@@ -354,6 +357,95 @@ async function main() {
       restaurar();
     }
   }
+
+// -----------------------------------------------------------------------
+  //  F42 · AL VOLVER NO SE COBRA NADA
+  //
+  //  Los dos flancos de la presencia ya estaban: sin presencia no hay tick,
+  //  y sin tick no hay ingreso. El que faltaba era el tercero, que era el
+  //  que de verdad daba dinero: al volver se cobraba el pasivo acumulado con
+  //  la tarjeta AFK puesta. `grantAfkCatchUp()` existe para eso y se borra
+  //  entera —**no solo su llamada**: dejar la función sin usar es dejar la
+  //  puerta abierta con el nombre puesto, y el nombre ("catch up", "ponerse
+  //  al día") decía justo lo contrario de la regla.
+  //
+  //  **LO QUE NO SE PUEDE COMPROBAR DESDE AQUÍ, Y POR QUÉ NO SE INVENTA UNA PRUEBA.**
+  //  El cobro ocurría dentro del manejador de `visibilitychange`/`blur`, y el stub de
+  //  DOM del banco (`domStub.ts`) tiene `addEventListener` como no-op: no hay forma
+  //  de lanzar un evento de presencia desde un banco. Fabricar unaapi de pruebas
+  //  solo para esto sería añadir código al motor para comprobar que no hay código,
+  //  así que aquí se comprueba **el contrato**: lo que el motor expone y lo que el
+  //  reloj sigue haciendo. El evento en sí no está verificado y no cuenta como
+  //  verificado.
+  // -----------------------------------------------------------------------
+  {
+    const { lista, restaurar } = capturarIntervalos();
+    try {
+      const g = await boot(baseSave([consumable('afk', 'afk', 3, { name: 'Tarjeta AFK' })], {
+        nanites: 0,
+        totalNanitesProduced: 0,
+        companions: [ficha('c1', 1, { power: 5, type: 'passive' })],
+        activeCompanions: ['c1'],
+        maxCompanionSlots: 3
+      }));
+
+      // **LA TARJETA SIGUE COMPRANDO TIEMPO.** Quitar el cobro sin tocar el reloj sería
+      // quitar un sistema entero para tapar una regla: el AFK es lo que sigue contando
+      // mientras no miras, y lo que **no** existe es que ese tiempo se convierta solo en
+      // nanitas.
+      g.useConsumable('afk', 3);
+      const tick = tickDe(lista);
+      const antes = nanites(g);
+      for (let i = 0; i < 4; i++) tick();
+      check('F42: con la tarjeta puesta el tiempo de AFK sigue corriendo',
+        s(g).afkExpiresAt > Date.now(), 'afk=' + s(g).afkExpiresAt);
+      check('F42: y mirando la pantalla el ingreso entra, que no es lo que se quit\u00f3',
+        nanites(g) > antes, `antes=${antes} despues=${nanites(g)}`);
+
+      // **Y EL RELOJ NO SE HA TOCADO:** los topes siguen vivos y con los mismos valores.
+      // Borrar el cobro no puede arrastrar el tope, porque el tope es del reloj y el
+      // reloj es lo que queda.
+      check('F42: el tope del reloj de AFK sigue siendo de 30 minutos',
+        MAX_AFK_BUFF_DURATION_MS === 30 * 60_000, 'tope=' + MAX_AFK_BUFF_DURATION_MS);
+      check('F42: y una tarjeta de AFK sigue durando 10 minutos',
+        AFK_CARD_DURATION_MS === 10 * 60_000, 'tarjeta=' + AFK_CARD_DURATION_MS);
+      check('F42: y tres tarjetas siguen dar los 30 minutos, no tres veces m\u00e1s',
+        Math.abs((s(g).afkExpiresAt - Date.now()) - MAX_AFK_BUFF_DURATION_MS) < 5_000,
+        `restante=${s(g).afkExpiresAt - Date.now()}`);
+
+      // **Y EL MOTOR NO EXPONE NINGÚN COBRO DE AUSENCIA.** Es una prueba débil —no
+      // comprueba el interior, comprueba la puerta— pero es la que se puede hacer sin
+      // inventarse una API de pruebas, y una función que vuelve a aparecer se ve en
+      // la superficie pública antes que en el banco.
+      const api = Object.keys(g as any).filter((k) => /catch|away|ausencia/i.test(k));
+      check('F42: el motor no expone nada para cobrar el tiempo ausente',
+        api.length === 0, 'expone=' + (api.join(',') || 'nada'));
+    } finally {
+      restaurar();
+    }
+  }
+  {
+    // **Y LA RECARGA TAMPOCO.** Al cargar, el bucle arranca y el primer tick cobra con
+    // el juego presente; lo que no puede pasar es que el arranque "recupere" el tiempo
+    // en que el documento estuvo cerrado. Se comprueba con una partida vieja que
+    // vuelve con el AFK caducado hace mucho: si al arrancar se pagara el tiempo
+    // ausente, el saldo subiría de golpe.
+    const g = await boot(baseSave([consumable('afk', 'afk', 3, { name: 'Tarjeta AFK' })], {
+      nanites: 0,
+      totalNanitesProduced: 0,
+      companions: [ficha('c1', 1, { power: 5, type: 'passive' })],
+      activeCompanions: ['c1'],
+      maxCompanionSlots: 3,
+      afkExpiresAt: Date.now() - 60 * 60_000
+    }));
+    const antes = nanites(g);
+    const g2 = await reload();
+    check('F42: una partida vieja con el AFK caducado no cobra nada al arrancar',
+      nanites(g2) === antes, `antes=${antes} despues=${nanites(g2)}`);
+    check('F42: y el AFK caducado sigue caducado, sin resucitar',
+      s(g2).afkExpiresAt <= Date.now(), 'afk=' + s(g2).afkExpiresAt);
+  }
+
 
   resumen('tick: el ingreso pasivo entra entero y a su ritmo');
 }
