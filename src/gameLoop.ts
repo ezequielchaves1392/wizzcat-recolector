@@ -4056,8 +4056,8 @@ const AFK_THRESHOLD_MS = 60000;
             // eso no está en la tabla.
             //
             // Y SIGUE SIENDO EL ÚNICO QUE LLEGA MÁS ALLÁ DE LA ESCALERA DE
-            // EXPANSORES. Si no existiera, un almacén de 65 se quedaría clavado
-            // para siempre; y bajarlo a 65 haría que `enforceWarehouseCapacity()`
+            // EXPANSORES. Si no existiera, un almacén de 115 se quedaría clavado
+            // para siempre; y bajarlo a 115 haría que `enforceWarehouseCapacity()`
             // le borrara items a quien ya pasó de ahí.
             if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
               return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };

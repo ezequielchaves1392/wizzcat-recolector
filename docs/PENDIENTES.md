@@ -180,7 +180,18 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 - [ ] **F45 · Buscador** en el almacén.
 - [ ] **F46 · Orden personalizado** — hay que mirarlo, porque con el agrupado de pilas que
       se acaba de tocar puede haber pasado a ser incoherente.
-- [ ] **F47 · Los expansores a "Mejoras"**, no a recursos.
+- [x] **F47 · Los expansores a "Mejoras"**, no a recursos. Hecho: "Recursos" se queda
+      solo con el cristal, que es el único que lo es, y los expansores se van con las
+      cartas de ranura. No es un cambio de sitio: es que **la categoría se llama así porque
+      es lo que hay dentro**, y "Recursos" tenía tres cartas de las que dos no son
+      recursos: no se gastan, no se acumulan, se **usan**.
+- [x] **Escalera de expansores a +10 y a la venta el T3 y el T4.** Decisión tuya, aplicada:
+      el T1 vale hasta 25, el T2 hasta 35 y así de diez en diez hasta el T10 en 115; y
+      **cada expansor da +1 ranura**, no el peldaño entero. Son dos reglas distintas y
+      ahora viven en dos números distintos (`RANURAS_POR_ESCALON` y
+      `RANURAS_POR_EXPANSOR`), porque juntas se movieron las dos y los techos quedaron
+      en 16, 17, 18 y 19. Con +1 un peldaño son diez usos, que es justo lo que hace el
+      uso en lote de F43 cómodo de usar.
 
 ### Lote 6 · RULETA, CRISTALES Y NÚMEROS
 
@@ -377,7 +388,8 @@ decisión que solo vive en un mensaje no existe dentro de tres meses.**
 2. **F44 · Los expansores NO llegan a T30.** **Por qué:** el juego tiene 10 cajas, y subir
    a 30 niveles de caja es un rebalance entero. Se queda la escalera de 15 a 65 con diez
    tiers, que ya está puesta y probada. **Consecuencia que hay que aceptar:** el expansor
-   más alto abre hasta 65 ranuras, y a partir de ahí el almacén se llena solo con expansores.
+   más alto abre hasta 115 ranuras, y a partir de ahí el almacén se llena sobre todo con
+   expansores.
 
 ---
 

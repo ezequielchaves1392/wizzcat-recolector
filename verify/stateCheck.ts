@@ -24,7 +24,7 @@
 import { STORE_ITEMS, type CrateType } from '../src/gameLoop';
 import { costeDeNivel, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
 import { chanceDeSintonizacion } from '../src/data/items';
-import { costeDeCaja } from '../src/data/store';
+import { costeDeCaja , techoDeExpansor } from '../src/data/store';
 import { formatNumber } from '../src/utils/format';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom } from '../src/data/crafting';
@@ -1657,30 +1657,36 @@ async function main() {
     check('tienda: el expansor mete un item',
       !!e1 && wh(g).length === antes + 1, `items=${wh(g).length}`);
     const r = g.useConsumable(e1.id);
-    check('tienda: y al usarlo la capacidad sube 5',
-      r.ok === true && s(g).warehouseCapacity === 20,
+// **+1, NO EL PELDAÑO ENTERO.** Comprar mete un item y usarlo amplía una ranura; el
+    // expansor da +1 y sirve hasta su techo, así que subir un peldaño son diez usos. Lo
+    // que se comprueba aquí es solo que ampliar sigue siendo ampliar, y el número
+    // exacto lo comprueba `consumableCheck`, que es donde vive la escalera.
+    check('tienda: y al usarlo la capacidad sube una ranura',
+      r.ok === true && s(g).warehouseCapacity === 16,
       `cap=${s(g).warehouseCapacity} msg=${r.msg ?? ''}`);
     const g2 = await reload();
     check('tienda: y la ampliación sobrevive a la recarga',
-      s(g2).warehouseCapacity === 20, `cap=${s(g2).warehouseCapacity}`);
+      s(g2).warehouseCapacity === 16, `cap=${s(g2).warehouseCapacity}`);
   }
   {
-    // Cada expansor vale hasta SU techo, y el techo es el siguiente peldaño:
-    // el T1 sirve hasta 20 y en 20 deja de servir y pide el T2.
-    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 19 }));
+    // Cada expansor vale hasta SU techo: el T1 sirve hasta 25 y en 25 deja de servir
+    // y pide el T2. Los números salen de `techoDeExpansor()`, no de aquí, porque una
+    // escalera escrita a mano en cuatro bancos es una escalera que se descuadra.
+    const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoDeExpansor(1) - 1 }));
     const e1 = g.buyStoreItem('expansorT1') as any;
     check('tipos: el T1 sirve por debajo de su techo', g.useConsumable(e1.id).ok === true,
       `cap=${s(g).warehouseCapacity}`);
-    const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 20 }));
+const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoDeExpansor(1) }));
     const e2 = gB.buyStoreItem('expansorT1') as any;
     const r2 = gB.useConsumable(e2.id);
-    check('tipos: en 20 el T1 pide el T2 y no gasta',
-      r2.ok === false && /T2/.test(r2.msg ?? '') && s(gB).warehouseCapacity === 20,
+    check('tipos: en su techo el T1 pide el T2 y no gasta',
+      r2.ok === false && /T2/.test(r2.msg ?? '')
+      && s(gB).warehouseCapacity === techoDeExpansor(1),
       `msg=${r2.msg ?? ''} cap=${s(gB).warehouseCapacity}`);
-    const gC = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 24 }));
+    const gC = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoDeExpansor(2) - 1 }));
     const e3 = gC.buyStoreItem('expansorT2') as any;
-    check('tipos: el T2 sirve por debajo de 25 y da +5',
-      gC.useConsumable(e3.id).ok === true && s(gC).warehouseCapacity === 29,
+    check('tipos: el T2 sirve por debajo de su techo y da +1',
+      gC.useConsumable(e3.id).ok === true && s(gC).warehouseCapacity === techoDeExpansor(2),
       `cap=${s(gC).warehouseCapacity}`);
   }
   {

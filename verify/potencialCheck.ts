@@ -351,11 +351,14 @@ async function main() {
     check('expansor: la caja T{n} suelta el expansor T{n}',
       fallos === 0, detalle || 'los diez tiers');
 
-    // Y con el techo nuevo, cada expansor sirve para un peldaño y se muere: los
-    // diez dan la escalera entera de 15 a 65.
+    // Y con el techo nuevo, cada expansor sirve **hasta** su techo y se muere
+    // después. Lo que da y hasta dónde llega son dos reglas distintas: da **una**
+    // ranura y llega a `15 + 10n`, así que un peldaño son diez usos. Que las dos
+    // salieran del mismo número era el error de esta misma tarde: al subir el escalón
+    // a diez, el techo bajó a 16, 17, 18 y 19 y el T4 dejó de llegar a 55.
     const total = EXPANSOR_TIERS.reduce((a, e) => a + e.slots, 0);
-    check('expansor: los diez dan la escalera entera, de 15 a 65',
-      EXPANSOR_TIERS[0].maxCap === 20 && EXPANSOR_TIERS[9].maxCap === 65 && total === 50,
+    check('expansor: la escalera va de 15 a 115, de diez en diez, y cada uno da una ranura',
+      EXPANSOR_TIERS[0].maxCap === 25 && EXPANSOR_TIERS[9].maxCap === 115 && total === 10,
       `${EXPANSOR_TIERS[0].maxCap}..${EXPANSOR_TIERS[9].maxCap} · ${total} ranuras`);
 
     // Y la ficha del expansor DICE su techo: es lo que contesta "¿me sirve?" sin

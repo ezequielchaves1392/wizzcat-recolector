@@ -363,13 +363,15 @@ async function main() {
       wh(g7).length === antesSlots + 1, `${antesSlots} -> ${wh(g7).length}`);
     const usado = g7.useConsumable((expansor as any).id);
     check('almacén: ampliar es usarlo', usado.ok === true, usado.msg ?? '');
-    // El expansor T1 da +5 ranuras y vale hasta 20, que es su techo: a partir de ahí deja de servir.
-    check('almacén: y al usarlo suben 5 ranuras',
-      g7.getCapacity() === capTrasComprar + 5,
+// El expansor T1 da +1 ranura y vale hasta 25, que es su techo: a partir de ahí deja
+    // de servir y hay que buscar el T2. Un uso son +1, y el lote es lo que sube el peldaño
+    // entero; aquí la comprobación es de un solo uso porque es la que hace el botón.
+    check('almacén: y al usarlo sube una ranura',
+      g7.getCapacity() === capTrasComprar + 1,
       `${capTrasComprar} -> ${g7.getCapacity()}`);
     const g8 = await recargar();
     check('almacén: la ampliación sobrevive a la recarga',
-      g8.getCapacity() === antesCap + 5, 'cap=' + g8.getCapacity());
+      g8.getCapacity() === antesCap + 1, 'cap=' + g8.getCapacity());
 
     // Y ahora la parte que más se ha roto: con el almacén lleno, lo que no cabe
     // no se compra, y lo que sí cabe en una pila sí se compra.

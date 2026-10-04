@@ -14,7 +14,7 @@
 import { TIER_SYSTEM } from '../data/tiers';
 import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal } from '../data/crafting';
 import { generateCollectorByTier } from '../data/generators';
-import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, type ExpansorTier } from '../data/store';
+import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, textoDeExpansor, type ExpansorTier } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
 import { CRISTAL_NOMBRE, CRISTAL_RAREZA } from '../data/items';
@@ -646,7 +646,10 @@ function buildExpansorLoot(tier: number, rarezaDeCaja: string, caja: CrateType):
     // escalera se lee sin sorpresas.
     pesoComo: rarezaDeCaja,
     build: () => {
-      const detalles = `Amplía el almacén +${def.slots} ranuras. Vale hasta ${def.maxCap}.`;
+      // **LA FRASE VIENE DE LA TABLA, COMO SIEMPRE.** Aquí estaba escrita aparte —y con
+      // "+n ranuras" a pelo, que con `slots = 1` da "+1 ranuras"— y el botín de la caja y
+      // la ficha del almacén contaban cosas distintas del mismo número.
+      const detalles = textoDeExpansor(def);
       return {
         kind: 'consumable', amount: 1, name: def.name, label: `+1 ${def.name}`,
         details: detalles, rarity: rarezaDeCaja, icon: 'plus',

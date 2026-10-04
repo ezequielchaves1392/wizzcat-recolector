@@ -34,7 +34,7 @@ import { formatNumber } from '../utils/format';
 import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
-import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, costeDeCaja, type CrateType } from '../data/store';
+import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, WAREHOUSE_BASE_CAP, costeDeCaja, type CrateType } from '../data/store';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { showConfirmModal } from '../utils/modal';
@@ -57,9 +57,9 @@ interface Category {
  * esté a la venta, la caja alta es un adorno y abrir cofres no progresa nada.
  *
  * Lo que queda es lo que de verdad es el arranque y el sostenimiento: **la caja
- * T1**, los expansores y las tarjetas. Las nueve cajas siguientes salen de abrir la
- * anterior, así que la tienda solo tiene que vender la primera; y ya **no hay llave
- * que compre por delante**, porque la caja se abre sola.
+ * T1**, las ranuras, los expansores y las tarjetas. Las nueve cajas siguientes salen
+ * de abrir la anterior, así que la tienda solo tiene que vender la primera; y ya
+ * **no hay llave que compre por delante**, porque la caja se abre sola.
  */
 /**
  * Los expansores que están en la tienda, por orden de tier.
@@ -76,18 +76,26 @@ const EXPANSORES_EN_VENTA = EXPANSOR_TIERS
 
 const CATEGORIES: Category[] = [
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1'] },
-  // Los expansores que se venden salen de `EXPANSOR_TIERS`, no de una lista
-  // escrita. Con diez expansores y solo dos a la venta, escribirlos aquí era
-  // otro sitio donde olvidarse de uno; y si mañana se vendiera el T3, esta línea
-  // seguiría enseñando dos.
-  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal', ...EXPANSORES_EN_VENTA] },
+  // F47 · **EL CRISTAL SOLO EN RECURSOS.** Los expansores estaban aquí con él porque
+  // los dos se compran con lo que produce el juego, pero no son un recurso: no se
+  // gastan, no se acumulan y no se venden, **se usan** para abrir el almacén, y la
+  // pestaña donde estaban—"Recursos"— solo tenía una carta que lo era. El expansor
+  // es lo mismo que las cartas de ranura: una mejora de la partida. Ahora están en
+  // "Mejoras", con ellas, y donde se buscan.
+  { id: 'recursos', label: 'Recursos', icon: 'crystal', items: ['upgradeCrystal'] },
   // F4 · Solo las tres tarjetas. `clickBuff` y `passiveBuff` se han retirado de la
   // lista: la categoría ya no puede nombrarlos porque no existen, y
   // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
   // `undefined` al pintar.
   { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card', 'clickX3Card'] },
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
-  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: Object.keys(RANURA_POR_CARTA) }
+  // Los expansores que se venden salen de `EXPANSOR_TIERS`, no de una lista escrita.
+  // Con diez expansores y cuatro a la venta, escribirlos aquí era otro sitio donde
+  // olvidarse de uno; y si mañana se vendiera el T5, esta línea seguiría enseñando
+  // cuatro. El filtro es el mismo que usa `STORE_ITEMS` para construirlos, así que
+  // la categoría no puede enseñar una carta que no existe ni dejar de enseñar una
+  // que sí.
+  { id: 'mejoras', label: 'Mejoras', icon: 'layers', items: [...Object.keys(RANURA_POR_CARTA), ...EXPANSORES_EN_VENTA] }
 ];
 
 /**
@@ -195,8 +203,14 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
  */
 function descDeExpansor(e: typeof EXPANSOR_TIERS[number]): { what: string; detail: string } {
   const siguiente = EXPANSOR_TIERS.find(x => x.tier === e.tier + 1);
+  const unidad = e.slots === 1 ? 'ranura' : 'ranuras';
+  const usos = e.maxCap - WAREHOUSE_BASE_CAP;
   return {
-    what: `Añade ${e.slots} ranuras permanentes al almacén, hasta un total de ${e.maxCap}.`,
+    // **"UNA RANURA, HASTA 25" Y NO "UNA, HASTA 25":** el singular y el plural salen de
+    // la tabla, igual que los números. Y se dice cuántas veces se puede usar, que es lo
+    // que el jugador no puede calcular: diez usos para el primer peldaño, y a partir de
+    // ahí el expansor siguiente.
+    what: `Añade ${e.slots} ${unidad} permanente${e.slots === 1 ? '' : 's'} al almacén, ${usos} veces hasta llegar a ${e.maxCap}.`,
     detail: siguiente
       ? `Se usa desde el almacén. Si ya llegas a ${e.maxCap}, deja de servir: necesitas el ${siguiente.name}, que llega hasta ${siguiente.maxCap}.`
       : `Se usa desde el almacén. Es el último: llega hasta ${e.maxCap} y no hay nada por encima.`

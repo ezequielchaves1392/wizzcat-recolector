@@ -401,35 +401,44 @@ async function main() {
   // vía de la tienda (F27: la compra mete el item y ampliar es usarlo). La
   // emisión del logro vive en `useConsumable`, como en las demás rutas.
   //
-  // **EL EXPANSOR T1 DA +5 Y SOLO SE USA UNA VEZ**, porque a partir de 20 deja de
-  // servir. Antes daba +2 y se podía usar tres veces seguidas, y esta comprobación
-  // miraba que con 17 todavía no hubiera logro. Ese caso ya no existe: con un
-  // solo uso el almacén llega a 20 y el logro salta, que es lo correcto.
+// **EL EXPANSOR T1 DA +1 Y SIRVE HASTA SU TECHO, QUE AHORA ES 25.** Antes daba +5 y
+  // se usaba una vez, porque su techo estaba a cinco. Ahora un uso es una ranura y el
+  // techo está a diez, así que el mismo Shopping del logro —Almacén Masivo, a 20— se
+  // alcanza con cinco expansores, y el techo se comprueba llegando a 25.
   //
-  // Lo que se comprueba ahora es lo que se puede comprobar: **que el logro salte
-  // al llegar a 20 y que el expansorutzado no sirva para nada más**. La segunda
-  // mitad es la que importa, porque es la que convierte el techo en una regla y no
-  // en un número decorativo.
+  // Lo que se comprueba sigue siendo lo que importa: **que el techo sea una regla y no un
+  // número decorativo**. Con la capacidad en su techo, el expansor no se gasta.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
-    const e = g.buyStoreItem('expansorT1', 3) as any;
-    g.useConsumable(e.id);
+    // **QUINCE, Y NO CINCO, PORQUE LOS USOS SE COMEN LA PILA ENTERA.** Con cinco
+    // comprados el lote se los lleva todos y a la segunda tanda el item ya no existe:
+    // la prueba fallaba por el `msg` de "ya no está en el almacén", no por la regla.
+    const e = g.buyStoreItem('expansorT1', 15) as any;
+    g.useConsumable(e.id, 5);
     check(
       'logros: ampliar el almacen hasta 20 desbloquea el logro',
-      g.getState().unlockedAchievements.includes('deep_pockets'),
-      'logros=' + JSON.stringify(g.getState().unlockedAchievements)
+      g.getState().warehouseCapacity === 20
+      && g.getState().unlockedAchievements.includes('deep_pockets'),
+      'cap=' + g.getState().warehouseCapacity + ' logros=' + JSON.stringify(g.getState().unlockedAchievements)
     );
     check(
       'y lo ANUNCIA, que es lo que hace el cartel',
       vistos.includes('Almacén Masivo'),
       'anunciados=' + JSON.stringify(vistos)
     );
-    // Y el segundo expansor T1 ya no sirve: el techo está alcanzado. El item
-    // sigue en el almacén, porque no se gasta un item que no hace nada.
+    // Y hasta su propio techo sigue sirviendo: el T1 llega a 25.
+    const hastaTope = g.useConsumable(e.id, 5) as any;
+    check('logros: y el mismo expansor sigue sirviendo hasta su techo de 25',
+      hastaTope.ok === true && g.getState().warehouseCapacity === 25,
+      `ok=${hastaTope.ok} cap=${g.getState().warehouseCapacity}`);
+    // Ya en el techo, no sirve ni se gasta. El item se queda, porque no se gasta un item
+    // que no hace nada: es lo que el jugador tiene que poder comprobar después.
     const otro = g.useConsumable(e.id);
-    check('logros: el segundo expansor T1 no sirve de nada',
-      otro.ok === false && g.getState().warehouseCapacity === 20,
-      `ok=${otro.ok} cap=${g.getState().warehouseCapacity} msg=${otro.msg ?? ''}`);
+    const sobran = g.getState().warehouse.find((w: any) => w.id === e.id);
+    check('logros: y en su techo el expansor T1 no sirve de nada',
+      otro.ok === false && g.getState().warehouseCapacity === 25
+      && (sobran?.stackCount ?? 0) > 0,
+      `ok=${otro.ok} cap=${g.getState().warehouseCapacity} stack=${sobran?.stackCount} msg=${otro.msg ?? ''}`);
   }
   // 7b · Y que se anuncie UNA VEZ. Con más usos, el logro ya está
 // 7b · Y que se anuncie UNA VEZ. Con más usos, el logro ya está
