@@ -74,8 +74,27 @@ export function avatarStack(
   return `
     <div class="avatar-stack ${dims} flex-shrink-0" aria-hidden="true">
       ${hayBanner ? `
-        <span class="avatar-frame w-full h-full"
-              style="${bannerStyle(banner)}"></span>` : ''}
+        <!--
+          F54 · EL BANNER VA EN UN ENVOLTORIO QUE LO RECORTA, Y SOLO ÉL.
+
+          El banner se pinta escalado (1,32 si es una placa y 1,7 si es circular) para
+          que se lea como un halo, y el avatar-stack NO recorta: lleva overflow visible.
+          Medido en el perfil, con un avatar de 80 px, el halo sale 13 px por cada lado
+          (106 px de ancho dentro de una caja de 80). En la tarjeta del Perfil eso todavía
+          cae dentro del padding y no se ve, pero en la cabecera y en las filas del
+          ranking el avatar es de 32 px, el halo se sale 10 px y el hueco hasta el nombre es
+          de 8: el halo se come las primeras letras del nombre.
+
+          Lo que se recorta es el banner y solo el banner, con este envoltorio. El marco
+          NO entra: su trazo está centrado en el borde de la caja, así que recortarlo
+          dejaría medio píxel de marco y todos los marcos se verían más finos unos que
+          otros. Recortando solo el halo, el marco conserva su grosor exacto y lo único
+          que deja de rebasar es lo que rebasar no aporta: el halo se ve entero dentro de
+          la caja, que es de donde se leía.
+        -->
+        <span class="avatar-halo">
+          <span class="avatar-frame w-full h-full" style="${bannerStyle(banner)}"></span>
+        </span>` : ''}
       <span class="avatar-core w-[78%] h-[78%] ${glyphClass}">${initials}</span>
       ${hayMarco ? `
         <span class="avatar-frame w-full h-full"

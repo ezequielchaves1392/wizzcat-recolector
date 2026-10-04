@@ -198,6 +198,26 @@
 
 .avatar-stack > * { grid-area: 1 / 1; }
 
+/* F54 · El envoltorio del halo, que es lo único que se recorta.
+   El banner va escalado (1,32 si es placa, 1,7 si es circular) para que se lea como
+   un halo alrededor del avatar, y sin esto se salía 13 px por cada lado de una caja de
+   80 px: en la cabecera, donde el avatar es de 32 px y el hueco hasta el nombre es de
+   8, el halo se comía las primeras letras. Que sea `relative` es para que el banner,
+   que es `position:absolute; inset:0`, se mida contra él y no contra el avatar entero.
+   El marco NO entra aquí a propósito: su trazo está centrado en el borde y recortarlo
+   dejaría medio píxel de grosor, que se nota más que el desborde que arregla. */
+.avatar-halo {
+  position: relative;
+  overflow: hidden;
+  /* El `width/height` al 100% NO es opcional: el avatar es un `grid` con
+     `place-items: center`, así que sus hijos se dimensionan por su contenido —y el halo
+     no tiene contenido en flujo, porque su único hijo es `position: absolute`—. Sin
+     esto el envoltorio mide 0×0, no recorta nada y además se lleva por delante el
+     núcleo, que comparte celda con él. */
+  width: 100%;
+  height: 100%;
+}
+
 .avatar-core {
   display: grid;
   place-items: center;

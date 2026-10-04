@@ -127,6 +127,38 @@ async function main() {
     const iMarco = html.lastIndexOf('avatar-frame');
     check('identidad: el marco va encima del núcleo, y el banner debajo',
       iMarco > iNucleo, `marco=${iMarco} nucleo=${iNucleo}`);
+    // ---------------------------------------------------------------------------
+    //  F54 · EL HALO NO SE SALE DE LA CAJA, Y EL MARCO NO ENTRA EN EL RECORTE
+    //
+    //  El banner se escala para leerse como halo y el avatar no recorta: medido en el
+    //  perfil, con una caja de 80 px, el halo salía **13 px por cada lado**, y en la
+    //  cabecera, donde la caja es de 32 px y el hueco hasta el nombre de 8, se comía las
+    //  primeras letras. El arreglo es un envoltorio que recorta **solo el banner**.
+    //
+    //  Lo que se comprueba es la estructura, porque lo que se rompió fue la estructura:
+    //  el banner tiene que estar **dentro** del envoltorio y el marco **fuera**, y el
+    //  marco fuera es medio problema —su trazo está centrado en el borde, así que
+    //  recortarlo deja medio píxel y todos los marcos se ven más finos unos que otros—.
+    // ---------------------------------------------------------------------------
+    {
+      const iHalo = html.indexOf('avatar-halo');
+      const iCierreHalo = html.indexOf('</span>', iHalo);
+      check('F54: el halo existe y envuelve al banner',
+        iHalo !== -1 && iCierreHalo !== -1
+        && html.indexOf('transform:scale(', iHalo) > iHalo
+        && html.indexOf('transform:scale(', iHalo) < iCierreHalo,
+        `halo=${iHalo} cierre=${iCierreHalo}`);
+      check('F54: y el marco queda FUERA del recorte, con su trazo entero',
+        iMarco > iCierreHalo, `marco=${iMarco} cierre del halo=${iCierreHalo}`);
+      check('F54: y el núcleo va entre el halo y el marco, que es el orden de las capas',
+        iHalo < iNucleo && iNucleo < iMarco, `halo=${iHalo} nucleo=${iNucleo} marco=${iMarco}`);
+      // **Y QUE SIN BANNER NO SALGA EL ENVOLTORIO VACÍO.** Un envoltorio sin nada
+      // dentro es un nodo que no pinta nada y que sí pinta en el inspector: la mitad de
+      // los avatares del juego no llevan banner.
+      const sinBanner = miniIdentity('Ab', { title: 'title_default', frame: 'frame_neon' });
+      check('F54: y sin banner no hay envoltorio que no pinte nada',
+        sinBanner.indexOf('avatar-halo') === -1, 'aparece=' + sinBanner.indexOf('avatar-halo'));
+    }
     // **Y QUE EL PERFIL USE EL MISMO AVATAR QUE LA CABECERA.** El markup estaba
     // copiado en `identityCard()` y las dos copias ya se habían separado. La prueba
     // compara el trozo de avatar de las dos funciones, y es la que falla el día que

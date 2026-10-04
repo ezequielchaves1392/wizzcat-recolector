@@ -421,7 +421,20 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
 ### Lote 8 · APARIENCIA
 
 - [ ] **F53 · Banners, marcos y títulos en Perfil, Menú y Ranking.**
-- [ ] **F54 · Los marcos no desbordan** el avatar.
+- [x] **F54 · Los marcos no desbordan el avatar.** Hecho, y era **el banner, no el
+      marco**. El banner se escala a propósito para leerse como halo (`scale(1.32)` si
+      es placa, `1.7` si es circular) y el avatar **no recortaba**: medido en la
+      tarjeta del Perfil, una caja de 80 px dejaba el halo en **106 px**, o sea **13 px
+      por cada lado**. En el Perfil eso cae dentro del padding y no se ve; en la
+      cabecera y en el ranking el avatar es de 32 px, el halo sale 10 px y el hueco
+      hasta el nombre es de 8: **se comía las primeras letras del nombre**.
+      El arreglo es un envoltorio con `overflow: hidden` que recorta **solo el banner**:
+      el marco se queda fuera porque su trazo está centrado en el borde de la caja y
+      recortarlo dejaría medio píxel de grosor, que se nota más que el desborde que
+      arregla. Y el envoltorio necesita `width/height: 100%` porque el avatar es un
+      `grid` con `place-items: center` y sus hijos se dimensionan por su contenido: sin
+      eso mide 0×0, no recorta nada y **se lleva por delante el núcleo**.
+      `identidadCheck` (+4), que comprueba la estructura y no el píxel.
 - [ ] **F55 · Logros 100% obtenibles**, con banco que lo compruebe. Aquí hay un
       ~~sorpresa~~: el logro `overclocked` se acaba de reasignar y hay que mirarlo con lupa.
 
