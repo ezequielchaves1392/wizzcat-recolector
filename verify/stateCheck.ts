@@ -2573,6 +2573,72 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
   }
 
 
+  // =========================================================================
+  //  LAS FILAS DEL HOVER: TIENEN QUE SUMAR EL NUMERO DE AL LADO
+  // =========================================================================
+  //
+  //  El hover del almacen ensena 'de donde sale' el stat grande de la ficha: la base
+  //  y una fila por cada multiplicador. **La lista esta para explicar ese numero**, asi
+  //  que una fila que no esta en ese numero es una mentira con forma de tabla. Y paso:
+  //  con una fila de afijos de mas se veian 23 de base, +14, +44 y +15 --96-- con un
+  //  total arriba de 81.
+  //
+  //  La causa era una regla mal entendida: `getStatPrincipal()` **no** incluye los
+  //  afijos, a proposito, porque solo cuentan mientras el objeto esta equipado y su
+  //  total es 'lo que da este objeto por si mismo'. Los afijos salen en
+  //  `getClickDamageParts()`, que es el dano real del clic con todo puesto.
+  {
+    // Con nivel, potencial y afijos: el caso completo, que es donde se rompio.
+    const g = await boot(baseSave([collector('r1', 5, 3)], { equippedCollectorId: 'r1' }));
+    const w: any = (s(g).warehouse as any[])[0];
+    w.level = 12;
+    // El dano guardado lleva el potencial dentro, asi que se pone el que le toca a un
+    // potencial 3.
+    w.damage = danioDeRango(5, 3);
+    // **LOS AFIJOS SON IDS, NO OBJETOS.** `equippedAffixEffect()` recorre el array
+    // buscando en `AFFIX_BY_ID`, asi que un objeto se salta en silencio y el afijo no
+    // cuenta: la primera version de este fixture por ahi un objeto y la fila de afijos
+    // no salia, que es un fallo de la prueba y no del codigo.
+    w.affixes = ['aff_bulwark'];
+
+    const stat = g.getStatPrincipal('r1');
+    const filas = g.getStatFilas('r1');
+    const suma = filas.base + filas.filas.reduce((a: number, f: any) => a + f.suma, 0);
+    check('filas: la base mas las filas da el total del hover',
+      suma === filas.total,
+      `base=${filas.base} filas=${filas.filas.map((f: any) => f.nombre + ':' + f.suma).join(' ')} suma=${suma} total=${filas.total}`);
+    check('filas: y el total del hover es el stat grande de la ficha',
+      filas.total === stat?.valor,
+      `filas=${filas.total} stat=${stat?.valor}`);
+
+    // **Y LA FILA QUE NO ESTA, PORQUE ES LA QUE ROMPIA LA CUENTA.**
+    check('filas: los afijos NO salen en la lista del item, ni equipado',
+      !filas.filas.some((f: any) => f.nombre === 'Afijos'),
+      filas.filas.map((f: any) => f.nombre).join(' '));
+
+    // Y que la lista del dano del clic **si** los lleve, porque esa si es la del dano
+    // real. Las dos son distintas a proposito, y esta comprobacion es la que lo fija.
+    const partes: any = g.getClickDamageParts();
+    check('filas: y en el dano del clic los afijos SI salen, que es otra pregunta',
+      partes.filas.some((f: any) => f.nombre === 'Afijos' && f.grupo === 'item'),
+      partes.filas.map((f: any) => f.nombre).join(' '));
+    check('filas: el dano del clic es la base mas sus filas, con las suyas',
+      partes.base + partes.filas.reduce((a: number, f: any) => a + f.suma, 0) === partes.total,
+      `base=${partes.base} total=${partes.total}`);
+  }
+  {
+    // Sin nivel no hay fila de nivel: una fila con +0 es ruido.
+    const g2 = await boot(baseSave([collector('r2', 2, 5)]));
+    const f2 = g2.getStatFilas('r2');
+    check('filas: sin nivel no sale la fila del nivel',
+      !f2.filas.some((f: any) => f.nombre.startsWith('Nivel')),
+      f2.filas.map((f: any) => f.nombre).join(' '));
+    check('filas: y sigue cuadrando con el stat',
+      f2.base + f2.filas.reduce((a: number, f: any) => a + f.suma, 0) === f2.total &&
+      f2.total === g2.getStatPrincipal('r2')?.valor,
+      `base=${f2.base} total=${f2.total} stat=${g2.getStatPrincipal('r2')?.valor}`);
+  }
+
 resumen('estado, migracion y economia');
 }
 

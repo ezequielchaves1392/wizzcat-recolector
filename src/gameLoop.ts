@@ -3346,13 +3346,23 @@ const AFK_THRESHOLD_MS = 60000;
 
       anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más`, multPot);
       if (nivel > 0) anota(`Nivel ${nivel}`, esRecolector ? 'del recolector' : 'del compañero', multiplicadorDeNivel(nivel));
-      // **LOS AFIJOS SOLO EN EL RECOLECTOR, Y SOLO SI ESTÁ EQUIPADO.** Son del objeto
-      // porque van impresos en él, pero su bonificación solo cuenta mentre esté puesto:
-      // el hover es de la ficha de un item del almacén, que puede no estar equipado, y
-      // enseñar un +13 que no se está cobrando es la peor clase de mentira.
-      if (esRecolector && state.equippedCollectorId === itemId) {
-        anota('Afijos', 'del item', 1 + equippedAffixEffect().clickMult);
-      }
+      // **LOS AFIJOS NO ESTAN, Y SU AUSENCIA ES LA RAZON DE QUE ESTA LISTA CUADRE.**
+      //
+      // La primera version metia una fila de afijos, y la cuenta se rompia de la forma
+      // mas visible que hay: 23 de base, +14 de potencial, +44 de nivel y +15 de afijos,
+      // con un total arriba que decia 81. 23+14+44+15 son **96**. Las filas estan para
+      // explicar el numero de al lado, asi que una fila que no esta en ese numero es una
+      // mentira con forma de tabla.
+      //
+      // Y no es que los afijos no cuenten: es que **`getStatPrincipal()` no los
+      // incluye, a proposito**. Su total es 'lo que da este objeto por si mismo', y el
+      // afijo solo cuenta mientras el objeto esta equipado: si la ficha lo metiera,
+      // cambiar de arma cambiaria el stat del item y no habria forma de comparar dos
+      // recolectores en el almacen. Los afijos salen en el desglose del **dano del clic**
+      // --`getClickDamageParts()`--, que si es el dano real con todo puesto. Son dos
+      // preguntas distintas y por eso son dos listas.
+      //
+      // La regla que queda, y que un banco comprueba: **las filas suman el total**.
 
       return { base: Math.floor(base), total: Math.floor(acum), filas };
     },

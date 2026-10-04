@@ -878,10 +878,24 @@ export function crearCompanioDeTier(
     // **NACE CON NIVEL 0 Y SU TECHO PUESTOS, Y POR ESO NO HAY MIGRACIÓN QUE
     // INVENTARLOS.** Un compañero sin nivel es un nivel 0, que es lo que haría
     // cualquier código que lo leyera; y el techo lo pone la misma función que lo
-    // lo aplica, así que no puede haber un compañero cuyo botón diga una cosa y el
+    // aplica, así que no puede haber un compañero cuyo botón diga una cosa y el
     // motor acepte otra.
     level: 0,
-    maxLevel: nivelMaximoDeCompanio(tier, p)
+    // **LOS ARGUMENTOS EN ORDEN, QUE ESTABON CAMBIADOS Y ERA UN BUG DE JUEGO.**
+    //
+    // La firma es `nivelMaximoDeCompanio(potential, maxLevel)`, y aquí se llamaba
+    // `nivelMaximoDeCompanio(tier, p)`: el tier en el hueco del potencial y el
+    // potencial en el del `maxLevel`. La función devuelve el `maxLevel` en cuanto lo
+    // recibe como número positivo, así que **el techo de todo compañero forjado era
+    // su propio potencial**: un ★1 topaba en nivel 1 y un ★4 en nivel 4, cuando el
+    // techo de un ★4 son 32.
+    //
+    // Lo que se veía en la ficha: "NIVEL 4 / 4" con el botón en "Nivel máximo", y un
+    // compañero forjado que ya no subía nunca más. Al lado, uno de caja del mismo ★4
+    // con "1 / 32", y la conclusión de que cada compañero tenía un tope arbitrario.
+    // No lo tenía: **los de caja bien y los de forja con el potencial por techo**, que
+    // es el peor sitio para un fallo porque las dos mitades del juego parecian lo mismo.
+    maxLevel: nivelMaximoDeCompanio(p)
   };
 }
 
