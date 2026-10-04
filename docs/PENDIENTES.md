@@ -204,6 +204,68 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       hacia abajo. La **Ascensión también los deja puestos**, porque reconstruye la partida de
       partida: si no, ascender desequiparía todo sin avisar.
 
+### Lote B · ENCARGO DEL 3 DE OCTUBRE, SEGUNDA TANDA
+
+*Las cinco son tuyas y **ninguna se ha tocado**: se escriben aquí antes de(programarlas, que es
+lo que evita que vivan solo en una conversación. Las tres primeras están medidas.*
+
+- [ ] **B9 · Que un T1 al máximo de mejora pueda superar a un T2 flojo.** Lo que dices es
+      que, si no, **siempre compensa esperar al tier siguiente** y el sistema de cristales
+      deja de tener efecto.
+      **Medido, y la mitad es verdad.** Con la regla de hoy (`baseDeTier()` sube ×1,75 por
+      tier y `multiplicadorDeNivel()` da +10 % por nivel), un **T1 ★5 subido al techo de
+      nivel 35 pega 45** y un **T2 ★1 recién salido pega 13**. O sea que sí lo supera, y
+      incluso al T2 ★1 **subido también al techo** (43): 45 contra 43.
+      **Y aquí está el problema real:** ese 45 contra 43 son **35 niveles de cristal y un
+      +4,7 %**. El nivel compra casi un tier entero de diferencia y el tier vale ×1,75, o
+      sea que **el potencial —que es el dado— le gana al sistema de mejora por goleada**, y
+      solo en la distancia mínima entre dos estrellas contiguas. Con un T2 ★2 ya subido (54)
+      no hay nada que hacer.
+      **Lo que hay que decidir no es el número del 10 %:** es si subir de nivel tiene que
+      poder competir con **subir de potencial**, porque hoy compiten por la misma reunión y
+      el segundo es el que sale de un dado. Subir el 10 % hasta que un T1 ★5 al techo iguale
+      a un T2 ★5 al techo (99, o sea ×2,2) es una opción; la otra es reconocer que los
+      cristales sirven para **subir el tier que ya tienes** y no para cerrar la distancia de
+      potencial. **Y ojo:** subir el multiplicador de nivel sube también el ingreso de los
+      compañeros, que usan la misma función, así que es un cambio de economía y no un ajuste
+      de la forja.
+- [ ] **B10 · Que dentro de un mismo tier haya bases distintas.** Hoy **no las hay**:
+      `danioDeRango()` es `base del tier × (1 + 0,2 × potencial)`, y el potencial es un
+      entero de 1 a 5. O sea que **dentro de un tier hay exactamente cinco valores**, y dos
+      T1 con el mismo potencial son **idénticos**: mismo daño, mismos afijos posibles, misma
+      valoración. Dos T1 ★5 son el mismo objeto, y eso hace que buscar una caja sea buscar
+      una estrella y no una arma.
+      **Lo que falta es una tira continua dentro del rango**, que es justo lo que F33
+      describía y que se quitó al decidir que el potencial 1..5 **era** el stat. Las dos
+      cosas no pueden ser el stat a la vez: o el potencial decide, o la posición en el rango.
+      Si se añade la tira, la forja necesita una regla para promediarla —que es la que F33 ya
+      tenía— y las estrellas pasan a ser "de qué parte del rango viene", que es información
+      distinta.
+- [ ] **B11 · En la Forja, "materiales" son "compañeros y armas".** Tres cosas en una:
+      (a) el nombre, que no es lo que hay en el almacén —el interruptor ya pone
+      "Recolectores / Compañeros", y el resto de la pantalla habla de "materiales"—;
+      (b) **un filtro como el del almacén**, con el filtro de tipo y los mismos botones de
+      orden; y (c) **que no se puedan mezclar**, que **hoy ya está medio hecho**: la rejilla
+      filtra por `ui.tipo`, así que un recolector no aparece en la pestaña de compañeros.
+      Falta lo que tú describes, que es el aviso: si hay un compañero en el yunque, al tocar
+      un recolector tiene que decir **por qué** no lo acepta, no simplemente no aparecer.
+- [ ] **B12 · El yunque de fusión quedó raro.** Son tres huecos en fila y se leen como un
+      campo de texto vacío. Es **estética**, y es de las tres la única que no toca una regla,
+      así que puede ir en cualquier momento.
+- [ ] **B13 · La barra de progreso de los buffs miente cuando usas varios.** **Causa raíz
+      encontrada, y es una sola:** la barra se calcula como `restante / durationMs`, donde
+      `durationMs` es la duración **de una unidad**, pero el motor **acumula**: usar tres
+      píldoras de 30 s deja el buff puesto **30 minutos**. Medido en el código:
+      `clickX2` y `clickX3` se capan a `ahora + 30 min` con una duración de 30 s, `afk` a tres
+      tarjetas con una duración de una, y `passiveBoost` a dos horas con una de una. O sea
+      que **tres de los cinco buffs tienen un denominador más pequeño que lo que pueden
+      durar**, y justo en el caso que describes la barra se queda clavada en el 100 % con el
+      contador corriendo: se ve como una barra muerta.
+      **El arreglo es guardar el total concedido** —un campo por buff— y usar ese como
+      denominador, en vez de calcularlo del tope teórico. Como es un campo nuevo en el
+      guardado, necesita la coacción de la carga (R8) y una prueba que fije que la barra de
+      un buff acumulado **baja** desde el principio.
+
 ### Lo que queda de este encargo, en orden
 
 - [x] **B1 · La forja se abre desde el inicio y se elimina el requisito.** La puerta era

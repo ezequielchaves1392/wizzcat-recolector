@@ -33,6 +33,7 @@ import { generateCompanionByTier } from '../src/data/generators';
 
 import { rangoDePoder } from '../src/data/tiers';
 import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
+import { chanceDeSintonizacion } from '../src/data/items';
 
 
 /** ¿Coincide el ★3 con el punto medio del rango en los diez tiers? */
@@ -707,6 +708,56 @@ async function main() {
   check('nivel companero: y el nivel NO retrocede, que era el fallo viejo',
     (s(g).companions as any[])[0]?.level === 0,
     `nivel=${(s(g).companions as any[])[0]?.level}`);
+}
+
+// --- 3b. EL UMBRAL ES EL QUE ANUNCIA LA HOJA, Y ESO ANTES NO SE COMPROBABA ---------
+//
+// Hasta aquí solo se medían los extremos: con el dado a 0 acierta y con el dado a 0,99
+// falla. **Esas dos pruebas pasan igual si el motor y la hoja dijeran probabilidades
+// distintas**, siempre que los extremos no se muevan: el 0 acierta con cualquier umbral
+// positivo y el 0,99 falla con cualquier umbral por debajo de 99. O sea que el agujero
+// exacto —"me enseñan una probabilidad y tiran con otra" — no estaba cerrado, y es el
+// fallo que R3 prohíbe.
+//
+// Por eso el borde se mide **con un umbral en medio**: el nivel 10 anuncia 65 %, así que
+// un dado de 0,649 tiene que acertar y uno de 0,651 tiene que fallar. Si el motor usara
+// otra fórmula, estas dos pruebas no podrían pasar a la vez.
+{
+  const nivel = 10;
+  const anunciado = chanceDeSintonizacion(nivel);
+  check('nivel companero: el nivel 10 anuncia 65, que es el numero que hay que tirar',
+    anunciado === 65, `anuncia=${anunciado}`);
+
+  const conNivel = async (id: string, dado: number) => {
+    const g = await boot(baseSave([
+      companion(id, 3, { potential: 3 })
+    ], {
+      nanites: 0, warehouseCapacity: 40, crystals: valorDeUnCristal(3) * 40,
+      companions: [ficha(id, 3, { potential: 3, level: nivel })]
+    }));
+    return conRoll(dado, () => g.upgradeCompanion(id)) as any;
+  };
+
+  // 0,649 · 100 = 64,9, que es MENOS que 65: acierta.
+  const rJusto = await conNivel('c1', 0.649);
+  check('nivel companero: un dado por debajo del anunciado acierta',
+    rJusto?.success === true, `dado=64,9 anuncia=${anunciado} success=${rJusto?.success}`);
+
+  // 0,651 · 100 = 65,1, que es MÁS que 65: falla.
+  const rPasado = await conNivel('c2', 0.651);
+  check('nivel companero: un dado por encima del anunciado falla',
+    rPasado?.success === false, `dado=65,1 anuncia=${anunciado} success=${rPasado?.success}`);
+
+  // **Y LA MISMA CUENTA PARA EL RECOLECTOR**, porque el Holeja enseña la misma
+  // probabilidad y son dos métodos distintos: que coincidan los dos con el mismo número
+  // es lo que hace que "abrir la hoja" signifique algo sea cual sea el objeto.
+  const gRec = await boot(baseSave([collector('r1', 3)], {
+    nanites: 0, warehouseCapacity: 40, crystals: valorDeUnCristal(3) * 40
+  }));
+  (wh(gRec) as any[]).find((w: any) => w.id === 'r1').level = nivel;
+  const rRec: any = conRoll(0.651, () => gRec.upgradeEquippedCollector());
+  check('nivel recolector: el mismo borde y el mismo numero',
+    rRec?.success === false, `dado=65,1 anuncia=${anunciado} success=${rRec?.success}`);
 }
 
 // --- 4. El techo y el rechazo sin coste ---------------------------------------
