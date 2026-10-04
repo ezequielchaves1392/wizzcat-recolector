@@ -79,11 +79,40 @@ import {
   descripcionDeAutoVenta, type TipoDeVentaAuto
 } from '../data/autoventa';
 
+/**
+ * Los cuatro filtros del almacén, con su etiqueta.
+ *
+ * **ESTO ESTABA EN LA PLANTILLA Y AHORA ESTÁ AQUÍ PORQUE LA REJILLA VACÍA LOS USA.**
+ * La etiqueta vive en dos sitios —el botón y el texto de "no tienes nada de…"— y
+ * escrita en los dos es una etiqueta escrita dos veces: el día que un filtro cambie de
+ * nombre, el botón y el mensaje vacío dirán cosas distintas, y el único que se ve es el
+ * mensaje.
+ */
+const FILTROS = [
+  { id: 'all', label: 'Todo' },
+  { id: 'collector', label: 'Recolectores' },
+  { id: 'companion', label: 'Compañeros' },
+  { id: 'otros', label: 'Otros' }
+];
+
 // Estado de la pantalla. Sobrevive a los re-render.
 const ui = {
   selectedId: null as string | null,
   filter: 'all' as string,
   sort: 'default' as string,
+  /**
+   * LO QUE SE ESCRIBE EN EL BUSCADOR, Y POR QUÙ ES ESTADO Y NO UN `$query`.
+   *
+   * El campo tiene que sobrevivir al re-render: al escribir se repinta la rejilla y el
+   * input volvería a su valor inicial, con lo que el jugador escribe una letra, la
+   * pierde y no entiende por qué el buscador no hace nada. Es el mismo motivo por el que
+   * `selectedId` y `elegidos` viven aquí y no en el marcado.
+   *
+   * **Lo que se guarda es el texto crudo y los términos se sacan al filtrar**, no al revés:
+   *   así el input puede devolver exactamente lo que el jugador escribió, con sus espacios,
+   *   y un buscador que te corrige el texto mientras escribes es un buscador con voz.
+   */
+  buscar: '',
   sheetOpen: false,
   /**
    * SELECCIÓN MÚLTIPLE, Y POR QUÉ ES ESTADO Y NO UN `{...}` de cada celda.
@@ -297,16 +326,36 @@ function draw(
         `)}
 
         <div class="flex flex-wrap items-center gap-1.5 mb-3">
-          ${([
-            { id: 'all', label: 'Todo' },
-            { id: 'collector', label: 'Recolectores' },
-            { id: 'companion', label: 'Compañeros' },
-            { id: 'otros', label: 'Otros' }
-          ]).map(f => `
+          ${FILTROS.map(f => `
             <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition
                            ${ui.filter === f.id ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}"
                     data-filter="${f.id}">${f.label}</button>
           `).join('')}
+<!-- EL BUSCADOR, Y POR QUÉ ESTÁ ANTES DEL SELECT DE ORDEN Y NO DESPUÉS.
+             Con veinte cajas y cuarenta armas en el almacén, el filtro de tipo y el orden
+             no contestan "¿dónde está el AK-7?": contestan "¿qué tipo quiero ver?". El
+             buscador es la otra pregunta, y por eso tiene su propio hueco y no se
+             mezcla con el filtro.
+             Y el texto va en el placeholder, que es donde se lee lo que hace el campo, y no en un
+             label suelto porque un buscador sin texto visible parece una casilla de
+             pegar texto. -->
+          <label class="relative flex-1 min-w-[9rem]" for="wh-buscar">
+            <span class="sr-only">Buscar en el almacen</span>
+            <input id="wh-buscar" type="search" data-wh-search autocomplete="off"
+                   placeholder="Buscar por nombre, tier o rareza"
+                   value="${ui.buscar}"
+                   class="h-10 w-full pl-3 pr-8 rounded-lg btn-ghost text-[11px] font-mono
+                          placeholder:text-[var(--text-muted)] placeholder:opacity-70
+                          focus:outline-none focus:ring-1 focus:ring-[var(--accent)]" />
+            ${ui.buscar ? `
+              <button data-act="limpiar-busqueda"
+                      aria-label="Quitar la busqueda"
+                      class="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-md
+                             btn-ghost flex items-center justify-center cursor-pointer
+                             [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">
+                <span>${ic('close')}</span>
+              </button>` : ''}
+          </label>
           <select id="wh-sort" aria-label="Ordenar"
             class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
             <!--
@@ -404,7 +453,42 @@ function draw(
 
         ${ui.multisel ? multiSelBar(game) : ''}
 
-        <div class="inv-grid mb-2" id="inv-grid">${cells.join('')}</div>
+        <!--
+          LA REJILLA VACÍA, Y POR QUÉ DICE LAS DOS COSAS QUE PUEDEN ESTAR PASANDO.
+
+          Sin búsqueda esto solo podía ser "no tienes nada de este tipo", pero en cuanto
+          existe un campo de texto **hay dos motivos distintos** y se parecen tanto en la
+          pantalla que el jugador no puede saber cuál es: puede no haber nada de ese tipo,
+          o puede haberlo y no estar buscando lo que cree. Una rejilla en blanco sin
+          explicación es indistinguible de un buscador roto, y el jugador no va a
+  reescribir la búsqueda: va a abrir el inventario otra vez y a dejarlo.
+
+          Así que el texto lleva el motivo **y la salida**: lo que se escribió y el botón
+          de quitarlo. Y sale de ui.buscar, que es el texto crudo, no de los términos
+          normalizados: enseñarle "ak7" cuando el jugador ha escrito "AK 7" sería una
+          segunda cosa que no cuadra.
+
+          **Y LA CONDICIÓN ES QUE NO HAY CELDAS, NO QUE EL HTML SALE VACÍO.** La rejilla
+          se rellena con celdas de capacidad libre hasta el tope del almacén, así que el
+          marcado nunca está vacío: con la condición sobre el html, el mensaje no salía
+          nunca y lo que se veía al buscar algo inexistente era una rejilla entera de
+          "+" —que es exactamente la pantalla de un almacén vacío, y por tanto
+          indistinguible de un buscador que ha borrado el almacén.
+        -->
+        <div class="inv-grid mb-2" id="inv-grid">
+          ${celdas.length === 0 ? `
+            <div class="col-span-full flex flex-col items-center gap-2 py-8 text-center">
+              <span class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                ${ui.buscar.trim()
+                  ? `Nada con "${ui.buscar.trim()}". Puede que no haya nada así en el almacén.`
+                  : `No tienes nada de ${FILTROS.find(f => f.id === ui.filter)?.label.toLowerCase() ?? 'este tipo'}.`}
+              </span>
+              ${ui.buscar.trim() ? `
+                <button class="px-3 h-9 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
+                        data-act="limpiar-busqueda">Quitar la búsqueda</button>` : ''}
+            </div>`
+          : cells.join('')}
+        </div>
 
     </div>
 
@@ -463,7 +547,7 @@ function draw(
 function multiSelBar(game: any): string {
   const state = game.getState();
   const plan = game.planSellMany(ui.elegidos);
-  const celdas = visibleStacksFor(game, state, ui.filter, ui.sort);
+  const celdas = visibleStacksFor(game, state, ui.filter, ui.sort, ui.buscar);
   const visibles = celdas.map((c: any) => c.item.id);
   const hayTodos = visibles.length > 0 && visibles.every((id: string) => ui.elegidos.includes(id));
   /** El nombre del item, para poder decir "el Dron Explorador está equipado". */
@@ -994,6 +1078,36 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
     redraw();
   });
 
+  /**
+   * EL BUSCADOR, Y POR QUÉ VA EN SU PROPIO `input` Y NO EN EL DELEGADO DE ABAJO.
+   *
+   * El texto vive en `ui.buscar` y no en el nodo porque la rejilla se repinta al
+   * escribir: si el input no recuperase su valor en cada repintado, el jugador escribiría
+   * una letra y la perdería, y el buscador "no haría nada" sin decir por qué.
+   *
+   * **Y `input` Y NO `change`:** `change` en un campo de texto salta al perder el foco,
+   * así que la rejilla no se filtraría hasta que el jugador pulsing fuera. Es un
+   * buscador que parece no funcionar.
+   *
+   * El texto se guarda **crudo** y los términos se sacan al filtrar, en
+   * `terminosDeBusqueda()`: así el campo devuelve al jugador exactamente lo que
+   * escribió, y corregirle el texto mientras escribe es un buscador con voz.
+   */
+  root.querySelector<HTMLInputElement>('#wh-buscar')?.addEventListener('input', (e) => {
+    ui.buscar = (e.target as HTMLInputElement).value;
+    redraw();
+    // **EL CURSOR VUELVE AL FINAL, Y POR QUÉ HAY QUE HASTERLO.** El repintado recrea
+    // el input, así que el foco se pierde y con él el cursor: sin esto, escribir la
+    // segunda letra deja el campo en medio de la palabra y a partir de la tercera ya no
+    // se escribe nada. Por eso se devuelve el foco al nodo nuevo, no al viejo.
+    const campo = root.querySelector<HTMLInputElement>('#wh-buscar');
+    if (campo) {
+      campo.focus();
+      const fin = campo.value.length;
+      campo.setSelectionRange(fin, fin);
+    }
+  });
+
   // --- Selección múltiple ------------------------------------------------
   // Van en el delegado de abajo y no aquí, porque los botones de la barra se pintan y
   // se borran en cada repintado: un listener por nodo habría que volver a ligar veinte
@@ -1079,6 +1193,16 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
     const item = ui.selectedId ? (game.getState().warehouse as any[]).find((w: any) => w.id === ui.selectedId) : null;
 
     switch (act) {
+      // **LA CRUZ DEL BUSCADOR, Y POR QUÉ VACÍA EL CAMPO Y NO ESCRIBE EN ÉL.**
+      // Escribir en el input desde un manejador de clic obliga a devolverle el foco a
+      // mano, y el input está en otro sitio del marcado: una cruz que pone "a" en el
+      // campo sin que el jugador lo pulse deja el cursor en un sitio raro. Vaciar el
+      // estado y repintar deja el campo vacío y el foco donde estaba.
+      case 'limpiar-busqueda':
+        sfx.nav();
+        ui.buscar = '';
+        redraw();
+        break;
       case 'close':
         sfx.pick();
         ui.selectedId = null;
@@ -1218,7 +1342,7 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         // lo que hay en pantalla. Marcar lo que no se ve para venderlo sería dejar al
         // jugador vendiendo cosas sin verlas, que es la forma más rápida de que un
         // jugador no se fie de ese boton, y con razon.
-        const celdas = visibleStacksFor(game, game.getState(), ui.filter, ui.sort);
+        const celdas = visibleStacksFor(game, game.getState(), ui.filter, ui.sort, ui.buscar);
         const ids = celdas.map((c: any) => c.item.id);
         ui.elegidos = ids;
         // Los que no se pueden vender no se marcan, y el motivo lo pone el motor: el
@@ -1303,7 +1427,7 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
  * pila completa y no uno de los items que hay dentro.
  */
 function visibleStacks(game: any, state: any): Array<{ item: any; ids: string[]; count: number }> {
-  return visibleStacksFor(game, state, ui.filter, ui.sort);
+  return visibleStacksFor(game, state, ui.filter, ui.sort, ui.buscar);
 }
 
   /**
@@ -1376,10 +1500,14 @@ export function visibleStacksFor(
   game: any,
   state: any,
   filtro: string,
-  sort: string
+  sort: string,
+  buscar = ''
 ): Array<{ item: any; ids: string[]; count: number }> {
   const wh = (state.warehouse || []) as any[];
-  let items = wh.filter((w: any) => matchesFilter(w, filtro));
+  // **EL FILTRO COMPLETO, EN UN SITIO.** Tipo y búsqueda juntos, y no aplicados en la
+  // vista: una rejilla que busca y un arrastre que solo filtra cuentan celdas distintas,
+  // y el jugador señala un número de celda que no es el sitio que ve.
+  let items = wh.filter((w: any) => pasaElFiltro(w, filtro, terminosDeBusqueda(buscar)));
 
   if (sort === 'name') items = [...items].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   else if (sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
@@ -1586,11 +1714,137 @@ function nombreDeTipoDeAuto(t: TipoDeVentaAuto): string {
  * banco de pruebas.
  */
 
-/** ¿El item pasa el filtro activo de la rejilla? */
+/**
+ * ¿Este item pasa la búsqueda del almacén?
+ *
+ * **LA BÚSQUEDA ES UN TERCER FILTRO, Y NO UN "ORDEN"**: el `filter` elige el tipo y
+ * `sort` elige el eje, y los dos son listas cerradas de la barra de herramientas. La
+ * búsqueda es texto libre, y por eso se compone con los otros dos en vez de sustituir a
+ * ninguno: buscar "AK-7" dentro de "Recolectores" tiene que salir distinto de buscarlo
+ * dentro de "Todo".
+ *
+ * ## LAS TRES MITADES DE LA COINCIDENCIA, Y POR QUÉ SON TRES
+ *
+ * · **El nombre**, sin tildes y en minúsculas, y con el texto del **detalle** también:
+ *   el jugador busca "t10" o "divino" y el nombre no lo dice.
+ * · **El tier**, como número: buscar "10" tiene que encontrar el T10 aunque el nombre no
+ *   lo lleve, porque el jugador que busca por tier lo hace por el número que ve en la
+ *   celda.
+ * · **Una coincidencia por palabras enteras**, no por subcadena: buscar "t1" **no**
+ *   devuelve el T10. Es el error clásico del buscador y el que más molesta, porque el
+ *   jugador ve quince resultados que no son los que ha pedido y no entiende por qué.
+ *
+ * ## POR QUÉ NO ES UN `includes` SOBRE EL NOMBRE
+ *
+ * Porque el almacén guarda "Ak-7 Valioso" y el jugador escribe "ak 7", y porque el
+ * teclado del móvil no siempre pone las tildes. Se normaliza una vez por item y una vez
+ * por búsqueda —no en cada comparación—, y por eso la normalización es una función
+ * suelta: el índice de la Forja necesita la misma y copiarla sería la segunda versión de
+ * la misma regla.
+ *
+ * Y **el texto de la búsqueda se parte en términos y todos tienen que aparecer**: "ak 7"
+ * son dos términos, y un jugador que escribe eso quiere los AK-7, no los AK ni los 7.
+ */
+export function normalizaBusqueda(s: string): string {
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Los términos de la búsqueda, ya normalizados y sin los que no dicen nada. */
+export function terminosDeBusqueda(texto: string): string[] {
+  return normalizaBusqueda(texto)
+    .split(/[\s,·]+/)
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+}
+
+/** El texto de un item por el que se puede buscar: nombre, detalle, rareza y tipo. */
+export function textoBuscable(w: any): string {
+  const tipo = w.type === 'collector' ? 'recolector'
+    : w.type === 'companion' ? 'compañero'
+    : w.type === 'consumable' ? 'consumible'
+    : w.type === 'crate' ? 'caja'
+    : String(w.type ?? '');
+  return normalizaBusqueda(
+    `${w.name ?? ''} ${w.details ?? ''} ${w.rarity ?? ''} ${tipo}`
+  );
+}
+
+/** Los términos que llevan solo números, que son los del tier y los de un nombre. */
+function esTerminoDeNumero(t: string): boolean {
+  return /^t?\d+$/.test(t);
+}
+
+/** El número de un término numérico, con la "t" delante si la lleva. */
+function numeroDeTermino(t: string): number {
+  return Number(t.replace(/^t/, ''));
+}
+
+/**
+ * ¿Un término encuentra a este item?
+ *
+ * ## POR QUÉ UN TÉRMINO CON LETRAS ES PREFIJO Y UNO NUMÉRICO NO
+ *
+ * Es lo que separa "ak" de "t1", y es toda la diferencia entre un buscador útil y uno
+ * que parece roto:
+ *
+ * · **Con letras, prefijo de una palabra**: "ak" tiene que encontrar "Ak-7" y "Ak-10".
+ *   Si fuera coincidencia entera, "ak" no encontraría nada y el jugador concluiría que el
+ *   buscador no funciona.
+ * · **Con números, el tier exacto**: "t1" tiene que devolver el T1 y **no** el T10. Un
+ *   prefijo aquí devuelve el T10 al buscar el T1, y eso es el error clásico: quince
+ *   resultados que no son los que se han pedido, sin explicación posible.
+ *
+ * Y **un número también mira dentro del texto**, porque "ak 7" son dos términos y el
+ * "7" es del nombre, no del tier: sin esa mitad, escribir el nombre completo con un
+ * espacio no encuentra nada, que es la forma más probable de escribirlo en un teclado.
+ *
+ * ## Y LAS PALABRAS SE CORTAN POR ESPACIOS, NO POR TODO LO QUE NO ES LETRA
+ *
+ * Que sea por espacios y no "por lo que no es una letra" es lo que hace que "ak-7" sea
+ * **una** palabra. Cortando por cualquier cosa que no sea letra, el guion desaparecía y
+ * "ak-7" se convertía en dos: el término entero no encontraba nada y el buscador parecía
+ * roto justo con el nombre completo, que es lo primero que se escribe.
+ */
+function coincideTermino(w: any, termino: string, texto: string): boolean {
+  if (esTerminoDeNumero(termino)) {
+    // El tier es una comparación exacta, no un prefijo: por eso se lee del item.
+    if (numeroDeTermino(termino) === Number(w.tier)) return true;
+    // Y además dentro del texto, para los nombres que llevan números.
+    return texto.includes(termino);
+  }
+  return texto
+    .split(/[\s,;/·|]+/)
+    .some((palabra: string) => palabra.length > 0 && palabra.startsWith(termino));
+}
+
+export function matchesSearch(w: any, terminos: string[]): boolean {
+  if (!terminos || terminos.length === 0) return true;
+  const texto = textoBuscable(w);
+  // Todos los términos tienen que aparecer: son "y" y no "o", porque un jugador que
+  // escribe "ak oscuro" quiere los dos, no los que tengan cualquiera de los dos.
+  return terminos.every(t => coincideTermino(w, t, texto));
+}
+
+/** ¿El item pasa el filtro activo de la rejilla *y* la búsqueda activa? */
 export function matchesFilter(w: any, filtro: string): boolean {
-  if (filtro === 'all') return true;
-  if (filtro === 'otros') return !['collector', 'companion'].includes(w.type);
-  return w.type === filtro;
+  if (filtro === 'otros' && !['collector', 'companion'].includes(w.type)) return true;
+  if (filtro === 'collector' || filtro === 'companion') return w.type === filtro;
+  return filtro === 'all';
+}
+
+/**
+ * El filtro completo: tipo **y** búsqueda.
+ *
+ * Con la búsqueda añadida, aplicar las dos mitades en la vista era justo el sitio donde
+ * podían separarse: una rejilla que busca y otro sitio que solo filtra, y un arrastre
+ * que cuenta celdas distintas de las que se ven. Ahora hay un solo sitio, y es el mismo
+ * que usan la rejilla, el arrastre y el banco de pruebas.
+ */
+export function pasaElFiltro(w: any, filtro: string, terminos: string[] = []): boolean {
+  return matchesFilter(w, filtro) && matchesSearch(w, terminos);
 }
 
 // ==========================================================================

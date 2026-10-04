@@ -177,9 +177,30 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 - [ ] **F44 · Expansores hasta T30.** Pides "hasta T30" y el juego tiene **10 cajas**: los
       expansores de T11 a T30 no tienen de dónde salir. **Decisión tuya:** ¿se suben las
       cajas a 30, o los expansores altos salen de otra parte?
-- [ ] **F45 · Buscador** en el almacén.
-- [ ] **F46 · Orden personalizado** — hay que mirarlo, porque con el agrupado de pilas que
-      se acaba de tocar puede haber pasado a ser incoherente.
+- [x] **F45 · Buscador en el almacén.** Hecho. Un campo antes del selector de orden, y la
+      **búsqueda se compone con el filtro de tipo** en vez de sustituirlo: buscar dentro
+      de "Recolectores" sale distinto de buscarlo en "Todo". Busca por **nombre, detalle,
+      rareza, tipo y tier**, sin tildes y sin distinguir mayúsculas.
+      **Lo que más cuesta decidir es qué es una coincidencia, y por eso hay dos reglas y
+      no una:** un término **con letras** es prefijo de una palabra —"ak" tiene que
+      encontrar "Ak-7" y "Ak-10"— y un término **con números** es el **tier exacto** —
+      "t1" devuelve el T1 y **no** el T10—. Un prefijo también en los números es el
+      error clásico: quince resultados que no son los que se han pedido, sin explicación
+      posible. Y varios términos son "y", no "o": "ak 7" son dos y quiere los dos.
+      **La rejilla vacía dice las dos cosas que pueden estar pasando** —que no hay nada de
+      ese tipo, o que hay y no es lo que se busca— con el botón de quitar la búsqueda, y
+      **eso hubo que hacerlo sobre `celdas.length === 0` y no sobre el HTML vacío**: la
+      rejilla se rellena con celdas de capacidad libre hasta el tope del almacén, así
+      que con la condición sobre el html el mensaje no salía nunca y lo que se veía al
+      buscar algo inexistente era una pantalla entera de "+", que es la misma imagen que
+      un almacén vacío.
+      `filterCheck` (+17), que es el banco que ya comprobaba el filtro y el agrupado.
+- [-] **F46 · Orden personalizado** — **descartada, ya no hay nada que ordenar a mano.**
+      El arrastre y "Mi orden" se quitaron en `26171d1`: quedaban huecos entre celdas, que
+      son huecos de verdad, y con ellos "colocar el almacén" era una disposición y no un
+      orden. Lo que queda es "Como llegó", que es el orden de entrada y **la única manera
+      de volver al estado natural** sin recargar la página. Si algún día vuelve a hacer
+      falta, es una feature de verdad, no un arreglo.
 - [x] **F47 · Los expansores a "Mejoras"**, no a recursos. Hecho: "Recursos" se queda
       solo con el cristal, que es el único que lo es, y los expansores se van con las
       cartas de ranura. No es un cambio de sitio: es que **la categoría se llama así porque

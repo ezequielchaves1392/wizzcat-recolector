@@ -20,7 +20,10 @@
 //  y no desaparecer de la rejilla.
 // ==========================================================================
 
-import { visibleStacksFor, matchesFilter } from '../src/components/warehouse';
+import {
+  visibleStacksFor, matchesFilter, matchesSearch, pasaElFiltro,
+  terminosDeBusqueda, normalizaBusqueda
+} from '../src/components/warehouse';
 import { materialesDeForja } from '../src/ui/forgePage';
 import { bandaDeProbabilidad, CORTE_PROBABILIDAD_ALTA, CORTE_PROBABILIDAD_MEDIA } from '../src/data/items';
 import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
@@ -614,6 +617,103 @@ async function main() {
     check('forja orden: una clave que no existe deja la lista entera, no vacia',
       desconocida.length === 3, desconocida.join(','));
   }
+
+// =========================================================================
+  //  F45 · EL BUSCADOR, Y SUS TRES MITADES
+  //
+  //  El filtro de tipo y el orden contestan "¿qué tipo quiero ver?" y "¿en qué
+  //  orden?". El buscador contesta "¿dónde está el AK-7?", que es la tercera
+  //  pregunta y la que másfalta cuando el almacén tiene veinte cajas y cuarenta
+  //  armas. Y como es texto libre **se compone** con el filtro en vez de
+  //  sustituirlo: buscar dentro de "Recolectores" tiene que salir distinto de
+  //  buscarlo en "Todo".
+  //
+  //  Lo que se comprueba aquí es la regla, no el campo: el input es markup y el
+  //  banco no tiene DOM, pero la regla es lo que puede estar mal.
+  // =========================================================================
+  {
+    const ak = ficha('ak7', 5, { name: 'Ak-7 Valioso', type: 'collector', tier: 3, rarity: 'Épico' });
+    const ak10 = ficha('ak10', 5, { name: 'Ak-10 Roto', type: 'collector', tier: 10, rarity: 'Legendario' });
+    const dron = ficha('d1', 5, { name: 'Dron Explorador', type: 'companion', tier: 2, rarity: 'Raro' });
+    const caja = crate('c1', 4);
+    const lista = [ak, ak10, dron, caja];
+
+    const busca = (texto: string, filtro = 'all') =>
+      lista.filter((w: any) => pasaElFiltro(w, filtro, terminosDeBusqueda(texto))).map((w: any) => w.id);
+
+    // --- El nombre, y sin tildes ni mayúsculas ---
+    check('buscador: por el nombre, en cualquier caja',
+      busca('ak-7').join() === 'ak7', busca('ak-7').join());
+    check('buscador: sin tildes y sin mayúsculas',
+      busca('ak').length === 2 && busca('AK-7').join() === 'ak7',
+      `${busca('ak').join('|')} / ${busca('AK-7').join('|')}`);
+
+    // **Y POR TILDE, QUE ES LA RAZÓN DE NORMALIZAR.** El teclado del móvil no
+    //  siempre la pone, y un buscador que solo encuentra lo que está bien escrito
+    //  es un buscador que falla justo en el móvil, que es donde se busca más.
+    const conTilde = ficha('a1', 5, { name: 'Águila Cibernética', type: 'collector', tier: 1 });
+    check('buscador: encuentra lo que lleva tilde escribiéndolo sin ella',
+      matchesSearch(conTilde, terminosDeBusqueda('aguila')) === true
+      && normalizaBusqueda('Águila') === 'aguila',
+      normalizaBusqueda('Águila'));
+
+    // --- El tier como número, que es el número que ve el jugador ---
+    check('buscador: por el tier',
+      busca('t10').join() === 'ak10' && busca('10').join() === 'ak10',
+      `${busca('t10').join('|')} / ${busca('10').join('|')}`);
+
+    // --- TÉRMINOS ENTEROS, Y NO SUBCADENA: EL ERROR CLÁSICO ---
+    // Buscar "t1" devolviendo el T10 es lo que hace que un buscador parezca roto:
+    // el jugador ve resultados que no ha pedido y no entiende el porqué.
+    check('buscador: "t1" NO devuelve el T10',
+      !busca('t1').includes('ak10'), busca('t1').join('|'));
+    check('buscador: y el T10 sí aparece con su propio término',
+      busca('t10').join() === 'ak10', busca('t10').join('|'));
+
+    // **Y VARIAS PALABRAS SON "Y", NO "O".** "ak 7" son dos términos: un jugador
+    //  que escribe eso quiere los AK-7, no los AK y los que tienen un 7.
+    check('buscador: dos términos son "y", no "o"',
+      busca('ak 7').join() === 'ak7', busca('ak 7').join('|'));
+    check('buscador: y dos términos imposibles no devuelven nada, sin error',
+      busca('ak 99').length === 0, busca('ak 99').join('|'));
+    check('buscador: y "ak 10" si encuentra el Ak-10, que el 10 es su tier',
+      busca('ak 10').join() === 'ak10', busca('ak 10').join('|'));
+
+    // --- El filtro sigue mandando ---
+    check('buscador: se compone con el filtro de tipo',
+      busca('t3', 'collector').join() === 'ak7' && busca('t3', 'companion').length === 0,
+      `${busca('t3', 'collector').join('|')} / ${busca('t3', 'companion').join('|')}`);
+    check('buscador: buscar en "Todo" encuentra un compañero que en su filtro no está',
+      busca('dron').join() === 'd1' && busca('dron', 'collector').length === 0,
+      `${busca('dron').join('|')} / ${busca('dron', 'collector').join('|')}`);
+
+    // --- Lo vacío NO FILTRA NADA ---
+    // Un buscador que se queda sin resultados porque el campo quedó con un espacio
+    // es un buscador que parece roto, y el jugador va a abrir el inventario otra vez.
+    check('buscador: vacío y solo espacios devuelven todo',
+      busca('').length === 4 && busca('   ').length === 4,
+      `${busca('').length} / ${busca('   ').length}`);
+    check('buscador: y sin términos tampoco filtra, que es el 0 de los términos',
+      matchesSearch(ak, []) === true, String(matchesSearch(ak, [])));
+
+    // --- Y LA REJILLA, QUE ES DONDE SE VE SI LOS DOS FILTROS SE SEPARAN ---
+    const g = await boot(baseSave([ak, ak10, dron, caja], { warehouseCapacity: 40 }));
+    const rejilla = (buscar: string, filtro = 'all', sort = 'default') =>
+      visibleStacksFor(g, g.getState(), filtro, sort, buscar).map((c: any) => c.item.id).join('|');
+    check('buscador: la rejilla filtra por el texto que le pasan',
+      rejilla('dron') === 'd1', rejilla('dron'));
+    check('buscador: y por texto y tipo a la vez, que es la prueba de que no se separan',
+      rejilla('t3', 'collector') === 'ak7' && rejilla('ak', 'collector') === 'ak7|ak10',
+      `${rejilla('t3', 'collector')} / ${rejilla('ak', 'collector')}`);
+    check('buscador: sin texto la rejilla no cambia, que es lo que tiene que pasar',
+      rejilla('') === rejilla('   '), `${rejilla('')} vs ${rejilla('   ')}`);
+    check('buscador: el orden sigue mandando sobre la búsqueda, no al revés',
+      rejilla('ak', 'all', 'value') === rejilla('ak', 'all', 'rarity').split('|').length
+        ? rejilla('ak', 'all', 'value')
+        : 'x',
+      'orden=' + rejilla('ak', 'all', 'value'));
+  }
+
 
   resumen('filtros y rejilla');
 }
