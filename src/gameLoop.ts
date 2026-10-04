@@ -44,6 +44,10 @@ import {
   expansorPorBuff, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
+import {
+  AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta, debeVenderseAuto,
+  type ConfigAutoVenta, type TipoDeVentaAuto
+} from './data/autoventa';
 import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
 import { costeDeNivel, valorDeUnCristal } from './data/crafting';
 
@@ -463,6 +467,22 @@ export async function createGameLoop(
       unlocked: ['title_default', 'frame_none', 'banner_none'] as string[]
     },
     crystals: 5,
+    /**
+     * EL FILTRO DE AUTO-VENTA AL ABRIR CAJAS.
+     *
+     * **Viene apagado y con los tres tipos apagados, y no es pereza: es la única forma
+     * de que un filtro de venta sea seguro.** Encenderlo destruye objetos sin aviso y el
+     * juego no tiene deshacer, así que nace en la posición en la que no hace nada y el
+     * jugador lo enciende sabiendo lo que hace.
+     *
+     * Se guarda en la partida y no en el navegador por una razón concreta: **si el
+     * filtro no coincide con lo que el jugador está viendo, el número que le sale es de
+     * otro juego.** La regla y el filtro tienen que viajar juntos para que la coacción de
+     * la carga pueda volver a ponerlos de acuerdo antes de abrir la primera caja.
+     *
+     * La forma y la coacción están en `data/autoventa.ts`; aquí solo el valor.
+     */
+    autoVenta: { ...AUTO_VENTA_POR_DEFECTO, tipos: { ...AUTO_VENTA_POR_DEFECTO.tipos } },
     warehouseCapacity: 15,
     maxCompanionSlots: 1,
     // Ids de items delante de los cuales el jugador ha dejado un hueco. Ver
@@ -1246,6 +1266,11 @@ const AFK_THRESHOLD_MS = 60000;
         ? data.warehouseGaps.filter((id: any): id is string =>
           typeof id === 'string' && state.warehouse.some((w: any) => w.id === id))
         : [];
+      // El filtro de auto-venta, coaccionado campo a campo. Un guardado viejo no lo
+      // trae; uno manipulado puede traer `"sí"` en `activa` o `tipos: true` en vez de un
+      // objeto de tres banderas, y sin coaccionar eso revienta **a mitad de un sorteo**,
+      // que es el peor sitio posible para un dato corrupto. Ver `coaccionaAutoVenta()`.
+      state.autoVenta = coaccionaAutoVenta(data.autoVenta);
       // Migración: agregar 'damage' y actualizar descripción a recolectores viejas
       let warehouseNeedsMigration = false;
 
@@ -1736,6 +1761,7 @@ const AFK_THRESHOLD_MS = 60000;
         nodeLevels: state.nodeLevels,
         forgedCount: state.forgedCount,
         cosmetics: state.cosmetics,
+        autoVenta: state.autoVenta,
         updatedAt: new Date()
       });
       // Crear documento de ranking
@@ -2696,6 +2722,7 @@ const AFK_THRESHOLD_MS = 60000;
         nodeLevels: state.nodeLevels,
         forgedCount: state.forgedCount,
         cosmetics: state.cosmetics,
+        autoVenta: state.autoVenta,
         updatedAt: new Date(),
         // ======================================================================
         //  EL BORRADO DE LAS ESQUIRLAS, Y POR QUÉ NECESITA SU PROPIA LÍNEA
@@ -3712,6 +3739,49 @@ const AFK_THRESHOLD_MS = 60000;
     planSellMany: (itemIds: string[]) => planDeVenta(Array.isArray(itemIds) ? itemIds : []),
 
     /**
+     * EL FILTRO DE AUTO-VENTA AL ABRIR CAJAS, Y POR QUÉ SE LEE Y SE ESCRIBE POR AQUÍ.
+     *
+     * La vista pinta casillas y el motor decide. Un filtro de venta escrito en la hoja de
+     * la caja sería la vista cambiando el estado (R1), y además no alcanzaría a las
+     * **aperturas en lote**, que son veinte sorteos seguidos sin pasar por un solo clic.
+     *
+     * Y lo que devuelve el lector está **coaccionado**, no guardado tal cual: es lo que
+     * la ruleta y el diálogo enseñan, y tiene que ser la misma forma que decide la venta.
+     * Si la vista recibiera el objeto crudo del guardado, podría estar enseñando un
+     * filtro que el motor no va a usar —un `"sí"` en `activa`, un tipo desconocido— y
+     * esa es la clase de discrepancia que R3 prohíbe.
+     */
+    getAutoVenta: (): ConfigAutoVenta => coaccionaAutoVenta(state.autoVenta),
+
+    /**
+     * Cambia el filtro. `{ tipos }` se **fusiona** campo a campo, no se sustituye: quien
+     * enciende el conmutador maestro no quiere desmarcar los tres tipos, y quien marca
+     * "solo armas" no quiere perder el tope de tier que ya había puesto.
+     *
+     * Y **cada cambio se guarda**, aunque el filtro no affecte a nada todavía. Encenderlo
+     * es una decisión que se quiere conservar; perderla al recargar convertiría cada
+     * sesión en volver a explicar el mismo filtro, que es la forma más lenta de perder la
+     * costumbre de usarlo.
+     */
+    setAutoVenta: (parcial: Partial<ConfigAutoVenta>) => {
+      handleUserActivity();
+      const actual = coaccionaAutoVenta(state.autoVenta);
+      const tipos: Partial<Record<TipoDeVentaAuto, boolean>> = (parcial && parcial.tipos) || {};
+      state.autoVenta = coaccionaAutoVenta({
+        activa: parcial?.activa ?? actual.activa,
+        tipos: {
+          collector: tipos.collector ?? actual.tipos.collector,
+          companion: tipos.companion ?? actual.tipos.companion,
+          consumable: tipos.consumable ?? actual.tipos.consumable
+        },
+        tierMax: parcial?.tierMax ?? actual.tierMax,
+        potencialMax: parcial?.potencialMax ?? actual.potencialMax
+      });
+      saveToFirebase();
+      return state.autoVenta;
+    },
+
+    /**
      * Vende una selección entera de una vez, con **un solo guardado**.
      *
      * Y aquí está la razón de que sea un método y no un bucle de `sellItem()` desde la
@@ -4523,9 +4593,46 @@ const AFK_THRESHOLD_MS = 60000;
           // y no hay ningún motivo. Ahora no se puede llegar a ese estado porque
           // `openCrateBox()` veta la apertura cuando el botín no cabe, y el tope del lote
           // sale de `maximoDeApertura()` con los huecos libres. **El retorno se sigue
-          // respetando** —un `false` aquí no se ignora— y el veto está un nivel más arriba,
-          // donde se puede decir por qué.
-          if (!addToWarehouse(item as any)) return false;
+          // respetando** —un `ok: false` aquí no se ignora— y el veto está un nivel más
+          // arriba, donde se puede decir por qué.
+
+          // ---------------------------------------------------------------------------
+          //  LA AUTO-VENTA, Y POR QUÉ ESTÁ AQUÍ Y NO EN LA VISTA
+          // ---------------------------------------------------------------------------
+          //
+          // El botín se aplica **dentro** de `rollCrateReward()`, que no sabe nada del
+          // filtro. Si el filtro fuera de la vista, la vista tendría que mirar cada
+          // premio y decidir: eso es la vista mutando el estado (R1), y además no
+          // alcanzaría a las openings en lote, que son veinte de un tirón.
+          //
+          // **EL IMPORTE ES EL DE `sellItem()`, CON EL TOPE DE PRECIO APLICADO.** Vender
+          // automáticamente no cambia de dónde sale el dinero, y `sellPriceTope` existe
+          // justo para que un premio de caja no valga más vendido que la caja y la llave
+          // que lo dieron. Sin tope, la auto-venta sería **el camino para imprimir**, que
+          // es lo que ese tope existe para cerrar.
+          //
+          // Y **NO SE VENDE SI FUERA EL ÚLTIMO DE SU TIPO**, por la misma razón que en
+          // `sellItem()`: un filtro que te deja sin recolectores te deja sin clickedor,
+          // y eso no es una venta, es romper la partida. En ese caso el item **entra en el
+          // almacén** en vez de negarse: el jugador pidió que se vendiera lo que no
+          // cumple, y el premio tiene que entrar igualmente.
+          const cfg = coaccionaAutoVenta((state as any).autoVenta);
+          if (debeVenderseAuto(item, cfg)) {
+            const esUltimo = (item.type === 'collector' || item.type === 'companion') &&
+              state.warehouse.filter((w: any) => w.type === item.type).length <= 1;
+            if (!esUltimo) {
+              const ganado = Math.floor(getSellPriceFor(item));
+              state.nanites += ganado;
+              // El total producido **también** sube: vender un objeto es cobrar por
+              // jugar, no es un premio de caja. Si no contara, la Ascensión — que paga
+              // con núcleos y por lo producido — dejaría de reconocer el tiempo que el
+              // jugador ha invertido en abrir cajas.
+              state.totalNanitesProduced += ganado;
+              return { ok: true, nanitas: ganado };
+            }
+          }
+
+          if (!addToWarehouse(item as any)) return { ok: false };
           // El item trae `companionType` y `power` ya resueltos por crateLoot.
           // Antes se deducían parseando `details` con regex y el multiplicador
           // 0.75 se guardaba como 0.5.
@@ -4539,7 +4646,7 @@ const AFK_THRESHOLD_MS = 60000;
               tier: item.tier
             });
           }
-          return true;
+          return { ok: true };
         }
       });
 

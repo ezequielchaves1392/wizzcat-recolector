@@ -61,7 +61,8 @@ export default defineConfig({
         saltoCheck: resolve(here, 'saltoCheck.ts'),
         identidadCheck: resolve(here, 'identidadCheck.ts'),
         loreCheck: resolve(here, 'loreCheck.ts'),
-        leyendaCheck: resolve(here, 'leyendaCheck.ts')
+        leyendaCheck: resolve(here, 'leyendaCheck.ts'),
+        autoventaCheck: resolve(here, 'autoventaCheck.ts')
       },
       formats: ['es']
     }

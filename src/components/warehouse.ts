@@ -74,6 +74,10 @@ const UNIDAD_SINGULAR: Record<string, string> = {
 // la rejilla acaban contando cosas distintas otra vez.
 import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits, textoDeCantidad, topeDePila } from '../data/stacking';
 import { lorePara } from '../data/tiers';
+import {
+  AUTO_VENTA_POR_DEFECTO, TIPOS_DE_VENTA_AUTO, TOPES_TIER, TOPES_POTENCIAL,
+  descripcionDeAutoVenta, type TipoDeVentaAuto
+} from '../data/autoventa';
 
 // Estado de la pantalla. Sobrevive a los re-render.
 const ui = {
@@ -844,6 +848,7 @@ function detailContent(item: any, state: any, game: any): string {
                     data-act="open">
               Abrir caja
             </button>
+            ${filtroDeAutoVentaHTML(game)}
           ` : ''}
 
 
@@ -978,6 +983,21 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
    * es vendible, y una comprobación de "¿está equipado?" aquí sería una copia de una
    * regla que ya vive en dos sitios del game loop.
    */
+  // --- El filtro de auto-venta, en la ficha de la caja ------------------------
+  // Va en el delegado y no por atributo sobre `root` porque los `<select>` cambian
+  // y los botones viven en nodos que `mountInto()` recrea: consultarlos aquí es lo
+  // único que no puede quedarse colgando de un nodo viejo.
+  root.addEventListener('change', (e) => {
+    const sel = e.target as HTMLSelectElement;
+    if (sel.dataset.avTier !== undefined) {
+      game.setAutoVenta?.({ tierMax: Number(sel.value) || 0 });
+      redraw();
+    } else if (sel.dataset.avPot !== undefined) {
+      game.setAutoVenta?.({ potencialMax: Number(sel.value) || 0 });
+      redraw();
+    }
+  });
+
   const marcarCelda = (id: string) => {
     if (ui.elegidos.includes(id)) {
       ui.elegidos = ui.elegidos.filter((x) => x !== id);
@@ -1070,6 +1090,34 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
       case 'nada':
         // Botón informativo: no hace nada a propósito.
         return;
+
+      // --- El filtro de auto-venta. Cada cambio va al motor y se guarda; la vista solo
+      // le pasa lo que se ha pulsado. Encenderlo o cambiar un tope son decisiones del
+      // juego, no del componente.
+      case 'av-activa': {
+        const cfg = game.getAutoVenta?.() ?? AUTO_VENTA_POR_DEFECTO;
+        const nuevos = game.setAutoVenta?.({ activa: !cfg.activa });
+        sfx.nav();
+        // **AL ENCENDER SIN MARCAR NADA, SE MARCAN LOS RECOLECTORES.** Un conmutador
+        // verde que no hace nada es un botón roto, y "vendeme las armas que no me
+        // sirven" es el filtro que se quiere en el 90 % de las partidas: los compañeros
+        // y los consumibles se usan, las armas son las que se acumulan.
+        if (nuevos && nuevos.activa && TIPOS_DE_VENTA_AUTO.every((t) => !nuevos.tipos[t])) {
+          game.setAutoVenta?.({ tipos: { collector: true, companion: false, consumable: false } });
+        }
+        redraw();
+        break;
+      }
+      case 'av-tipo': {
+        const btn = (e.target as HTMLElement).closest('[data-av-tipo]') as HTMLElement | null;
+        const tipo = btn?.dataset.avTipo as TipoDeVentaAuto | undefined;
+        if (!tipo) return;
+        const cfg = game.getAutoVenta?.() ?? AUTO_VENTA_POR_DEFECTO;
+        sfx.pick();
+        game.setAutoVenta?.({ tipos: { [tipo]: !cfg.tipos[tipo] } as any });
+        redraw();
+        break;
+      }
 
       // --- La selección múltiple. Todas van antes de que `item` importa: son
       // barra y rejilla enteras, no la ficha de una celda.
@@ -1784,6 +1832,85 @@ export function moveToFreeCell(
   game.setWarehouseGaps?.(salida);
 
   return true;
+}
+
+/**
+ * EL FILTRO DE AUTO-VENTA, Y POR QUÉ VA EN LA FICHA DE LA CAJA Y NO EN EL DIÁLOGO.
+ *
+ * ## DÓNDE
+ *
+ * El diálogo de "cuántas cajas" es del motor —`showConfirmModal()` con un
+ * `quantity`— y meterle un formulario de filtro dentro sería pelearse con un módulo que
+ * solo sabe pintar un mensaje y dos botones. La ficha de la caja es **el sitio donde ya
+ * se abre la caja**, está a la vista durante todo el flujo y el filtro se guarda al
+ * cambiarlo: quien lo enciende una vez no lo vuelve a tocar.
+ *
+ * ## QUÉ VES
+ *
+ * Un conmutador, tres casillas de tipo, dos selectores y **una frase que dice qué se
+ * vende**. La frase es lo que hace seguro el filtro: un conmutador encendido sin
+ * explicación se enciende por error, y en una venta automática no hay forma de
+ * deshacerlo. La frase sale de `descripcionDeAutoVenta()`, que la lee de la
+ * configuración —no es un texto escrito al lado— y por eso no puede quedarse diciendo
+ * otra cosa de lo que el filtro hace.
+ *
+ * ## Y POR QUÉ LOS SELECTORES VAN EN ORDEN DE "CUANDO DEJO DE NECESITARLO"
+ *
+ * `tierMax` y `potencialMax` son "hasta T2" y "de ★2 o menos", no al revés. La pregunta
+ * al abrir cajas es siempre cuánto te queda-serving, y lo que se descarta es lo bajo:
+ * un T9 sirve para forjar y además es material de forja. Un filtro al revés no lo usaría
+ * nadie.
+ */
+function filtroDeAutoVentaHTML(game: any): string {
+  const cfg = game.getAutoVenta?.() ?? AUTO_VENTA_POR_DEFECTO;
+  const descripcion = descripcionDeAutoVenta(cfg, nombreDeTipoDeAuto);
+
+  const chip = (t: TipoDeVentaAuto) => {
+    const marcado = cfg.tipos[t];
+    return `
+      <button class="px-2.5 h-8 rounded-lg text-[10px] font-mono cursor-pointer transition
+                     ${marcado ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}"
+              data-av-tipo="${t}" aria-pressed="${marcado}">${nombreDeTipoDeAuto(t)}</button>`;
+  };
+
+  const opcion = (valor: number, texto: string, actual: number) => `
+    <option value="${valor}" ${actual === valor ? 'selected' : ''}>${texto}</option>`;
+
+  return `
+    <div class="mt-2 rounded-xl px-2.5 py-2 border"
+         style="border-color: color-mix(in srgb, var(--accent) 25%, transparent)">
+      <button class="w-full flex items-center justify-between gap-2 cursor-pointer"
+              data-av-activa aria-pressed="${cfg.activa}">
+        <span class="text-[10px] font-mono font-bold ${cfg.activa ? 'accent-text' : 'text-[var(--text-muted)]'}">
+          Vender el botín que no quieras
+        </span>
+        <span class="text-[10px] font-mono ${cfg.activa ? 'accent-text' : 'text-[var(--text-muted)]'}">
+          ${cfg.activa ? 'sí' : 'no'}
+        </span>
+      </button>
+
+      ${cfg.activa ? `
+        <div class="mt-2 flex flex-col gap-2">
+          <div class="flex flex-wrap gap-1.5">${TIPOS_DE_VENTA_AUTO.map(chip).join('')}</div>
+          <div class="flex items-center gap-1.5">
+            <select data-av-tier class="h-8 px-1.5 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
+                    aria-label="Tier máximo que se vende">
+              ${TOPES_TIER.map((t) => opcion(t, t === 0 ? 'cualquier tier' : `hasta T${t}`, cfg.tierMax)).join('')}
+            </select>
+            <select data-av-pot class="h-8 px-1.5 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
+                    aria-label="Potencial máximo que se vende">
+              ${TOPES_POTENCIAL.map((p) => opcion(p, p === 0 ? 'cualquier potencial' : `hasta ★${p}`, cfg.potencialMax)).join('')}
+            </select>
+          </div>
+          <p class="text-[9px] font-mono leading-relaxed text-[var(--text-muted)]">${descripcion}</p>
+        </div>` : `
+        <p class="text-[9px] font-mono leading-relaxed text-[var(--text-muted)] mt-1">${descripcion}</p>`}
+    </div>`;
+}
+
+/** Cómo se llama cada tipo en el filtro. Vive aquí porque es de esta pantalla. */
+function nombreDeTipoDeAuto(t: TipoDeVentaAuto): string {
+  return t === 'collector' ? 'Armas' : t === 'companion' ? 'Compañeros' : 'Consumibles';
 }
 
 /**

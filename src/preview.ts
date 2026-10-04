@@ -31,6 +31,7 @@ import { renderPrestigePage } from './ui/prestigePage';
 import { renderRankings } from './components/rankings';
 import { TIER_SYSTEM } from './data/tiers';
 import { sellPrice } from './data/valuation';
+import { AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta } from './data/autoventa';
 import { baseSuccessChance, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
 
 const params = new URLSearchParams(location.search);
@@ -220,6 +221,10 @@ const noop = () => {};
 // almacén lleno, con la forja bloqueada.
 if (import.meta.env.DEV) (window as any).__previewState = MOCK;
 
+/** El filtro del preview. Vive fuera del estado a proposito: ver `getAutoVenta()`.
+ */
+const AUTO_VENTA_PREVIEW = { ...AUTO_VENTA_POR_DEFECTO, tipos: { ...AUTO_VENTA_POR_DEFECTO.tipos } };
+
 const fakeGame: any = {
   getState: () => MOCK,
   getDisplayName: () => MOCK.displayName,
@@ -321,6 +326,23 @@ const fakeGame: any = {
     anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más`, multPot);
     if (nivel > 0) anota(`Nivel ${nivel}`, esRecolector ? 'del recolector' : 'del compañero', multiplicadorDeNivel(nivel));
     return { base: Math.floor(base), total: Math.floor(acum), filas };
+  },
+  /**
+   * El filtro de auto-venta, **en memoria y no en el estado del mock**.
+   *
+   * Va en una variable del módulo y no en `MOCK` porque el preview se reinicia con la
+   * página: un filtro que se queda puesto entre navegaciones del preview haría creer que
+   * está guardado, y en el producto sí lo está. Aquí solo hace falta que la casilla se
+   * pueda encender y ver el texto, que es lo que se está revisando.
+   */
+  getAutoVenta: () => coaccionaAutoVenta(AUTO_VENTA_PREVIEW),
+  setAutoVenta: (parcial: any) => {
+    Object.assign(AUTO_VENTA_PREVIEW, coaccionaAutoVenta({
+      ...AUTO_VENTA_PREVIEW,
+      ...parcial,
+      tipos: { ...AUTO_VENTA_PREVIEW.tipos, ...(parcial?.tipos ?? {}) }
+    }));
+    return AUTO_VENTA_PREVIEW;
   },
   getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
   // -------------------------------------------------------------------------

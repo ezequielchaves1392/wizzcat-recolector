@@ -1238,15 +1238,29 @@ export function pickLoot(crateType: CrateType, weights?: number[]): LootEntry {
 export type LootApplier = {
   nanites: (n: number) => void;
   crystals: (n: number, tier: number) => void;
-  addItem: (item: any) => boolean;
+  /**
+   * Coloca un item, o lo vende si el filtro de auto-venta lo dice.
+   *
+   * **POR QUÉ DEVUELVE UN OBJETO Y NO UN BOOLEANO.** Porque "lo he vendido" y "lo he
+   * guardado" no se distinguen con `true`, y esa diferencia es justo lo que la ruleta
+   * tiene que enseñar: un premio vendido se ve como **las nanitas que entraron**, no
+   * como el item que no llegó a existir. Con un `boolean`, el `default:` de más abajo
+   * solo podría devolver el item tal cual y el jugador vería "Coloso de Batalla" en la
+   * casilla ganadora sin ningún aviso de que no lo tiene.
+   *
+   * `nanitas` viene **solo cuando se ha vendido**, y es el importe exacto —el mismo
+   * que `sellItem()` cobraría, con el tope de precio aplicado—. `ok: false` es lo de
+   * siempre: no cabe y toca compensar.
+   */
+  addItem: (item: any) => { ok: boolean; nanitas?: number };
   /**
    * **ESTE CAMPO ESTABA AQUÍ Y NO LO USABA NADIE.**
    *
    * Parecía una guarda —"¿queda sitio?"— y de hecho era la respuesta a la pregunta
    * equivocada: el sitio no lo decide el sorteo, lo decide quién pide la apertura. Por eso
    * el veto vive en el motor y el tope del lote en `maximoDeApertura()`, y aquí lo que
-   * decide es qué hacer con un botín: **`addItem` devuelve `false` cuando no cabe**, y quien
-   * llama tiene que.handlerlo.
+   * decide es qué hacer con un botín: **`addItem` devuelve `ok: false` cuando no cabe**, y
+   * quien llama tiene que resolverlo.
    *
    * Se quitó porque un campo muerto que parece una protección es peor que no tenerlo:
    * quien lo lea lo cuenta como una guarda y no mira más atrás.
@@ -1390,12 +1404,36 @@ export function rollCrateReward(crateType: CrateType, applier: LootApplier): Cra
       return dup;
     }
     default: {
-      // El resto son items: entran al almacén o se compensan
-      const stored = reward.item ? applier.addItem(reward.item) : false;
-      if (stored) return reward;
+      // El resto son items: entran al almacén, se venden solos, o se compensan.
+      const colocado = reward.item
+        ? applier.addItem(reward.item)
+        : { ok: false };
+      if (colocado.ok) {
+        // **LO VENDIDO SE VENDE COMO NANITAS, Y ESTE ES EL MOTIVO DE QUE `addItem`
+        // devuelva un objeto.** El premio que se anuncia y el que se aplica tienen que
+        // ser la misma cosa: si la casilla ganadora dice "Coloso de Batalla" y lo que ha
+        // pasado es que se ha convertido en 3.000 ◆, el jugador ha visto un objeto que
+        // no tiene. Se devuelve un premio de tipo `nanites` con el importe **exacto**, no
+        // la compensación de "no cabía": esa es para cuando algo se pierde, y aquí el
+        // jugador lo ha pedido.
+        if (typeof colocado.nanitas === 'number') {
+          const porNanitas = formatNumber(colocado.nanitas);
+          return {
+            kind: 'nanites',
+            amount: colocado.nanitas,
+            name: 'Vendido',
+            label: `+${porNanitas} Nanitas`,
+            details: 'Vendido automáticamente',
+            rarity: reward.rarity,
+            icon: 'bolt',
+            exclusive: false
+          };
+        }
+        return reward;
+      }
       const full = naniteCompensation(crateType, 'No cabía el objeto, se compensó en nanitas');
       applier.nanites(full.amount);
-      return { ...full, name: 'Compensación', label: `Almacén lleno: +${full.amount} Nanitas` };
+      return { ...full, name: 'Compensación', label: `Almacén lleno: +${formatNumber(full.amount)} Nanitas` };
     }
   }
 }
@@ -1414,7 +1452,7 @@ function naniteCompensation(crateType: CrateType, details: string): CrateReward 
     kind: 'nanites',
     amount: compensation,
     name: 'Compensación',
-    label: `+${compensation} Nanitas`,
+    label: `+${formatNumber(compensation)} Nanitas`,
     details,
     rarity: 'Común',
     icon: 'bolt',

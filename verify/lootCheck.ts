@@ -52,7 +52,12 @@ function crearApplier(tieneEspacio = true, yaTiene: string[] = []) {
   const applier: LootApplier = {
     nanites: (n: number) => { cuenta.nanitas += n; },
     crystals: (n: number) => { cuenta.cristales += n; },
-    addItem: () => tieneEspacio,
+    // **DEVUELVE UN OBJETO, NO UN BOOLEANO, Y ESTA LÍNEA SE ROMPIÓ AL CAMBIAR EL
+    // CONTRATO.** `addItem` pasó de `boolean` a `{ ok, nanitas? }` para poder distinguir
+    // "lo he guardado" de "lo he vendido": con un `true` a secas, `colocado.ok` era
+    // `undefined` y **todo item caía en la compensación de almacén lleno**. El banco
+    // follow dio cero recolectores en 4.000 tiradas por caja, que es como se noto.
+    addItem: () => (tieneEspacio ? { ok: true } : { ok: false }),
     hasSpace: () => tieneEspacio,
     unlockCosmetic: (id: string) => {
       if (poseidos.has(id)) return false;
