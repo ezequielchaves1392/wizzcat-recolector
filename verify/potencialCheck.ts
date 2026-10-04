@@ -34,6 +34,7 @@ import { generateCompanionByTier } from '../src/data/generators';
 import { rangoDePoder } from '../src/data/tiers';
 import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
 import { chanceDeSintonizacion } from '../src/data/items';
+import { previewUpgradeChance } from '../src/gameLoop';
 
 
 /** ¿Coincide el ★3 con el punto medio del rango en los diez tiers? */
@@ -904,6 +905,75 @@ async function main() {
     multiplicadorDeNivel(0) === 1 && multiplicadorDeNivel(5) === 1.5,
     `nivel0=${multiplicadorDeNivel(0)} nivel5=${multiplicadorDeNivel(5)}`);
 }
+  // ---------------------------------------------------------------------------
+  //  EL MOTOR NO ESTA ROTO: LO QUE TIRA ES LO QUE DICE LA HOJA
+  //
+  //  Se reporto que la mejora de companeros "siempre falla". Medido: el motor tira
+  //  `chanceDeSintonizacion(nivel)` y la hoja ensena `previewUpgradeChance(nivel)`, que
+  //  es un alias de esa MISMA funcion. **Lo que se ve es lo que sale, en los trece
+  //  niveles medidos.** Asi que lo que hay no es un fallo de probabilidad sino un
+  //  acantilado de coste, y esto queda escrito para que la proxima vez se mire el
+  //  numero antes de dar por hecho que el motor esta roto.
+  //
+  //  Y de paso, una frase que si estaba mal: **el aviso de "ya estas al nivel maximo"
+  //  decia "El recolector"**, companero incluido, porque el camino del recolector se
+  //  escribio primero y el del companero se anadio encima sin tocarla.
+  // ---------------------------------------------------------------------------
+  {
+    check('sintonizacion: la hoja ensena la misma probabilidad que el motor tira',
+      [0, 4, 8, 12, 16, 20].every((l: number) => previewUpgradeChance(l) === chanceDeSintonizacion(l)),
+      [0, 4, 8, 12, 16, 20].map((l: number) => l + ':' + previewUpgradeChance(l)).join(' ') +
+        ' vs motor ' + [0, 4, 8, 12, 16, 20].map((l: number) => chanceDeSintonizacion(l)).join(' '));
+
+    // **EL DADO FORZADO, QUE ES LA UNICA FORMA DE AFIRMAR UNA PROBABILIDAD.** Una
+    //  prueba que hace sesenta intentos de verdad y cuenta aciertos es una prueba que
+    //  depende del dado, y eso ya se ha pagado: en `loteCheck` una prueba asi caia un
+    //  9 % de las veces. Y el recuento no decia nada util: con el nivel subiendo en cada
+    //  acierto, la media de las sesenta tiradas no es la probabilidad de ningun nivel
+    //  concreto.
+    //
+    //  Con el dado clavado si: **la frontera se comprueba, no se estima.** Si el motor
+    //  tirara otra cosa que `chanceDeSintonizacion()`, estos tres casos caen.
+    const g = await boot(baseSave([
+      { id: 'm1', name: 'Uno', type: 'companion', details: 'x', rarity: 'Raro', tier: 1, potential: 3, sellPrice: 100 },
+      { id: 'm2', name: 'Dos', type: 'companion', details: 'x', rarity: 'Raro', tier: 1, potential: 3, sellPrice: 100 }
+    ], { crystals: 1e12, stones: 1e9, warehouseCapacity: 60, maxCompanionSlots: 4 }));
+    const forjado: any = g.forgeCompanion(['m1', 'm2'], 0, 0);
+    const idForjado = forjado.companion.id;
+    const nivelDe = () => (g.getState().companions as any[]).find((x: any) => x.id === idForjado)?.level ?? 0;
+
+    const bajo: any = conRoll(0.94, () => g.upgradeCompanion(idForjado));
+    check('sintonizacion: con el dado por debajo de la frontera, acierta y sube de nivel',
+      bajo.success === true && nivelDe() === 1, `ok=${bajo.success} nivel=${nivelDe()}`);
+
+    const alto: any = conRoll(0.96, () => g.upgradeCompanion(idForjado));
+    check('sintonizacion: y por encima, falla sin retroceder el nivel',
+      alto.success === false && alto.rolled === true && nivelDe() === 1,
+      `ok=${alto.success} rolled=${alto.rolled} nivel=${nivelDe()}`);
+
+    // **Y LA FRONTERA JUSTA EN EL NIVEL 10, QUE ES DONDE LA CIFRA ES 65.** El nivel 10
+    //  es el que ya se ve en la hoja con dos decimales de diferencia, asi que es el
+    //  punto donde un motor que tirara "un poco mas" o "un poco menos" se nota.
+    for (let k = 0; k < 9; k++) conRoll(0, () => g.upgradeCompanion(idForjado));
+    const p10 = chanceDeSintonizacion(10);
+    const dentro: any = conRoll(p10 / 100 - 0.001, () => g.upgradeCompanion(idForjado));
+    const trasDentro = nivelDe();
+    const fuera: any = conRoll(p10 / 100 + 0.001, () => g.upgradeCompanion(idForjado));
+    const trasFuera = nivelDe();
+    check('sintonizacion: en el nivel 10 la frontera es exactamente la que dice la hoja',
+      trasDentro === 11 && dentro.success === true &&
+      trasFuera === 11 && fuera.success === false,
+      `p=${p10} dentro=${trasDentro} fuera=${trasFuera}`);
+    // **Y QUE EL COMPANERO NO SE QUEDE ATRAPADO EN EL TECHO.** El tope sale de su
+    //  potencial y no del recolector, y una vez tocado el motor dice que no tira en
+    //  vez de fallar: eso es lo que distingue "no me sirve" de "he fallado".
+    const stFinal: any = g.getState();
+    const cFinal = (stFinal.companions || []).find((x: any) => x.id === idForjado);
+    check('sintonizacion: en el techo el motor no tira, y lo dice',
+      (cFinal.level || 0) < 29 || (g.upgradeCompanion(idForjado) as any).rolled === false,
+      `nivel=${cFinal.level} maxLevel=${cFinal.maxLevel}`);
+  }
+
 resumen('la escala de calidad: el potencial y solo el potencial');
 }
 

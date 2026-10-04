@@ -186,7 +186,13 @@ export function showSintonizacion(
     : collectorMaxLevel(equipo.maxLevel);
   const nivel = equipo.level || 0;
   if (nivel >= tope) {
-    showToast('El recolector ya está al nivel máximo.', 'info');
+    // **EL QUE ESTÁ AL TECHO, Y NO SIEMPRE "EL RECOLECTOR".** La frase estaba escrita
+    // con la palabra del recolector porque el camino del recolector se escribió primero,
+    // y el del compañero se añadió encima sin tocarla: sintonizar un compañero al máximo
+    // decía "El recolector ya está al nivel máximo". Es el mismo fallo del subtítulo de
+    // la ruleta, en un sitio donde el jugador ya ha leido todo lo demas y solo le queda
+    // leer esto: y si dice la palabra equivocada, parece que el boton va al objeto equivocado.
+    showToast(`El ${esCompanero ? 'compañero' : 'recolector'} ya está al nivel máximo.`, 'info');
     return;
   }
 
