@@ -610,25 +610,44 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
     return { lista, selected };
   };
 
+  /**
+   * EL ORDEN SE APLICA EN `change`, Y NO EN `click`. ESTO ESTABA MAL PUESTO.
+   *
+   * El comentario de al lado ya decía "es un `change` y no un `click`", y el código
+   * estaba en `click`. La consecuencia era el bug que reportó el jugador: al tocar el
+   * `<select>` salía un `click` —no un `change`, porque nada había cambiado todavía—,
+   * el delegado lo tomaba por un cambio de orden, llamaba a `redraw()` y **sustituía
+   * el nodo entero, incluido el propio `<select>`**. El desplegable se cerraba solo
+   * antes de llegar a abrirse y la página volvía arriba.
+   *
+   * **UN `CLICK` EN UN SELECT NO ES "HAN ELEGIDO ALGO".** Es "han tocado el control".
+   * Entre el toque y la elección hay un desplegable abierto, una lista, y un dedo
+   * por el medio; redibujar en el toque es redibujar mientras el jugador está
+   * eligiendo. Por eso esto va en `change`: `change` solo salta cuando el valor
+   * **ha** cambiado, que es justo lo que hay que repintar.
+   *
+   * Va en un `addEventListener` aparte y no dentro del `switch` de `click` porque son
+   * dos eventos distintos, y porque el `switch` empieza con `closest('[data-act]')` y
+   * el objetivo de un `change` sí es el propio `<select>` —eso se conserva.
+   */
+  root.addEventListener('change', (e) => {
+    const sel = e.target as HTMLSelectElement;
+    if (sel.tagName !== 'SELECT') return;
+    if (sel.dataset.act !== 'orden') return;
+    // Una preferencia de lectura: la lista se vuelve a pedir al motor con otro
+    // criterio y **la selección del yunque se queda**, porque reordenar no ha tocado
+    // lo que hay seleccionado.
+    ui.orden = sel.value || 'stat';
+    sfx.nav();
+    redraw();
+  });
+
   root.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     if (!btn) return;
     const act = btn.dataset.act;
 
     switch (act) {
-      // **EL ORDEN SE APLICA Y SE REPINTA, Y NO CAMBIA NADA DEL JUEGO.** Es una
-      // preferencia de lectura: la lista se vuelve a pedir al motor con otro criterio y
-      // **la seleccion del yunque se queda**, porque reordenar no ha tocado lo que hay
-      // seleccionado. Es un `change` y no un `click` por lo mismo que la casilla de
-      // Ajustes: un `select` no produce `click` al elegir con el teclado.
-      case 'orden': {
-        const sel = e.target as HTMLSelectElement;
-        if (sel.tagName !== 'SELECT') return;
-        ui.orden = sel.value || 'stat';
-        sfx.nav();
-        redraw();
-        break;
-      }
 // **CAMBIAR DE TIPO VACÍA LA SELECCIÓN, Y DICE POR QUÉ.** Los ids de un tipo no
       // son de otro: al cambiar, el yunque se quedaría con huecos invisibles y el
       // jugador creería que ha perdido materiales que no tocó.

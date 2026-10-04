@@ -229,9 +229,37 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 
 ### Lote 6 · RULETA, CRISTALES Y NÚMEROS
 
-- [ ] **F48 · El check de saltar animaciones va en la ruleta**, no en el perfil.
+- [x] **F48 · El check de saltar animaciones va en la ruleta**, no en el perfil. Ya
+      estaba, y en el sitio correcto: `getSkipRoulette()` lo leen **las tres** ruletas —
+      la de cajas, la de sintonización y la de la forja—, y el conmutador está en Ajustes
+      de la cabecera, o sea fuera del perfil. No estaba marcado porque el banco solo
+      llegaba a la mitad: `rouletteCheck` comprueba que la preferencia exista, **persista,
+      sobreviva a la recarga y coaccione** —un valor raro es "no saltar", nunca un trompo
+      a medias—, que es lo que se puede comprobar sin DOM. Lo que no comprueba es que las
+      tres ruletas la lean, porque eso es leer código y una prueba que lee código no lo
+      comprueba: lo lee. Anotado abajo como pendiente de banco.
 - [ ] **F49 · Mejora automática de cristales** hasta agotarlos.
-- [ ] **F50 · Precisión de los contadores.** Con pocas nanitas el número no se mueve.
+- [x] **F50 · Precisión de los contadores.** Estaba arreglado —tres decimales en vez de
+      dos, que era lo que congelaba el saldo con pocas nanitas— pero **nunca se marcó
+      porque no había banco**, y eso es justo lo que hizo que pasara inadvertido tanto
+      tiempo. El banco nuevo (`contadorCheck`, 11 pruebas) encontró **dos bugs de verdad**:
+      - **El separador decimal no era el del juego.** `toFixed` devuelve punto, y en
+        español el punto es el separador de miles: la rama de los enteros escribe
+        `1.234` y la abreviatura escribía `1.000 K`. El mismo carácter significando dos
+        cosas distintas en la misma pantalla. Ahora la coma es la regla, también en la
+        notación exponencial.
+      - **El tramo se calculaba con `Math.log10`, que falla en la frontera.** Con
+        999.999.999.999.999 el contador enseñaba `1.000 Qa`: **mil veces el saldo**, y
+        por encima de cualquier tolerancia de redondeo. Un logaritmo devuelve un `double`
+        y en la frontera el redondeo decide, y decide hacia arriba. Ahora es una
+        estimación con corrección exacta contra `Math.pow(1000, tramo)`.
+      Y de paso: **`formatCompact()` hacía lo contrario de lo que decía su nombre.**
+      Documentaba "sin abreviar" y llamaba a `formatNumber`. No lo usaba nadie, que es
+      por lo que nadie se enteró; el banco compara las dos funciones y ahora sí hace lo
+      que promete.
+      El banco mide tres cosas: que un incremento de una cifra mueva el número en cada
+      tramo, que lo que se lee sea lo que hay con el error del redondeo, y que cada
+      tramo enseñe su unidad sin adelantarse.
 
 ### Lote A · BUGS Y VERDADES (encargo del 3 de octubre)
 
@@ -260,6 +288,37 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       medio, el jugador empezaría con un ★3 sin haber hecho nada y no tendría nada que mejorar
       hacia abajo. La **Ascensión también los deja puestos**, porque reconstruye la partida de
       partida: si no, ascender desequiparía todo sin avisar.
+- [x] **A5 · La Forja: el selector de orden no se podía usar, y cada cambio devolvía la
+      página al principio.** Reportado el 4 de octubre: "lo toco y me sube al principio y no
+      puedo cambiarlo", y lo mismo al marcar un material. **Eran dos bugs con la misma
+      causa de fondo, y los dos estaban donde nadie mira porque el código se lee bien.**
+      - **El `<select>` de orden estaba en `click`.** Su propio comentario decía "es un
+        `change` y no un `click`" —y el código estaba en `click`. Un `click` en un select
+        es "han tocado el control", no "han elegido algo": el delegado lo tomaba por un
+        cambio de orden y llamaba a `redraw()`, que **sustituía el nodo entero, incluido el
+        propio `<select>`**. El desplegable se cerraba antes de llegar a abrirse. Ahora va
+        en `change`, que solo salta cuando el valor **ha** cambiado. El almacén ya lo tenía
+        bien; la Forja era el único sitio con el patrón equivocado.
+      - **Cualquier re-render devolvía la página al scroll 0.** `mountInto()` hacía
+        `replaceWith`, que **quita el nodo viejo antes de insertar el nuevo**: entre las dos
+        operaciones el contenedor se queda sin contenido, el navegador ve una página de
+        altura cero y recorta el `scrollTop` a 0. Cuando la página volvía a crecer ya no
+        había a qué volver, así que el salto era definitivo. Medido en la forja: 120 px al
+        cambiar el orden, 0 px después; y lo mismo al marcar el primer y el segundo
+        material.
+        Ahora inserta **antes** de quitar, y además devuelve los scrolls del árbol nuevo
+        usando la ruta de índices del nodo viejo —porque el `<main>` que scrollea está
+        **dentro** del nodo que se sustituye, no en sus antepasados, y esa fue la dirección
+        equivocada en el primer intento.
+      - **Y cambiar de página sigue empezando arriba**, que es lo que había que evitar al
+        arreglar esto: navegar vacía `#app` antes de montar, así que `mountInto` no
+        encuentra nodo previo y no conserva nada. Solo se conserva en el repintado de la
+        misma página, que es el único caso en el que conservarlo es lo correcto.
+      **Lo que no hay aquí: banco.** El comportamiento del scroll es de layout, y
+      `domStub.ts` no tiene layout —`scrollTop` siempre es 0—, así que una prueba escrita
+      ahí pasaría en verde sin comprobar nada. Está medido en `preview.html` con viewport
+      real (cambio de orden 120 → 120, primer material 150 → 150, segundo 160 → 160, cambio
+      de tier 140 → 140, y el `click` del select ya no redibuja nada).
 
 ### Lote B · ENCARGO DEL 3 DE OCTUBRE, SEGUNDA TANDA
 
@@ -1993,3 +2052,21 @@ _Cosas que estorban al trabajo más que al juego._
       que depende del dado no se cuenta— pero un banco cuyo total se mueve es un banco
       del que no se puede fiar uno para detectar que le falta una prueba. Habría que
       forzarlo con `conRoll` o quitar el `if`, en vez de dejarlo condicional.
+- [ ] **Que las tres ruletas lean la preferencia de saltar, comprobado y no leído.**
+      `crateRoulette.ts`, `tuningRoulette.ts` y `forgePage.ts` llaman a
+      `getSkipRoulette()`, y el conmutador está en Ajustes de la cabecera. Es cierto, y es
+      exactamente el tipo de cosa que se rompe sola: mañana alguien añade una cuarta ruleta
+      y no se le ocurre el `getSkipRoulette()`, y el banco no lo dirá porque no lo mide.
+      **La forma de medirlo sin leer código es Montarla**: las tres con la preferencia
+      apagada y comprobar que no hay cinta en el DOM. Es la clase de prueba que ya está
+      escrita a mano en `ruleta-preview.html`, y lo que falta es el mismo caso detrás de un
+      `check()`.
+- [ ] **El scroll de las páginas no tiene banco, y `domStub` no lo va a tener.**
+      A5 arregla un re-render que devolvía al principio, pero lo comprobó `preview.html` con
+      viewport real porque `domStub.ts` **no tiene layout**: `scrollTop` siempre es 0 ahí, y
+      una prueba escrita sobre ese stub daría verde sin medir nada. Un banco de scroll
+      necesita o un navegador o un stub con layout falso que sepa qué elemento se desplaza
+      y hasta dónde, y lo segundo es una copia del motor de layout. Lo que sí se puede
+      probar sin DOM es lo que hay alrededor: que `mountInto` sustituya el nodo, que lo
+      haga antes de quitar el viejo, y que devuelva los scrolls del árbol nuevo por la ruta
+      de índices. Esa parte es lógica pura y se puede aislar.

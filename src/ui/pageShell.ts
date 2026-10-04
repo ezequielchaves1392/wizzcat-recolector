@@ -130,6 +130,70 @@ export interface PageShellOptions {
 /** Marca el nodo interior que `mountInto` va sustituyendo. */
 const MOUNT_ATTR = 'data-page-root';
 
+/**
+ * La ruta de un nodo **dentro de `raiz`**: los índices de los hijos, uno tras otro.
+ *
+ * **POR QUÉ UNA RUTA Y NO UN ID.** Para devolverle su scroll al `<main>` del repintado
+ * hace falta encontrar, en el árbol nuevo, **el mismo nodo** que tenía scroll en el
+ * viejo. No se puede por `id` porque la página no pone uno, y no se puede guardar el
+ * nodo viejo porque deja de existir. La ruta de hijos sí sirve: las dos páginas se
+ * generan con el mismo `html`, así que el nodo que estaba desplazado está en la misma
+ * posición del árbol nuevo.
+ *
+ * Con "2/1" quiere decir "el segundo hijo del tercero", y si el árbol nuevo fuera más
+ * corto la ruta no existe y no se hace nada —que es lo que tiene que pasar, no fallar.
+ *
+ * **Y LA RUTA ES RELATIVA A `raiz`, NO ABSOLUTA.** Una ruta absoluta —contando desde
+ * `body`— no sirve para nada aquí, porque al buscarla en el árbol nuevo se empieza en
+ * `fresh`, no en `body`: los índices serían los de dos árboles distintos y la búsqueda
+ * fallaría siempre. El primer buggy devolvía `null` en todos los casos y, como el
+ *Scroll se devuelve con un `if`, no rompía nada: solo no arreglaba nada.
+ */
+function rutaDe(nodo: Element, raiz: Element): string {
+  const pasos: string[] = [];
+  let actual: Element | null = nodo;
+  while (actual && actual !== raiz) {
+    const hermano: Element | null = actual.parentElement;
+    if (!hermano) return '';
+    pasos.unshift(String(Array.prototype.indexOf.call(hermano.children, actual)));
+    actual = hermano;
+  }
+  return actual === raiz ? pasos.join('/') : '';
+}
+
+/** El nodo que está en esa ruta dentro de `raiz`, o `null` si el árbol cambió. */
+function nodoEnRuta(raiz: Element, ruta: string): Element | null {
+  let actual: Element = raiz;
+  for (const paso of ruta.split('/')) {
+    const hijos = actual.children;
+    const siguiente = hijos[Number(paso)];
+    if (!siguiente) return null;
+    actual = siguiente;
+  }
+  return actual;
+}
+
+/**
+ * Todos los scrolls del árbol, con la ruta de su nodo.
+ *
+ * **EL QUE SCROLLEA ESTÁ DENTRO DEL NODO QUE SE SUSTITUYE, NO FUERA.** El `<main>` de
+ * cada página —lo único con scroll vertical— está dentro de `pageShell()`, así que está
+ * dentro del `div.page-root` que `mountInto` tira y rehace. Buscar el scroll en los
+ * antepasados del contenedor no encuentra nada: es la dirección contraria.
+ */
+function scrollsDelArbol(raiz: Element): { ruta: string; top: number }[] {
+  const salida: { ruta: string; top: number }[] = [];
+  const recorrer = (nodo: Element) => {
+    if (nodo.scrollTop) {
+      const ruta = rutaDe(nodo, raiz);
+      if (ruta) salida.push({ ruta, top: nodo.scrollTop });
+    }
+    for (let i = 0; i < nodo.children.length; i++) recorrer(nodo.children[i]);
+  };
+  recorrer(raiz);
+  return salida;
+}
+
 export function mountInto(container: HTMLElement, html: string): HTMLElement {
   const prev = container.querySelector(`:scope > [${MOUNT_ATTR}]`);
   const fresh = container.ownerDocument.createElement('div');
@@ -137,9 +201,47 @@ export function mountInto(container: HTMLElement, html: string): HTMLElement {
   fresh.className = 'page-root';
   fresh.innerHTML = html;
 
-  if (prev) prev.replaceWith(fresh);
-  else container.appendChild(fresh);
+  // ======================================================================
+  //  EL RE-RENDER NO MUEVE LA PÁGINA, Y ESTO ES LO QUE LO IMPIDE.
+  //
+  //  `replaceWith` quita el nodo viejo **antes** de insertar el nuevo, y entre esas dos
+  //  operaciones el contenedor se queda sin contenido: el navegador ve una página de
+  //  altura cero y **recorta el `scrollTop` a 0**. Cuando la página vuelve a crecer ya
+  //  no hay a qué volver, así que el salto es definitivo.
+  //
+  //  Medido en la forja, que es donde se nota: 120 px de scroll al cambiar el orden, 0 px
+  //  después. Con veinte celdas de material y la rejilla de tiers encima, **cada** cambio
+  //  de orden y **cada** material que se marcaba devolvía al jugador al principio de una
+  //  página de mil píxeles.
+  //
+  //  Son dos arreglos y hacen falta los dos:
+  //
+  //    1. **Insertar antes de quitar**, para que el contenedor nunca llegue a estar
+  //       vacío. Con eso solo, el scroll se mantiene mientras la página nueva tenga la
+  //       misma altura, que es el caso normal de un re-render.
+  //    2. **Devolver los scrolls de dentro del árbol nuevo**, para cuando la página sí
+  //       cambia de tamaño —un filtro que deja dos filas— y el navegador recorta por
+  //       debajo. Asignar un `scrollTop` mayor que el máximo no da error: lo recorta
+  //       solo, así que no hay forma de dejar la página en un scroll imposible.
+  //
+  //  **Y NINGÚN PÉRDONA EL SALTO AL CAMBIAR DE PÁGINA**, que es lo que había que evitar
+  //  al arreglar esto. Navegar vacía `#app` antes de montar —`app.innerHTML = ''` en
+  //  `renderRoute`—, así que al llegar aquí no hay nodo previo que sustituir: esta
+  //  función conserva el scroll cuando está **repintando la misma página**, que es
+  //  exactamente el caso en el que conservarlo es lo correcto.
+  // ======================================================================
+  if (prev) {
+    const scrolls = scrollsDelArbol(prev);
+    container.insertBefore(fresh, prev);
+    for (const { ruta, top } of scrolls) {
+      const destino = nodoEnRuta(fresh, ruta);
+      if (destino) destino.scrollTop = top;
+    }
+    prev.remove();
+    return fresh;
+  }
 
+  container.appendChild(fresh);
   return fresh;
 }
 
