@@ -335,16 +335,28 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
         .map(([k, v]) => bonusLabel(k as keyof PassiveBonuses, v as number))
         .join(' · ') || 'Desbloquea una función';
 
-      // Un nodo bloqueado o caro explica por qué, en vez de no hacer nada:
-      // un botón muerto se lee como error.
-      if (!check.ok) {
-        sfx.error();
-        showToast(check.reason ?? 'No disponible', 'info');
-        return;
-      }
+      // **EL DIÁLOGO SE ABRE SIEMPRE, Y LO ÚNICO QUE SE APAGA ES LA COMPRA.**
+      //
+      // Antes, un nodo que no podías pagar enseñaba un aviso —"Faltan 1 núcleos"— y se
+      // acababa ahí. Es decir: **no había forma de saber qué hace una pasiva sin poder
+      // comprarla**, con veinticinco nodos en pantalla. El jugador no podia planear
+      // nada: veía el nombre, el coste y el punto, y nada más.
+      //
+      // Y el aviso tapaba justo lo que se venía a buscar. Un nodo que no se puede pagar
+      // es **el nodo que más información necesita**, porque es el que el jugador está
+      // mirando para decidir si vale la pena seguir:
+      // "Instinto de Forja" no dice nada
+      // con el nombre, y "+6 % a la probabilidad de crafteo" sí.
+      //
+      // El motivo va DENTRO del diálogo y no en un aviso aparte, porque el motivo sin la
+      // explicación al lado es la mitad de la respuesta.
+      const descripcion = `${node.name} — nivel ${level + 1}/${node.maxLevel}. ${effectLine}.`;
+      const conDinero = check.ok;
 
       showConfirmModal(
-        `${node.name} — nivel ${level + 1}/${node.maxLevel}. ${effectLine}.`,
+        conDinero
+          ? descripcion
+          : `${descripcion} Todavía no: ${check.reason ?? 'no está disponible'}.`,
         () => {
           const res = game.buyNode(nodeId);
           if (res.success) {
@@ -358,7 +370,10 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
         },
         {
           sublabel: `${cat?.label ?? 'Nodo'} · nivel ${level + 1}/${node.maxLevel}`,
-          confirmText: `Comprar por ${nodeCost(node, level)} ◆`
+          confirmText: conDinero
+            ? `Comprar por ${nodeCost(node, level)} ◆`
+            : `Te faltan ${nodeCost(node, level) - state.cores} ◆`,
+          confirmDisabled: !conDinero
         }
       );
     });

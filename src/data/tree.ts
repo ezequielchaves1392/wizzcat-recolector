@@ -48,31 +48,32 @@ export const TREE_NODES: TreeNode[] = [
     baseCost: 3, costGrowth: G, maxLevel: 6,
     bonus: { costReduction: 0.04 }, x: 0, y: 3
   },
-  {
-    // **ESTE NODO ERA UNA PUERTA Y AHORA ES UNA RAÍZ, QUE ES OTRO OFICIO.**
-    //
-    // Antes su único trabajo era *desbloquear* la forja, y por eso tenía
-    // `bonus: {}`: no hacía falta, lo que hacía era dejarte entrar. Con la forja
-    // abierta desde el inicio ya no hay nada que abrir, y un nodo de 4 núcleos que
-    // no da nada es una trampa: el jugador lo compra, ve que no cambia nada, y
-    // pierde la confianza en el árbol entero.
-    //
-    // **Y NO SE PUEDE BORRAR, Y POR QUÉ ES LO IMPORTANTE.** Es la **raíz de la
-    // rama de crafteo**: `forge_luck` y `shard_sifter` lo tienen en `requires`.
-    // Borrarlo dejaba esos dos inalcanzables —con sus bonificaciones
-    // desaparecidas de golpe para quien ya los tenía— y partía el árbol por la
-    // mitad. Por eso se queda como raíz, y por eso tiene que dar algo: **todos los
-    // demás nodos de la columna 0 dan un bonus**, y este era el único que no.
-    //
-    // El bonus es `craftLuck` porque es lo que hace el nodo: "sabes cómo funciona
-    // una forja". El 3 % es de una raíz de 4 núcleos y un nivel, al lado del +6 %
-    // por nivel de `forge_luck`, que es la rama que ya se carrera en esa estadística.
-    // **Si algún día molesta, es este número y esta línea.**
-    id: 'blueprint', name: 'Planos Viejos', description: 'Raíz de la forja: +3% a la probabilidad de fusionar.',
-    icon: 'sparkle', category: 'exclusivo', tier: 0, requires: [],
-    baseCost: 4, costGrowth: 1, maxLevel: 1,
-    bonus: { craftLuck: 0.03 }, x: 0, y: 4
-  },
+  //
+  // ---------------------------------------------------------------------------
+  //  `blueprint` YA NO ESTA, Y EL PORQUE ESTA AQUI PORQUE SE VA A PREGUNTAR
+  // ---------------------------------------------------------------------------
+  //
+  // Era la raiz de la rama de crafteo: `forge_luck` y `shard_sifter` lo tenian en
+  // `requires`. Antes de eso habia sido la PUERTA de la forja, y cuando la forja se
+  // abrio desde el inicio se convirtio en un nodo de 4 nucleos al que no le quedaba
+  // nada que abrir, asi que se le puso un +3% de `craftLuck` para que no fuera una
+  // trampa.
+  //
+  // **SE HA BORRADO PORQUE SU TRABAJO YA NO EXISTE.** El nodo pagaba por una
+  // restriccion que se borro, y una restriccion que ya no esta no puede seguir cobrando
+  // por quitarla: el jugador ve una condicion que nunca se cumple.
+  //
+  // **LO IMPORTANTE: A LOS DOS HIJOS NO SE LES HA QUITADO LA PUERTA, SE LES HA QUITADO
+  // LA CONDICION.** `requires: []` en vez de `requires: ['blueprint']`. Borrar el nodo
+  // sin tocar eso deja los dos **inalcanzables** para el que no lo tenia comprado, con
+  // sus bonificaciones desaparecidas de golpe --y `shard_sifter` todavia es la clave
+  // guardada de un arbol de esquirlas que ya no existe, asi que ese identificador no
+  // se toca--. Los dos siguen dando lo que dan y ahora se compran directamente.
+  //
+  // **Y QUIEN LO TUVIERA COMPRADO PIERDE EL 3%**, y eso es lo correcto: era el
+  // precio de una puerta que ya no esta. Si alguna vez se quiere compensar, el sitio
+  // es este parrafo y no una excepcion en el codigo.
+  // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------- TIER 1
   {
@@ -89,7 +90,7 @@ export const TREE_NODES: TreeNode[] = [
   },
   {
     id: 'forge_luck', name: 'Instinto de Forja', description: '+6% a la probabilidad de crafteo.',
-    icon: 'sparkle', category: 'crafteo', tier: 1, requires: ['blueprint'],
+    icon: 'sparkle', category: 'crafteo', tier: 1, requires: [],
     baseCost: 4, costGrowth: 1.5, maxLevel: 5,
     bonus: { craftLuck: 0.06 }, x: 1, y: 2
   },
@@ -100,7 +101,7 @@ export const TREE_NODES: TreeNode[] = [
     // que hace sí cambian: las esquirlas ya no existen, y lo que este nodo multiplica es
     // el premio del fallo de forja, que son los cristales.
     id: 'shard_sifter', name: 'Alcornoque', description: '+25% de cristales por fallo de forja.',
-    icon: 'crystal', category: 'crafteo', tier: 1, requires: ['blueprint'],
+    icon: 'crystal', category: 'crafteo', tier: 1, requires: [],
     baseCost: 3, costGrowth: G, maxLevel: 4,
     bonus: { consolationBonus: 0.25 }, x: 1, y: 3
   },

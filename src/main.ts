@@ -542,6 +542,12 @@ async function initGame(user: any, username?: string) {
   }
 
   requestAnimationFrame(() => {
+    // **UNA SOLA VEZ, AQUÍ, Y NO EN CADA `renderRoute()`.** Es un
+    // `addEventListener`, así que llamarlo otra vez añadiría otro manejador: la hoja se
+    // abriría y cerraría tantas veces como hubs, y con un número par el jugador no vería
+    // nada. Va antes del primer render porque no depende del DOM: busca el nodo en el
+    // momento del clic, no lo guarda.
+    instalaDelegacionDeAjustes();
     renderRoute(router.current);
     startCompanionClicks(activeGameInstance);
     // B3 · El layout ya está montado, así que los logros que el motor evaluó
@@ -567,6 +573,79 @@ async function initGame(user: any, username?: string) {
  * siguen entrando. Antes, al entrar al almacén se paraba el bucle y el juego
  * se congelaba mientras mirabas tus cosas.
  */
+/**
+ * ABRE Y CIERRA LA HOJA DE AJUSTES, Y ESTE LISTENER SOBREVIVE A LOS CAMBIOS DE RUTA.
+ *
+ * ## POR QUÉ ESTÁ FUERA DEL `app.onclick` DE LA BASE
+ *
+ * Porque `renderRoute()` hace `app.onclick = null` en cada cambio de ruta y solo
+ * `renderBase()` vuelve a ponerlo. Con la apertura de la hoja declarada ahí dentro, el
+ * botón de ajustes —que la cabecera pinta en las siete pantallas desde que la hoja se
+ * movió fuera de la cabecera— **se veía en todas y solo respondía en la base**. Se vio
+ * así, jugando.
+ *
+ * ## POR QUÉ UN `addEventListener` Y NO OTRA ASIGNACIÓN DE `onclick`
+ *
+ * Porque `renderBase()` se llama en cada vuelta a la base, y ahí un `onclick` se
+ * reasigna y no se acumula —mientras que un `addEventListener` sí. Al revés de lo que
+ * pasa con el resto de las pantallas, que se limpian creando un nodo nuevo. Por eso esta
+ * función se llama **una vez, al arrancar**, y no desde `renderRoute()` ni desde
+ * `renderBase()`: si se llamara en cada render, a los cuatro clics habría cuatro
+ * manejadores, la hoja se abriría y cerraría cuatro veces y no se vería nada. Con un
+ * número par el síntoma es "no hace nada", que es lo mismo que el bug que arregla.
+ *
+ * ## Y POR QUÉ BUSCA EL NODO EN EL MOMENTO DEL CLIC
+ *
+ * Porque la hoja **se reconstruye con cada vista**: el nodo que había en la base no es
+ * el que hay en el almacén. Guardar la referencia en una variable es exactamente el
+ * fallo que hace que el botón deje de responder al cambiar de sector.
+ *
+ * Y `data-cerrar-ajustes` y `data-abrir-ajustes` salen del mismo `closest()`, porque los
+ * dos botones y el fondo del diálogo comparten atributo y no hay nada más que consultar.
+ */
+function instalaDelegacionDeAjustes() {
+  app.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-cerrar-ajustes]')) {
+      e.preventDefault();
+      // **EL NODO SE BUSCA AQUÍ Y NO SE GUARDA.** Ver el párrafo de arriba: la hoja se
+      // reconstruye en cada vista y una referencia guardada apunta al nodo viejo, que ya
+      // no está en el documento. Con una referencia, el botón funcionaba en la base —la
+      // primera vez— y en ningún otro sitio.
+      document.querySelector('[data-ajustes]')?.classList.add('hidden');
+      return;
+    }
+    if (target.closest('[data-abrir-ajustes]')) {
+      e.preventDefault();
+      sfx.nav();
+      document.querySelector('[data-ajustes]')?.classList.remove('hidden');
+      return;
+    }
+
+    // **EL TEMA TAMBIÉN POR DELEGACIÓN, Y POR EL MISMO MOTIVO QUE EL RESTO.**
+    //
+    // Los botones de tema tenían un `addEventListener` por nodo, ligado en `renderBase()`:
+    // en la base funcionaban, y en las otras seis pantallas no, porque esos nodos **no
+    // existían** cuando se ligaron y la hoja se reconstruye en cada vista. Con la hoja
+    // abierta desde el almacén, los seis temas eran seis botones muertos.
+    //
+    // El marcado del botón elegido lo repinta quien cambia, y **solo el que está
+    // elegido**: los demás solo cambian de color al perder el borde, y eso lo hace el
+    // mismo recorrido.
+    const tema = target.closest('[data-theme-option]') as HTMLElement | null;
+    if (tema) {
+      e.preventDefault();
+      setTheme(tema.getAttribute('data-theme-option') as ThemeName);
+      const activo = THEMES.find((t: any) => t.value === getSavedTheme());
+      document.querySelectorAll('[data-theme-option]').forEach((otro) => {
+        (otro as HTMLElement).style.cssText = otro.getAttribute('data-theme-option') === getSavedTheme()
+          ? `border-color:${activo?.tone};color:${activo?.tone}`
+          : '';
+      });
+    }
+  });
+}
+
 function renderRoute(route: Route) {
   if (!activeGameInstance) return;
   app.innerHTML = '';
@@ -658,25 +737,19 @@ function renderBase(onNavigate: (r: Route) => void) {
       return;
     }
 
-    // La hoja de ajustes, antes que la navegación y antes que el cierre de sesión,
-    // porque los tres viven dentro de ella y el cierre es un `[data-logout]` que está
-    // más abajo en el DOM: si el cierre se comprobara después de la navegación, el clic
-    // en "Cerrar sesión" caería en el `closest('[data-nav]')` equivocado.
+    // La hoja de ajustes **NO ESTÁ AQUÍ**, Y ESTA LÍNEA ES EL MOTIVO.
     //
-    // Y abrir y cerrar en el MISMO manejador, no en dos: la cabecera se reconstruye al
-    // cambiar de sector y cualquier listener registrado a mano se queda en el nodo viejo.
-    if (target.closest('[data-cerrar-ajustes]')) {
-      e.preventDefault();
-      document.querySelector('[data-ajustes]')?.classList.add('hidden');
-      return;
-    }
-    if (target.closest('[data-abrir-ajustes]')) {
-      e.preventDefault();
-      sfx.nav();
-      document.querySelector('[data-ajustes]')?.classList.remove('hidden');
-      return;
-    }
-
+    // Antes el abrir y el cerrar vivían en este `onclick`, que es el de la BASE. Y
+    // `renderRoute()` hace `app.onclick = null` en cada cambio de ruta: este manejador
+    // solo existía en la base y en ninguna de las otras seis pantallas. Con la hoja
+    // metida en la cabecera de las siete, eso daba un botón de ajustes **visible en
+    // todas y que solo respondía en una** —que es exactamente lo que se vio—.
+    //
+    // **POR QUÉ NO SE ARREGLA VOLVIÉNDOLO A UN `addEventListener` AQUÍ.** Porque esta
+    // función se llama en cada vuelta a la base, y un `addEventListener` por vuelta
+    // acumula un manejador más: el mismo clic abriría y cerraría la hoja N veces, y con
+    // un número par no se vería. Va en `instalaDelegacionDeAjustes()`, que se llama una
+    // sola vez al arrancar, y su comentario explica el porqué.
     if (target.closest('[data-logout]')) {
       e.preventDefault();
       void doLogout();
@@ -798,35 +871,26 @@ function renderBase(onNavigate: (r: Route) => void) {
 
   // ---- Hoja de ajustes ----
   //
-  // **ABRE Y CIERRE POR DELEGACIÓN, EN EL MISMO `app.onclick` DE ARRIBA, Y NO CON
-  // `addEventListener` POR NODO.** El botón está en la cabecera, y la cabecera se
-  // reconstruye cada vez que se cambia de sector: cualquier listener registrado a mano
-  // se queda colgado del nodo viejo y no vuelve a dispararse. El botón de cerrar y el
-  // fondo usan `data-cerrar-ajustes` y el que abre usa `data-abrir-ajustes`, así que los
-  // dos caminos salen del mismo `closest()`.
+  // **AQUI NO HAY NADA, Y ANTES HABIA DOS COSAS.** Abrir y cerrar la hoja, y el
+  // selector de tema, estaban los dos en la base y los dos fallaban en las otras seis
+  // pantallas: el boton se veia en todas y solo respondia en una, y los seis temas
+  // eran seis botones muertos en cuanto abrias la hoja desde el almacen.
   //
-  // Y el nodo **no se desmonta**: se le quita y se le pone `hidden`. Es lo que permite
-  // que `paintAudioButtons()` encuentre `#music-btn` y `#mute-btn` por id después de haber
-  // cambiado el estado; si la hoja se quitara del DOM, los interruptores se quedarían con
-  // el icono de antes de apagarlos.
+  // Los dos tenian la misma causa y por eso los dos estan ahora en
+  // `instalaDelegacionDeAjustes()`: `renderRoute()` hace `app.onclick = null` en cada
+  // cambio de ruta, asi que lo declarado aqui solo vivia en la base; y los
+  // `addEventListener` por nodo se ligaban contra nodos que la siguiente vista
+  // destruye. Esa funcion se llama una vez al arrancar y busca los nodos en el momento
+  // del clic.
   //
-  // El tema se aplica **sin cerrar** la hoja, al revés que antes. Antes el panel de móvil
-  // se cerraba al elegir, y eso obligaba a reabrirlo para ver el siguiente: cambiar el
-  // tema probando cuatro es un bucle, no una decisión.
-  const ajustes = document.querySelector('[data-ajustes]');
-  ajustes?.querySelectorAll('[data-theme-option]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      setTheme(btn.getAttribute('data-theme-option') as ThemeName);
-      // El botón elegido se marca por el color del tema, y el resto se queda igual: solo
-      // hace falta volver a pintar los que ya existían.
-      ajustes.querySelectorAll('[data-theme-option]').forEach((otro: any) => {
-        const activo = THEMES.find((t: any) => t.value === getSavedTheme());
-        otro.style.cssText = otro.getAttribute('data-theme-option') === getSavedTheme()
-          ? `border-color:${activo?.tone};color:${activo?.tone}`
-          : '';
-      });
-    });
-  });
+  // **Y LA HOJA NO SE DESMONTA**: se le quita y se le pone `hidden`. Eso es lo que
+  // permite que `paintAudioButtons()` encuentre `#music-btn` y `#mute-btn` por id
+  // despues de haber cambiado el estado; si se quitara del DOM, los interruptores se
+  // quedarian con el icono de antes de apagarlos.
+  //
+  // El tema se aplica **sin cerrar** la hoja, al reves que antes. Antes el panel de
+  // movil se cerraba al elegir, y eso obligaba a reabrirlo para ver el siguiente:
+  // cambiar el tema probando cuatro es un bucle, no una decision.
 
   // ---- Audio: suspende en segundo plano para no gastar batería ----
   // El listener vive en `document`, que sobrevive a los re-renders de la

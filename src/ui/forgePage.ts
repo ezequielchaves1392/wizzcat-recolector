@@ -28,7 +28,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, cristalesDeConsuelo, valorDeUnCristal } from '../data/crafting';
+import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -390,30 +390,19 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     icon: 'anvil',
     route: 'forja',
     state,
-    // LA PÍLDORA DE LA CABECERA DICE CUÁNTO PAGA UN FALLO, Y ANTES DECÍA OTRA COSA.
+    // **LA PILDORA DE 'SI FALLA' SE HA QUITADO, Y POR QUE EL DATO ERA PEOR QUE
+    // INUTIL.** Ensenaba cristalesDeConsuelo(tier) * valorDeUnCristal(tier), que
+    // **cambia con el tier de los materiales**, y eso es lo que la hacia enganosa: un
+    // numero pegado en la cabecera parece una cantidad fija, asi que un T1 que falla y
+    // un T3 que falla dan lo mismo. No es verdad: el fallo paga cristalesDeConsuelo(tier),
+    // que sube con el tier. El jugador leia 'por 2.025 K me quedo con esto' y el 'esto'
+    // es quince veces mas grande si los materiales eran de un tier alto.
     //
-    // Estaba el total de esquirlas, y el fallo no se pagaba en esquirlas: se acumulaban
-    // y no servían para nada. Era el dato equivocado en el sitio donde el jugador mira
-    // antes de decidir si conviene risking los dos materiales.
-    //
-    // Ahora es **la compensación de un fallo en el tier que está abierto**, convertida a
-    // unidades, que es la cifra con la que el jugador piensa: "si fallo, pierdo estos dos
-    // y me quedo con esto". Sale de las dos funciones de la regla —`cristalesDeConsuelo()`
-    // y `valorDeUnCristal()`—, no de un número escrito aquí.
-    //
-    // **Y LLEVA LA PALABRA "SI FALLA" AL LADO, PORQUE UN NÚMERO SOLO NO SE SABE QUÉ ES.**
-    // La franja de la cabecera ya enseña el saldo de cristales, así que un 24,8 K suelto
-    // al lado se lee como el saldo otra vez —la misma cifra por otro camino— o como nada.
-    // La palabra no cabe en todos los anchos: por debajo de `sm` se oculta y el número se
-    // queda solo, que es lo único que cabe en 360 px. En cualquier ancho con sitio, se lee.
-    actions: `
-      <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
-                   text-[11px] font-mono text-cyan-300"
-            title="Lo que deja un fallo en el tier abierto">
-        ${ic('crystal', 'w-3.5 h-3.5')}
-        <span class="hidden lg:inline opacity-60">si falla</span>
-        ${formatNumber(cristalesDeConsuelo(ui.tier) * valorDeUnCristal(ui.tier))}
-      </span>`
+    // **LA REGLA NO SE HA TOCADO**, que es lo importante: el fallo sigue pagando
+    // cristales por el tier de los materiales. Lo que se ha quitado es el numero fijo, no
+    // la compensacion. Y si algun dia hace falta ver el numero, el sitio honesto es
+    // dentro del yunque y calculandolo con los materiales ya elegidos: ahi el numero ya
+    // no varia bajo los pies del jugador.
   }, body));
 
   wireNav(root, { go });

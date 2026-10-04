@@ -301,24 +301,40 @@ async function main() {
       rNuevo.success !== undefined,
       rNuevo.msg ?? 'sin mensaje');
 
-    // Y el árbol ya no es el que abre la forja: `blueprint` es una raíz más, con su
-    // propio bonus. Un nodo que no hace nada es una trampa —el jugador paga 4
-    // núcleos y no ve nada— y además es la raíz de `forge_luck` y `shard_sifter`,
-    // así que borrarlo dejaría esos dos inalcanzables.
-    const nodo = TREE_BY_ID.blueprint;
-    check('forja: el nodo de la forja sigue existiendo y da algo a cambio',
-      !!nodo && Object.keys(nodo.bonus ?? {}).length > 0,
-      `nodo=${nodo?.id} bonus=${JSON.stringify(nodo?.bonus)}`);
-    const dependientes = TREE_NODES.filter((n: any) => (n.requires ?? []).includes('blueprint'));
-    check('forja: y sigue siendo la raíz de la rama de crafteo, que lo necesitaría',
-      dependientes.length === 2,
-      `nodos que lo requieren: ${dependientes.map((n: any) => n.id).join(',') || 'ninguno'}`);
+    // **EL NODO DE LA FORJA YA NO ESTA, Y ESTAS TRES COMPROBACIONES SON LAS DE ESO.**
+    //
+    // Decian que `blueprint` seguia existiendo, que tenia bonus y que era la raiz de
+    // `forge_luck` y `shard_sifter`. Las tres se han reescrito: **una prueba que afirma
+    // una regla borrada es peor que no tenerla**, porque se lee, se ve pasar y alguien
+    // se queda creyendola. Ahora fijan lo contrario, que es lo que hay.
+    //
+    // Lo que se borro es el nodo entero. La forja no tiene puerta desde que se abrio
+    // desde el inicio, y cuando se le puso un +3% de `craftLuck` para que no fuera un
+    // nodo que no hace nada, seguia pagando por una restriccion que ya no existia.
+    check('forja: el nodo de la puerta ya no esta, y no queda ni el identificador',
+      TREE_BY_ID.blueprint === undefined && !TREE_NODES.some((n: any) => n.id === 'blueprint'),
+      `quedan=${TREE_NODES.filter((n: any) => n.id === 'blueprint').map((n: any) => n.id).join(',') || 'ninguno'}`);
 
-    // Y la puerta que había en la tienda tampoco: las piedras y las nanopartículas
+    // **Y SUS DOS HIJOS SIGUEN SIENDO COMPRABLES, QUE ES LO QUE HABIA QUE CUIDAR.**
+    // Borrar el nodo sin quitarles el `requires` los dejaba inalcanzables para el que
+    // no lo tenia comprado, con sus bonificaciones desaparecidas de golpe. Se compran
+    // directamente, y dan lo que han dado siempre.
+    const hijos = ['forge_luck', 'shard_sifter'].map((id) => TREE_BY_ID[id]).filter(Boolean);
+    check('forja: los dos hijos de la rama de crafteo siguen en el arbol',
+      hijos.length === 2,
+      `hijos=${hijos.map((n: any) => n.id).join(',') || 'ninguno'}`);
+    check('forja: y ya no piden ningun requisito que no exista',
+      hijos.every((n: any) => (n.requires ?? []).every((r: string) => !!TREE_BY_ID[r])),
+      `requisitos=${hijos.map((n: any) => (n.requires ?? []).join('+') || 'ninguno').join(' | ')}`);
+    check('forja: y los dos dan un bonus de crafteo o de consuelo',
+      hijos.every((n: any) => Object.keys(n.bonus ?? {}).length > 0),
+      `bonus=${hijos.map((n: any) => JSON.stringify(n.bonus)).join(' | ')}`);
+
+    // Y la puerta que habia en la tienda tampoco: las piedras y las nanoparticulas
     // se venden desde el principio, porque la forja se puede usar desde el
-    // principio y comprar algo inservible es perder dinero a propósito.
+    // principio y comprar algo inservible es perder dinero a proposito.
     const gTienda = await bootNew();
-    check('forja: y el nodo ya no abre ni cierra la forja en ninguna partida',
+    check('forja: y el arbol ya no abre ni cierra la forja en ninguna partida',
       gTienda.getForgeInfo().craftLuck >= 0 && (gTienda.getState().nodeLevels ?? {}).blueprint === undefined,
       `niveles=${JSON.stringify(gTienda.getState().nodeLevels ?? {})}`);
   }

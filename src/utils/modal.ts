@@ -73,6 +73,21 @@ export interface ConfirmOptions {
   danger?: boolean;
   /** Pide cuántas unidades, en vez de confirmar de golpe. */
   quantity?: QuantityPrompt;
+  /**
+   * Muestra el diálogo pero **deja el botón de confirmar muerto**.
+   *
+   * Existe para un caso concreto que se pidió al ver el árbol de pasivas: **quieres saber
+   * qué hace una cosa antes de poder pagarla**. Con un diálogo solo para lo que se puede
+   * comprar, todo lo demás es un botón que no hace nada —o un aviso que salta por encima
+   * de la explicación— y el jugador no puede planningar: se ve el nombre del nodo y
+   * poco más, con 25	nodos en pantalla.
+   *
+   * Con esta opción el diálogo se abre **siempre**, con su descripción entera, y lo
+   * único que se apaga es la compra. El motivo va en el mensaje, que es lo que el
+   * jugador venía a leer. Y el botón no recibe el foco: el foco en algo que no se puede
+   * pulsar es una invitación a pulsarlo.
+   */
+  confirmDisabled?: boolean;
 }
 
 export function showConfirmModal(
@@ -85,7 +100,8 @@ export function showConfirmModal(
     confirmText = 'Confirmar',
     cancelText = 'Cancelar',
     danger = false,
-    quantity
+    quantity,
+    confirmDisabled = false
   } = options;
 
   // Si ya hay un diálogo abierto, se sustituye en vez de apilarse
@@ -247,6 +263,11 @@ export function showConfirmModal(
 
   const cancelBtn = mkBtn(cancelText, false);
   const confirmBtn = mkBtn(confirmText, true);
+  if (confirmDisabled) {
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = '0.4';
+    confirmBtn.style.cursor = 'not-allowed';
+  }
 
   const close = () => {
     overlay.remove();
@@ -262,6 +283,7 @@ export function showConfirmModal(
    * (forja, Ascensión, aplicar consumible) no saben qué hacer con un número.
    */
   function confirmar() {
+    if (confirmDisabled) return;
     close();
     onConfirm(quantity ? unidades : undefined);
   }
@@ -270,7 +292,12 @@ export function showConfirmModal(
   if (quantity) fijar(quantity.max);
 
   cancelBtn.addEventListener('click', close);
-  confirmBtn.addEventListener('click', confirmar);
+  confirmBtn.addEventListener('click', () => {
+    // El `disabled` ya impide el clic de verdad; el guard es para el `Enter` del campo de
+    // cantidad, que llega por `keydown` y no pasa por el botón.
+    if (confirmDisabled) return;
+    confirmar();
+  });
 
   buttonContainer.appendChild(cancelBtn);
   buttonContainer.appendChild(confirmBtn);
@@ -291,6 +318,11 @@ export function showConfirmModal(
   // acción esperada. Con selector, en el campo: la primera intención de quien
   // ha abierto "cuántas" es cambiar el número, y saltar al botón le obliga a
   // tabular para volver.
+  //
+  // **Y CON EL CONFIRMAR APAGADO, EL FOCO VA AL CANCELAR**: el foco en un botón que no
+  // se puede pulsar es una invitación a pulsarlo, y con teclado el Enter se lo lleva el
+  // que esté encima.
   if (input) input.focus();
+  else if (confirmDisabled) cancelBtn.focus();
   else confirmBtn.focus();
 }
