@@ -223,69 +223,44 @@ function draw(
   /**
    * Una celda de capacidad libre.
    *
-   * `data-cell` es el índice de celda, que aquí es "más allá de la última", y
-   * `data-painted` es la posición REAL en la rejilla, con los huecos ya
-   * intercalados. Las dos cosas se necesitan y no son la misma: soltar en una
-   * celda vacía tiene que poner el item en la posición que el jugador señaló, y
-   * esa posición solo la sabe el índice pintado. Antes, con un hueco por celda,
-   * bastaba con "al final" y no hacia falta nada mas.
+   * **`data-cell` es el indice de celda y ya no hay dos indices que distinguir.** Antes
+   * esta celda llevaba tambien `data-painted`, la posicion real en la rejilla, porque
+   * los huecos del jugador se intercalaban entre las ocupadas y un soltar en una celda
+   * vacia tenia que poner el item donde el jugador senalaba y no al final de la lista.
+   * Sin huecos no hay dos cosas que puedan confundirse: la celda vacia esta donde esta y
+   * su indice es su sitio.
+   *
+   * **Y NO ES UNA CELDA QUE SE PUEDA TOCAR.** Es `aria-hidden` y no lleva manejador:
+   * antes se soltaba un item encima y se colocaba ahi; ahora no hay arrastre, asi que
+   * una celda vacia es informacion --"caben tres mas"-- y no un sitio. Se queda
+   * pintada porque el contador de ranuras y la rejilla tienen que contar lo mismo.
    */
-  const emptyCell = (celda: number, pintado: number) => `
-    <div class="inv-cell opacity-25" data-cell="${celda}" data-painted="${pintado}" data-empty="1" aria-hidden="true">
+  const emptyCell = (celda: number) => `
+    <div class="inv-cell opacity-25" data-cell="${celda}" data-empty="1" aria-hidden="true">
       <span class="text-[var(--text-muted)] [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('plus')}</span>
     </div>
   `;
 
-  /**
-   * Un hueco que ha dejado el jugador a propósito.
-   *
-   * Se ve igual que la capacidad libre a propósito: para el jugador es la misma
-   * cosa —"aquí no hay nada y puedo soltar"—, y distinguirlo por el estilo
-   * convertiría una diferencia que no le importa en un concepto más que
-   * recordar. Lo que sí cambia es el marcado: un hueco lleva `data-gap` con el
-   * id del item al que precede y NO lleva `data-cell`.
-   *
-   * POR QUÉ NO LLEVA `data-cell`. `data-cell` es el índice dentro de `celdas`, y
-   * se usa para traducir lo que el jugador señala a un item. Un hueco no
-   * representa ningún item, así que no puede llevar ese índice. Si lo llevara,
-   * `closest('[data-cell]')` lo encontraría como si fuera una celda real y el
-   * arrastre traduciría la señalada a un item que no existe —que es exactamente
-   * el desfase de una celda que ya se corrigió una vez, caminos distintos por el
-   * mismo error de concepto: confundir "posición pintada" con "celda del
-   * almacén".
-   */
-  const gapCell = (anclaId: string) => `
-    <div class="inv-cell opacity-25" data-gap="${anclaId}" aria-hidden="true">
-      <span class="text-[var(--text-muted)] [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('plus')}</span>
-    </div>
-  `;
 
-  // Los huecos del jugador. Solo existen en la vista sin filtro y con el orden
-  // del jugador: un hueco dice "aquí no hay nada" en una disposición concreta, y
-  // esa disposición deja de ser cierta en cuanto se filtra o se ordena por valor.
-  // Pintarlos ahi seria una mentira.
-  const gaps = visibleGaps(game, state);
-
-  // Cuántas celdas se pintan. Es el TABLERO: el jugador ve estas celdas y puede
-  // soltar en cualquiera, ocupada o no. Vive en una función porque el arrastre
-  // necesita el MISMO número: si el pintado y el destino calcularan distinto
-  // total, un item podría acabar empujado fuera de la rejilla y desaparecer de
-  // la vista sin que se hubiera vendido.
-  const totalCells = totalCeldasPintadas(celdas.length, capacity);
+  // **CUÁNTAS CELDAS SE PINTAN, Y POR QUÉ ES UNA LÍNEA Y NO UNA FUNCIÓN.** La cuenta
+  // vivía en `totalCeldasPintadas()` porque el arrastre necesitaba el MISMO número: si
+  // el pintado y el destino calcularan distinto total, un item podía acabar empujado
+  // fuera de la rejilla y desaparecer de la vista sin que se hubiera vendido. Sin
+  // arrastre ya no hay dos cifras que puedan separarse, así que no hay nada que
+  // mantener de acuerdo: es el tablero entero y nada más.
+  const totalCells = celdas.length + Math.max(0, capacity - celdas.length);
   const cells: string[] = [];
   let pintados = 0;
   for (let i = 0; i < celdas.length; i++) {
-    // Las celdas de hueco van justas antes de su ancla, tantas como tenga.
-    const cuantas = gaps.get(celdas[i].item.id) ?? 0;
-    for (let h = 0; h < cuantas; h++) { cells.push(gapCell(celdas[i].item.id)); pintados++; }
     cells.push(cell(celdas[i], i));
     pintados++;
   }
-  // La cola libre se reparte DESPUÉS de intercalar los huecos del jugador: si se
-  // contara antes, meter un hueco acabaria empujando fuera una celda de
-  // capacidad y el almacén encogería solo por acomodar cosas.
+  // **Y LA COLA LIBRE VA DESPUÉS, QUE ANTES TENÍA OTRO MOTIVO.** Cuando existían los
+  // huecos del jugador, contarlos antes empujaba fuera una celda de capacidad y el
+  // almacén encogía solo por acomodarles sitio. Ya no hay nada que acomodar, así que la
+  // cola se reparte al final porque es lo que hace una cola.
   for (let n = 0; pintados < totalCells; n++, pintados++) {
-    cells.push(emptyCell(celdas.length + n, pintados));
+    cells.push(emptyCell(celdas.length + n));
   }
 
   const body = `
@@ -334,7 +309,21 @@ function draw(
           `).join('')}
           <select id="wh-sort" aria-label="Ordenar"
             class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
-            <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Mi orden</option>
+            <!--
+              LA PRIMERA OPCIÓN YA NO ES "MI ORDEN", Y EL POR QUÉ ESTÁ EN EL NOMBRE.
+
+              El almacén se puede colocar a mano: se arrastra una celda sobre otra y
+              queda donde la dejes. **Esa disposición no era una opción de orden sino la
+              ausencia de orden**, y por eso la opción se llamaba "Mi orden": no ordenaba
+              nada, solo decía que lo de abajo era lo que había puesto el jugador. Al
+              quitar el arrastre, la opción mentía: el jugador la elegía y no pasaba nada.
+
+              Ahora se llama **"Como llegó"** y dice la verdad: es el orden en que
+              entraron los items, el del guardado. Se queda porque **es lo único que
+              devuelve el almacén a su estado natural** y sin ella no hay manera de
+              volver a verlo sin recargar la página.
+            -->
+            <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Como llegó</option>
             <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
             <!--
               LOS DOS EJES DEL STAT, Y POR QUÉ NO ES UNO.
@@ -417,10 +406,7 @@ function draw(
 
         <div class="inv-grid mb-2" id="inv-grid">${cells.join('')}</div>
 
-        <p class="text-[9px] text-[var(--text-muted)] text-center leading-relaxed mt-3">
-          Arrastra una celda sobre otra para reordenar. Toca para ver detalles.
-        </p>
-      </div>
+    </div>
 
       <aside class="hidden lg:block w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-2">
         ${selected
@@ -1058,11 +1044,29 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
   };
 
   // --- Selección y arrastre --------------------------------------------
-  // Un solo conjunto de manejadores de puntero para toda la rejilla. Cada
-  // celda recibe listeners nuevos en cada re-render; si se cumularan, un
-  // arrastre dispararía N veces. Se limpian antes de volver a ligar.
-  const grid = root.querySelector('#inv-grid') as HTMLElement | null;
-  if (grid) setupDragAndDrop(grid, game, redraw, marcarCelda);
+  // --- Seleccionar una celda ------------------------------------------
+  //
+  // **UN `click` DELEGADO, Y ANTES ERA `pointerdown` MAS `pointerup` CON UN UMBRAL DE
+  // 8 PIXELES PARA DECIDIR SI ERA UN TOQUE O UN ARRASTRE.** Sin arrastre no hay dos
+  // gestos que distinguir, asi que el umbral no tiene nada que decidir y el `click` del
+  // navegador hace el trabajo: es el mismo evento que usan los botones de al lado, y
+  // funciona con el dedo, con el raton y con el teclado.
+  //
+  // Va sobre la rejilla y no sobre `root` porque las celdas no llevan `data-act` --el
+  // delegado de abajo solo oye lo que tiene atributo-- y porque asi un clic dentro de
+  // la ficha, que esta llena de botones, no puede dar en una celda por cerca. El nodo
+  // es el que `mountInto()` recrea, asi que el manejador no se acumula.
+  root.querySelector('#inv-grid')?.addEventListener('click', (e) => {
+    const celda = (e.target as HTMLElement).closest('[data-cell][data-id]') as HTMLElement | null;
+    const id = celda?.dataset.id;
+    if (!id) return;
+    // En selección múltiple un toque MARCA y no abre la ficha: si abriera las dos
+    // cosas, el jugador no podría ni leer un item ni quitar la marca sin apagar el modo.
+    if (ui.multisel) { marcarCelda(id); return; }
+    sfx.pick();
+    ui.selectedId = ui.selectedId === id ? null : id;
+    redraw();
+  });
 
   // --- Acciones de la hoja ---------------------------------------------
   // Delegado en `root`, no en `container`. Ver la nota de arriba: sobre
@@ -1257,225 +1261,6 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
   });
 }
 
-// ==========================================================================
-//  Arrastre con Pointer Events
-// ==========================================================================
-function setupDragAndDrop(
-  grid: HTMLElement,
-  game: any,
-  redraw: () => void,
-  marcarCelda: (id: string) => void
-) {
-  let dragId: string | null = null;
-  let fromIndex = -1;
-  let ghost: HTMLElement | null = null;
-  let activePointer: number | null = null;
-  let startX = 0;
-  let startY = 0;
-  // Umbral en píxeles: por debajo de esto es un toque, no un arrastre. Sin
-  // él, cada toque en móvil movía un píxel y seleccionaba otra celda.
-  const THRESHOLD = 8;
-
-  const cleanupGhost = () => {
-    ghost?.remove();
-    ghost = null;
-  };
-
-  grid.addEventListener('pointerdown', (e) => {
-    const cell = (e.target as HTMLElement).closest('[data-cell]') as HTMLElement | null;
-    if (!cell || (e.target as HTMLElement).closest('select, button[data-act]')) return;
-    if (activePointer !== null) return; // ya hay un dedo en pantalla
-
-    const id = cell.dataset.id;
-    if (!id) return;
-
-    // **EN SELECCIÓN MÚLTIPLE NO SE ARRASTRA NADA, Y NO ES UNA DECISIÓN DE ESTILO.**
-    // Los dos gestos son incompatibles sobre la misma celda: si el dedo se mueve ocho
-    // píxeles —que en un móvil es un temblor normal— el gesto pasa de "marcar" a
-    // "reordenar", y el jugador ha movido sin querer algo que creía haber marcado.
-    // Apagar el arrastre entero mientras el modo está encendido hace que el gesto sea
-    // inequívoco: aquí un toque marca y nada más.
-    if (ui.multisel) {
-      // Se registra igualmente el puntero para que `finish()` sepa que este toque ha
-      // empezado aquí y no venga de un arrastre anterior.
-      activePointer = e.pointerId;
-      dragId = id;
-      fromIndex = Number(cell.dataset.cell);
-      startX = e.clientX;
-      startY = e.clientY;
-      return;
-    }
-
-    activePointer = e.pointerId;
-    dragId = id;
-    fromIndex = Number(cell.dataset.cell);
-    startX = e.clientX;
-    startY = e.clientY;
-    cell.dataset.pendingDrag = '1';
-  });
-
-  grid.addEventListener('pointermove', (e) => {
-    if (activePointer !== e.pointerId || !dragId) return;
-
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if (!ghost && Math.hypot(dx, dy) < THRESHOLD) return; // todavía es un toque
-
-    const cell = grid.querySelector(`[data-cell="${fromIndex}"]`) as HTMLElement | null;
-    if (!cell) return;
-
-    if (!ghost) {
-      sfx.pick();
-      cell.classList.add('is-dragging');
-      delete cell.dataset.pendingDrag;
-      ghost = document.createElement('div');
-      ghost.className = 'drag-ghost';
-      ghost.style.background = 'color-mix(in srgb, var(--bg-app) 88%, transparent)';
-      ghost.style.border = '1px solid var(--accent)';
-      ghost.innerHTML = cell.innerHTML;
-      document.body.appendChild(ghost);
-      // `setPointerCapture` en el elemento que recibió el pointerdown: sin
-      // esto, en móvil el dedo se sale de la celda a los pocos píxeles y el
-      // navegador cancela el arrastre.
-      cell.setPointerCapture?.(e.pointerId);
-    }
-
-    e.preventDefault();
-    ghost.style.left = `${e.clientX}px`;
-    ghost.style.top = `${e.clientY}px`;
-
-    // Resaltar lo que hay bajo el dedo. Se resaltan también los huecos del
-    // jugador: son destinos válidos, y sin este resaltado no hay forma de saber
-    // que el arrastre va a funcionar. Un hueco lleva `data-gap` y no `data-cell`,
-    // así que los dos selectores son necesarios y no se solapan.
-    const under = document.elementFromPoint(e.clientX, e.clientY) as Element | null;
-    const over = (under?.closest('[data-cell],[data-gap]') ?? null) as HTMLElement | null;
-    grid.querySelectorAll('.is-over').forEach(el => el.classList.remove('is-over'));
-    // Lo único que no se resalta es el item que se esta arrastrando: soltarlo
-    // encima de si mismo no mueve nada. Los huecos SI se resaltan, y antes no:
-    // esta condicion tenia `&& over.dataset.gap === undefined`, que excluia
-    // exactamente el destino que el comentario de arriba dice que hay que
-    // resaltar. El drop funcionaba (el `pointerup` si resuelve `data-gap`); lo que
-    // faltaba era la senal visual, y sin ella arrastrar a un hueco se lee como
-    // un arrastre que no va a hacer nada.
-    if (over && over.dataset.cell !== String(fromIndex)) {
-      over.classList.add('is-over');
-    }
-  });
-
-  const finish = (e: PointerEvent) => {
-    if (activePointer !== e.pointerId) return;
-    activePointer = null;
-
-    const wasDragging = !!ghost;
-    cleanupGhost();
-    grid.querySelectorAll('.is-over, .is-dragging').forEach(el => el.classList.remove('is-over', 'is-dragging'));
-
-    if (!dragId) return;
-    const draggedId = dragId;
-    dragId = null;
-    const src = fromIndex;
-    fromIndex = -1;
-
-    if (!wasDragging) {
-      // Toque simple. **QUÉ HACE DEPENDE DEL MODO, Y NO ES LA MISMA COSA.**
-      //
-      // Con la selección múltiple encendida, un toque marca para vender y **no abre la
-      // ficha**: si abrió las dos cosas, el jugador no podría ni leer un item ni quitar
-      // la marca sin tener que apagar el modo, que es justo lo que se pidió al encenderlo.
-      if (ui.multisel) {
-        marcarCelda(draggedId);
-        return;
-      }
-      // Toque simple: seleccionar
-      sfx.pick();
-      ui.selectedId = ui.selectedId === draggedId ? null : draggedId;
-      redraw();
-      return;
-    }
-
-    // Arrastre: soltar sobre cualquier celda, ocupada o vacía, o sobre un hueco
-    // que el jugador dejó a propósito.
-    //
-    // Antes solo se aceptaba una celda CON item, porque el movimiento era un
-    // intercambio: soltar en un hueco no tenía sentido. Ahora es una inserción,
-    // así que cualquier posición es válida, incluidas las vacías del final.
-    // Por eso el resaltado ya no excluye los huecos.
-    //
-    // Al mover, la ordenación vuelve a "Mi orden". Es a propósito: si se
-    // mantuviera, el jugador volvería a ver el almacén ordenado por valor y el
-    // item que acaba de colocar no estaría donde lo dejó, que es justo la
-    // sensación de que el arrastre no sirve. Acomodar a mano ES elegir "Mi
-    // orden"; a partir de ahí se vuelve a ordenar si quiere.
-    //
-    // Hay TRES destinos distintos y cada uno con su traducción. Un hueco es un
-    // intercambio de item por hueco; una celda de capacidad libre del final es
-    // "vete al final y deja libre donde estabas"; y una celda ocupada es solo
-    // un traslado. Conflacionarlos es lo que hacía que soltar en un hueco no
-    // moviera el item, solo lo recolocara, y el jugador lo leía como "aquí no se
-    // puede mover nada".
-    const under = document.elementFromPoint(e.clientX, e.clientY) as Element | null;
-    const hueco = (under?.closest('[data-gap]') ?? null) as HTMLElement | null;
-    const target = (under?.closest('[data-cell]') ?? null) as HTMLElement | null;
-
-    if (hueco?.dataset.gap) {
-      // Hueco del jugador: el item entra y el hueco se va a donde estaba.
-      if (moveIntoGap(game, draggedId, hueco.dataset.gap, ui.filter, ui.sort)) {
-        sfx.place();
-        ui.sort = 'default';
-      } else {
-        showToast('Ese hueco ya está donde toca.', 'info');
-      }
-    } else if (target?.dataset.empty) {
-      // Celda VACÍA de capacidad. Es el gesto que el jugador pedía desde el
-      // principio: soltar en un espacio vacío y que el item se quede AHI, no
-      // "al final". Se le pasa la posición PINTADA, que es la que señala, y no
-      // el índice de celda: con huecos intercalados no son lo mismo.
-      const pintado = target.dataset.painted !== undefined
-        ? Number(target.dataset.painted)
-        : Number(target.dataset.cell);
-      if (moveToFreeCell(game, draggedId, pintado, ui.filter, ui.sort)) {
-        sfx.place();
-        ui.sort = 'default';
-      } else {
-        showToast('Ya está en la última posición: no hay más sitio libre detrás.', 'info');
-      }
-    } else {
-      const dst = target ? Number(target.dataset.cell) : -1;
-      if (dst >= 0 && dst !== src) {
-        // Se apunta el orden ANTES de mover. Un traslado que se acepta pero deja el
-        // almacén igual es un caso real y frecuente —soltarlo donde ya estaba—, y
-        // sin esto sonaba el "colocado" como si se hubiera movido algo. El jugador
-        // veía una celda quieta, con su item igual, y se quedaba con la impresión
-        // de que el arrastre estaba roto. Se le dice, en una línea, qué ha pasado.
-        const antes = ((game.getState().warehouse as any[]) || []).map((w: any) => w.id).join(',');
-
-        if (moveItem(game, draggedId, dst)) {
-          const despues = ((game.getState().warehouse as any[]) || []).map((w: any) => w.id).join(',');
-          if (despues === antes) {
-            showToast('Ya estaba en ese sitio.', 'info');
-          } else {
-            sfx.place();
-            ui.sort = 'default';
-          }
-        }
-      }
-    }
-    redraw();
-  };
-
-  grid.addEventListener('pointerup', finish);
-  grid.addEventListener('pointercancel', (e) => {
-    cleanupGhost();
-    grid.querySelectorAll('.is-over, .is-dragging').forEach(el => el.classList.remove('is-over', 'is-dragging'));
-    if (activePointer === e.pointerId) activePointer = null;
-    dragId = null;
-    fromIndex = -1;
-  });
-
-  // Sin esto, un arrastre en móvil termina en un clic que abre la hoja.
-  grid.addEventListener('click', (e) => e.stopPropagation());
-}
 
 // ==========================================================================
 //  Mover items
@@ -1696,206 +1481,6 @@ export function visibleStacksFor(
 }
 
 /**
- * Cuántas celdas tiene el tablero.
- *
- * El jugador ve estas celdas y puede soltar en CUALQUIERA, ocupada o no. Es un
- * tablero de verdad, no una lista: por eso una celda vacía es un sitio libre
- * válido y no un adorno. El mínimo de 12 es para que una mochila recién estrenada
- * no salga con tres celdas y un resto de sitio invisible, y el múltiplo de tres
- * es para que las filas cierren en la rejilla.
- *
- * Vive en una función y no en línea porque el arrastre necesita el MISMO número.
- * Si el pintado y el destino calcularan distinto, un item podría acabar
- * empujado fuera de la rejilla y desaparecer de la vista sin que se hubiera
- * vendido: lo peor que puede pasarle a un inventario.
- */
-function totalCeldasPintadas(celdas: number, capacity: number): number {
-  return Math.max(celdas, Math.min(capacity, Math.max(12, Math.ceil(capacity / 3) * 3)));
-}
-
-/**
- * Los huecos que se pintan en la rejilla ahora mismo.
- *
- * Un hueco guardado es un id de item, y solo se pinta si la vista es la del
- * jugador —sin filtro y con su orden—, porque un hueco describe una disposición
- * concreta. Con un filtro activo, la celda que ocupa un item es otra, y el hueco
- * caería en medio de una disposición que el jugador no ha elegido nunca.
- *
- * También se filtra por "el item existe": un hueco anclado a algo que ya no está
- * no se pinta, y esconderlo es preferible a romper el arrastre. El juego limpia
- * los que sobran, pero la vista no confía en que lo haya hecho.
- */
-function visibleGaps(game: any, state: any): Map<string, number> {
-  const porItem = new Map<string, number>();
-  if (ui.filter !== 'all' || ui.sort !== 'default') return porItem;
-
-  // Un hueco puede ocupar VARIAS celdas seguidas, y eso se cuenta por
-  // repeticiones del id: ['b','b','c'] son dos celdas vacías antes de `b` y una
-  // antes de `c`. Un array de ids con duplicados en vez de un array de objetos es
-  // feo, pero evita cambiar el formato guardado por algo que no ha estado vivo lo
-  // bastante para que importe, y la multiplicidad se normaliza en un solo sitio.
-  const ids = (game.getWarehouseGaps?.() ?? state.warehouseGaps ?? []) as string[];
-  const vivos = new Set((state.warehouse || []).map((w: any) => w.id));
-  for (const id of ids) {
-    if (!vivos.has(id)) continue;
-    porItem.set(id, (porItem.get(id) ?? 0) + 1);
-  }
-  return porItem;
-}
-
-/**
- * Solta el grupo de `draggedId` dentro del hueco que precede a `gapBeforeId`.
- *
- * Es un INTERCAMBIO, no una inserción: el item entra en el hueco y el hueco se
- * queda donde estaba el item. Es lo que hace que arrastrar a un hueco tenga
- * sentido —si solo rellenara el hueco, el item desapareciería de donde estaba y
- * el almacén se compactaría hacia arriba, que es justo lo contrario de lo que se
- * acaba de pedir— y es la razón de que el número de huecos no cambie al
- * arrastrar.
- *
- * Se deja justo delante de su ancla, asi que si el grupo ya estaba ahi no hay
- * movimiento posible: el gesto no significa nada y se rechaza con un motivo,
- * para que el jugador no se quede pensando que el arrastre se ha roto.
- */
-export function moveIntoGap(
-  game: any,
-  draggedId: string,
-  gapBeforeId: string,
-  filtro: string,
-  sort: string
-): boolean {
-  const state = game.getState();
-  const celdas = visibleStacksFor(game, state, filtro, sort);
-  const origen = celdas.findIndex(c => c.ids.includes(draggedId));
-  if (origen < 0) return false;
-
-  const grupo = celdas[origen];
-
-  // El ancla del hueco es parte del propio grupo: es el item que se arrastra, y
-  // "ponlo justo delante de sí mismo" no tiene solución.
-  if (grupo.ids.includes(gapBeforeId)) return false;
-
-  // Ya está justo delante del ancla: el hueco está pegado a su derecha, así que
-  // moverlo no cambiaría nada.
-  const celdaAncla = celdas.findIndex(c => c.ids.includes(gapBeforeId));
-  if (celdaAncla === origen + 1) return false;
-
-  if (!game.moveItems(grupo.ids, gapBeforeId, 'antes')) return false;
-
-  // El hueco se va donde estaba el grupo. Se ancla al item que venía justo
-  // detrás, porque es el que queda arriba del sitio que el grupo acaba de dejar.
-  // Si no había nada detrás —el grupo era el último— el hueco cae en la cola
-  // libre, que ya se pinta vacía sola y no necesita ancla.
-  //
-  // La cuenta se hace sobre la lista COMPLETA y no sobre un conjunto: un id
-  // puede repetirse, y cada repetición es una celda de hueco. Un `Set` las
-  // fundiría en una y el item se quedaría a la izquierda de donde se soltó.
-  const siguiente = celdas[origen + 1];
-  const actuales: string[] = (game.getWarehouseGaps?.() ?? state.warehouseGaps ?? []) as string[];
-  const huecos = actuales.filter(id => id !== gapBeforeId);
-  if (siguiente) huecos.push(siguiente.item.id);
-  game.setWarehouseGaps?.(huecos);
-
-  return true;
-}
-
-/**
- * Suelta el grupo de `draggedId` en la celda VACIA `dstPainted`, que es la
- * posicion PINTADA que el jugador senalo -con los huecos ya intercalados, no el
- * indice de celda.
- *
- * LA REGLA, tal y como la entiende el jugador: **mientras queden celdas vacias,
- * cualquier objeto se puede mover a cualquiera de ellas.** Tambien el ultimo, que
- * es el caso que antes se rechazaba con "no hay mas sitio libre detras": hay
- * sitio, lo que no habia era forma de representarlo.
- *
- * COMO SE REPRESENTA. El array sigue siendo una lista empaquetada, asi que el
- * item solo tiene un sitio: el final. Para que se VEA en la celda 5 hay que poner
- * celdas de hueco por delante que lo empujen hasta ahi, y por eso un hueco puede
- * ocupar varias celdas seguidas.
- *
- * DONDE VAN LOS HUECOS: todos en el item que se mueve, y ninguno en los demas.
- * Es lo que hace que los otros items se queden donde estaban. Repartirlos desde
- * la izquierda -que es lo que habia antes- metia huecos en medio de un almacen
- * lleno y desplazaba cosas que el jugador no habia tocado: al soltar un item en
- * una celda vacia se movian tres mas.
- *
- * CUANTOS. Con `K` celdas, `E` celdas de hueco ya puestas delante del item y `H`
- * nuevas, su posicion pintada es `(K - 1) + E + H`. Para que caiga en
- * `dstPainted`: `H = dstPainted - (K - 1) - E`. El tope es `2K - 1` posiciones,
- * porque no puede haber mas celdas de hueco que celdas ocupadas: cada hueco
- * necesita un item al que anclarse. Mas alla de ese tope se recorta en vez de
- * inventar una posicion.
- */
-export function moveToFreeCell(
-  game: any,
-  draggedId: string,
-  dstPainted: number,
-  filtro: string,
-  sort: string
-): boolean {
-  const state = game.getState();
-  const celdas = visibleStacksFor(game, state, filtro, sort);
-  const origen = celdas.findIndex(c => c.ids.includes(draggedId));
-  if (origen < 0) return false;
-  const capacity = game.getCapacity?.() ?? state.warehouseCapacity ?? 15;
-
-  const K = celdas.length;
-  if (!K) return false;
-
-  // Los huecos que ya hay, contados por item. Cada repeticion es una celda.
-  const yaPuestos = new Map<string, number>();
-  for (const id of (game.getWarehouseGaps?.() ?? state.warehouseGaps ?? []) as string[]) {
-    yaPuestos.set(id, (yaPuestos.get(id) ?? 0) + 1);
-  }
-  const totalPuestos = [...yaPuestos.values()].reduce((a, b) => a + b, 0);
-
-  // El item va al final del array. Si ya estaba, no hay nada que reordenar: solo
-  // hacen falta huecos. Este es el caso que antes se rechazaba.
-  const grupo = celdas[origen];
-  const hayQueMover = origen !== K - 1;
-  if (hayQueMover && !game.moveItems(grupo.ids, null, 'despues')) return false;
-
-  // Huecos que hay por delante del item una vez movido: los de las celdas que
-  // quedan antes que el. Los del propio item se cuentan aparte, porque son
-  // justamente los que se van a anadir.
-  const delante = celdas
-    .filter((_, i) => i !== origen)
-    .reduce((sum, c) => sum + (yaPuestos.get(c.item.id) ?? 0), 0);
-
-  // Cuantas celdas de hueco hay que poner delante del item para que su posicion
-  // pintada sea la senalada.
-  //
-  // NO HAY TOPE DE "UN HUECO POR CELDA". Eso era un limite inventado, y hacia
-  // justo lo contrario de lo que el jugador pide: con 3 celdas y 18 libres, solo
-  // dejaba mover el item hasta la celda 5. El limite real es el TABLERO: no se
-  // pueden poner mas celdas de las que la rejilla dibuja, porque un item
-  // empujado mas alla dejaria de pintarse y pareceria perdido sin haberse
-  // vendido. Ese es el unico tope que importa, y sale del MISMO numero que usa
-  // el pintado.
-  const wanted = Math.max(0, dstPainted - (K - 1) - delante);
-  const caben = Math.max(0, totalCeldasPintadas(K, capacity) - K - totalPuestos);
-  const H = Math.min(wanted, caben);
-
-  if (!hayQueMover && H === 0) return false; // ya esta donde se pidio
-
-  const salida: string[] = [];
-  for (const c of celdas) {
-    if (c.ids.includes(draggedId)) {
-      // Los huecos del item se ponen DE NUEVO, por eso se quitan antes los
-      // viejos: si no, cada arrastre a una celda vacia dejaria el hueco que
-      // tenia y no avanzaria nunca hacia la derecha.
-      salida.push(...Array<string>(H).fill(c.item.id));
-      continue;
-    }
-    salida.push(...Array<string>(yaPuestos.get(c.item.id) ?? 0).fill(c.item.id));
-  }
-  game.setWarehouseGaps?.(salida);
-
-  return true;
-}
-
-/**
  * EL FILTRO DE AUTO-VENTA, Y POR QUÉ VA EN LA FICHA DE LA CAJA Y NO EN EL DIÁLOGO.
  *
  * ## DÓNDE
@@ -1986,9 +1571,6 @@ function nombreDeTipoDeAuto(t: TipoDeVentaAuto): string {
  * los huecos se recortaban a la última celda ocupada, que era justo la celda de
  * origen.
  */
-function moveItem(game: any, draggedId: string, dstViewIndex: number): boolean {
-  return moveItemTo(game, draggedId, dstViewIndex, ui.filter, ui.sort);
-}
 
 /**
  * El mismo traslado, con el filtro y el orden como parámetros en vez de leídos
@@ -1997,53 +1579,6 @@ function moveItem(game: any, draggedId: string, dstViewIndex: number): boolean {
  * es el sitio que se mueve. Se puede comprobar sin DOM, que es lo que hace este
  * banco de pruebas.
  */
-export function moveItemTo(
-  game: any,
-  draggedId: string,
-  dstViewIndex: number,
-  filtro: string,
-  sort: string
-): boolean {
-  if (dstViewIndex < 0) return false;
-
-  const celdas = visibleStacksFor(game, game.getState(), filtro, sort);
-  const origen = celdas.findIndex(c => c.ids.includes(draggedId));
-  if (origen < 0) return false;
-
-  const grupo = celdas[origen];
-  if (dstViewIndex === origen) return false;
-
-  // Las celdas del final están vacías. No hay item al que anclarse, y lo que el
-  // jugador quiere decir con "suéltalo ahí" es "déjalo al final", que es
-  // literalmente el hueco que está señalando. Sin ancla, el juego lo pone al final.
-  const destino = dstViewIndex >= celdas.length ? null : celdas[dstViewIndex];
-
-  // Soltado sobre su propia celda, o sobre una celda que forma parte del mismo
-  // grupo de apilados: no hay nada que colocar delante.
-  if (destino && grupo.ids.includes(destino.ids[0])) return false;
-
-  // DE QUÉ LADO DEL ANCLA ENTRA EL BLOQUE. Es lo que hace que el item caiga en
-  // la celda señalada y no una antes. El ancla es el item de la celda destino, y
-  // si el bloque entra siempre por delante acaba SIEMPRE en la celda anterior a
-  // la que el jugador señaló. Peor todavía: soltar sobre la celda vecina era un
-  // no-op exacto, porque el bloque ya estaba por delante de ese vecino. El
-  // jugador arrastraba, veía que no se movía nada, y concluía que no se puede
-  // mover a un hueco.
-  //
-  // La dirección la decide quien llama, no el juego: solo el que ve la rejilla
-  // sabe en qué celda estaba el bloque y en cuál se ha soltado.
-  //
-  // Con una pila de destino el ancla es el ÚLTIMO item del grupo, no el primero:
-  // entrar por detrás de solo uno partiría la pila en dos mitades separadas, que
-  // se seguirían pintando como una sola celda (los items iguales se aunan estén
-  // donde estén) pero dejarían el almacén guardado con un orden hecho trozos.
-  const irDespues = dstViewIndex > origen;
-  const ancla = destino
-    ? (irDespues ? destino.ids[destino.ids.length - 1] : destino.ids[0])
-    : null;
-
-  return game.moveItems(grupo.ids, ancla, irDespues ? 'despues' : 'antes');
-}
 
 /** ¿El item pasa el filtro activo de la rejilla? */
 export function matchesFilter(w: any, filtro: string): boolean {

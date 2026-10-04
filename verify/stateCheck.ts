@@ -1632,7 +1632,7 @@ async function main() {
     g.sellItem('c1');
     g.useConsumable('u1');
     g.openCrateBox('c1');
-    g.moveItems([find(g, 'r2')?.id ?? 'r1'], null);
+    g.apilar();
     check('logros: ninguna operacion revienta', wh(g).length >= 0, 'ok');
     check('logros: los logros desbloqueados son ids conocidos',
       s(g).unlockedAchievements.every((id: any) => typeof id === 'string'),
@@ -1739,7 +1739,7 @@ async function main() {
     g.buyStoreItem('upgradeCrystal');
     g.buyStoreItem('rareCrate');
     g.sellItem('c2');
-    g.moveItems(['r2'], 'r1');
+    g.apilar();
     g.useConsumable('u1');
     g.openCrateBox('c1');
     g.equipCollector('r2');

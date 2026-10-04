@@ -40,7 +40,7 @@ lerna-debug.log*
 
 # Banco de pruebas visual (solo desarrollo)
 # Entradas o NONE. O el utillaje está ignorado entero, o se versiona entero:
-# dejarlos a medias hace que git status insinúe que drag-test.html es código
+# dejarlos a medias hace que git status insinúe que un preview es código
 # nuevo cuando en realidad es montarlo con `npx vite`.
 preview.html
 src/preview.ts
@@ -49,8 +49,6 @@ auth-preview.html
 src/authPreview.ts
 nav-test.html
 src/navTest.ts
-drag-test.html
-src/dragTest.ts
 ruleta-preview.html
 src/ruletaPreview.ts
 

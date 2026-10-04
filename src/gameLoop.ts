@@ -485,10 +485,20 @@ export async function createGameLoop(
     autoVenta: { ...AUTO_VENTA_POR_DEFECTO, tipos: { ...AUTO_VENTA_POR_DEFECTO.tipos } },
     warehouseCapacity: 15,
     maxCompanionSlots: 1,
-    // Ids de items delante de los cuales el jugador ha dejado un hueco. Ver
-    // `setWarehouseGaps`. El array sigue Empaquetado: un hueco es una
-    // preferencia de disposición, no una posición, y por eso va anclado a un id
-    // y no a un índice de celda.
+    /**
+     * IDs de items delante de los cuales el jugador había dejado un hueco.
+     *
+     * **ESTE CAMPO AHORA ES SOLO DATOS HEREDADOS, Y POR QUÉ SIGUE AQUÍ.** El almacén
+     * ya no se coloca a mano —no hay arrastre ni huecos—, así que nada crea esta lista.
+     * Se conserva por dos razones que no son pereza: una partida guardada antes del
+     * cambio trae el campo, y borrarlo del estado sería perderlo sin aviso; y la
+     * coacción de la carga lo filtra contra los items que existen de verdad, así que un
+     * hueco anclado a algo que ya no está **se cae solo** en cada carga.
+     *
+     * La Y no lo lee nadie mas: la vista no lo pinta, y `apilar()` solo lo mantiene
+     * para que esas partidas viejas no guarden una lista que crece. Es una migración,
+     * no una función, y por eso el comentario lo dice.
+     */
     warehouseGaps: [] as string[],
     afkCards: 0, // Tarjetas AFK acumuladas (máx 3)
     afkExpiresAt: 0, // Tiempo de expiración del buff AFK (10 min por tarjeta)
@@ -1897,82 +1907,7 @@ const AFK_THRESHOLD_MS = 60000;
     enforceWarehouseCapacity();
   }
 
-  /**
-   * Forget the gaps anchored to items that are no longer in the warehouse.
-   *
-   * A gap lives in the VIEW, not in the array: `warehouseGaps` is the list of
-   * ids that have a hole painted right before them. The array itself stays
-   * packed, so a hole can never be sold, moved or counted as a slot — which is
-   * exactly why this cleanup is all it needs. If an item leaves the warehouse
-   * (sold, consumed, recycled by a prestige) its gap has nothing to be painted
-   * in front of, so it goes with it. Anything left dangling would be a hole
-   * that reappears somewhere the player never asked for as soon as an item with
-   * that id showed up again.
-   *
-   * Called from every path that removes an item. Cheap: it only walks a handful
-   * of ids, not the whole warehouse.
-   */
-  function syncWarehouseGaps() {
-    const limpio = normalizaGaps(state.warehouseGaps);
-    if (limpio.join(',') !== (state.warehouseGaps || []).join(',')) {
-      state.warehouseGaps = limpio;
-    }
-  }
 
-  /**
-   * Limpia la lista de huecos: solo ids que existen en el almacen, y sin pasar
-   * de un tope de seguridad.
-   *
-   * POR QUE NO HAY UN TOPE DE "UN HUECO POR CELDA". Se puso ese limite, y hacia
-   * justo lo contrario de lo que el jugador pide: con 3 celdas ocupadas y 18
-   * libres, solo dejaba mover un item hasta la celda 5, cuando las 18 celdas
-   * vacias son sitios tan validos como las ocupadas. El limite de verdad no es
-   * este: es el TABLERO, y lo calcula la vista (`totalCeldasPintadas`), que es la
-   * unica que sabe cuantas celdas se dibujan. Por arrastre nunca se pasa de ahi.
-   *
-   * Lo que queda aqui es un cortafuegos contra un documento manipulado: si
-   * alguien edita la partida y mete 100.000 celdas de hueco, aqui se recorta.
-   * El recorte no pierde nada —cada hueco es una celda vacia de adorno— pero
-   * evita pintar una rejilla gigante.
-   */
-  function normalizaGaps(ids: any): string[] {
-    if (!Array.isArray(ids)) return [];
-    const existentes = new Set(state.warehouse.map((w: any) => w.id));
-    const salida: string[] = [];
-    for (const id of ids) {
-      if (typeof id !== 'string' || !existentes.has(id)) continue;
-      salida.push(id);
-      if (salida.length >= TOPE_CELDAS_HUECO) break;
-    }
-    return salida;
-  }
-
-  /**
-   * Deja las celdas de hueco indicadas, una por repetición de id.
-   *
-   * `ids` es la lista COMPLETA, no una operación de "añadir": quien llama es la
-   * vista, que es la única que sabe qué hueco se está moviendo al soltar un item
-   * dentro de otro. El juego solo guarda y limpia, igual que con el orden: la
-   * disposición es del jugador, no del juego.
-   *
-   * LA MULTIPLICIDAD ES EL CONTENIDO. Un hueco puede ocupar varias celdas seguidas
-   * y eso se cuenta con repeticiones: `['b','b','c']` son dos celdas vacías antes
-   * de `b` y una antes de `c`. Por eso aquí NO se deduplica con un `Set` —que
-   * fundiría las repeticiones en una y dejaría al item a la izquierda de donde se
-   * soltó—, y por eso la lista se guarda tal cual, en orden.
-   *
-   * Un hueco NO es una ranura. No cuenta para `warehouse.length`, no bloquea una
-   * compra y no se puede vender: solo desplaza lo que se ve. Por eso el array
-   * sigue empaquetado y por eso esta función no toca `state.warehouse`.
-   */
-  function setWarehouseGaps(ids: string[]): boolean {
-    const limpio = normalizaGaps(ids);
-    const antes = (state.warehouseGaps || []).join(',');
-    state.warehouseGaps = limpio;
-    if (antes === limpio.join(',')) return false;
-    saveToFirebase();
-    return true;
-  }
 
   /**
    * Recorta el almacén respetando una prioridad. Antes se hacía
@@ -2008,7 +1943,6 @@ const AFK_THRESHOLD_MS = 60000;
 
     state.warehouse = kept;
     // Recortar el almacén puede llevarse el item al que estaba anclado un hueco.
-    syncWarehouseGaps();
   }
 
   /**
@@ -3643,7 +3577,6 @@ const AFK_THRESHOLD_MS = 60000;
       Object.assign(state, newState);
       enforceWarehouseCapacity();
       syncCompanionsToWarehouse();
-      syncWarehouseGaps();
       syncCrateCounters();
       refreshAfkCardCount();
       rebuildAchievementBonuses();
@@ -3653,93 +3586,6 @@ const AFK_THRESHOLD_MS = 60000;
       saveToFirebase();
     },
 
-    /**
-     * Reordena el almacén.
-     *
-     * La libertad de acomodo es del jugador, no del juego, así que aquí no se
-     * decide NADA sobre el destino: se le pasa el item al que tiene que quedar
-     * pegado el bloque que se mueve y el juego se limita a ponerlo delante. Con
-     * `anchorId = null` el bloque va al final del almacén.
-     *
-     * `lado` dice de qué lado del ancla entra el bloque. No es un detalle: sin
-     * él el bloque siempre caía DELANTE del ancla, y como el ancla es el item de
-     * la celda señalada, el bloque acababa una celda a la IZQUIERDA de donde el
-     * jugador había soltado. Peor: soltar encima del vecino inmediato era un
-     * no-op exacto —el bloque ya estaba delante del ancla— así que arrastrar una
-     * celda sobre la de al lado no movía absolutamente nada, y la conclusión del
-     * jugador era que mover no funcionaba.
-     *
-     * El que llama sabe en qué dirección se señala el destino (el número de celda
-     * de origen y el de destino), así que el juego no tiene que adivinarlo y no
-     * puede equivocarse.
-     *
-     * POR QUÉ UN ANCLA Y NO UN ÍNDICE. El número de celda de la rejilla no es un
-     * índice del array: una celda puede representar tres cajas apiladas. Al
-     * quitar el grupo arrastrado, todas las celdas que hubiera detrás cambian de
-     * sitio, así que un destino traducido a índice ANTES de quitar nada caía
-     * una celda más allá de donde se había soltado en cuanto había una pila por
-     * medio, y al soltar en uno de los huecos del final directamente no pasaba
-     * nada, porque el hueco no tiene índice y se recortaba a la última celda
-     * ocupada —que era justo la celda de origen—. Buscando el ancla por id DESPUÉS
-     * de quitar, da igual cuántas cosas hubiera detrás.
-     *
-     * `ids` puede traer varios items porque una pila es una sola celda: si se
-     * arrastra una pila de 5, los 5 van juntos y en el mismo orden. Mover solo el
-     * que representaba la celda dejaba la celda igual de llena, así que el
-     * jugador veía un arrastre que no había movido nada.
-     */
-    moveItems: (
-      ids: string[],
-      anchorId: string | null,
-      lado: 'antes' | 'despues' = 'antes'
-    ): boolean => {
-      const wh = state.warehouse;
-      if (!ids.length) return false;
-
-      // Índices de los que se mueven, de izquierda a derecha. Los ids que no
-      // estén en el almacén se ignoran en vez de abortar: uno que ya no existe
-      // no puede volver a bloquear el movimiento de los otros.
-      const origen = ids
-        .map(id => wh.findIndex((w: any) => w.id === id))
-        .filter(i => i >= 0)
-        .sort((a, b) => a - b);
-      if (!origen.length) return false;
-
-      const seMueven = new Set(origen);
-
-      // El ancla tiene que ser un item que se queda donde está. Si no está, o si
-      // es parte del bloque que se mueve (soltar una pila sobre sí misma), no hay
-      // reordenación que hacer.
-      const ancla = anchorId == null ? -1 : wh.findIndex((w: any) => w.id === anchorId);
-      if (anchorId != null && ancla < 0) return false;
-      if (ancla >= 0 && seMueven.has(ancla)) return false;
-
-      const bloque = origen.map(i => wh[i]);
-      for (let k = origen.length - 1; k >= 0; k--) wh.splice(origen[k], 1);
-
-      // Con el bloque ya fuera, el ancla se busca otra vez: sus índices ya no son
-      // los de antes. `ancla < 0` significa "sin ancla" = al final.
-      if (ancla < 0) {
-        wh.push(...bloque);
-      } else {
-        const i = wh.findIndex((w: any) => w.id === anchorId);
-        wh.splice(lado === 'despues' ? i + 1 : i, 0, ...bloque);
-      }
-
-      onUpdate(state, isAfk);
-      saveToFirebase();
-      return true;
-    },
-
-    /**
-     * Huecos de disposición. Ver `setWarehouseGaps`.
-     *
-     * Se expone como lista completa porque el intercambio de "item entra en el
-     * hueco y el hueco va a donde estaba el item" lo decide la vista, que es la
-     * que ve la rejilla. Aquí solo se guarda, se limpia y se persiste.
-     */
-    getWarehouseGaps: (): string[] => [...(state.warehouseGaps || [])],
-    setWarehouseGaps,
 
     /**
      * Vende un item del almacén.
@@ -3791,7 +3637,6 @@ const AFK_THRESHOLD_MS = 60000;
       state.nanites += ganado;
 
       consumeWarehouseItem(item.id, vender);
-      syncWarehouseGaps();
 
       if (item.type === 'companion') {
         state.companions = state.companions.filter((c: any) => c.id !== item.id);
@@ -3967,7 +3812,6 @@ const AFK_THRESHOLD_MS = 60000;
           state.activeCompanions = state.activeCompanions.filter((id) => id !== item.id);
         }
       }
-      syncWarehouseGaps();
       syncCrateCounters();
       refreshAfkCardCount();
       syncCompanionsToWarehouse();
@@ -4086,7 +3930,6 @@ const AFK_THRESHOLD_MS = 60000;
       }
 
       consumeWarehouseItem(item.id, 1);
-      syncWarehouseGaps();
 
       refreshAfkCardCount();
       recalculatePassiveIncome();
@@ -4690,7 +4533,6 @@ const AFK_THRESHOLD_MS = 60000;
       }
 
       consumeWarehouseItem(caja.id, 1);
-      syncWarehouseGaps();
       state.cratesOpened += 1;
 
       // El botín lo decide la tabla (crateLoot) y se aplica aquí. La ruleta solo

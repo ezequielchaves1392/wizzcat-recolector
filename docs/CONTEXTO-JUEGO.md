@@ -31,7 +31,7 @@ así que recargar tiene que devolver exactamente lo mismo (`src/ui/router.ts:1-2
 | Ruta | Nombre | Qué se hace ahí |
 |---|---|---|
 | `base` | Base | El recolector grande que se clickea, el escuadrón, el HUD de buffs y el ingreso pasivo. Es la única vista con el botón de recolector. |
-| `almacen` | Almacén | Rejilla de celdas con arrastre, filtros, orden, venta, uso, apertura de cajas y huecos. |
+| `almacen` | Almacén | Rejilla de celdas con filtros, orden, venta en lote, apilado, uso y apertura de cajas. |
 | `tienda` | Mercado | 7 categorías: cajas, recursos, cartas, forja, mejoras, compañeros, recolectores. |
 | `forja` | Forja | 3 materiales → 1 recolector, con probabilidad visible antes de confirmar. |
 | `perfil` | Perfil | Tarjeta de identidad (título/marco/banner), mejor recolector, logros, cosméticos. |
@@ -84,11 +84,12 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 - Capacidad en **pilas**, no en entradas del array. 20 llaves apiladas = 1 ranura.
 - Tres tipos de objeto: `collector`, `companion`, y apilables (`crate`,
   `consumable`, `key`, `crystal`).
-- **Huecos**: el jugador puede dejar celdas vacías a propósito antes de un item
-  (`warehouseGaps`). Es una preferencia de disposición, **no consume capacidad**.
-  Se crean arrastrando un item a cualquier celda vacía de la rejilla, que es un
-  tablero: el item cae exactamente donde se señala y los demás no se mueven.
-  Especificación completa en `docs/huecos-almacen.md`.
+- ~~**Huecos**: el jugador podía dejar celdas vacías a propósito~~ **QUITADOS.** La
+  disposición manual del almacén --arrastrar celdas y dejar huecos-- **ya no existe en el
+  juego**: se quitó entera porque no funcionaba bien. Queda el campo `warehouseGaps` en el
+  estado **solo como dato heredado** de las partidas viejas, y la coacción de la carga lo
+  filtra contra los items que existen, así que se limpia sola. El orden del almacén es
+  ahora el del guardado ("Como llegó") o el de un criterio automático.
 
 ## 4. Los sistemas
 
@@ -237,10 +238,11 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
     dejar la divergencia preparada.
 11. **`syncWarehouseGaps()` está documentado en inglés** (`gameLoop.ts:1188-1200`),
     el único bloque del juego en ese idioma. Cosmético, pero rompe el patrón.
-12. ~~**`docs/huecos-almacen.md` dice "sin implementar"**~~ **ARREGLADO.** La
-    funcionalidad está implementada y cubierta por `gapCheck.ts`. El fichero se
-    escribió para advertir de que otro agente editaba `src/` y `verify/` en el
-    mismo directorio, y el aviso se quedó pegado al estado de la funcionalidad.
+12. **La disposicion manual del almacen se quito del juego.** El documento
+    `docs/huecos-almacen.md` y los bancos `gapCheck` y `moveCheck` existen todavia y
+    describen una funcionalidad que ya no esta: 151 pruebas que pasaban y que
+    median algo que el jugador no puede hacer. Se decidio quitarla entera y revisar
+    el arrastre mas adelante.
 13. **La forja pierde valor total en T1-T4 y lo gana de T5 en adelante.**
     **No es un bug: es el cambio de cantidad a calidad, y está medido.** La curva
     de valor total (salida ÷ suma de las tres entradas) medida sobre el juego real
@@ -352,7 +354,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 9 | Código muerto | sigue |
 | 10 | El techo de niveles estaba escrito en 5 sitios y no coincidían | **arreglada** |
 | 11 | Un docblock en inglés | sigue |
-| 12 | `huecos-almacen.md` desactualizado | **arreglada** |
+| 12 | La disposicion manual del almacen no funcionaba | **quitada**: huecos, arrastre y sus bancos |
 | 13 | La forja pierde valor total en T1-T4 | **documentada, no es bug** (la invariante real es por ranura y se cumple) |
 | 14 | Un guardado confirmando vaciaba la cola de otro más nuevo | **arreglada** (queda la carrera inversa, que se cura sola) |
 | 15 | Recargar duplicaba llaves y cristales | **arreglada** (`keysByTier` no se guardaba) |
@@ -521,7 +523,7 @@ DOM de verdad.
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado, el botín y el ritmo del cobro**,
-no el pintado ni la navegación. **24 bancos, 1552 pruebas.** El total varía en ±1
+no el pintado ni la navegación. **29 bancos, 1821 pruebas.** El total varía en ±1
 según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que
 depende del botín. Queda fuera a propósito:
 
@@ -533,20 +535,20 @@ depende del botín. Queda fuera a propósito:
   puede afirmar sin navegador. `modal.ts` sigue sin cubrirse.
 - `data/cosmetics` solo está cubierto en lo que toca las cajas (`lootCheck`); los
   Caminos de logros, núcleos y ranking no.
-- El **arrastre real por puntero**: solo se prueba a mano con `drag-test.html`,
   porque el destino se lee con `document.elementFromPoint` y si eso no devuelve la
   celda señalada el arrastre es un no-op aunque la lógica sea correcta.
 
 Esos huecos se cubren con bancos de pruebas visuales, no automáticos:
 `preview.html` (monta cualquier pantalla con datos de ejemplo y viewport real),
-`nav-test.html` (recorrido automático de navegación), `drag-test.html`
-(escenarios de arrastre), `auth-preview.html`, `ruleta-preview.html`.
+`nav-test.html` (recorrido automático de navegación),
+`auth-preview.html`, `ruleta-preview.html`.
 
 ## 8. Antes de tocar nada
 
 Lee [`REGLAS-Y-TECNOLOGIAS.md`](./REGLAS-Y-TECNOLOGIAS.md) (reglas y stack) y
 [`CAMBIOS-MACRO.md`](./CAMBIOS-MACRO.md) (por qué el juego es como es). Si vas a
-tocar el almacén, lee también [`huecos-almacen.md`](./huecos-almacen.md).
+tocar el almacén, lee también [`huecos-almacen.md`](./huecos-almacen.md), que describe
+una funcionalidad **que ya no existe** y conviene no dar por buena.
 
 Y antes de nada, `git status`: hay otro agente trabajando en este directorio y el
 working tree va muy por delante del último commit.

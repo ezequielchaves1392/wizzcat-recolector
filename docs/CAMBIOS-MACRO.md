@@ -239,12 +239,12 @@ enseña la tira.
 | Cuenta suspendida | `src/components/blocked.ts`, `src/services/bloqueoService.ts` |
 | Cola offline de nanitas | `src/services/naniteQueue.ts` |
 | Módulo de apilado | `src/data/stacking.ts` |
-| Huecos del almacén | `warehouseGaps` en types/gameLoop/warehouse, `src/dragTest.ts` |
+| Huecos del almacén | **QUITADOS.** `warehouseGaps` queda como dato heredado; `src/dragTest.ts` y los bancos `gapCheck`/`moveCheck` se borraron |
 | Cosméticos de caja | `src/data/cosmetics.ts` (`crateCosmetics`), `crateLoot.ts`, `gameLoop.ts` |
 | **Suite de pruebas** | `verify/` completa (kit, stubs, bancos de pantalla y de economía) |
 | Mejoras varias | `auth.ts`, `store.ts`, `warehouse.ts`, `rankings.ts`, `main.ts`, `layout.ts`, `pageShell.ts`, `router.ts`, `audio.ts`, `theme.ts`, `style.css`, `style.modules.css` |
 | Configuración | `vite.config.ts` (multipágina), `tailwind.config.js` |
-| Bancos de pruebas visuales | `ruleta-preview.html`, `src/ruletaPreview.ts`, `drag-test.html`, `src/dragTest.ts` |
+| Bancos de pruebas visuales | `ruleta-preview.html`, `src/ruletaPreview.ts` (el de arrastre ya no existe) |
 | Documentación | `AGENTS.md` + `docs/` |
 
 > **Este lote ya está en el historial.** Cuando se escribió esto eran 24

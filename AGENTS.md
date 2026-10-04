@@ -90,7 +90,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 31 bancos = 1972 pruebas. El total es estable: una prueba que depende del dado no se cuenta: no se ha ejecutado.
+npm run verify    # 29 bancos = 1821 pruebas. El total es estable: una prueba que depende del dado no se cuenta: no se ha ejecutado.
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
@@ -120,24 +120,23 @@ El resto está en `docs/REGLAS-Y-TECNOLOGIAS.md`.
 ```bash
 npm run dev       # servidor de desarrollo
 npm run build     # tsc && vite build — el type-check es puerta de entrada
-npm run verify    # banco de pruebas propio: 31 bancos sobre el game loop real
+npm run verify    # banco de pruebas propio: 29 bancos sobre el game loop real
 ```
 
 Para un banco suelto:
 
 ```bash
-$env:ONE_BANK="gapCheck"; npx vite build --config verify/vite.one.config.ts
-node verify/one.mjs gapCheck
+$env:ONE_BANK="potencialCheck"; npx vite build --config verify/vite.one.config.ts
+node verify/one.mjs potencialCheck
 ```
 
-Para lo que `verify/` **no** cubre (render, navegación, arrastre real):
+Para lo que `verify/` **no** cubre (render y navegación):
 
 | Banco | URL |
 |---|---|
 | Cualquier pantalla con datos de ejemplo, viewport real | `preview.html?vista=almacen&w=390&h=844` |
 | La pantalla de acceso | `auth-preview.html` |
 | Recorrido automático de navegación | `nav-test.html` |
-| Arrastre con DOM real | `drag-test.html?caso=<n>` |
 | La ruleta aislada | `ruleta-preview.html` |
 
 ---

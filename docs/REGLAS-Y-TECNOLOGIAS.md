@@ -66,13 +66,12 @@ aliases ni formatos raros — está escrito así a propósito en la cabecera.
 | `preview.html` | `src/preview.ts` | No | Monta cualquier pantalla con datos de ejemplo. |
 | `auth-preview.html` | `src/authPreview.ts` | No | Escena de la pantalla de acceso. |
 | `nav-test.html` | `src/navTest.ts` | No | Recorrido automático de navegación. |
-| `drag-test.html` | `src/dragTest.ts` | No | Escenarios de arrastre con DOM real. |
 | `ruleta-preview.html` | `src/ruletaPreview.ts` | No | Las dos ruletas, aisladas: la de las cajas y la del sintonizador. `?sintonizador=1` y `?sintonizador=0` abren la segunda con cada desenlace. |
 
-De estos cinco últimos, `.gitignore` recoge **los cinco enteros**, HTML y script:
-`preview.html`, `auth-preview.html`, `nav-test.html`, `drag-test.html` y
+De estos cuatro últimos, `.gitignore` recoge **los cuatro enteros**, HTML y script:
+`preview.html`, `auth-preview.html`, `nav-test.html` y
 `ruleta-preview.html` con sus `src/`. Antes dejaban cuatro fuera
-(`drag-test.html`, `src/dragTest.ts`, `ruleta-preview.html`, `src/ruletaPreview.ts`),
+(`ruleta-preview.html`, `src/ruletaPreview.ts`),
 que quedaban **sin seguimiento pero no ignorados** — la peor de las dos
 situaciones: `git status` los anunciaba como código nuevo cada vez que alguien
 montaba el utillaje con `npx vite`. La regla que está escrita en el propio
@@ -490,9 +489,11 @@ Un solo camino para dedo, ratón y lápiz. `setPointerCapture`, umbral de 8 px p
 que un toque no sea un arrastre, y `touch-action: none` en las celdas para que
 2 px de dedo no hagan scroll.
 
-> Si `document.elementFromPoint` no devuelve la celda señalada, el arrastre es un
-> no-op aunque la lógica sea perfecta. Por eso `verify/` no lo puede cubrir y
-> existe `drag-test.html`.
+> ~~Si `document.elementFromPoint` no devuelve la celda señalada, el arrastre es un
+> no-op aunque la lógica sea perfecta.~~ **YA NO APLICA: el almacén no se arrastra.** La
+> disposición manual se quitó del juego entera porque no funcionaba bien, y con ella la
+> página de escenarios de arrastre y los dos bancos que la medían. Si vuelve, el aviso
+> vuelve con ella.
 
 ### R18. `overscroll-contain` en las zonas de scroll
 
@@ -602,7 +603,6 @@ visuales:
 |---|---|
 | Layout y overflow | `preview.html` con viewport real (390×844 y 1440×900), en varios temas |
 | Navegación | `nav-test.html` |
-| Arrastre real | `drag-test.html` con `?caso=<n>` |
 | La ruleta | `ruleta-preview.html` |
 | La pantalla de acceso | `auth-preview.html` |
 
@@ -726,7 +726,7 @@ docs/                           Este directorio.
 > las que sí importan. Si añades pruebas, actualiza la fila **y** comprueba que
 > la suma da el total.
 6. Para lo que `verify/` no cubre: `preview.html`, `nav-test.html`,
-   `drag-test.html`, `ruleta-preview.html`.
+   `ruleta-preview.html`.
 
 **Al terminar una sesión:** `npm run build` + `npm run verify`, y si el cambio
 toca la economía o el guardado, **una prueba nueva en el banco que corresponda**
