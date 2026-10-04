@@ -45,7 +45,10 @@ import {
   expansorPorBuff, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
-import { cuantasVecesCabe, pasoDeConsumible } from './data/buffs';
+import {
+  cuantasVecesCabe, pasoDeConsumible, anotaTotalDeBuff,
+  BUFF_TOTAL_CAMPOS, BUFF_TOTAL_FIELDS
+} from './data/buffs';
 import {
   AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta, debeVenderseAuto,
   type ConfigAutoVenta, type TipoDeVentaAuto
@@ -544,8 +547,19 @@ export async function createGameLoop(
       clickBoostExpiresAt: 0,
       passiveBoostExpiresAt: 0,
       clickX2ExpiresAt: 0, // Tarjeta Click x2 (30s)
-      clickX3ExpiresAt: 0  // Tarjeta Click x3 (30s)
-    }
+      clickX3ExpiresAt: 0, // Tarjeta Click x3 (30s)
+      // **Y LO QUE SE CONCEDIÓ EN EL ÚLTIMO USO, QUE ES EL DENOMINADOR DE LA BARRA.**
+      // La barra del HUD es `restante / esto`, y con la duración de una tarjeta el
+      // denominador es treinta segundos para un buff que dura treinta minutos: la
+      // barra se queda clavada en el 100 % y parece muerta. El comentario largo está
+      // en `data/buffs.ts`; aquí solo está el hueco.
+      clickBoostTotalMs: 0,
+      passiveBoostTotalMs: 0,
+      clickX2TotalMs: 0,
+      clickX3TotalMs: 0
+    },
+    /** Lo mismo para el AFK, que vive fuera de `buffs`. La barra también lo mira. */
+    afkTotalMs: 0
   };
 
 /**
@@ -1749,8 +1763,31 @@ const AFK_THRESHOLD_MS = 60000;
         clickBoostExpiresAt: data.buffs?.clickBoostExpiresAt ?? 0,
         passiveBoostExpiresAt: data.buffs?.passiveBoostExpiresAt ?? 0,
         clickX2ExpiresAt: data.buffs?.clickX2ExpiresAt ?? 0,
-        clickX3ExpiresAt: data.buffs?.clickX3ExpiresAt ?? 0
+        clickX3ExpiresAt: data.buffs?.clickX3ExpiresAt ?? 0,
+        // Los totalizadores no se coaccionan aquí sino en el bucle de abajo, con la
+        // tabla: escribirlos en los dos sitios es la forma de que se queden a medias.
+        clickBoostTotalMs: 0,
+        passiveBoostTotalMs: 0,
+        clickX2TotalMs: 0,
+        clickX3TotalMs: 0
       };
+
+      /**
+       * CUÁNTO SE CONCEDIÓ EN EL ÚLTIMO USO, Y POR QUÉ SE COACCIONA (R8).
+       *
+       * Son campos nuevos y una partida vieja no los tiene: sin `?? 0` quedarían en
+       * `undefined`, y el HUD haría `restante / undefined` = `NaN`, que en un `style`
+       * es una anchura inválida y la barra desaparece. Con 0, el HUD vuelve a la
+       * duración de una tarjeta, que es lo que se pintaba antes de que el campo existiera.
+       *
+       * Los cinco se coaccionan con el mismo bucle y **no a mano**, porque un campo
+       * nuevo que se añade aquí y se escribe en `data/buffs.ts` en dos sitios es un
+       * campo que se queda añado en el segundo.
+       */
+      for (const campo of BUFF_TOTAL_CAMPOS) {
+        (state.buffs as any)[campo] = Math.max(0, Number((data.buffs as any)?.[campo]) || 0);
+      }
+      state.afkTotalMs = Math.max(0, Number(data.afkTotalMs) || 0);
 
       /**
        * COLA DE LA SESIÓN ANTERIOR.
@@ -3624,10 +3661,15 @@ const AFK_THRESHOLD_MS = 60000;
       if (buffKey === 'afk') {
         if (state.afkExpiresAt <= Date.now()) return false;
         state.afkExpiresAt = 0;
+        // **EL TOTAL TAMBIÉN SE BORRA, Y PORQUE ES LO QUE USA LA BARRA.** Cancelado el
+        // buff, la tarjeta se esconde y el total no se ve... hasta que el buff vuelva, y
+        // entonces la barra arrancaría con el ancho de un buff que ya no existe.
+        state.afkTotalMs = 0;
       } else {
         const field = BUFF_FIELDS[buffKey];
         if (state.buffs[field] <= Date.now()) return false;
         state.buffs[field] = 0;
+        state.buffs[BUFF_TOTAL_FIELDS[buffKey]] = 0;
       }
       recalculatePassiveIncome();
       onUpdate(state, isAfk);
@@ -4114,6 +4156,13 @@ const AFK_THRESHOLD_MS = 60000;
         }
         aplicadas++;
       }
+
+      // **LO QUE SE CONCEDE SE ANOTA, Y DESPUÉS DEL BUCLE, NO DENTRO.** Es el
+      // denominador de la barra del HUD, y con el bucle aplicado tres veces solo
+      // importa el último: lo que quedó puesto en total. Anotarlo en cada paso
+      // sería lo mismo, porque cada paso parte del anterior, pero anotarlo aquí
+      // hace claro que es "lo que hay ahora", no "lo que se ha usado".
+      anotaTotalDeBuff(state, buffId, ahora);
 
       consumeWarehouseItem(item.id, aplicadas);
 

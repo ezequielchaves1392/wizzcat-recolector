@@ -5,7 +5,39 @@
 // la cabecera (móvil). Se parchean a la vez para que no haya dos implementaciones.
 
 import { ic, type IconName } from './icons';
+import { totalConcedidoDe } from '../data/buffs';
 
+/**
+ * El HUD de buffs, y **por qué la barra usa el total concedido y no la duración de la
+ * tarjeta**.
+ *
+ * ## LA BARRA MENTÍA, Y EN EL CASO QUE LA HACÍA INÚTIL
+ *
+ * Era `restante / durationMs`, con `durationMs` siendo **una** tarjeta. Pero el motor
+ * **acumula**: tres tarjetas de click x2 de treinta segundos dejan el buff puesto
+ * treinta minutos. O sea que el denominador era treinta segundos para algo que puede
+ * durar media hora, y la barra se quedaba clavada en el 100 % mientras el contador
+ * corría: se veía como una barra muerta, que es peor que no tener barra porque el
+ * jugador lee "no está haciendo nada" de un buff que sí está haciendo.
+ *
+ * Los tres buffs con el problema eran el `clickX2`, el `clickX3` y el `passiveBoost`;
+ * el `clickBoost` y el AFK casualmente tenían tope igual a una tarjeta, y por eso
+ * parecían bien.
+ *
+ * ## Y POR QUÉ NO SIRVE EL TECHO
+ *
+ * Porque con una sola tarjeta de treinta segundos la barra saldría al 1,6 % del tope de
+ * treinta minutos, y eso parece un buff a punto de expirar cuando acaba de empezar. El
+ * denominador honrado es **lo que se concedió en el último uso**, que no se deduce de
+ * nada guardado: por eso hay un campo por buff (`BUFF_TOTAL_FIELDS`).
+ *
+ * ## EL `0` ES "NO SE SABE", Y ESTÁ TRATADO
+ *
+ * Las partidas viejas no tienen el campo, y la carga lo coacciona a 0. Con 0 se vuelve
+ * a la duración de una tarjeta, que es lo que se pintaba antes: **el cambio degrada al
+ * comportamiento anterior en vez de romper**, y nunca sale un `NaN` al `style`, que es
+ * lo que hace que la barra desaparezca sin que se entienda por qué.
+ */
 export interface BuffDef {
   key: string;
   icon: IconName;
@@ -16,6 +48,11 @@ export interface BuffDef {
   accent: string;
   bar: string;
   getExpires: (state: any) => number;
+  /**
+   * Cuánto se concedió en el último uso. `0` significa "no se sabe" y el denominador
+   * cae a `durationMs`. Sale de `totalConcedidoDe()`, que es donde vive el campo.
+   */
+  getTotal: (state: any) => number;
 }
 
 export const BUFF_DEFS: BuffDef[] = [
@@ -23,31 +60,36 @@ export const BUFF_DEFS: BuffDef[] = [
     key: 'clickBoost', icon: 'bolt', label: 'Clics x2', durationMs: 30 * 60 * 1000,
     accent: 'border-emerald-500/40 text-emerald-500 dark:text-emerald-400',
     bar: 'bg-emerald-400',
-    getExpires: (s) => s.buffs.clickBoostExpiresAt
+    getExpires: (s) => s.buffs.clickBoostExpiresAt,
+    getTotal: (s) => totalConcedidoDe(s, 'clickBoost')
   },
   {
     key: 'clickX2', icon: 'bolt', label: 'Clics x2', tag: 'rápida', durationMs: 30 * 1000,
     accent: 'border-cyan-500/40 text-cyan-500 dark:text-cyan-400',
     bar: 'bg-cyan-400',
-    getExpires: (s) => s.buffs.clickX2ExpiresAt
+    getExpires: (s) => s.buffs.clickX2ExpiresAt,
+    getTotal: (s) => totalConcedidoDe(s, 'clickX2')
   },
   {
     key: 'clickX3', icon: 'bolt', label: 'Clics x3', tag: 'rápida', durationMs: 30 * 1000,
     accent: 'border-purple-500/40 text-purple-500 dark:text-purple-400',
     bar: 'bg-purple-400',
-    getExpires: (s) => s.buffs.clickX3ExpiresAt
+    getExpires: (s) => s.buffs.clickX3ExpiresAt,
+    getTotal: (s) => totalConcedidoDe(s, 'clickX3')
   },
   {
     key: 'passiveBoost', icon: 'shield', label: 'Pasivo x2', durationMs: 60 * 60 * 1000,
     accent: 'border-blue-500/40 text-blue-500 dark:text-blue-400',
     bar: 'bg-blue-400',
-    getExpires: (s) => s.buffs.passiveBoostExpiresAt
+    getExpires: (s) => s.buffs.passiveBoostExpiresAt,
+    getTotal: (s) => totalConcedidoDe(s, 'passiveBoost')
   },
   {
     key: 'afk', icon: 'card', label: 'AFK', durationMs: 30 * 60 * 1000,
     accent: 'border-amber-500/40 text-amber-500 dark:text-amber-400',
     bar: 'bg-amber-400',
-    getExpires: (s) => s.afkExpiresAt
+    getExpires: (s) => s.afkExpiresAt,
+    getTotal: (s) => totalConcedidoDe(s, 'afk')
   }
 ];
 
@@ -111,7 +153,12 @@ export function renderBuffHud(state: any, now: number, force = false): void {
   for (const def of BUFF_DEFS) {
     const remaining = Math.max(0, def.getExpires(state) - now);
     const timeText = formatCountdown(remaining);
-    const width = `${Math.max(0, Math.min(100, (remaining / def.durationMs) * 100))}%`;
+    // **EL DENOMINADOR ES LO QUE SE CONCEDIÓ, Y SI NO SE SABE, UNA TARJETA.**
+    // El `||` no es una comodidad: una partida vieja llega sin el campo y la carga lo
+    // deja en 0, y sin esto el denominador sería 0 y la barra daría NaN, que es un
+    // `width` inválido y una barra que desaparece sin motivo aparente.
+    const total = def.getTotal(state) || def.durationMs;
+    const width = `${Math.max(0, Math.min(100, (remaining / total) * 100))}%`;
 
     for (const root of roots) {
       const card = root.querySelector(`[data-buff="${def.key}"]`);

@@ -285,19 +285,24 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       estaba escrito a mano, que es el segundo sitio donde podía quedarse viejo.
       Comprobado en `preview.html?vista=forja` a 390×844 y a 1440×900: dos huecos, centrados,
       sin columna fantasma.
-- [ ] **B13 · La barra de progreso de los buffs miente cuando usas varios.** **Causa raíz
-      encontrada, y es una sola:** la barra se calcula como `restante / durationMs`, donde
-      `durationMs` es la duración **de una unidad**, pero el motor **acumula**: usar tres
-      píldoras de 30 s deja el buff puesto **30 minutos**. Medido en el código:
-      `clickX2` y `clickX3` se capan a `ahora + 30 min` con una duración de 30 s, `afk` a tres
-      tarjetas con una duración de una, y `passiveBoost` a dos horas con una de una. O sea
-      que **tres de los cinco buffs tienen un denominador más pequeño que lo que pueden
-      durar**, y justo en el caso que describes la barra se queda clavada en el 100 % con el
-      contador corriendo: se ve como una barra muerta.
-      **El arreglo es guardar el total concedido** —un campo por buff— y usar ese como
-      denominador, en vez de calcularlo del tope teórico. Como es un campo nuevo en el
-      guardado, necesita la coacción de la carga (R8) y una prueba que fije que la barra de
-      un buff acumulado **baja** desde el principio.
+- [x] **B13 · La barra de progreso de los buffs miente cuando usas varios.** **Causa raíz
+      confirmada en el motor:** la barra del HUD era `restante / duración de UNA tarjeta`
+      (`BUFF_DEFS[].durationMs`), y el motor **acumula**. El caso extremo medido: **sesenta
+      tarjetas de click x2 de 30 s son treinta minutos de buff**, y con el denominador de
+      30 s la barra daba **6000 %** — es decir, se quedaba clavada en el 100 % con el
+      contador corriendo, que es exactamente lo que se veía: una barra muerta al lado de
+      un buff vivo. Afectaba a `clickX2`, `clickX3` y `passiveBoost`; el `clickBoost` y el
+      AFK casualmente tienen tope igual a una tarjeta y por eso parecían bien.
+      **El arreglo es guardar el total concedido**, un campo por buff
+      (`BUFF_TOTAL_FIELDS`, más `state.afkTotalMs` para el AFK, que vive fuera de
+      `buffs`), que se anota **después** del bucle de usos: con tres unidades aplicadas
+      gana la última, que es la que sabe cuánto queda en total. El HUD usa ese campo y no
+      el tope —con el tope, una sola tarjeta de 30 s salía al 1,6 % y parecía un buff a
+      punto de expirar—, y **con 0 vuelve a la duración de una tarjeta**, que es lo que se
+      pintaba antes: una partida vieja no tiene el campo, la carga lo coacciona a 0 y
+      nunca sale un `NaN` al `width`, que es lo que hace que una barra desaparezca sin
+      motivo. `cancelBuff()` borra el total, o la barra del siguiente buff arrancaría con
+      el ancho del anterior. `consumableCheck` (+17).`consumableCheck` (+17).
 
 ### Lo que queda de este encargo, en orden
 

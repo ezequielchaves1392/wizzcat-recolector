@@ -26,6 +26,7 @@ import {
   EXPANSOR_TIERS, CONSUMABLES, RANURAS_POR_EXPANSOR, WAREHOUSE_BASE_CAP, WAREHOUSE_MAX_CAP,
   techoDeExpansor
 } from '../src/data/store';
+import { totalConcedidoDe } from '../src/data/buffs';
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
   collector, crate, consumable
@@ -729,6 +730,134 @@ async function main() {
     check('lote: un id que no esta no ofrece nada y lo dice',
       plan.unidades === 0 && !!plan.motivo && !/tope/i.test(plan.motivo ?? ''),
       `unidades=${plan.unidades} motivo=${plan.motivo}`);
+  }
+
+// -------------------------------------------------------------------------
+  //  B13 · LA BARRA DEL HUD, Y SU DENOMINADOR
+  //
+  //  Era `restante / duracion de UNA tarjeta`, con el motor acumulando por encima:
+  //  tres tarjetas de click x2 de treinta segundos dejan el buff treinta minutos y la
+  //  barra se quedaba clavada en el 100 % con el contador corriendo. Ahora el
+  //  denominador es lo que se concedió en el último uso, que es un campo del guardado.
+  //
+  //  Aquí se comprueban las tres mitades por separado, porque pueden fallar solas: que
+  //  el motor anote el total, que el HUD lo use de denominador, y que una partida vieja
+  //  sin el campo caiga a algo y no a NaN.
+  // -------------------------------------------------------------------------
+  {
+    const g = await boot(baseSave([
+      consumable('x2', 'clickX2', 60, { name: 'Tarjeta Click x2' })
+    ], { buffs: BUFFS_ZERO }));
+
+    // **SESENTA TARJETAS DE 30 s, TREINTA MINUTOS, Y UN TOTAL DE TREINTA MINUTOS.**
+    //  La clave de B13 es que las dos mitades cuadren: si el motor acumula y el
+    //  denominador no, la barra miente, y aquí se mide el error exacto que se veía en
+    //  pantalla. Sesenta es el tope del click x2 --treinta minutos--, así que es el
+    //  caso en el que más se salen: `restante / 30 s` da **6000 %**, que es la
+    //  barra clavada en el 100 % con el contador corriendo de lado a lado.
+    const r = g.useConsumable('x2', 60) as any;
+    const restante = s(g).buffs.clickX2ExpiresAt - Date.now();
+    check('b13: sesenta tarjetas de 30 s dejan el buff en 30 minutos',
+      r.usadas === 60 && restante > MIN_30 - 5_000 && restante <= MIN_30,
+      `usadas=${r.usadas} restante=${restante}`);
+    check('b13: y el total concedido son esos mismos 30 minutos, no 30 s',
+      Math.abs((s(g).buffs.clickX2TotalMs as number) - restante) < 5_000,
+      `total=${s(g).buffs.clickX2TotalMs} restante=${restante}`);
+    check('b13: con el denominador viejo la barra se iba de mil por ciento',
+      (restante / 30_000) * 100 > 1000,
+      `barra vieja=${((restante / 30_000) * 100).toFixed(0)}%`);
+
+    // **Y LA BARRA DE VERDAD, CON LA FÓRMULA DEL HUD.** Se calcula aquí y no mirando el
+    //  DOM porque el banco no tiene layout, pero es la misma cuenta: `restante / total`,
+    //  con `total` cayendo a una tarjeta cuando no se sabe.
+    const ancho = (restanteMs: number) => {
+      const total = totalConcedidoDe(s(g), 'clickX2') || 30_000;
+      return Math.max(0, Math.min(100, (restanteMs / total) * 100));
+    };
+    check('b13: la barra arranca llena',
+      ancho(restante) > 95, `ancho=${ancho(restante).toFixed(1)}%`);
+    check('b13: y a la mitad del buff le queda la mitad de barra',
+      ancho(restante / 2) > 45 && ancho(restante / 2) < 55,
+      `ancho=${ancho(restante / 2).toFixed(1)}%`);
+    check('b13: y al final se vacía, no se queda clavada',
+      ancho(0) === 0, 'ancho=' + ancho(0));
+
+    // **Y EL AFK, QUE VIVE FUERA DE `buffs`, TAMBIÉN TIENE TOTAL.** Es el caso especial
+    //  de toda la regla: si el total se escribiera solo dentro de `state.buffs`, el AFK
+    //  sería el único buff con la barra rota, y ningún banco de buffs lo vería.
+    const g2 = await boot(baseSave([consumable('a1', 'afk', 3, { name: 'Tarjeta AFK' })],
+      { warehouseCapacity: 40 }));
+    g2.useConsumable('a1', 3);
+    check('b13: el AFK anota su total en su propio campo',
+      (s(g2).afkTotalMs as number) > 0
+      && Math.abs((s(g2).afkTotalMs as number) - (s(g2).afkExpiresAt - Date.now())) < 5_000,
+      `total=${s(g2).afkTotalMs}`);
+    check('b13: y no escribe nada dentro de buffs',
+      !(s(g2).buffs as any).afkTotalMs,
+      'afkTotalMs=' + String((s(g2).buffs as any).afkTotalMs));
+
+    // **CANCELAR LO BORRA, O LA BARRA DEL SIGUIENTE ARRANCA CON EL ANCHO DEL VIEJO.**
+    check('b13: cancelar el click pone el total a cero',
+      (() => {
+        const a = g.cancelBuff('clickX2');
+        return a === 'Clics x2 (tarjeta)'
+          && s(g).buffs.clickX2TotalMs === 0 && s(g).buffs.clickX2ExpiresAt === 0;
+      })(),
+      `total=${s(g).buffs.clickX2TotalMs} expira=${s(g).buffs.clickX2ExpiresAt}`);
+    check('b13: y cancelar el AFK también',
+      (() => { const a = g2.cancelBuff('afk'); return a === 'AFK' && s(g2).afkTotalMs === 0; })(),
+      'afkTotalMs=' + String(s(g2).afkTotalMs));
+  }
+  {
+    // **UNA PARTIDA VIEJA NO TIENE EL CAMPO, Y ESO NO PUEDE SER UN NaN.**
+    //
+    //  Sin `?? 0` el campo llega `undefined`, y `restante / undefined` es `NaN`: un
+    //  `width` inválido es una barra que desaparece sin que nadie sepa por qué. Con 0 el
+    //  HUD vuelve a la duración de una tarjeta, que es exactamente lo que se pintaba
+    //  antes de que este campo existiera.
+    const g = await boot(baseSave([], { buffs: BUFFS_ZERO }));
+    const guardado = { ...s(g) } as any;
+    delete guardado.buffs.clickX2TotalMs;
+    delete guardado.buffs.passiveBoostTotalMs;
+    delete guardado.afkTotalMs;
+    // El campo se borra del guardado **y del estado**, que es como llega una partida
+    // de antes del cambio: el documento no lo tiene y la coacción no lo inventa.
+    (s(g).buffs as any).clickX2TotalMs = undefined;
+    (s(g).buffs as any).passiveBoostTotalMs = undefined;
+    (s(g) as any).afkTotalMs = undefined;
+    g.updateState({ buffs: { ...(s(g).buffs as any), clickX2ExpiresAt: Date.now() + 30_000 } });
+    const g2 = await reload();
+    check('b13: una partida vieja sin el campo carga a cero, no a undefined',
+      (s(g2).buffs as any).clickX2TotalMs === 0,
+      'total=' + String((s(g2).buffs as any).clickX2TotalMs));
+    check('b13: y el denominador cae a la duración de una tarjeta',
+      (totalConcedidoDe(s(g2), 'clickX2') || 30_000) === 30_000,
+      'denominador=' + (totalConcedidoDe(s(g2), 'clickX2') || 30_000));
+    check('b13: y el ancho sale finito, que es lo que evita que la barra desaparezca',
+      Number.isFinite((s(g2).buffs.clickX2ExpiresAt - Date.now()) / (totalConcedidoDe(s(g2), 'clickX2') || 30_000)),
+      'denominador=' + String(totalConcedidoDe(s(g2), 'clickX2')));
+    check('b13: y tampoco se rompe la partida vieja por tener un buff sin total',
+      s(g2).buffs.clickX2ExpiresAt > Date.now(),
+      'expira=' + s(g2).buffs.clickX2ExpiresAt);
+  }
+  {
+    // **Y QUE EL CAMPO SOBREVIVA A LA RECARGA**, que es el motivo de que esté en el
+    //  guardado y no en un módulo: si fuera un `let` del módulo, cada recarga pondría la
+    //  barra a cero y el buff seguiría puesto.
+    const g = await boot(baseSave([
+      consumable('p1', 'passiveBoost', 2, { name: 'Buff Pasivo x2' })
+    ], { buffs: BUFFS_ZERO }));
+    g.useConsumable('p1', 2);
+    const antes = s(g).buffs.passiveBoostTotalMs as number;
+    const g2 = await reload();
+    check('b13: el total del pasivo son sus dos horas',
+      antes > MIN_60 && antes <= 2 * MIN_60, `total=${antes}`);
+    check('b13: y el total guardado sobrevive a la recarga',
+      Math.abs((s(g2).buffs.passiveBoostTotalMs as number) - antes) < 5_000,
+      `antes=${antes} despues=${s(g2).buffs.passiveBoostTotalMs}`);
+    check('b13: y el buff sigue puesto con el mismo tiempo',
+      Math.abs((s(g2).buffs.passiveBoostExpiresAt - s(g).buffs.passiveBoostExpiresAt)) < 5_000,
+      `antes=${s(g).buffs.passiveBoostExpiresAt} despues=${s(g2).buffs.passiveBoostExpiresAt}`);
   }
 
   resumen('consumibles');

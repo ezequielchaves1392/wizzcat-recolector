@@ -120,6 +120,82 @@ export function topeDeConsumible(buffId: string, afkMs: number): number | null {
 }
 
 /**
+ * Campo del guardado que lleva **cuánto se concedió en el último uso** de cada buff.
+ *
+ * ## POR QUÉ HACE FALTA, Y POR QUÉ NO VALE EL TECHO
+ *
+ * El HUD pinta la barra como `restante / duración de una unidad`, y con eso la barra
+ * miente justo en el caso que la hace inútil: **el motor acumula**. Tres tarjetas de
+ * click x2 de treinta segundos dejan el buff puesto **treinta minutos**, y al ser el
+ * denominador treinta segundos, la barra se queda clavada en el 100 % con el contador
+ * corriendo: se ve como una barra muerta.
+ *
+ * La primera tentación es usar el **tope** (treinta minutos) de denominador, y es
+ * Peor: con una sola tarjeta de treinta segundos la barra saldría al 1,6 % y parecería
+ * que no hay buff. El denominador honrado es **lo que este buff tiene delante**, que no
+ * se deduce de nada guardado: hace falta un campo.
+ *
+ * ## POR QUÉ "EN EL ÚLTIMO USO" Y NO UNA SUMA HISTÓRICA
+ *
+ * Porque la barra tiene que **empezar en 100 % y bajar**. Si fuera la suma de todo lo
+ *concedido, un buff al que se le suma una tarjeta con diez minutos puestos se
+ * quedaría con un denominador mayor y la barra bajaría de golpe, como si se hubiera
+ * lost tiempo. Con "el último uso concedes lo que había al aplicarlo", la barra es
+ * "cuánto de lo que te dieron queda", que es lo que el jugador quiere ver.
+ *
+ * El AFK sigue estando **fuera** de `state.buffs` —su expiración es
+ * `state.afkExpiresAt`—, así que su total vive en `state.afkTotalMs` y las dos funciones
+ * de abajo tratan ese caso aparte, igual que ya hacía `BUFF_FIELDS`.
+ */
+export const BUFF_TOTAL_FIELDS = {
+  clickBoost: 'clickBoostTotalMs',
+  clickX2: 'clickX2TotalMs',
+  clickX3: 'clickX3TotalMs',
+  passiveBoost: 'passiveBoostTotalMs'
+} as const;
+
+/** Dónde vive la expiración de un buff, sea cual sea el buff. */
+export function expiracionDe(state: any, buffId: string): number {
+  if (buffId === 'afk') return Number(state.afkExpiresAt) || 0;
+  const campo = (BUFF_FIELDS as Record<string, string>)[buffId];
+  return campo ? Number(state.buffs?.[campo]) || 0 : 0;
+}
+
+/**
+ * Anota cuánto se acaba de conceder, para que la barra tenga un denominador real.
+ *
+ * Se llama **una vez por uso**, después de aplicar: con tres tarjetas aplicadas en
+ * bucle son tres anotaciones y gana la última, que es la que sabe cuánto queda en total.
+ *
+ * @returns El total anotado, o 0 si el buff no lleva expiración (o sea, ninguno).
+ */
+export function anotaTotalDeBuff(state: any, buffId: string, ahora: number): number {
+  const expira = expiracionDe(state, buffId);
+  const total = expira > ahora ? expira - ahora : 0;
+  if (buffId === 'afk') {
+    state.afkTotalMs = total;
+    return total;
+  }
+  const campo = (BUFF_TOTAL_FIELDS as Record<string, string>)[buffId];
+  if (campo) state.buffs[campo] = total;
+  return total;
+}
+
+/** Cuánto se concedió en el último uso. 0 significa "no se sabe", y el HUD lo deduce. */
+export function totalConcedidoDe(state: any, buffId: string): number {
+  if (buffId === 'afk') return Number(state.afkTotalMs) || 0;
+  const campo = (BUFF_TOTAL_FIELDS as Record<string, string>)[buffId];
+  return campo ? Number(state.buffs?.[campo]) || 0 : 0;
+}
+
+/** Los cinco totalizadores, para la coacción de la carga (R8). */
+export const BUFF_TOTAL_CAMPOS = Object.values(BUFF_TOTAL_FIELDS);
+
+/**
+ * Cuántas veces cabe un consumible, y por qué es una función y no un número en cada
+ * `case`.
+
+/**
  * Cuántas unidades se pueden usar de un golpe sin que la siguiente se pierda.
  *
  * ## POR QUÉ ES UN `ceil` Y NO UN RESTO
