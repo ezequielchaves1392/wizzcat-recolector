@@ -569,6 +569,30 @@ body {
   100% { opacity: 1; transform: translateY(0); }
 }
 
+/* --------------------------------------------------------------------------
+   UNA ENTRADA QUE NO TOCA EL TRANSFORM, Y POR QUÉ HACE FALTA.
+   --------------------------------------------------------------------------
+
+   `riseIn` termina en `transform: translateY(0)`. Con `animation-fill-mode: both` ese
+   transform **se queda puesto para siempre** cuando acaba la animación, y como la
+   declaración de la animación gana a la clase, se come el `-translate-y-1/2` del
+   contenedor. Medido en la hoja de ajustes: el velo ocupaba los 898 px correctos y el
+   panel quedaba con `panelTop=459` en vez de 257 —centrado a la mitad de abajo— porque
+   su `translateY` era el de la animación y no el del centrado.
+
+   O sea: **una animación con `both` sobre un elemento que se centra con un translate
+   anula el centrado**, y no se ve como un fallo de posición sino como un centrado que
+   está medio desfasado, que es la forma más difícil de detectar mirando.
+
+   Por eso esta entrada solo mueve la opacidad, que no compite con nada. La otra salida
+   sería animar un hijo y centrar el padre, pero eso mete un nodo por panel para evitar
+   una clave de animación.
+   */
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
 .animate-core-pulse { animation: corePulse 2.6s ease-in-out infinite; }
 .animate-core-breathe { animation: coreBreathe 4.5s ease-in-out infinite; }
 .animate-rise-in { animation: riseIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }

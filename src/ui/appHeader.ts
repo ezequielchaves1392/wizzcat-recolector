@@ -248,8 +248,20 @@ export function headerSettingsButton(): string {
 }
 
 /**
- * LA HOJA. Va dentro de `<header>` porque la cabecera es lo que las siete pantallas
- * pintan, y así hay un solo sitio donde puede estar.
+ * LA HOJA. Va **FUERA del `<header>`**, y no por gusto.
+ *
+ * **ESTABA DENTRO Y ESO LA HACIA PEQUEÑA.** El velo es `fixed inset-0`, y un `fixed`
+ * dentro de un ancestro con `backdrop-filter` deja de ser relativo a la ventana y pasa a
+ * ser relativo a ese ancestro: la cabecera usa `card-glass`, o sea que tiene
+ * `backdrop-filter`, y por eso **la hoja entera quedaba metida en la caja de la cabecera**.
+ * Medido: el velo medía 78 px de alto en las pantallas y 80 en la base —la diferencia es
+ * la identidad del jugador—, cuando la ventana tiene 898. Said así de verdad: la hoja no
+ * tapaba la pantalla y solo se veían los 78 píxeles de arriba.
+ *
+ * Por eso, y porque salía distinta en cada pantalla, parecía que los ajustes solo
+ * abrían desde un sitio. Devolver la hoja **justo después de `</header>`**, como hermana y
+ * no como hija, la deja en el mismo nodo del `#app` en las siete pantallas **sin tocar
+ * ninguna de las siete llamadas**: sigue siendo esta función la que la pinta.
  *
  * **`hidden` EN EL NODO, Y NO `lg:hidden`: EL MOTIVO ES EL CONTRARIO AL DE ANTES.** El
  * panel viejo era `lg:hidden` porque en escritorio había un `<select>` que hacía lo mismo
@@ -262,24 +274,37 @@ export function headerSettingsButton(): string {
  * hoja se desmontara, ese pintor no los encontraría y los interruptores se quedarían con
  * el icono de antes de apagarlos.
  *
- * **LA POSICIÓN ES UNA Y LA MISMA EN TODOS LOS ANCHOS, Y ES A PROPÓSITO.** Abajo en
- * móvil, que es donde llega el pulgar; centrada en escritorio, que es donde se lee. Dos
- * clases y una regla, en vez de dos hojas.
+ * ## Y CENTRADA EN TODOS LOS ANCHOS, NO ABAJO EN MÓVIL
+ *
+ * Estaba anclada abajo por el pulgar, que es un motivo de verdad, pero el resultado era un
+ * modal que **no se leía como modal**: sin bordes alrededor y con el título pegado al
+ * borde de la pantalla, parecía un mensaje que salía de golpe. Centrada tapa lo mismo,
+ * tiene los cuatro lados y se lee como una ventana. El `max-height` y el margen de abajo
+ * son para que con la pantalla de un móvil pequeño no se salga por arriba, y el
+ * `safe-area` sigue estando.
+ *
+ * **Y LA ENTRADA ES `fadeIn`, NO `riseIn`, PORQUE `riseIn` ROMPÍA EL CENTRADO.** Acaba en
+ * `transform: translateY(0)` y con `fill-mode: both` ese transform se queda para siempre,
+ * declarado en la animación gana a la clase, así que se comía el `-translate-y-1/2` de
+ * aquí. Medido: velo de 898 px y panel en `top=459` en vez de 257, o sea **centrado a la
+ * mitad de abajo**, que no parece un fallo de posición sino un centrado medio desfasado.
+ * Una animación con `both` sobre un elemento que se centra con un translate anula el
+ * centrado. `fadeIn` solo mueve la opacidad y no compite con nada.
  */
 export function settingsSheetHTML(): string {
   const tema = getSavedTheme();
   return `
     <div data-ajustes class="fixed inset-0 z-[80] hidden">
       <div class="absolute inset-0 bg-black/65 backdrop-blur-sm" data-cerrar-ajustes></div>
-      <div class="absolute bottom-0 left-0 right-0 lg:absolute lg:bottom-auto lg:left-1/2 lg:top-1/2
-                  lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-[22rem]
-                  card-glass-elevated rounded-t-2xl lg:rounded-2xl p-5 pb-8 lg:pb-5 flex flex-col gap-4"
-           style="padding-bottom: calc(2rem + env(safe-area-inset-bottom));
-                  animation: riseIn 280ms cubic-bezier(0.16, 1, 0.3, 1) both">
+      <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(22rem,calc(100vw-2rem))]
+                  max-h-[calc(100dvh-3rem)] overflow-y-auto overscroll-contain
+                  card-glass-elevated rounded-2xl p-5 flex flex-col gap-4"
+           style="margin-bottom: env(safe-area-inset-bottom);
+                  animation: fadeIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both">
         <div class="flex items-center justify-between">
           <h3 class="font-['Orbitron'] font-bold text-sm accent-text">Ajustes</h3>
           <button data-cerrar-ajustes
-                  class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer"
+                  class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
                   aria-label="Cerrar">
             <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('close')}</span>
           </button>
@@ -457,6 +482,6 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
         <div id="${opts.mobileBuffsId}"
              class="xl:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>` : ''}
 
-      ${settingsSheetHTML()}
-    </header>`;
+      </header>
+    ${settingsSheetHTML()}`;
 }
