@@ -36,6 +36,7 @@ import { showConfirmModal } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from '../components/crateLoot';
 import { statCelda } from '../components/warehouse';
+import { esEquipado } from '../components/warehouse';
 
 /** Estado de la pantalla. Vive aquí para sobrevivir a los re-renders. */
 interface ForgeUIState {
@@ -115,6 +116,25 @@ export function renderForgePage(container: HTMLElement, game: any, go?: (r: any)
  * hay que hacer nada más.
  */
 export function materialesDeForja(game: any, tipo: string): any[] {
+  const state = game.getState();
+  // **LO EQUIPADO NO SE PINTA, Y ANTES SE PINTA GRIS.**
+  //
+  // El motor ya lo rechaza --`materialesDeForja()` en el game loop dice "no puedes
+  // fusionar el equipado, desequipalo primero"-- asi que la celda gris era una celda
+  // que solo servia para recordar una regla: **ocupaba el hueco de un material que si
+  // se puede usar, y el jugador tiene que saltarsela con el dedo.** En una rejilla de
+  // veinte con tres equipados, tres huecos muertos.
+  //
+  // Que el filtro este **aqui** y no en la celda es lo que hace que los tabs de tier
+  // tambien sean ciertos: si el unico T4 que tiene el jugador esta equipado, el tab
+  // de T4 no aparece, y con el dibujado aparecia con un 1 que no se podia tocar.
+  //
+  // **Y NO SE PIERDE NADA:** desequipar es una ficha de la tienda y el item sigue ahi.
+  // Lo que se pierde es la lista de lo que no se puede usar, que es informacion que el
+  // motor ya dice con su propio mensaje.
+  // **EL PREDICADO ES EL DEL ALMACEN, NO UNO NUEVO.** Ver `esEquipado()`: el id manda y
+  // la bandera de la ficha no, y por que es asi esta escrito alli.
+  const equipado = (w: any) => esEquipado(w, state);
   /** El stat final del material, o `null` si en este eje no tiene cifra. */
   const valorFinalDe = (w: any): number | null => {
     const s = game.getStatPrincipal?.(w.id);
@@ -122,8 +142,8 @@ export function materialesDeForja(game: any, tipo: string): any[] {
     if (w.type === 'companion' && (s as any).subtipo === 'multiplier') return null;
     return s.valor;
   };
-  return (((game.getState().warehouse as any[]) || [])
-    .filter(w => w.type === tipo))
+  return (((state.warehouse as any[]) || [])
+    .filter(w => w.type === tipo && !equipado(w))
     .sort((a, b) => {
       const va = valorFinalDe(a);
       const vb = valorFinalDe(b);
@@ -132,7 +152,36 @@ export function materialesDeForja(game: any, tipo: string): any[] {
       if (vb === null) return -1;
       if (va !== vb) return vb - va;
       return (b.tier || 0) - (a.tier || 0);
-    });
+    }));
+}
+
+/**
+ * Por que la rejilla esta vacia, y si es por culpa del filtro.
+ *
+ * Sin esto el jugador ve una pantalla que dice "No tienes recolectores" con doce
+ * recolectores en el almacen, y no hay forma de que sepa que son los que tiene
+ * **equipados**: el filtro los saca de la lista, no del almacen. Es el fallo que hace
+ * que un filtro parezca un robo.
+ */
+function motivoDeRejillaVacia(game: any, tipo: string): string {
+  const state = game.getState();
+  const enAlmacen = ((state.warehouse as any[]) || []).filter((w: any) => w.type === tipo);
+  if (enAlmacen.length === 0) {
+    return 'Compra ' + (tipo === 'companion' ? 'compañeros' : 'recolectores') +
+      ' en la tienda o abre cajas. Necesitas ' + MATERIALES_POR_FUSION + ' del mismo tier para fusionar.';
+  }
+  return `Tienes ${enAlmacen.length} en el almacen y todos estan equipados. ` +
+    `Desequipa ${enAlmacen.length === 1 ? 'el que hay' : 'alguno'} en el almacen y aparecera aqui. ` +
+    `Se necesitan ${MATERIALES_POR_FUSION} del mismo tier.`;
+}
+
+/** El titulo del estado vacio, en la misma linea que el motivo. */
+function catalogoVacio(game: any, tipo: string): string {
+  const state = game.getState();
+  const enAlmacen = ((state.warehouse as any[]) || []).filter((w: any) => w.type === tipo);
+  return enAlmacen.length === 0
+    ? `No tienes ${NOMBRES[tipo as 'companion'].muchos}`
+    : 'Todo lo que tienes esta equipado';
 }
 
 function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
@@ -180,11 +229,6 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     : 0;
   const ready = elegidos.length === MATERIALES_POR_FUSION;
 
-  /** Lo equipado no se puede consumir: perderlo sería un castigo doble. */
-  const equipado = (w: any) => ui.tipo === 'collector'
-    ? w.id === state.equippedCollectorId
-    : (state.activeCompanions || []).includes(w.id);
-
   // --- Fragmentos -------------------------------------------------------
 
   const slot = (i: number) => {
@@ -209,21 +253,22 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
 
   const matCell = (w: any) => {
     const isSel = ui.selected.includes(w.id);
-    // Por el id y no por una bandera: el recolector tiene `equipped` en su ficha
-    // y además el id del motor; el compañero solo tiene la lista de activos. Las
-    // dos formas están en `esEquipado()` del almacén, que es la que los cuenta.
-    const equipped = equipado(w);
+    // **SIN ESTADO DE EQUIPADO, PORQUE AQUÍ NO HAY NINGUNO.** La celda lo llevaba
+    // para ponerla a media opacidad y marcarla con EQ, y el filtro de
+    // materialesDeForja() hace que eso no tenga a quien marcar: los equipados no
+    // llegan aquí. Una pregunta de "¿está equipado?" en la celda sería una pregunta
+    // que la lista ya respondió.
     return `
-      <button class="inv-cell ${isSel ? 'is-selected' : ''} ${equipped ? 'opacity-60' : ''}"
+      <button class="inv-cell ${isSel ? 'is-selected' : ''}"
               data-act="pick" data-id="${w.id}"
-              title="${equipped ? 'Equipada: desequípala para usarla como material' : w.name}">
+              title="${w.name}">
         <span class="ring-${raritySlug(w.rarity)} w-9 h-9 rounded-lg grid place-items-center
                      [&>span>svg]:w-4 [&>span>svg]:h-4 ${rarityClass(w.rarity)}">${ic(N.icono)}</span>
         <span class="text-[9px] font-mono text-[var(--text-main)] text-center leading-tight line-clamp-2 w-full">
           ${w.name}
         </span>
         <span class="text-[9px] font-mono text-[var(--text-muted)]">
-          T${w.tier} · ${estrellasDe(w.potential)}${equipped ? ' · EQ' : ''}
+          T${w.tier} · ${estrellasDe(w.potential)}
         </span>
         <!-- **LA ESQUINA CON EL STAT FINAL, Y ES LA MISMA FUNCIÓN QUE LA DEL ALMACÉN.**
              La celda enseña el tier y las estrellas, y con eso se ordenaba por la base:
@@ -366,8 +411,11 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
       `)}
 
       ${materiales.length === 0
-        ? emptyState(N.icono, `No tienes ${N.muchos}`,
-            'Compra ' + N.muchos + ' en la tienda o abre cajas. Necesitas ' + MATERIALES_POR_FUSION + ' del mismo tier para fusionar.')
+        ? emptyState(N.icono, catalogoVacio(game, ui.tipo),
+            // **EL MOTIVO VA EN EL TITULO Y DICE CUAL DE LOS DOS ES.** Un "no tienes"
+            // cuando lo que pasa es que "todo lo que tienes esta equipado" es la
+            // diferencia entre un jugador que abre una caja y uno que va a desequipar.
+            motivoDeRejillaVacia(game, ui.tipo))
         : `
           <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
             ${tiers.map(t => `

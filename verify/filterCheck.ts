@@ -761,6 +761,66 @@ async function main() {
       moveItemTo(g, 'lo_que_sea', 0, 'all', 'default') === false);
   }
 
+  // ---------------------------------------------------------------------------
+  //  LA REJILLA DE LA FORJA NO PINTA LO EQUIPADO
+  //
+  //  Es una regla de la lista, no de la celda, y por eso se puede comprobar sin un DOM:
+  //  `materialesDeForja()` es la que decide y lo que se mira es lo que sale de ella.
+  //  La celda se lleva la parte de verdad de la regla --que no haya ningun equipado que
+  //  pueda tocar-- y esta comprueba la parte de la lista.
+  // ---------------------------------------------------------------------------
+  {
+    const g = await boot(baseSave([
+      collector('r1'), collector('r2'), collector('r3')
+    ], { equippedCollectorId: 'r2' }));
+    const ids = materialesDeForja(g, 'collector').map((w: any) => w.id);
+    check('forja: el recolector equipado no sale en la rejilla de materiales',
+      !ids.includes('r2'), 'ids=' + ids.join(','));
+    check('forja: y los demas siguen saliendo',
+      ids.includes('r1') && ids.includes('r3'), 'ids=' + ids.join(','));
+    check('forja: el equipado sigue ESTANDO en el almacen, no se perdio',
+      s(g).warehouse.some((w: any) => w.id === 'r2'),
+      'almacen=' + s(g).warehouse.map((w: any) => w.id).join(','));
+
+    // **Y LO MISMO CON LOS COMPAÑEROS, QUE SON OTRA LISTA Y OTRO PREDICADO.** El
+    // recolector se recognise por `equippedCollectorId` y el compañero por la lista de
+    // activos, y un filtro que solo mirara el primero dejaría a los compañeros equipados
+    //ocupando huecos sin que nadie lo dijera.
+    const g2 = await boot(baseSave([
+      consumable('x1', 'afk', 1), collector('r1')
+    ], { activeCompanions: [] }));
+    // Un compañero activo con id propio: se marca en `activeCompanions`, que es lo
+    // unico que hay para el.
+    const st: any = s(g2);
+    st.warehouse.push({ id: 'k1', name: 'KOBOLD', type: 'companion', details: 'x', rarity: 'Raro', tier: 1, potential: 3, sellPrice: 100 });
+    st.activeCompanions = ['k1'];
+    const comp = materialesDeForja(g2, 'companion').map((w: any) => w.id);
+    check('forja: el compañero activo tampoco sale en la rejilla',
+      !comp.includes('k1'), 'ids=' + comp.join(','));
+
+    // **Y CON TODO EQUIPADO LA REJILLA QUEDA VACIA, QUE ES JUSTO LO QUE SE PIDIO**
+    // antes de que la celda gris dijera "no tienes nada". Con tres y dos equipados el
+    // filtro tiene que dejar la lista a cero, no a uno.
+    // **Y LA FLAG `equipped` DE LA FICHA NO CUENTA**, que es lo que hace peligroso
+    // escribir el filtro a ojo: el id manda y la bandera es su proyeccion. Aqui se
+    // comprueba poniendo la bandera puesta SIN id, que es el estado que dejo un
+    // guardado viejo, y el item tiene que seguir saliendo: el motor lo consume igual.
+    const g3 = await boot(baseSave([collector('r1'), collector('r2')], {}));
+    const st3: any = s(g3);
+    st3.equippedCollectorId = '';
+    st3.warehouse[0].equipped = true;
+    check('forja: la bandera de la ficha sin id NO esconde el item, porque el id manda',
+      materialesDeForja(g3, 'collector').length === 2,
+      `materiales=${materialesDeForja(g3, 'collector').length}`);
+
+    // Y con el id puesto de verdad, fuera.
+    st3.equippedCollectorId = 'r1';
+    check('forja: con el id puesto, el item sale de la rejilla y sigue en el almacen',
+      materialesDeForja(g3, 'collector').map((w: any) => w.id).join(',') === 'r2' &&
+      st3.warehouse.length === 2,
+      `ids=${materialesDeForja(g3, 'collector').map((w: any) => w.id).join(',')} almacen=${st3.warehouse.length}`);
+  }
+
   resumen('filtros y rejilla');
 }
 

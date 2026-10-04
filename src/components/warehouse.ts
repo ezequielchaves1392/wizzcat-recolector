@@ -957,7 +957,15 @@ function detailContent(item: any, state: any, game: any): string {
  * El id manda porque es lo que lee el cálculo de daño. La bandera es su
  * proyección, y como dato de solo lectura para el guardado.
  */
-function esEquipado(w: any, state: any): boolean {
+/**
+ * Exportado porque la Forja necesita **el mismo** predicado y no el suyo.
+ *
+ * Una regla compartida escrita dos veces es R2 en su forma mas barata de detectar: las
+ * dos copias son correctas y se separan el dia que el juego aprenda una tercera
+ * forma de estar equipado. Y aqui no es teorico: el flag `equipped` existe en la ficha
+ * y parece servir, asi que la copia "barata" es la que sale.
+ */
+export function esEquipado(w: any, state: any): boolean {
   if (w.type === 'collector') return state.equippedCollectorId === w.id;
   if (w.type === 'companion') return state.activeCompanions.includes(w.id);
   return false;
