@@ -60,6 +60,10 @@ export default defineConfig({
         identidadCheck: resolve(here, 'identidadCheck.ts'),
         loreCheck: resolve(here, 'loreCheck.ts'),
         leyendaCheck: resolve(here, 'leyendaCheck.ts'),
+        // F50 · El número del contador. Nace porque F48 y F50 ya estaban hechos y
+        // sin banco, y el banco encontró dos bugs que no eran de formato: el
+        // separador decimal del juego y el tramo en la frontera del logaritmo.
+        contadorCheck: resolve(here, 'contadorCheck.ts'),
         autoventaCheck: resolve(here, 'autoventaCheck.ts'),
         arbolLoreCheck: resolve(here, 'arbolLoreCheck.ts')
       },
