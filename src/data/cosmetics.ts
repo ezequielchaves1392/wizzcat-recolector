@@ -194,7 +194,101 @@ export const COSMETICS: Cosmetic[] = [
     style: { background: 'linear-gradient(120deg,#4c1d95,#0e7490 45%,#10b981)' } },
   { id: 'title_signal', type: 'title', name: 'La Señal', description: 'El único cosmético Divino que no se gana en el ranking.',
     rarity: 'Divino', unlock: { kind: 'crate', value: 10 },
-    style: { color: '#34d399', font: 'display', glow: 'true', gradient: 'linear-gradient(90deg,#34d399,#22d3ee,#a78bfa)' } }
+    style: { color: '#34d399', font: 'display', glow: 'true', gradient: 'linear-gradient(90deg,#34d399,#22d3ee,#a78bfa)' } },
+// ------------------------------------------------------- LOGROS DIFÍCILES (F53+)
+  //
+  //  **TRECE COSMÉTICOS MÁS, Y LA REGLA QUE LOS GOBIERNA: EL NOMBRE DICE LO QUE SE VE.**
+  //
+  //  Antes el catálogo tenía la regla contraria sin decirlo: el nombre prometía y el
+  //  estilo no cumplía. "Óxido: borde corroído" era un círculo de un píxel, y nueve
+  //  marcos eran el mismo. Un cosmético cuyo estilo no se parece a su nombre no es un
+  //  cosmético: es una etiqueta con una imagen al lado.
+  //
+  //  Así que aquí cada nombre es una instrucción:
+  //
+  //    · **Arcoíris** es un degradado de arcoíris, y se nota al mirar.
+  //    · **Ónix** es negro con un filo claro, y no brilla.
+  //    · **Legión** es un doble aro: dos líneas, porque son doce.
+  //    · **Espectro** es la conic de todos los tonos, girando sola.
+  //    · **Mosaico** es un damero de verdad, hecho con dos cónicos superpuestos.
+  //    · **Escaneo** son las líneas del monitor, de las de verdad.
+  //    · **Aurora Alta** es un cielo nocturno con estrellas encima.
+  //
+  //  Y las texturas salen de **gradientes a capas**, que es lo único que se puede meter en
+  //  un `style` sin añadir un binario al repositorio: un `conic-gradient`, un
+  //  `repeating-linear-gradient` y un `radial-gradient` apilados son una textura, y se leen
+  //  como una.
+  // ==========================================================================
+  {
+    id: 'frame_onyx', type: 'frame', name: 'Ónix', description: 'Negro con un filo claro. No brilla, y por eso se ve.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'vault_115' },
+    style: { ...glassBase, borderRadius: '0.5rem', borderWidth: '2px', borderColor: '#0a0a0f', boxShadow: 'inset 0 0 0 1px #3f3f46, 0 6px 18px #00000090' } },
+  {
+    id: 'frame_legion', type: 'frame', name: 'Legión', description: 'Doble aro. Doce en pie, y el marco los cuenta.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'squad_12' },
+    style: { ...glassBase, borderRadius: '9999px', borderWidth: '3px', borderColor: '#e5e7eb', boxShadow: '0 0 0 2px #111827, inset 0 0 0 2px #6b7280' } },
+  {
+    id: 'frame_prisma', type: 'frame', name: 'Prisma', description: 'El mismo borde se ve en tres tonos a la vez.',
+    rarity: 'Épico', unlock: { kind: 'achievement', value: 'doblaje' },
+    style: { ...glassBase, borderRadius: '0.875rem', borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, conic-gradient(from 90deg,#22d3ee,#a855f7,#f472b6,#22d3ee) border-box' } },
+  {
+    id: 'frame_spectrum', type: 'frame', name: 'Espectro', description: 'El arcoíris entero, girando despacio.',
+    rarity: 'Mítico', unlock: { kind: 'achievement', value: 'perfect_10' },
+    style: { ...glassBase, borderRadius: '9999px', borderColor: 'transparent', borderWidth: '3px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, conic-gradient(from 0deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444) border-box', animation: 'frameSpectrum 9s linear infinite' } },
+  {
+    id: 'banner_spectrum', type: 'banner', name: 'Espectro', description: 'Arcoíris en conic, con el centro justo detrás del avatar.',
+    rarity: 'Mítico', unlock: { kind: 'achievement', value: 'perfect_10' },
+    style: { background: 'conic-gradient(from 210deg at 50% 45%,#ef4444,#f59e0b,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444)', animation: 'frameSpectrum 14s linear infinite' } },
+  {
+    id: 'banner_mosaic', type: 'banner', name: 'Mosaico', description: 'Damero de dos cónicos cruzados: cuatro tonos, ocho cuadros.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'cores_10k' },
+    // **EL DAMERO SON DOS CÓNICOS SUPERPUESTOS**, no un `repeating-gradient`: el
+    // conic dibuja la estrella de ocho puntas y el segundo, girado 45°, la otra. Sale un
+    // damero real con dos capas.
+    style: {
+      background: 'conic-gradient(from 45deg,#0f172a 25%,#1e3a8a 0 50%,#0f172a 0 75%,#1e3a8a 0), conic-gradient(from 0deg,#0f172a 25%,#1e3a8a 0 50%,#0f172a 0 75%,#1e3a8a 0)',
+      backgroundBlendMode: 'difference'
+    } },
+  {
+    id: 'banner_scanlines', type: 'banner', name: 'Escaneo', description: 'Las líneas del monitor, de las de verdad, cada dos píxeles.',
+    rarity: 'Épico', unlock: { kind: 'achievement', value: 'custodio' },
+    style: {
+      background: 'repeating-linear-gradient(0deg, rgba(56,189,248,.16) 0 1px, transparent 1px 3px), linear-gradient(180deg,#042f2e,#022c22)',
+      backgroundSize: 'auto, auto'
+    } },
+  {
+    id: 'banner_aurora_high', type: 'banner', name: 'Aurora Alta', description: 'El cielo de la base desde el tejado, con las estrellas encima.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'incesante' },
+    // **LAS ESTRELLAS SON UN RADIAL REPETIDO** y la aurora un lineal debajo. Dos capas y
+    // unaEcual: la mezcla se queda en la capa de la aurora, que es donde se ve.
+    style: {
+      background: 'radial-gradient(circle at 20% 30%, rgba(226,232,240,.85) 0 1px, transparent 1.4px), radial-gradient(circle at 65% 18%, rgba(226,232,240,.6) 0 1px, transparent 1.3px), linear-gradient(120deg,#4c1d95 0%,#0e7490 45%,#10b981 78%,#052e16 100%)',
+      backgroundSize: '90px 90px, 130px 130px, auto'
+    } },
+  {
+    id: 'title_relicario', type: 'title', name: 'Relicario', description: 'Tienes un Divino. Se nota.',
+    rarity: 'Divino', unlock: { kind: 'achievement', value: 'relicario' },
+    style: { color: '#fde68a', font: 'display', glow: 'true', gradient: 'true' } },
+  {
+    id: 'title_eternidad', type: 'title', name: 'Eternidad', description: 'Veinte veces desde cero.',
+    rarity: 'Divino', unlock: { kind: 'achievement', value: 'eternidad' },
+    style: { color: '#c4b5fd', font: 'display', glow: 'true', gradient: 'true' } },
+  {
+    id: 'title_mil_millones', type: 'title', name: 'Mil Millones', description: 'El billón, contado de uno en uno.',
+    rarity: 'Divino', unlock: { kind: 'achievement', value: 'mil_millones' },
+    style: { color: '#67e8f9', font: 'mono', glow: 'true', gradient: 'true' } },
+  {
+    id: 'title_cantera', type: 'title', name: 'Cantera', description: 'Quinientas cajas y seguimos abriendo.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'cantera' },
+    style: { color: '#fdba74', font: 'display', glow: 'true' } },
+  {
+    id: 'title_ninguna_bala', type: 'title', name: 'Ninguna Bala', description: 'Cien mil clics. Ni uno desperdiciado.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'ninguna_bala' },
+    style: { color: '#e5e7eb', font: 'mono' } },
+  {
+    id: 'title_custodio', type: 'title', name: 'Custodio', description: 'Veinte nodos. El árbol es tuyo.',
+    rarity: 'Épico', unlock: { kind: 'achievement', value: 'custodio' },
+    style: { color: '#86efac', font: 'mono' } },
 ];
 
 export const COSMETICS_BY_ID: Record<string, Cosmetic> = Object.fromEntries(

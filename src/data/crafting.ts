@@ -109,6 +109,23 @@ export const AFFIX_BY_ID: Record<string, Affix> = Object.fromEntries(AFFIXES.map
 /** Techo de nivel de un recolector que no lo trae: los de la tienda. */
 export const BASE_COLLECTOR_MAX_LEVEL = 20;
 
+/**
+ * EL TOPE DE POTENCIAL, EN ESTRELLAS. Lo exporta porque **un logro necesita compararse
+ * con él** y antes no había con qué: `Math.min(5, …)` estaba escrito a mano en media
+ * docena de sitios (`preview.ts`, la fusión, la RTP de las piedras, el cálculo de
+ * afinidad) y el número solo aparecía dentro de una operación.
+ *
+ * **Y NO ES `AFIX_MAX`.** Ese es el tope de *afijos* —los modificadores que salen de la
+ * forja— y son 6. Confundir los dos da un logro que **nadie puede completar**: el
+ * potencial se queda en 5 estrellas y un `potential >= 6` no llega nunca, sin error y sin
+ * aviso. Los dos topes conviven a veinte líneas de distancia, que es exactamente por lo
+ * que este comentario hace falta.
+ *
+ * Sustituir los `Math.min(5, …)` sueltos por este nombre es trabajo de otro commit, y
+ * está anotado en `PENDIENTES.md`.
+ */
+export const POTENTIAL_MAX = 5;
+
 /** Cuántos niveles extra da cada estrella de potencial. */
 const MAX_LEVEL_PER_POTENTIAL = 3;
 

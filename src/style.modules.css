@@ -246,6 +246,28 @@
   100% { filter: hue-rotate(0deg) brightness(1); }
 }
 
+/**
+ * EL GIRO DEL ESPECTRO, Y POR QUÉ ES UNA VUELTA COMPLETA Y LENTA.
+ *
+ * Los cosmos "Espectro" (marco y banner) llevan un `conic-gradient` de arcoíris en el
+ * borde, y sin esto se ven como un arcoíris **quieto**: el nombre promete un espectro y lo
+ * que hay es una foto de uno.
+ *
+ * Dos decisiones. **Una vuelta completa de 9 s** —y no media vuelta— porque el
+ * `conic-gradient` es simétrico: girar 180° es la misma imagen, y una animación a medio
+ * girar vuelta parece salto. Y **sin `brightness`**, porque el brillo sobre un
+ * `border-box` con relleno `padding-box` sube también el fondo y el marco deja de leerse
+ * como marco en el segundo en que se enciende.
+ *
+ * Y hay un segundo sitio que gira el mismo arcoíris: el `::after` de `.cosmetic-banner`,
+ * que ya usa `shimmer`. Este es el del cónico, y son animations distintas porque los dos
+ *gradientes no se mueven igual: el lineal de las líneas de escaneo no puede girar.
+ */
+@keyframes frameSpectrum {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .cosmetic-banner {
   border-radius: 0.9rem;
   border: 1px solid var(--border-color);

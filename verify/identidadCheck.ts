@@ -22,7 +22,11 @@
 import { check, resumen, boot, baseSave, reload, s, collector } from './kit';
 import { miniIdentity, rellenoDeBanner } from '../src/ui/identity';
 import { identityCard, unlockHint } from '../src/ui/profilePage';
-import { SECRET_ACHIEVEMENTS } from '../src/data/achievements';
+import {
+  SECRET_ACHIEVEMENTS, ACHIEVEMENT_REWARDS, LOGROS_DIFICILES, sumaDeBonificacion,
+  type AchievementId
+} from '../src/data/achievements';
+import { ACHIEVEMENTS } from '../src/achievements';
 import { COSMETICS, cosmeticsAlcanzables, viasSinResolver, cosmeticStyle } from '../src/data/cosmetics';
 import {
   BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT, FILAS_DE_EJEMPLO
@@ -581,6 +585,117 @@ async function main() {
     unlockHint({ ...deLogro[0], id: 'x', unlock: { kind: 'achievement', value: 'no_existe' } } as any)
       === 'Se desbloquea con un logro',
     unlockHint({ ...deLogro[0], id: 'x', unlock: { kind: 'achievement', value: 'no_existe' } } as any));
+
+// ---------------------------------------------------------------------------
+  //  3 · LOS DOCE DIFÍCILES: QUE SE PUEDAN HACER, Y QUE NO TOQUEN LA ECONOMÍA
+  //
+  //  **EL RIESGO DE UN LOGRO NUEVO NO ES QUE NO SALGA: ES QUE NO SE PUEDA HACER.**
+  //  Un logro con un `target` de 12 compañeros se ve en la lista y no se completa nunca,
+  //  y el síntoma es que el jugador cree que le falta algo. Un logro que se completa solo
+  //  tampoco: es un logro de mentira.
+  //
+  //  Las cinco pruebas de abajo atacan las dos formas de mentira. Que el objetivo sea un
+  //  número finito. Que un estado vacío no lo complete. Que un estado absurdo **no lo
+  //  rebase** —una barra al 140 % es una barra rota—. Y que un estado maduro **sí** lo
+  //  complete, los doce a la vez, que es donde se ve si dos condiciones se están pisando.
+  // ---------------------------------------------------------------------------
+  {
+    const vacio = () => ({
+      warehouse: [], companions: [], activeCompanions: [],
+      nanites: 0, totalNanitesProduced: 0, totalClicks: 0, cratesOpened: 0, forgedCount: 0,
+      cores: 0, totalCores: 0, resets: 0, unlockedAchievements: [], unlockedNodes: [],
+      passiveIncome: 0, passiveMultiplier: 1, warehouseCapacity: 0, bonus: { storageSlots: 0 }
+    } as any);
+
+    // El estado que los completa a la vez. Cada campo es el que un logro mide, y el
+    // almacén lleva diez items de cinco estrellas de los cuales uno es Divino, así que
+    // `perfect_10` y `relicario` se cumplen sin que uno estorbe al otro.
+    const maduro = () => ({
+      ...vacio(),
+      warehouse: [
+        ...Array.from({ length: 10 }, () => ({ type: 'collector', rarity: 'Divino', potential: 5 })),
+        { type: 'collector', rarity: 'Legendario', potential: 3 }
+      ],
+      activeCompanions: Array.from({ length: 12 }, (_, i) => `c${i}`),
+      totalCores: 10_000, resets: 20, totalNanitesProduced: 1_000_000_000,
+      passiveIncome: 100_000, cratesOpened: 500, totalClicks: 100_000,
+      passiveMultiplier: 2, unlockedNodes: Array.from({ length: 20 }, (_, i) => `n${i}`),
+      warehouseCapacity: 115, bonus: { storageSlots: 0 }
+    } as any);
+
+    const porId = (id: string) => ACHIEVEMENTS.find(a => a.id === id) as any;
+    const ids = LOGROS_DIFICILES.map(l => l.id);
+    const achievement = ids.map(porId);
+
+    check('logros: los doce difíciles están en el catálogo y en su tabla',
+      achievement.every(a => a) && ids.length === 12,
+      `faltan: ${ids.filter(i => !porId(i)).join(',') || 'ninguno'} (${ids.length} en la tabla)`);
+
+    // **CADA UNO DICE POR QUÉ ES TAN DIFÍCIL, Y NO ES UNA FRASE DE RELLENO.** Es un
+    // banco de contenido, como el de las leyendas: la documentación de estos doce vive
+    // en `porQue`, y una tabla de doce líneas en blanco es documentación que no existe.
+    const sinPorque = LOGROS_DIFICILES.filter(l => (l.porQue ?? '').trim().length < 40);
+    check('logros: y cada uno explica por qué es difícil',
+      sinPorque.length === 0,
+      sinPorque.map(l => `${l.id}="${l.porQue}"`).join(' | ') || `${ids.length} explicaciones`);
+
+    // **LOS DOCE PREMIAN UN COSMÉTICO Y NADA MÁS.** Un `clickBonus` aquí sería tocar el
+    // equilibrio en un commit de contenido, y el equilibrio es del jugador. Se comprueba
+    // contra los `Record` que el motor suma, no contra un comentario.
+    const conBono = ids.filter(id => {
+      const r = ACHIEVEMENT_REWARDS[id as AchievementId];
+      return !r || r.clickBonus !== 0 || r.passiveBonus !== 0;
+    });
+    check('logros: los doce no dan bonificación numérica, solo cosmético',
+      conBono.length === 0, conBono.join(',') || 'los doce dan 0, 0');
+    check('logros: y la suma de la bonificación sale de los otros, no de estos',
+      sumaDeBonificacion().passiveBonus > 0
+        && ids.every(id => ACHIEVEMENT_REWARDS[id as AchievementId].passiveBonus === 0),
+      `pasivo total ${sumaDeBonificacion().passiveBonus}, de los doce: 0`);
+
+    const vacios = achievement.filter(a => a && a.progress(vacio()).current !== 0);
+    check('logros: una partida vacía no completa ninguno',
+      vacios.length === 0,
+      vacios.map(a => `${a.id}=${a.progress(vacio()).current}`).join(' | ') || `${ids.length} en cero`);
+
+    // **LA BARRA NO SE PASA.** `current` va acotado con `Math.min` en los doce, y esto lo
+    // comprueba con un estado imposible: si mañana alguien quita un `Math.min`, la barra
+    // pasa de 100 % y el banco lo dice.
+    const desbordados: string[] = [];
+    const exagerado = { ...maduro(), totalCores: 10 ** 12, resets: 9999, cratesOpened: 10 ** 7, totalClicks: 10 ** 8 };
+    for (const a of achievement.filter(Boolean)) {
+      const { current, target } = a.progress(exagerado);
+      if (current > target || current < 0) desbordados.push(`${a.id}=${current}/${target}`);
+    }
+    check('logros: ni con un estado imposible se pasa del objetivo',
+      desbordados.length === 0, desbordados.join(' | ') || 'los doce se quedan en su 100 %');
+
+    const incompletos = achievement.filter(a => a && a.progress(maduro()).current < a.progress(maduro()).target);
+    check('logros: y hay una partida que los completa a los doce a la vez',
+      incompletos.length === 0,
+      incompletos.map(a => {
+        const p = a.progress(maduro());
+        return `${a.id}=${p.current}/${p.target}`;
+      }).join(' | ') || 'los doce, en la misma partida');
+
+    // **Y CADA COSMÉTICO DE LOS DOCE LO ABRE UNO DE ELLOS, DE VERDAD.** La vía del logro
+    // la reconcilia el motor desde `unlockedAchievements`, así que esto no mira el
+    // catálogo: mira lo que `cosmeticsAlcanzables` devuelve cuando el logro está
+    // desbloqueado. Un cosmético escrito con un id mal escrito no abre nunca, y esta es
+    // la prueba que lo dice.
+    const sinPremio: string[] = [];
+    const queNoAbren: string[] = [];
+    for (const id of ids) {
+      const suyos = (COSMETICS as any[]).filter(c => c.unlock.kind === 'achievement' && c.unlock.value === id);
+      if (suyos.length === 0) { sinPremio.push(id); continue; }
+      const abiertos = alcanzables({ unlockedAchievements: [id] }).map((c: any) => c.id);
+      for (const c of suyos) if (!abiertos.includes(c.id)) queNoAbren.push(`${id}->${c.id}`);
+    }
+    check('logros: cada uno de los doce premia al menos un cosmético',
+      sinPremio.length === 0, sinPremio.join(',') || 'los doce tienen premio');
+    check('logros: y el premio se abre de verdad al desbloquear el logro',
+      queNoAbren.length === 0, queNoAbren.join(',') || `${ids.length} premios abiertos`);
+  }
 }
 
 

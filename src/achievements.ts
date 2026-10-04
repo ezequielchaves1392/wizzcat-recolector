@@ -6,6 +6,13 @@
 // al recalcular, así que no necesitan escribirse en el estado del jugador.
 
 import { ACHIEVEMENT_REWARDS, type AchievementId } from './data/achievements';
+import { techoDeExpansor, EXPANSOR_TIERS } from './data/store';
+import { POTENTIAL_MAX } from './data/crafting';
+// **EL TECHO DE LA ESCALERA Y EL TOPE DE AFIJOS, NO LOS NÚMEROS ESCRITOS.** El logro del
+// almacén pide 115 porque eso dice `techoDeExpansor(10)`, y el de los perfectos pide 10
+// ítems ★5 porque ★5 es `POTENTIAL_MAX`. Los dos números que se pueden mover están en
+// `data/`: escribirlos en el logro y en la regla esotería de dos sitios, y el día que
+// se quede viejo es el del logro, que es el que no se ve.
 
 export interface Achievement {
   id: AchievementId;
@@ -177,6 +184,180 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { clickBonus: 0.20, passiveBonus: 0.20 },
     progress: (s) => ({ current: Math.min(s.resets ?? 0, 5), target: 5 })
   },
+// =========================================================================
+  //  2 · LOS DIFÍCILES
+  //
+  //  Los de arriba son **cortos**: uno por sistema, y un jugador activo los saca en una
+  //  tarde. Estos son otra cosa —**lotes**—: hay que llegar muy lejos o tener muchos a la
+  //  vez, y varios no se pueden hacer por vías distintas porque el juego solo tiene una.
+  //
+  //  **SUS PREMIOS SON COSMÉTICOS Y NADA MÁS.** El `reward` de los doce es `0, 0` y el
+  //  premio de verdad está en el `rewardText`, como el marco de Brasa y el banner de
+  //  Carmesí. Es una decisión que se puede leer en una tabla
+  //  (`sumaDeBonificacion()`) y no en un comentario: añadir un +5 % a un logro difícil
+  //  es tocar el equilibrio, y eso es tuyo.
+  //
+  //  **Y CADA CONDICIÓN MIDE LO QUE EL JUGADOR VE, NO UN CONTADOR INTERNO.** La
+  //  capacidad es la base **más** los slots del árbol, que es lo que ve en la esquina;
+  //  el almacén se cuenta con los afijos incluidos, que es lo que ocupa; y el árbol se
+  //  cuenta por nodos comprados, no por ramas abiertas. Una condición que mide un campo
+  //  que el jugador no puede ver es un logro que no se puede Perseguir.
+  // =========================================================================
+  {
+    id: 'vault_115',
+    title: 'Almacén Definitivo',
+    description: 'Amplía el almacén a 115 ranuras',
+    icon: 'warehouse',
+    rewardText: 'Marco "Ónix"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **115 ES LA CIMA DE LA ESCALERA**, `techoDeExpansor(10)`, y sale de ahí en vez de
+    // estar escrito a mano: si la escalera sube, el logro sube con ella y no se queda
+    // pidiendo algo que ya no existe.
+    progress: (s) => ({
+      current: Math.min(
+        (s.warehouseCapacity ?? 0) + (s.bonus?.storageSlots ?? 0),
+        techoDeExpansor(EXPANSOR_TIERS.length)
+      ),
+      target: techoDeExpansor(EXPANSOR_TIERS.length)
+    })
+  },
+  {
+    id: 'perfect_10',
+    title: 'Diez Perfectos',
+    description: 'Ten 10 items con 5 estrellas a la vez',
+    icon: 'flame',
+    rewardText: 'Banner "Espectro"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // ★5 es el 100 % del item, y **tenerlos a la vez** es lo que lo hace difícil: se
+    // hace difícil: se pueden vender entre medias. El almacén es el único sitio donde
+    // "a la vez" existe.
+    progress: (s) => ({
+      current: (s.warehouse ?? []).filter((w: any) => (w.potential ?? 0) >= POTENTIAL_MAX).length,
+      target: 10
+    })
+  },
+  {
+    id: 'relicario',
+    title: 'Relicario',
+    description: 'Consigue un recolector Divino',
+    icon: 'crown',
+    rewardText: 'Título "Relicario"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **Divino, no Mítico como el jackpot.** El `jackpot` viejo mira compañeros Míticos o
+    // Divinos y por eso este no lo repite: este mira un **recolector** Divino, que sale
+    // de fundir dos ★5 y es el objeto más completo del juego.
+    progress: (s) => ({
+      current: (s.warehouse ?? []).some((w: any) => w.type === 'collector' && w.rarity === 'Divino') ? 1 : 0,
+      target: 1
+    })
+  },
+  {
+    id: 'squad_12',
+    title: 'Doce en Pie',
+    description: 'Equipa 12 compañeros a la vez',
+    icon: 'companion',
+    rewardText: 'Marco "Legión"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // Hay 17 ranuras de compañero en el juego (1 de partida + 12 de tienda + 4 del árbol),
+    // así que 12 activas es casi todo el tablero lleno.
+    progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 12), target: 12 })
+  },
+  {
+    id: 'cores_10k',
+    title: 'Diez Mil Núcleos',
+    description: 'Gana 10.000 núcleos en total entre todas tus ascensiones',
+    icon: 'core',
+    rewardText: 'Banner "Mosaico"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **`totalCores` y no `cores`**, que es el saldo y baja al comprar un nodo: medido con
+    // el saldo, el logro se desactiva solo en cuanto inviertes.
+    progress: (s) => ({ current: Math.min(s.totalCores ?? 0, 10000), target: 10000 })
+  },
+  {
+    id: 'eternidad',
+    title: 'Eternidad',
+    description: 'Recicla tu progreso 20 veces',
+    icon: 'recycle',
+    rewardText: 'Título "Eternidad"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(s.resets ?? 0, 20), target: 20 })
+  },
+  {
+    id: 'mil_millones',
+    title: 'Mil Millones',
+    description: 'Produce 1.000.000.000 de nanitas en total',
+    icon: 'graph',
+    rewardText: 'Título "Mil Millones"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **`totalNanitesProduced` y no `nanites`**: el saldo baja al comprar y al ascender, y
+    // un logro que se desactiva al gastar es un logro que no es un logro.
+    progress: (s) => ({ current: Math.min(s.totalNanitesProduced ?? 0, 1_000_000_000), target: 1_000_000_000 })
+  },
+  {
+    id: 'incesante',
+    title: 'Incesante',
+    description: 'Alcanza 100.000 nanitas por segundo',
+    icon: 'bolt',
+    rewardText: 'Banner "Aurora Alta"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(Math.floor(s.passiveIncome ?? 0), 100000), target: 100000 })
+  },
+  {
+    id: 'cantera',
+    title: 'Cantera',
+    description: 'Abre 500 cajas',
+    icon: 'crate',
+    rewardText: 'Título "Cantera"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **Cincocientas, contando las que no sale nada**, que es el 99 % de la caja T1. El
+    // logro viejo pedía veinticinco; este pide la cantera entera.
+    progress: (s) => ({ current: Math.min(s.cratesOpened ?? 0, 500), target: 500 })
+  },
+  {
+    id: 'ninguna_bala',
+    title: 'Ninguna Bala',
+    description: 'Acumula 100.000 clics',
+    icon: 'power',
+    rewardText: 'Título "Ninguna Bala"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    progress: (s) => ({ current: Math.min(s.totalClicks ?? 0, 100000), target: 100000 })
+  },
+  {
+    id: 'doblaje',
+    title: 'Doblaje',
+    description: 'Duplica el ingreso pasivo con compañeros multiplicadores',
+    icon: 'scale',
+    rewardText: 'Marco "Prisma"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **El multiplicador global, no el ingreso**: es lo que hacen cinco compañeros
+    // multiplicadores, y es la única forma de llegar a ×2 sin tocar la forja.
+    //
+    // **Y SE MIDE LA DIFERENCIA, NO EL VALOR.** `passiveMultiplier` **empieza en 1**, así
+    // que medirlo tal cual leía 1 de 2 en una partida recién creada: la barra del logro
+    // nacía al 50 %, con el marco ya a medio camino, antes de haber hecho nada. Un
+    // progreso que no empieza en cero es un progreso que miente. Por eso el objetivo es
+    // 1 —*cuánto falta por multiplicar*— y no 2, y lo que se resta es la base.
+    //
+    // El `Math.floor` de centésimas es porque los compañeros multiplican por factores con
+    // decimales: sin él la barra daría 0,4375 y el jugador ve un porcentaje que no
+    // corresponde a nada.
+    progress: (s) => ({
+      current: Math.min(Math.max(0, Math.round(((s.passiveMultiplier ?? 1) - 1) * 100) / 100), 1),
+      target: 1
+    })
+  },
+  {
+    id: 'custodio',
+    title: 'Custodio',
+    description: 'Compra 20 nodos del árbol de pasivas',
+    icon: 'tree',
+    rewardText: 'Banner "Escaneo"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
+    // **`unlockedNodes` y no `nodeLevels`**: son los nodos **comprados**, que es lo que el
+    // jugador cuenta en el árbol. Los niveles se pueden subir gastando núcleos otra vez.
+    progress: (s) => ({ current: Math.min((s.unlockedNodes ?? []).length, 20), target: 20 })
+  },
+  // ------------------------------------------------------------- Secretos
   // ------------------------------------------------------------- Secretos
   {
     id: 'ghost',

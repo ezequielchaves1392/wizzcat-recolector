@@ -453,6 +453,39 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
       `identidadCheck` (+4), que comprueba la estructura y no el píxel.
 - [ ] **F55 · Logros 100% obtenibles**, con banco que lo compruebe. Aquí hay un
       ~~sorpresa~~: el logro `overclocked` se acaba de reasignar y hay que mirarlo con lupa.
+      **Parcialmente cerrado con los doce difíciles** (ver "Lote 7 · INFORMACIÓN", más
+      abajo): ya hay banco que demuestra que los doce se pueden completar a la vez, que no
+      los completa una partida vacía y que su progreso no se rebasa. Queda `overclocked`.
+- [x] **F58 · Doce logros difíciles y trece cosméticos con el estilo diciendo lo que el
+      nombre promete.** Hecho en dos mitades, porque son dos cosas que no se tocan igual.
+      - **Los doce logros.** Cada uno es un **lote**: hay que llegar muy lejos o tener
+        muchos a la vez. Y hay dos reglas que no negocian:
+        1. **Ninguno da bonificación numérica.** Los doce dan `0, 0` y su premio es el
+        cosmético. Un `clickBonus` aquí sería tocar el equilibrio dentro de un commit de
+        contenido, y el equilibrio es tuyo. Está comprobado contra los `Record` que el
+        motor suma, no en un comentario.
+        2. **Cada uno mide lo que el jugador ve.** Capacidad = base + slots del árbol;
+        estrella = potencial del item; Custodio = nodos **comprados** (`unlockedNodes`),
+        no niveles; núcleos = `totalCores` y no el saldo, que baja al comprar un nodo.
+        Una condición que mide un campo que el jugador no puede ver es un logro que no
+        se puede perseguir.
+      - **Los trece cosméticos.** La regla que los gobierna es que **el nombre dice lo
+        que se ve**, que es lo contrario de lo que había: nueve marcos eran el mismo
+        círculo y dos banners no pintaban nada. Así que Arcoíris y Espectro son un
+        `conic-gradient` de arcoíris —y el de Espectro **gira**, con una vuelta completa
+        de 9 s porque media vuelta de un cónico es la misma imagen—, Mosaico es un damero
+        de verdad hecho con dos cónicos superpuestos y `background-blend-mode`, Escaneo
+        son líneas de monitor de 2 px, y Ónix es negro con un filo claro y **no brilla**,
+        que es lo que lo hace legible. Las texturas salen de **gradientes a capas**, que
+        es lo único que cabe en un `style` sin meter un binario en el repositorio.
+      - **Un bug real que salió de camino:** el primer pase usaba `AFIX_MAX` para contar
+        los items de cinco estrellas. `AFIX_MAX` es el tope de **afijos** y son 6: el
+        potencial se queda en 5, así que el logro **no lo podía completar nadie**, sin
+        error ni aviso. Ahora `data/crafting.ts` exporta `POTENTIAL_MAX` y los dos topes
+        conviven a veinte líneas, con el comentario que explica por qué no son el mismo
+        número. Y `Doblaje` medía el multiplicador tal cual, que **empieza en 1**: la
+        barra nacía al 50 % del marco antes de hacer nada. Mide la diferencia.
+      `identidadCheck` 70 → 79, `leyendaCheck` sube sola (27 logros).
 
 ### Lote 9 · CAJAS
 
@@ -1945,3 +1978,18 @@ _Cosas que estorban al trabajo más que al juego._
       despliegue público cualquiera termine subido el botón de **borrar la base de
       datos**, y esa red compensa más que el sitio que ocupa. Borrar el fichero de
       despliegue no es lo mismo que borrar la protección.
+- [ ] **`Math.min(5, …)` está escrito a mano en seis sitios** y el tope de potencial no
+      tenía nombre. Lo pasó a tener (`POTENTIAL_MAX`, en `data/crafting.ts`) porque un
+      logro necesitaba compararse con él y no había con qué. Los seis sitios sueltos —
+      `preview.ts`, la fusión, la afinidad del cálculo de potencial, las piedras de
+      calibración— siguen ahí: es un refactor de bajo riesgo y de bajo interés, y se
+      deja para cuando se toque uno de esos ficheros. **Lo que ya no es aceptable es que
+      alguien escriba el 5 otra vez**, y por eso el número tiene nombre y el comentario
+      al lado del `AFIX_MAX` avisa de que son dos topes distintos.
+- [ ] **`playthroughCheck` tiene una prueba que depende del dado** y no lo dice:
+      `caja: si son nanitas, entran las que dice la etiqueta` solo se ejecuta cuando el
+      botín de la caja sale de nanitas, así que el total del banco **varía entre 1964 y
+      1965** según la tirada. No es un fallo —por eso `AGENTS.md` avisa de que una prueba
+      que depende del dado no se cuenta— pero un banco cuyo total se mueve es un banco
+      del que no se puede fiar uno para detectar que le falta una prueba. Habría que
+      forzarlo con `conRoll` o quitar el `if`, en vez de dejarlo condicional.

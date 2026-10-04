@@ -367,12 +367,16 @@ function draw(
               nada, solo decía que lo de abajo era lo que había puesto el jugador. Al
               quitar el arrastre, la opción mentía: el jugador la elegía y no pasaba nada.
 
-              Ahora se llama **"Como llegó"** y dice la verdad: es el orden en que
+              Ahora se llama **"Default"** y dice la verdad: es el orden en que
               entraron los items, el del guardado. Se queda porque **es lo único que
               devuelve el almacén a su estado natural** y sin ella no hay manera de
               volver a verlo sin recargar la página.
+
+              Y el nombre es el que trae el juego entero: el resto de selectores y de
+              botones usan palabras inglesas, y una opción en medio de "Mayor valor" y
+              "Mayor nivel" era la única que traducía una etiqueta de software.
             -->
-            <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Como llegó</option>
+            <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Default</option>
             <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
             <!--
               LOS DOS EJES DEL STAT, Y POR QUÉ NO ES UNO.
