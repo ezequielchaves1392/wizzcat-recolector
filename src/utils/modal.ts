@@ -90,6 +90,36 @@ export interface ConfirmOptions {
   confirmDisabled?: boolean;
 }
 
+/**
+ * Convierte marcado en un nodo del DOM, para los dialogos que necesitan contenido
+ * **estructurado** en vez de un parrafo.
+ *
+ * `showConfirmModal()` ya acepta `string | Node`, asi que el arbol de pasivas puede
+ * ensenar el nombre grande, el efecto con su cifra y el lore del nodo sin que el modal
+ * tenga que saber nada de ninguno de los tres. Antes solo cabia una frase seguida.
+ *
+ * **Y POR QUE ESTA AQUI Y NO EN CADA PANTALLA:** es el unico punto donde hace falta y
+ * el unico que tiene el nodo que produce. Una copia por pantalla seria la razon por la
+ * que el DOM se construye a mano en tres sitios distintos.
+ *
+ * No usa `innerHTML` de un `div` porque eso ejecuta scripts del contenido; aqui el
+ * contenido lo escribe el propio codigo y no viene de fuera, y el rango de contextos no
+ * ejecuta nada. La alternativa seria `DOMParser` con un documento entero, que es mas
+ * lento para lo mismo.
+ */
+export function htmlToNode(html: string): Node {
+  const plantilla = document.createElement('template');
+  plantilla.innerHTML = html.trim();
+  // Un `template` puede traer mas de una raiz si el marcado va suelto, y el modal
+  // espera **un** nodo que insertar: se envuelve en un `div` para no tener que
+  // suponer que el marcado viene en un solo elemento.
+  if (plantilla.content.childNodes.length === 1) return plantilla.content.firstChild!;
+  const envolver = document.createElement('div');
+  envolver.className = 'flex flex-col gap-2 text-left';
+  envolver.appendChild(plantilla.content);
+  return envolver;
+}
+
 export function showConfirmModal(
   message: string | Node,
   onConfirm: (units?: number) => void,

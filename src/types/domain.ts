@@ -171,6 +171,13 @@ export interface TreeNode {
   maxLevel: number;
   /** Bonificación por nivel. */
   bonus: Partial<PassiveBonuses>;
+  /**
+   * Una frase de sabor sobre QUE ES ESTA PASIVA Y POR QUE EXISTE.
+   *
+   * No es decoracion: description dice el numero y esto dice para que sirve, que es
+   * lo que el jugador no puede deducir de un +8 %. La hoja del nodo las ensena las dos.
+   */
+  lore?: string;
   /** Posición en el árbol (columna = tier). */
   x: number;
   y: number;

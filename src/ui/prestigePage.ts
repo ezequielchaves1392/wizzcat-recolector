@@ -23,7 +23,7 @@ import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META } from '../data/tr
 import { canBuyNode, nextCores, coreProgress, nanitesToNextCore, treeCompletion } from '../data/prestige';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
-import { showConfirmModal } from '../utils/modal';
+import { htmlToNode } from '../utils/modal';import { showConfirmModal } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import type { PassiveBonuses } from '../types/domain';
 
@@ -279,6 +279,81 @@ export function renderPrestigePage(
 }
 
 /**
+ * LA HOJA DE UN NODO, Y POR QUÉ DEJA DE SER UNA FRASE.
+ *
+ * Antes el diálogo del árbol llevaba **una línea de texto**: "Instinto de Forja — nivel
+ * 1/5. +6 % a la probabilidad de crafteo." Con veintitrés nodos en pantalla y cinco
+ * niveles en cada uno, esa línea responde a "¿cuánto cuesta?" y a nada más. Y las dos
+ * preguntas que un jugador tiene al mirar un nodo son otras: **qué hace esto** y
+ * **para qué me sirve**.
+ *
+ * El `description` da el número y el `lore` da el sentido, y van en bloques distintos
+ * porque no se leen igual: uno se consulta y el otro se lee. El lore va en comillas, como
+ * el de los items del almacén, porque es la misma clase de cosa: una frase sobre el
+ * objeto que estás mirando.
+ *
+ * Y el motivo del veto va **encima de todo y en su propio color**, porque es lo que el
+ * jugador vino a ver al abrir un nodo que no puede pagar: si está debajo del lore, se lee
+ * después de la explicación y parece una nota al pie.
+ *
+ * Devuelve marcado, no un nodo, porque es una función pura y `htmlToNode()` la
+ * convierte en el nodo que el modal ya sabe insertar.
+ */
+export function nodeSheetHTML(node: any, level: number, opts: {
+  ok: boolean;
+  reason?: string;
+  coste: number;
+  cores: number;
+  categoria?: { label?: string } | null;
+  requiere?: string[];
+}): string {
+  const efectos = Object.entries(node.bonus)
+    .map(([k, v]) => bonusLabel(k as keyof PassiveBonuses, v as number))
+    .join(' · ') || 'Desbloquea una función';
+  const alMaximo = level >= (node.maxLevel ?? 1);
+
+  return `
+    <div class="flex flex-col gap-3 text-left" style="max-width:22rem">
+      <div>
+        <div class="font-['Orbitron'] font-bold text-[15px] leading-tight" style="color:var(--text-main)">
+          ${node.name}
+        </div>
+        <div class="text-[11px] font-mono leading-relaxed mt-1" style="color:var(--text-main)">
+          ${efectos}
+        </div>
+      </div>
+
+      ${node.lore ? `
+        <blockquote class="text-[11px] italic leading-relaxed px-2.5 py-2 rounded-lg"
+          style="color:var(--text-main);
+                 background: color-mix(in srgb, var(--accent) 7%, transparent);
+                 border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent)">
+          “${node.lore}”
+        </blockquote>` : ''}
+
+      <div class="flex flex-wrap gap-1.5 text-[10px] font-mono" style="color:var(--text-muted)">
+        <span class="px-2 h-6 inline-flex items-center rounded-md"
+              style="background: color-mix(in srgb, var(--accent) 12%, transparent); color:var(--accent)">
+          Nivel ${Math.min(level + 1, node.maxLevel)}/${node.maxLevel}
+        </span>
+        <span class="px-2 h-6 inline-flex items-center rounded-md border border-[var(--border-color)]">
+          ${opts.coste} ◆${opts.ok ? '' : ` · tienes ${opts.cores}`}
+        </span>
+        ${opts.categoria?.label ? `<span class="px-2 h-6 inline-flex items-center rounded-md border border-[var(--border-color)]">${opts.categoria.label}</span>` : ''}
+      </div>
+
+      ${alMaximo ? `
+        <p class="text-[10px] font-mono" style="color:#fbbf24">Nivel máximo alcanzado.</p>
+      ` : !opts.ok ? `
+        <p class="text-[10px] font-mono leading-relaxed" style="color:#f87171">
+          Todavía no: ${opts.reason ?? 'no está disponible'}.
+        </p>
+      ` : ''}
+    </div>
+  `;
+}
+
+/**
  * Conecta los manejadores de la Ascensión.
  *
  * `root` es el nodo que `mountInto` acaba de crear, y los listeners van ahí
@@ -350,13 +425,21 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
       //
       // El motivo va DENTRO del diálogo y no en un aviso aparte, porque el motivo sin la
       // explicación al lado es la mitad de la respuesta.
+      // La hoja entera, con el lore y el motivo del veto. `effectLine` se queda arriba
+      // porque es el `confirmText` del botón cuando no queda claro el coste.
+      const hoja = nodeSheetHTML(node, level, {
+        ok: check.ok,
+        reason: check.reason,
+        coste: nodeCost(node, level),
+        cores: state.cores,
+        categoria: cat,
+        requiere: node.requires
+      });
       const descripcion = `${node.name} — nivel ${level + 1}/${node.maxLevel}. ${effectLine}.`;
       const conDinero = check.ok;
 
       showConfirmModal(
-        conDinero
-          ? descripcion
-          : `${descripcion} Todavía no: ${check.reason ?? 'no está disponible'}.`,
+        htmlToNode(hoja),
         () => {
           const res = game.buyNode(nodeId);
           if (res.success) {
@@ -369,7 +452,9 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
           renderPrestigePage(container, game, go);
         },
         {
-          sublabel: `${cat?.label ?? 'Nodo'} · nivel ${level + 1}/${node.maxLevel}`,
+          // **EL NIVEL NO SE REPITE ARRIBA.** Antes el `sublabel` decia "categoria · nivel 1/5" y
+          // la hoja lo decia tambien; ahora la hoja es el sitio y el subtitulo solo categoriza.
+          sublabel: cat?.label ?? 'Nodo',
           confirmText: conDinero
             ? `Comprar por ${nodeCost(node, level)} ◆`
             : `Te faltan ${nodeCost(node, level) - state.cores} ◆`,

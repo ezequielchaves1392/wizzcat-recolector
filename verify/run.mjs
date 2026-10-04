@@ -45,6 +45,7 @@ for (const banco of [
   'identidadCheck',
   'loreCheck',
   'autoventaCheck',
+  'arbolLoreCheck',
   'leyendaCheck'
 ]) {
   console.log(`\n=== ${banco} ===`);

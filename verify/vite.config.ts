@@ -60,7 +60,8 @@ export default defineConfig({
         identidadCheck: resolve(here, 'identidadCheck.ts'),
         loreCheck: resolve(here, 'loreCheck.ts'),
         leyendaCheck: resolve(here, 'leyendaCheck.ts'),
-        autoventaCheck: resolve(here, 'autoventaCheck.ts')
+        autoventaCheck: resolve(here, 'autoventaCheck.ts'),
+        arbolLoreCheck: resolve(here, 'arbolLoreCheck.ts')
       },
       formats: ['es']
     }
