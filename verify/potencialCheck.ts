@@ -760,6 +760,52 @@ async function main() {
     rRec?.success === false, `dado=65,1 anuncia=${anunciado} success=${rRec?.success}`);
 }
 
+// --- 3c. SE PUEDE MEJORAR CUALQUIER RECOLECTOR, NO SOLO EL EQUIPADO -------------
+//
+// El método antes no recibía id y mejoraba `state.equippedCollectorId`, así que la ficha
+// apagaba el botón con "Equípala primero": con veinte recolectores en el almacén,
+// diecinueve no se podían subir y había que equipar cada uno por turnos.
+//
+// Lo que se fija aquí es que **el id manda**, y en los dos sentidos: que sube el que se
+// le pide aunque no esté equipado, y que **no** sube el equipado por error cuando se le
+// pide otro. Lo segundo es el que importa: si el método ignorara el argumento, la hoja
+// mostraría el coste y la probabilidad de un item y el motor subiría otro.
+{
+  const g = await boot(baseSave([
+    collector('equipado', 3), collector('guardado', 3), collector('tercero', 3)
+  ], {
+    nanites: 0, warehouseCapacity: 40,
+    crystals: valorDeUnCristal(3) * 200,
+    equippedCollectorId: 'equipado'
+  }));
+
+  const nivelDe = (id: string) =>
+    (s(g).warehouse as any[]).find((w: any) => w.id === id)?.level;
+
+  const r: any = conRoll(0.001, () => g.upgradeCollector('guardado'));
+  check('mejorar: sube el que se le pide aunque no este equipado',
+    r?.success === true && nivelDe('guardado') === 1 && nivelDe('equipado') === 0,
+    `success=${r?.success} guardado=${nivelDe('guardado')} equipado=${nivelDe('equipado')}`);
+
+  // **Y SIN ARGUMENTO SIGUE SUBIENDO EL EQUIPADO**, que es lo que hace que veinte bancos
+  // y el guardado no cambien de comportamiento.
+  const r2: any = conRoll(0.001, () => g.upgradeCollector());
+  check('mejorar: sin argumento sube el equipado, como antes',
+    r2?.success === true && nivelDe('equipado') === 1,
+    `success=${r2?.success} equipado=${nivelDe('equipado')}`);
+
+  // Y el alias antiguo sigue siendo lo mismo, no una segunda implementación.
+  const r3: any = conRoll(0.001, () => g.upgradeEquippedCollector());
+  check('mejorar: el alias antiguo sube el equipado y no tiene logica propia',
+    r3?.success === true && nivelDe('equipado') === 2 && nivelDe('guardado') === 1,
+    `success=${r3?.success} equipado=${nivelDe('equipado')} guardado=${nivelDe('guardado')}`);
+
+  // **LO QUE NO ES UN RECOLECTOR SE NIEGA**, en vez de subirle el nivel a una caja.
+  const r4: any = g.upgradeCollector('no-existe');
+  check('mejorar: un id que no existe se niega diciendo que',
+    r4?.success === false && !!r4?.msg, `ok=${r4?.success} msg=${r4?.msg ?? ''}`);
+}
+
 // --- 4. El techo y el rechazo sin coste ---------------------------------------
 {
   // El techo lo pone **la ficha**, y la ficha lo pone `nivelMaximoDeCompanio()`.

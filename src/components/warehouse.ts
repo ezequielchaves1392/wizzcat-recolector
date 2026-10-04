@@ -853,9 +853,18 @@ function detailContent(item: any, state: any, game: any): string {
           ` : ''}
 
           ${isCollector ? `
+            <!--
+              **MEJORAR NO ES SOLO PARA EL EQUIPADO, Y EL BOTÓN YA NO SE APAGA.**
+              Antes llevaba el atributo disabled con "Equipala primero", porque el metodo del motor
+              no recibia ningun id y solo sabia subir al equipado. Con veinte
+              recolectores en el almacén, diecinueve tenían la mejora bloqueada por cómo
+              estaban colocados: había que equipar cada uno por turnos.
+              Y no hay razón de juego: el nivel es **del item**, no de la partida —la
+              ficha, la valoración y el stat lo leen del objeto—, así que subir uno que no
+              está en la mano no cambia nada más.
+            -->
             <button class="w-full h-11 rounded-xl btn-ghost font-['Orbitron'] font-bold text-[11px] cursor-pointer"
-                    data-act="upgrade" ${isEquipped ? '' : 'disabled style="opacity:.4"'}
-                    title="${isEquipped ? '' : 'Equípala primero'}">
+                    data-act="upgrade">
               Mejorar con cristal
             </button>
           ` : ''}
@@ -1030,14 +1039,12 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         break;
       case 'upgrade':
         if (!item) return;
-        if (item.id !== game.getState().equippedCollectorId) {
-          showToast('Equipa el recolector primero.', 'info');
-          return;
-        }
-        // El selector de cristal vive en la vista y no en el game loop porque
-        // elegir cristal es una decisión de interfaz. El coste, la probabilidad
-        // y el consumo los calcula el juego.
-        showSintonizacion(game, redraw);
+        // **EL ID VIAJA HASTA LA HOJA, Y ANTES NO VIAJABA.** La hoja de sintonización
+        // busca el recolector por su cuenta cuando no se le dice cuál es; mientras solo
+        // se podía mejorar al equipado eso no importaba, y en cuanto se puede mejorar
+        // cualquiera significa que abriría siempre la del equipado con otro item delante.
+        // Es el mismo motivo por el que el compañero ya pasa su `{ item }`.
+        showSintonizacion(game, redraw, { tipo: 'recolector', item });
         break;
 
       case 'upgrade-companion': {

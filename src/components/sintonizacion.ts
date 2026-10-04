@@ -53,9 +53,18 @@ import { collectorMaxLevel, nivelMaximoDeCompanio, costeDeNivel, valorDeUnCrista
 import { CRISTAL_NOMBRE, bandaDeProbabilidad } from '../data/items';
 import type { BandaDeProbabilidad } from '../data/items';
 
-/** Qué se está sintonizando. El único sitio donde se diferencian las dos ramas. */
+/**
+ * Qué se está sintonizando. El único sitio donde se diferencian las dos ramas.
+ *
+ * **EL RECOLECTOR TAMBIÉN ACEPTA `item`, Y POR QUÉ ES OPCIONAL.** Mientras solo se podía
+ * mejorar al equipado no hacía falta: la hoja lo buscaba por su cuenta. En cuanto se
+ * puede mejorar **cualquiera**, buscar el equipado abriría la hoja del item equivocado
+ * con otro delante —el jugador leería un coste y una probabilidad de un recolector y los
+ * gastaría sobre otro—, así que el id tiene que viajar. Opcional para no romper a quien
+ * llama sin él, que es el caso de siempre: el equipado.
+ */
 export type ObjetivoDeSintonizacion =
-  | { tipo: 'recolector' }
+  | { tipo: 'recolector'; item?: any }
   | { tipo: 'companero'; item: any };
 
 /**
@@ -147,7 +156,14 @@ export function showSintonizacion(
       return;
     }
   } else {
-    equipo = (state.warehouse as any[]).find((w: any) => w.id === state.equippedCollectorId);
+    // **EL RECOLECTOR TAMBIÉN VIENE DADO, Y ANTES SE BUSCABA EL EQUIPADO.**
+    // Mientras solo se podía mejorar al equipado da igual; en cuanto se puede mejorar
+    // cualquiera, buscar el equipado abriría **la hoja del item equivocado** con otro
+    // delante: el jugador leería un coste y una probabilidad de un recolector y los
+    // gastaría sobre otro. Por eso el `item` es lo que manda y el equipado es solo el
+    // respaldo de quien llama sin decir cuál —los bancos, el guardado—.
+    equipo = objetivo.item
+      ?? (state.warehouse as any[]).find((w: any) => w.id === state.equippedCollectorId);
     if (!equipo) {
       showToast('Equipa un recolector primero.', 'info');
       return;
@@ -318,7 +334,10 @@ export function showSintonizacion(
       // que un cambio futuro en la hoja llegue a los dos sin poder olvidarse del segundo.
       const res = esCompanero
         ? game.upgradeCompanion(equipo.id)
-        : game.upgradeEquippedCollector();
+        // **EL ID DEL RECOLECTOR, Y NO EL DEL EQUIPADO.** Es el otro mitad del arreglo de
+        // "mejorar el que sea": sin esto la hoja muestra el coste y la probabilidad del
+        // item que tiene delante y el motor sube el equipado.
+        : (game.upgradeCollector?.(equipo.id) ?? game.upgradeEquippedCollector());
       // `tuningRoll()` decide qué niveles enseña la ruleta, y el porqué de que
       // el de antes se lea ANTES de la llamada está en su JSDoc.
       const roll = tuningRoll(res, nivelAntes, equipo.level || 0);
@@ -339,7 +358,7 @@ export function showSintonizacion(
       // POR QUÉ `success` Y NO `ok`. El game loop tiene DOS convenciones de
       // resultado y no están unificadas: `sellItem`, `useConsumable` y
       // `openCrateBox` devuelven `{ ok, msg }`, mientras que
-      // `upgradeEquippedCollector`, la Forja y la Ascensión devuelven
+      // `upgradeCollector`, la Forja y la Ascensión devuelven
       // `{ success, msg }`. Aquí se leía `res.ok`, que en un `{ success }` es
       // `undefined`: `!undefined` es `true`, así que TODA sintonización caía en
       // la rama de error. Es decir, un acierto pintaba un toast rojo de "error"

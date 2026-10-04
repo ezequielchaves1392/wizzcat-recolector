@@ -4028,11 +4028,38 @@ const AFK_THRESHOLD_MS = 60000;
         msg: `Fallo en el sintonizador. ${comp.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)`
       };
     },
-    upgradeEquippedCollector: () => {
+    /**
+     * SUBE EL NIVEL DE UN RECOLECTOR, **EL QUE SEA**.
+     *
+     * ## POR QUÉ ACEPTA UN ID Y NO SOLO "EL EQUIPADO"
+     *
+     * Antes este método no tenía argumento y mejoraba `state.equippedCollectorId`, y la
+     * ficha lo traducía en un botón apagado con "Equípala primero". O sea que **no se
+     * podía mejorar un recolector que no estuviera en la mano**: veinte objetos en el
+     * almacén, uno equipado, y los otros diecinueve con la mejora bloqueada por dónde
+     * estaban colocados. El jugador tenía que equipar cada uno por turnos para subirlo,
+     * y el crystal upgrade deja de ser una decisión y pasa a ser un turno de cola.
+     *
+     * Y no hay ninguna razón de juego detrás: **el nivel es del item, no de la partida**.
+     * `getStatPrincipal()` lo lee del objeto, la valoración lo lee del objeto, y subir un
+     * recolector que no está equipado no cambia nada más. La restricción era un
+     * accidente de la firma del método.
+     *
+     * ## Y POR QUÉ EL ARGUMENTO ES OPCIONAL
+     *
+     * Porque media partida ya lo llama sin argumento —todos los bancos y el guardado— y
+     * un argumento obligatorio obligaría a tocar veinte llamadas para cambiar una regla
+     * que no les afecta. Sin argumento hace lo de siempre: el equipado.
+     */
+    upgradeCollector: (itemId?: string) => {
       handleUserActivity();
-      if (!state.equippedCollectorId) return { success: false, rolled: false, msg: 'No hay ningún recolector equipado.' };
-      const item = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
+      const objetivo = itemId ?? state.equippedCollectorId;
+      if (!objetivo) return { success: false, rolled: false, msg: 'No hay ningún recolector equipado.' };
+      const item = state.warehouse.find((w: any) => w.id === objetivo);
       if (!item) return { success: false, rolled: false, msg: 'Recolector no encontrado.' };
+      if (item.type !== 'collector') {
+        return { success: false, rolled: false, msg: 'Eso no es un recolector.' };
+      }
       const level = item.level || 0;
 
       // =====================================================================
@@ -4133,6 +4160,16 @@ const AFK_THRESHOLD_MS = 60000;
      * los dos caminos haciendo cosas distintas.
      */
     toggleCompanionActive: (compId: string) => estado.equipCompanion(compId),
+    /**
+     * Alias de `upgradeCollector()` sin argumento.
+     *
+     * Se conserva porque el guardado y veinte llamadas de bancos lo nombran así, y
+     * porque el nombre dice lo que hace para quien lee un banco viejo. **No tiene lógica
+     * propia**: mantener dos implementaciones de "subir el nivel del recolector" es
+     * exactamente lo que dejó `toggleCompanionActive` y `equipCompanion` haciendo cosas
+     * distintas.
+     */
+    upgradeEquippedCollector: () => estado.upgradeCollector(),
     equipCollector: (itemId: string) => {
       handleUserActivity();
       const item = state.warehouse.find((w: any) => w.id === itemId);
