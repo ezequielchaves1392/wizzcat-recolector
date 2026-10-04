@@ -436,7 +436,57 @@ switch (vista) {
     // motor, así que se le da el mismo `power` repartido en la misma proporción
     // y el efecto que se revisa es el de que la cifra viene del motor.
     const ingresoDe = repartoProporcional(MOCK);
-    renderPanel(MOCK, 1962, MOCK.maxCompanionSlots + MOCK.bonus.companionSlots, ingresoDe);
+    // **Y LA LISTA DE BONOS, QUE SIN ELLA NO SE REVISA NADA DE ESA TARJETA.** El mock no
+    // tiene motor, así que los multiplicadores salen de su propio estado y en el MISMO
+    // orden que la fórmula: nivel, compañeros, logros, árbol, afijos, buff. Un mock que no
+    // coincide con el producto es un banco visual aprobando una pantalla que el juego no
+    // tiene, y ya ha pasado cuatro veces con esta tarjeta.
+    // **LAS DOS PARTES DEL DANO, CON LA MISMA REGLA QUE EL MOTOR.** El preview no tiene
+    // motor, asi que los multiplicadores salen de su propio estado; lo que no puede
+    // cambiar es la estructura: la base se deduce del dano guardado porque este ya
+    // lleva el potencial, las filas van en el MISMO orden que la formula, y el
+    // acumulado va en float mientras lo que se pinta es el suelo. Un mock que no
+    // coincide con el producto es un banco visual aprobando una pantalla que el juego
+    // no tiene, y con esta tarjeta ya ha pasado cinco veces.
+    const damagePartsDe = () => {
+      const w: any = MOCK.warehouse.find((x: any) => x.id === MOCK.equippedCollectorId);
+      const pot = w?.potential ?? 3;
+      const multPot = 1 + 0.2 * pot;
+      const base = (w?.damage || 0) / multPot;
+      const filas: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }> = [];
+      let acum = base;
+      let mostrado = Math.floor(acum);
+      let delItem = 0;
+      const anota = (nombre: string, detalle: string, mult: number, grupo: 'item' | 'partida') => {
+        if (Math.abs(mult - 1) <= 0.0001) return;
+        acum *= mult;
+        const ahora = Math.floor(acum);
+        if (ahora === mostrado) return;
+        const salto = ahora - mostrado;
+        filas.push({ nombre, detalle, suma: salto, grupo });
+        if (grupo === "item") delItem += salto;
+        mostrado = ahora;
+      };
+      anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más de daño`, multPot, "item");
+      anota(`Nivel ${w?.level || 0}`, 'del recolector', multiplicadorDeNivel(w?.level), 'item');
+      anota("Afijos", "del item", 1.26, "item");
+      anota('Compañeros', 'de la partida', 1 + (MOCK.activeCompanions?.length || 0) * 0.05, 'partida');
+      anota('Logros', 'de la partida', 1.28, 'partida');
+      anota('Árbol de pasivas', 'de la partida', 1 + MOCK.bonus.clickMult, 'partida');
+      anota('Buff de click', 'temporal', 1, 'partida');
+      const total = Math.floor(acum);
+      return {
+        base: Math.floor(base),
+        intrinseco: Math.floor(base) + delItem,
+        partida: total - Math.floor(base) - delItem,
+        total,
+        filas
+      };
+    };
+    // Y el numero grande sale de la MISMA cadena que el desglose, no de un literal:
+    // pasaba 1962 a mano y la tarjeta ensenaba un total arriba y una lista que no
+    // llegaba a ese total.
+    renderPanel(MOCK, damagePartsDe().total, MOCK.maxCompanionSlots + MOCK.bonus.companionSlots, ingresoDe, damagePartsDe);
     renderBuffHudForPreview(MOCK);
 }
 

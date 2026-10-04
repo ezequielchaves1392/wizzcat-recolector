@@ -1042,10 +1042,14 @@ function renderPlayerPanel(state: any) {
   // La vista no lo deduce restando: si lo hiciera, un buff que expirara entre el
   // pintado y la lectura haría que las partes no sumaran el total, que es
   // justo el descuadre que esto viene a arreglar.
-  const desgloseDe = typeof activeGameInstance?.getClickDamageBreakdown === 'function'
-    ? () => activeGameInstance.getClickDamageBreakdown()
+  // **Y LAS DOS PARTES DEL DAÑO**, que es lo que permite pintar "30+5": lo que produce el
+  // item por sí mismo y lo que le suma la partida. También del motor: son cifras suyas, y
+  // si las calculara la vista un buff que expirara entre el pintado y la lectura haría que
+  // el número grande y el desglose no cuadraran.
+  const damagePartsDe = typeof activeGameInstance?.getClickDamageParts === 'function'
+    ? () => activeGameInstance.getClickDamageParts()
     : undefined;
-  renderPanel(state, realDamage, slots, ingresoDe, desgloseDe);
+  renderPanel(state, realDamage, slots, ingresoDe, damagePartsDe);
 }
 
 // Cuánto vive en pantalla un "+X" flotante. El companion click usa un valor

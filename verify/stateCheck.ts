@@ -2490,6 +2490,89 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
   }
 
 
+  {
+    // =====================================================================
+    //  EL DAÑO EN DOS PARTES, Y QUE LAS SUMAS CUADREN CON EL TOTAL
+    // =====================================================================
+    //
+    //  La regla que sostiene la tarjeta es una línea: **un recolector produce una cifra
+    //  propia y la partida le suma otra.** El 30 es el item —su potencial, sus niveles
+    //  y sus afijos— y el 5 son los compañeros, los logros, el árbol y los buffs.
+    //
+    //  Lo comprobable aquí son tres cosas, y las tres se pueden romper por motivos
+    //  distintos: que las dos partes no encajen, que las filas no sumen el total, y que
+    //  las filas del item y de la partida no sumen lo que dicen sus dos grupos.
+    {
+      // **EL FIXTURE TIENE QUE TENERLO TODO, Y POR QUÉ NO BASTA CON EL RECOLECTOR.** Las filas de
+    //  afijos, compañeros y árbol no salen porque no hay nada que las produzca, y una
+    //  comprobación que espera una fila que el fixture no puede dar pasa por el motivo
+    //  equivocado: mide el fixture, no la regla. Así que aquí se montan las tres, que son
+    //  exactamente los tres grupos en los que se puede caer algo.
+    const g = await boot(baseSave([
+      collector('r1', 5, { damage: 200, level: 9, equipped: true, affixes: ['aff_sharp'] }),
+      { id: 'm1', name: 'Multiplicador de prueba', type: 'companion', tier: 3, level: 0, power: 0.5, potential: 3 }
+    ], { nanites: 100_000, activeCompanions: ['m1'], nodeLevels: { core_edge: 3 } }));
+    (s(g).warehouse as any[]).find((w: any) => w.id === 'm1').type = 'companion';
+    s(g).companions = [ficha('m1', 3, { type: 'multiplier', power: 0.5, potential: 3 })];
+
+      const partes = g.getClickDamageParts();
+      const suma = (filas: any[]) => filas.reduce((acc: number, f: any) => acc + f.suma, 0);
+
+      check('dano: las dos partes estan y no estan vacias',
+        partes.intrinseco > 0 && partes.partida > 0,
+        `intrinseco=${partes.intrinseco} partida=${partes.partida}`);
+
+      // **LA SUMA DE LAS FILAS MÁS LA BASE DA EL TOTAL.** El suelo y no el redondeo al
+      //  medio porque el daño que se cobra también lo es: se trunca.
+      check('dano: base + cada incremento = el total que se muestra',
+        Math.floor(partes.base) + suma(partes.filas) === partes.total,
+        `base=${partes.base} suma=${suma(partes.filas)} total=${partes.total}`);
+
+      // **Y LOS DOS GRUPOS SUMAN SUS PARTES.** Si el item y la partida no encajan con
+      //  lo que dicen, el "30+5" del número grande y la lista son dos verdades.
+      const delItem = partes.filas.filter((f: any) => f.grupo === 'item');
+      const deLaPartida = partes.filas.filter((f: any) => f.grupo === 'partida');
+      const conGrupo = partes.base + suma(delItem);
+      check('dano: el grupo del item suma justo lo que dice el numero grande',
+        conGrupo === partes.intrinseco,
+        `base+item=${conGrupo} intrinseco=${partes.intrinseco}`);
+      check('dano: y el grupo de la partida suma justo lo que dice el mas pequeno',
+        suma(deLaPartida) === partes.partida,
+        `partida=${suma(deLaPartida)} declarada=${partes.partida}`);
+
+      // **EL AFILO ES DEL ITEM, Y ESTO ES LO QUE CUESTA CLASIFICAR.** Es la fila que
+      //  más se presta a error: va impreso en el item y sale de la forja con él, pero su
+      //  bonificación solo cuenta equipado. Va con el item porque es propiedad suya, y
+      //  esta comprobación lo fija para que nadie lo mueva de grupo con "es una bonificación
+      //  de la partida".
+      check('dano: los afijos van con el item, no con la partida',
+        delItem.some((f: any) => /afijo/i.test(f.nombre)) &&
+        !deLaPartida.some((f: any) => /afijo/i.test(f.nombre)),
+        delItem.map((f: any) => f.nombre).join(" | "));
+
+      // **LO QUE ES DE LA PARTIDA, EN SU GRUPO:** compañeros, logros, árbol y buffs.
+      check('dano: companeros, logros y arbol son de la partida',
+        ['compañer', 'logro', 'rbol'].every((s: string) =>
+          deLaPartida.some((f: any) => f.nombre.toLowerCase().indexOf(s) >= 0)),
+        deLaPartida.map((f: any) => f.nombre).join(" | "));
+
+      // **LA RAREZA NO ESTÁ, Y ESTE BLOQUE LO DICE POR QUÉ.** No es que falte una fila:
+      //  es que la rareza no multiplica el daño en ninguna parte del juego, solo el
+      //  precio. Ponerla aquí sería inventar un bono.
+      check('dano: la rareza no aparece, porque no multiplica el dano',
+        !partes.filas.some((f: any) => /rarity|rareza/i.test(f.nombre)),
+        partes.filas.map((f: any) => f.nombre).join(" | "));
+
+      // **Y SIN RECOLECTOR NO HAY PARTES, NO UN CERO CON FORMA DE DAÑO.**
+      const sinNada = await boot(baseSave([]));
+      check('dano: sin recolector equipado no hay partes que pintar',
+        sinNada.getClickDamageParts().filas.length === 0 &&
+        sinNada.getClickDamageParts().total === 0,
+        JSON.stringify(sinNada.getClickDamageParts()));
+    }
+  }
+
+
 resumen('estado, migracion y economia');
 }
 

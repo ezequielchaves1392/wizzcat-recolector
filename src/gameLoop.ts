@@ -2448,6 +2448,97 @@ const AFK_THRESHOLD_MS = 60000;
     return { total, base: cuenta.base, porNivel, porBonos };
   }
 
+  /**
+ * EL DANO DEL RECOLECTOR, PARTIDO EN DOS: LO QUE ES DEL ITEM Y LO QUE ES DE LA PARTIDA.
+ *
+ * ## LA LINEA QUE LO DEFINE
+ *
+ * **UN RECOLECTOR PRODUCE UNA CIFRA PROPIA, Y DESPUES LA PARTIDA LE SUMA OTRA.** Un
+ * T11 con cinco estrellas en el nivel 12 produce lo que produce por sí mismo —con su
+ * potencial, con sus niveles comprados con cristales y con sus afijos—, y aparte el resto
+ * de la partida —los compañeros, los logros, el árbol y los buffs— le multiplica. Eso se
+ * escribe "30+5": el 30 es el item y el 5 no lo es.
+ *
+ * **Y LA CORTE ES EL AFILO, QUE ES LO QUE CUESTA CLASIFICAR.** Un afijo parece del item
+ * porque va impreso en él y sale de la forja con él, pero **su bonificación solo cuenta
+ * mientras esté equipado**, igual que el árbol. Aun así va con el item y no con la
+ * partida, porque es una propiedad suya: si el afijo fuera de la partida bastaría con
+ * cambiar de recolector para perderlo, y eso no es lo que pasa. Va en el grupo del item y
+ * con eso la línea se sostiene —"lo que da este objeto"— en los dos casos.
+ *
+ * **LO QUE NO ESTÁ Y NO SE PONE: LA RAREZA.** La rareza no multiplica el daño en
+ * ninguna parte del juego, solo el precio. Aquí solo hay daño.
+ *
+ * ## LAS SUMAS CUADRAN CON EL TOTAL, Y ESO SE COMPRUEBA
+ *
+ * El acumulado va en coma flotante y **lo que se pinta es el suelo**, porque el daño que
+ * se cobra también lo es: se trunca. La primera versión redondeaba cada paso y la última
+ * fila acababa en un número que no era el de arriba; cuatro redondeos seguidos no son un
+ * redondeo, son cuatro. Con el suelo, la base más las filas da exactamente la cifra
+ * grande, y la suma de los dos grupos da el mismo número que esa cifra.
+ */
+  function danosDeClick(): {
+    base: number;
+    intrinseco: number;
+    partida: number;
+    total: number;
+    filas: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }>;
+  } {
+    const item: any = state.equippedCollectorId
+      ? state.warehouse.find((w: any) => w.id === state.equippedCollectorId)
+      : null;
+    const vacio = { base: 0, intrinseco: 0, partida: 0, total: 0, filas: [] as any[] };
+    if (!item) return vacio;
+
+    const pot = potencialNormalizado(item.potential);
+    const multPot = 1 + 0.2 * pot;
+    // La base se deduce del daño guardado, y por eso puede salir con decimales: es la
+    // cifra que hace que el potencial multiplicando dé justo el daño que trae el item.
+    const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, item.damage || 0) / multPot;
+    const filas: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }> = [];
+    let acum = base;
+    let mostrado = Math.floor(acum);
+    let delItem = 0;
+
+    const anota = (nombre: string, detalle: string, mult: number, grupo: 'item' | 'partida') => {
+      if (Math.abs(mult - 1) <= 0.0001) return;
+      acum *= mult;
+      const ahora = Math.floor(acum);
+      // Un bono que no mueve el suelo no se pinta: una fila con un +0 es ruido.
+      if (ahora === mostrado) return;
+      const salto = ahora - mostrado;
+      filas.push({ nombre, detalle, suma: salto, grupo });
+      if (grupo === "item") delItem += salto;
+      mostrado = ahora;
+    };
+
+    // --- LO QUE ES DEL ITEM ---------------------------------------------------
+    // El potencial primero porque es lo primero que se aplicó, y su detalle lleva el
+    // porcentaje **sin un "+" delante**: la fila ya tiene su cifra a la derecha, y dos
+    // signos más en la misma línea obligan a decidir cuál de los dos leer.
+    anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más de daño`, multPot, "item");
+    const nivel = Math.max(0, Math.floor(Number(item.level) || 0));
+    if (nivel > 0) anota(`Nivel ${nivel}`, "del recolector", multiplicadorDeNivel(nivel), "item");
+    // Los afijos son del item: van con él, salen de la forja con él y solo hay que
+    // tenerlo equipado. Por eso no van con el árbol, aunque se comporten igual.
+    anota("Afijos", "del item", 1 + equippedAffixEffect().clickMult, "item");
+
+    // --- LO QUE ES DE LA PARTIDA ------------------------------------------------
+    anota("Compañeros", "de la partida", calculateCompanionMultiplier(), "partida");
+    anota("Logros", "de la partida", 1 + achievementState.clickBonus, "partida");
+    anota("Árbol de pasivas", "de la partida", 1 + state.bonus.clickMult, "partida");
+    anota("Buff de click", "temporal", calculateMultiplier(), "partida");
+
+    const total = Math.floor(acum);
+    return {
+      base: Math.floor(base),
+      intrinseco: Math.floor(base) + delItem,
+      partida: total - Math.floor(base) - delItem,
+      total,
+      filas
+    };
+  }
+
   function calculateMultiplier() {
     let multiplier = 1;
     const now = Date.now();
@@ -3039,6 +3130,20 @@ const AFK_THRESHOLD_MS = 60000;
      * enseñe sin tener que deducirlo restando. Ver `desgloseDeClick()`.
      */
     getClickDamageBreakdown: () => desgloseDeClick(),
+    /**
+     * EL DAÑO DEL RECOLECTOR EN DOS PARTES, CON SU DESGLOSE. Ver `danosDeClick()`.
+     *
+     * **El número grande de la base se escribe "30+5"**, y por eso esto devuelve las dos
+     * partes por separado en vez de un total: `intrinseco` es lo que produce el item por sí
+     * mismo —potencial, niveles y afijos— y `partida` es lo que le suma el resto —compañeros,
+     * logros, árbol y buffs—. Un solo total obligaría al jugador a restar para saber cuánto
+     * es suyo, y esa es justo la pregunta que hace alguien que está pensando en
+     * reemplazarlo.
+     *
+     * Y `filas` lleva cada incremento con su grupo, porque la lista tiene que enseñar la
+     * misma división: primero lo del item, después lo de la partida, y no mezclados.
+     */
+    getClickDamageParts: () => danosDeClick(),
     /**
      * EL STAT PRINCIPAL DE UN ITEM, YA SUMADO. Lo que la ficha del almacén enseña en
      * grande: base, potencial y mejora, juntos.

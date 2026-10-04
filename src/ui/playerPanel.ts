@@ -1,19 +1,25 @@
 import { ic } from './icons';
 import { formatNumber } from '../utils/format';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe } from '../data/crafting';
-import { valuationBreakdown } from '../data/valuation';
+import { valuationConCifras } from '../data/valuation';
 
 /**
  * Panel del jugador: recolector equipado y slots de companeros.
  * Vive en su propio modulo para que el banco de pruebas visuales (/preview.html)
  * reuse exactamente el mismo marcado que la partida real.
+ *
+ * `bonusesDe` es **la lista de bonos uno a uno** (`getClickBonuses`), no el resumen de tres
+ * cifras. Se pasaron los dos durante un rato porque el resumen sigue siendo lo que pide el
+ * total de arriba, y quitar un parámetro a la vez que se rompe el panel es una forma de
+ * romperlo dos veces.
  */
 export function renderPanel(
   state: any,
   realDamage: number,
   effectiveSlots?: number,
   ingresoDe?: (companionId: string) => number,
-  desgloseDe?: () => { total: number; base: number; porNivel: number; porBonos: number }
+
+  damagePartsDe?: () => { base: number; intrinseco: number; partida: number; total: number; filas: any[] }
 ) {
   // --- Recolector equipado ---
   const equippedItem = state.equippedCollectorId
@@ -33,67 +39,90 @@ export function renderPanel(
       // Los afijos son la diferencia entre dos recolectores del mismo tier
       const affixes: string[] = equippedItem.affixes || [];
 
-      // F3 · EL DESGLOSE DEL DAÑO. El jugador pide "5 base +15 por mejora", y
-      // el motor lo da partido en tres (`getClickDamageBreakdown`). Las cifras
-      // las pone el motor porque son suyas: si se calcularan aquí, un buff que
-      // activara o expirara entre el pintado y la lectura haría que la suma no
-      // cuadrara, y eso es exactamente el descuadre que se vino a arreglar.
+      // **LO QUE HAY EN ESTA TARJETA, Y POR QUE HAY UNA SOLA LISTA.**
       //
-      // Y son TRES partes y no dos a propósito. Con "base" y "por nivel" nada
-      // más, un T1 de daño 5 en nivel 4 daría 5 + 2 = 7 al lado de un total de 20,
-      // y el jugador volvería a informar del mismo bug. Los bonos de compañeros,
-      // logros, árbol y afijos tienen que aparecer o las cifras no suman.
-      const desglose = typeof desgloseDe === 'function' ? desgloseDe() : null;
-      const desgloseHTML = desglose && desglose.total > 0 ? `
-        <div class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 flex flex-wrap gap-x-2 tabular">
-          <span title="El daño que trae el item">${formatNumber(desglose.base)} base</span>
-          ${desglose.porNivel > 0 ? `<span title="Lo que suma el nivel del recolector">+${formatNumber(desglose.porNivel)} nivel</span>` : ''}
-          ${desglose.porBonos > 0 ? `<span title="Compañeros, logros, árbol, afijos y buffs de click">+${formatNumber(desglose.porBonos)} bonos</span>` : ''}
-        </div>
-      ` : '';
+      // Antes había tres cosas que se solapaban: el desglose de tres cifras del daño, una
+      // lista de multiplicadores que no se sabía si eran de daño o de precio, y un
+      // "28 base +12 bonos" que no decía qué era un bono.
+      //
+      // **LA VALORACIÓN SE HA IDO, Y NO ES QUE ESTARA ESCONDIDA.** Eran los
+      // multiplicadores del PRECIO de venta, debajo de un número que es daño: dos
+      // grandezas distintas con la misma forma de letra. El precio sigue en el botón de
+      // vender, que es donde se cobra; la cuenta interna del precio no hacía falta
+      // encima del daño.
+      //
+      // **Y EL NÚMERO GRANDE VA PARTIDO EN DOS, "30+5".** Lo que produce el item por sí
+      // mismo y lo que le suma la partida son dos preguntas distintas, y un solo total
+      // obligaría a restar para saber cuánto es del arma. El desglose va en los mismos dos
+      // grupos y con la misma separación, para que el número grande y la lista underneath
+      //osion sean lo mismo visto de dos formas.
+      const partes = typeof damagePartsDe === "function" ? damagePartsDe() : null;
+      const intrinseco = partes ? partes.intrinseco : realDamage;
+      const deLaPartida = partes ? partes.partida : 0;
 
-      // F2 · LA VALORACIÓN, que estaba solo en la ficha del almacén y se perdía
-      // en el panel principal, que es donde se mira el recolector antes de
-      // decidir. `valuationBreakdown()` es pura y vive en `data/valuation.ts`, así
-      // que se puede llamar igual que desde la ficha, sin pasar por el motor: no
-      // depende del estado de la partida, sale del item.
-      const valoracion = valuationBreakdown(equippedItem);
-      // **NO ES UN ACORDEÓN, Y ES LA MISMA REGLA QUE EN LA FICHA DEL ALMACÉN.** Estaba
-      // dentro de un `<details>` abierto, o sea que la flechita no hacía falta para nada y
-      // solo añadía un clic de inexplicable. Aquí además el espacio es el que es: este
-      // bloque comparte la tarjeta del recolector equipado con el nombre y la rareza, y
-      // un acordeón abierto ocupa la misma altura que uno que no se puede cerrar.
-      //
-      // **Y NO ES "TODO PLANO" PORQUE UN DESGLOSE EN UNA LISTA DE TEXTO NO SE LEE.** Las
-      // cifras se separan de su etiqueta, que es justo lo que un desglose no debe hacer:
-      // cada fila es "esto es lo que multiplica" y "por cuánto", en dos columnas, con el
-      // factor a la derecha y en el color del acento para que la columna se vea de un
-      // vistazo sin leer. El bloque lleva borde y fondo porque es una tarjeta dentro de
-      // una tarjeta, y sin eso se pierde en el fondo.
-      const valoracionHTML = valoracion.length ? `
+      const bonoHTML = (f: any) => `
+        <li class="flex items-baseline justify-between gap-2">
+          <span class="text-[9px] font-mono text-[var(--text-muted)] truncate">
+            ${f.nombre}${f.detalle ? ` <span class="opacity-60">· ${f.detalle}</span>` : ""}
+          </span>
+          <span class="text-[10px] font-mono font-bold tabular accent-text flex-shrink-0">
+            +${formatNumber(f.suma)}
+          </span>
+        </li>`;
+
+      const filasDelItem = (partes?.filas ?? []).filter((f: any) => f.grupo === "item");
+      const filasDeLaPartida = (partes?.filas ?? []).filter((f: any) => f.grupo === "partida");
+
+      const bonosHTML = partes && (filasDelItem.length || filasDeLaPartida.length) ? `
         <div class="mt-2.5 rounded-lg px-2.5 py-2"
              style="border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
                     background: color-mix(in srgb, var(--accent) 5%, transparent)">
           <div class="label-caps mb-1.5 flex items-center gap-1.5">
-            <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 opacity-70">${ic('scale')}</span>
-            Valoración
+            <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 opacity-70">${ic("bolt")}</span>
+            De dónde sale el daño
           </div>
           <ul class="space-y-1">
-            ${valoracion.map(v => {
-              // "Nivel 12: ×2.60" -> etiqueta a la izquierda, factor a la derecha.
-              const corte = v.lastIndexOf(': ');
-              const etiqueta = corte > 0 ? v.slice(0, corte) : v;
-              const valor = corte > 0 ? v.slice(corte + 2) : '';
-              return `
-                <li class="flex items-baseline justify-between gap-3">
-                  <span class="text-[9px] font-mono text-[var(--text-muted)]">${etiqueta}</span>
-                  ${valor ? `<span class="text-[9px] font-mono font-bold tabular accent-text">${valor}</span>` : ''}
-                </li>`;
-            }).join('')}
+            <li class="flex items-baseline justify-between gap-2">
+              <span class="text-[9px] font-mono text-[var(--text-muted)]">Base del item</span>
+              <span class="text-[10px] font-mono tabular text-[var(--text-muted)] flex-shrink-0">
+                ${formatNumber(partes.base)}
+              </span>
+            </li>
+            ${filasDelItem.map(bonoHTML).join("")}
           </ul>
-        </div>
-      ` : '';
 
+          ${filasDeLaPartida.length ? `
+            <div class="label-caps mt-2 pt-1.5 border-t border-[var(--border-color)]">
+              Más las bonificaciones de la partida</div>
+            <ul class="space-y-1 mt-1">
+              ${filasDeLaPartida.map(bonoHTML).join("")}
+            </ul>` : ""}
+
+          <div class="flex items-baseline justify-between gap-2 mt-1.5 pt-1.5
+                      border-t border-[var(--border-color)]">
+            <span class="text-[9px] font-mono accent-text font-bold">Daño por click</span>
+            <span class="text-[10px] font-mono font-bold tabular accent-text">
+              +${formatNumber(partes.total)}
+            </span>
+          </div>
+        </div>
+      ` : "";
+
+      // **EL "+5" DE LA PARTIDA VA MÁS PEQUEÑO Y MÁS APAGADO A PROPÓSITO.** Es la mitad
+      // que el jugador no controla con este item: se la quita si cambia de arma. Si
+      // fuera del mismo tamaño, "lo que da mi recolector" y "lo que da mi partida" se
+      // leerían como la misma cifra, que es exactamente la confusión que el "30+5"
+      // viene a resolver.
+      const danoHTML = `
+        <div class="flex items-baseline gap-1 justify-end">
+          <span class="font-['Orbitron'] font-bold text-2xl md:text-3xl leading-none"
+                style="color: var(--accent)">+${formatNumber(intrinseco)}</span>
+          ${deLaPartida > 0 ? `
+            <span class="text-sm md:text-base font-bold leading-none opacity-60"
+                  style="color: var(--accent)"
+                  title="Bonificaciones de la partida: compañeros, logros, árbol y buffs">
+              +${formatNumber(deLaPartida)}</span>` : ""}
+        </div>`;
       collectorContainer.innerHTML = `
         <div class="flex items-center gap-3">
 <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -148,12 +177,11 @@ export function renderPanel(
             <div class="label-caps leading-none">Daño</div>
             <div class="font-['Orbitron'] font-bold text-base md:text-lg
                         leading-tight tabular mt-0.5"
-                 style="color: var(--accent)">+${formatNumber(realDamage)}</div>
+                 style="color: var(--accent)">${danoHTML}</div>
           </div>
         </div>
 
-        ${desgloseHTML}
-        ${valoracionHTML}
+        ${bonosHTML}
       `;
     } else {
       collectorContainer.innerHTML = `

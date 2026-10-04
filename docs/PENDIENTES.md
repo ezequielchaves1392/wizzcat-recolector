@@ -1030,7 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1858**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1865**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -1121,6 +1121,31 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 
 - [x] **Los companions del mock con potencial y los items tambien.** El `preview` los montaba
       sin potencial, así que las estrellas de la ficha salian del valor por defecto de la
       funcion y no del item. Un banco visual aprobando una pantalla que el producto no tiene.
+- [x] **El daño del recolector equipado en dos partes: "30+5".** El 30 es lo que produce el
+      item —su potencial, sus niveles y sus afijos— y el 5 son los compañeros, los logros,
+      el árbol y los buffs. El "+5" va **más pequeño y más apagado** a propósito: es la mitad
+      que el jugador no controla con este item, y del mismo tamaño se leería como la misma
+      cifra. **La línea que lo sostiene es una, y la corte más difícil es el afijo:** parece
+      del item porque va impreso en él y sale de la forja con él, pero su bonificación solo
+      cuenta equipado. Va con el item porque es propiedad suya —si fuera de la partida
+      bastaría cambiar de recolector para perderlo, y eso no es lo que pasa—, y hay una
+      comprobación que lo fija porque es la fila que más se presta a que alguien la mueva.
+      **La base se deduce hacia atrás:** el daño guardado ya lleva el potencial dentro, así
+      que si la lista empezara por ahí el potencial no tendría fila propia.
+      **Y la valoración se ha ido.** Eran los multiplicadores del PRECIO, debajo de un
+      número que es daño: dos grandezas con la misma forma de letra. El precio sigue en el
+      botón de vender. Y la línea "Base T2" **vuelve** dentro de la lista del almacén: se
+      quitó cuando estaba bajo el daño, y con la lista entera en nanitas ya no hay mezcla.
+      Ocho comprobaciones nuevas en `stateCheck`, incluidas las dos que atan cada grupo con
+      su parte del número grande.
+
+### Lo que sigue esperando tu palabra
+
+- [ ] **B8 · Ver el perfil de otro jugador.** ¿Se publica una **tarjeta pública** nueva, o
+      se abre `users/{uid}` a lectura? **Es privacidad y no lo debe decidir un agente.**
+      Recomiendo la tarjeta: lo no recomendable es abrir el documento privado, porque un
+      incremental te enseña el gasto y el inventario de tu competencia. Bloquea F20 y F22.
+      _Lo demás de "Bloqueadas por tu respuesta" está resuelto; esta es la que queda._
 ### La ficha del inventario, y el stat que enseña
 
 - [x] **El stat principal va en grande, con su etiqueta al lado y dentro de un borde.**

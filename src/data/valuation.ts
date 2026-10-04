@@ -230,6 +230,65 @@ export function fusionImprovesDensity(
  * multiplicadores. Una lista de multiplicadores sin el número de partida es exactamente
  * lo que un desglose debe ser, y es lo que se ve.
  */
+/**
+ * LA MISMA LISTA, PERO CON LO QUE SUMA CADA COSA EN NANITAS.
+ *
+ * ## POR QUÉ LA CIFRA ES EN NANITAS Y NO EN DAÑO
+ *
+ * Porque esta lista **multiplica el valor de venta**, no el daño por clic, y esas dos
+ * grandezas no tienen nada que ver. En concreto, **la rareza no toca el daño**: el daño de
+ * un clic sale de `danioDeRango(tier, potencial)` y de ahí multiplican el nivel, los
+ * compañeros, los logros, el árbol y los afijos. `RARITY_VALUE_MULT` solo aparece en este
+ * fichero, en la fórmula del precio. Poner "×1,30 = 2 daño" al lado de la rareza sería una
+ * cuenta que no existe: un recolector Raro hace exactamente el daño por clic que uno
+ * Común del mismo tier y potencial, y lo único que cambia es cuánto se vende.
+ *
+ * Por eso cada fila enseña su incremento **en el precio**, y el detalle de lo que sí sube
+ * el daño es otra sección, en el panel del jugador, que sale del desglose del clic.
+ *
+ * **Y EL INCREMENTO, NO EL TOTAL.** "×1,30" es el multiplicador y "+1,2 K" es lo que
+ * aporta sobre lo que había antes: es la pregunta que se hace alguien que está pensando
+ * si merece la pena el árbol de pasivas o subir el nivel. Un total acumulado al lado de un
+ * multiplicador obliga a hacer la resta mental.
+ *
+ * Se aplica **en el mismo orden que la fórmula**, que es lo único que hace que los
+ * incrementos signifiquen algo: son multiplicadores encadenados y el orden decide a quién
+ * se le atribuye el efecto redondos. El de la rareza va antes que el de los afijos porque
+ * en `collectorValue()` va antes.
+ */
+export function valuationConCifras(collector: CollectorItem, opts: ValuationOptions = {}): Array<{
+  etiqueta: string; mult: number; suma: number;
+}> {
+  const base = valorBaseTier(Math.max(1, collector.tier)) ?? 200;
+  // **LA BASE ES LA PRIMERA FILA Y NO LLEVA MULTIPLICADOR.** Se quitó en su día porque
+  // decía "Base T2: 480" debajo del stat grande, que es el **daño**, y dos números
+  // llamados "base" con dos grandezas distintas era exactamente el descuadre que había
+  // que evitar. Ahora ya no hay mezcla: **esta lista entera es en nanitas** y cada fila
+  // enseña su incremento, así que la base es el punto de partida de la cuenta y sin ella
+  // los incrementos no se pueden comprobar de cabeza. Es el primero de la suma.
+  const filas: Array<{ etiqueta: string; mult: number; suma: number }> = [
+    { etiqueta: 'Base T' + Math.max(1, collector.tier), mult: 1, suma: Math.round(base) }
+  ];
+  let acum = base;
+
+  const anota = (etiqueta: string, mult: number) => {
+    if (Math.abs(mult - 1) < 0.0001) return;
+    const antes = acum;
+    acum = acum * mult;
+    filas.push({ etiqueta, mult, suma: Math.round(acum - antes) });
+  };
+
+  if (collector.level) anota(`Nivel ${collector.level}`, levelValueMult(collector.level, collectorMaxLevel(collector.maxLevel)));
+  anota(`Rareza ${collector.rarity}`, RARITY_VALUE_MULT[collector.rarity] ?? 1);
+  if (collector.potential) anota(`Potencial ${collector.potential}★`, potentialValueMult(collector.potential));
+  if (collector.affixes?.length) anota(`${collector.affixes.length} afijo(s)`, affixValueMult(collector));
+  if (opts.authorRank != null) anota(`Autor top ${opts.authorRank}`, fameValueMult(opts.authorRank));
+  if (collector.forgedAt) anota('Antigüedad', marketAgeMult(collector.forgedAt));
+  if (opts.sellMult != null && Math.abs(opts.sellMult - 1) > 0.0001) anota('Bonificación de venta', opts.sellMult);
+
+  return filas;
+}
+
 export function valuationBreakdown(collector: CollectorItem, opts: ValuationOptions = {}): string[] {
   const out: string[] = [];
   if (collector.level) out.push(`Nivel ${collector.level}: ×${levelValueMult(collector.level, collectorMaxLevel(collector.maxLevel)).toFixed(2)}`);
