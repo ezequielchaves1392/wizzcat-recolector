@@ -156,9 +156,21 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 
 ### Lote 4 · CONSUMIBLES
 
-- [ ] **F43 · Usar N de golpe.** Que se pueda elegir la cantidad, se descuente esa cantidad
-      y se **sume el tiempo**. Topes: AFK **30 minutos** (3 tarjetas) y click x2/x3
-      **5 minutos**.
+- [x] **F43 · Usar N de golpe.** Hecho. El diálogo de usar un consumible **pregunta cuántas**
+      cuando el tope deja más de una, y el motor cobra y aplica ese mismo número:
+      `planUseConsumable()` es la única fuente del tope y `useConsumable(id, n)` lo consulta
+      **antes** de aplicar nada, con el `switch` de siempre en un bucle. El expansor calcula
+      su tope aparte, porque el suyo no es un tiempo sino el almacén. Con lo que había antes,
+      con veinte tarjetas AFK en la pila eran veinte confirmaciones para un efecto que el
+      juego limita a tres; y una tarjeta que no cabía **se cobraba igual** (el tope vivía
+      dentro del `case` que aplicaba el efecto). `consumableCheck` (+20).
+      **Ojo con la cifra del doc:** aquí decía "click x2/x3, 5 minutos" y el juego tiene 30
+      desde el principio. Mandó el código, que es el que comprueban las pruebas.
+- [ ] **F43b · Cuántos de cada tope.** Dejar los topes en un sitio solo ya está hecho
+      (`topeDeConsumible()`), pero los **números en sí** son decisión de equilibrio: los 30
+      minutos de la x2 y la x3 hacen que tres tarjetas de la x2 indistinguibles de una, y
+      el AFK de tres tarjetas se puede ampliar con el árbol. Nada de esto lo toco sin que
+      lo decidas.
 
 ### Lote 5 · EXPANSORES Y ALMACÉN
 

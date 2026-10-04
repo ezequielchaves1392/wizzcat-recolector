@@ -1806,56 +1806,76 @@ function inferCrateType(name: string): CrateType | null {
   return null;
 }
 
-/** Aplica un consumible. Toda la lógica vive en el game loop. */
+/**
+ * Aplica un consumible, y CUÁNTOS DE UNA VEZ si el tope lo deja.
+ *
+ * ## POR QUÉ UN SELECTOR Y NO UN BOTÓN DE MÁXIMO
+ *
+ * "Usar máximo" gasta todo lo que haya, y hay un caso en el que eso **tira recursos**:
+ * veinte tarjetas AFK en la pila dan tres y las otras diecisiete se consumen para nada.
+ * Así que el diálogo pregunta **cuántas**, con el máximo como opción de un toque, y el
+ * motor recorta lo que se pida contra el tope: ni se gasta de más ni se rechaza entero.
+ *
+ * ## Y EL NÚMERO LO PONE EL MOTOR
+ *
+ * `planUseConsumable()` es el mismo que llama el propio `useConsumable()` para decidir el
+ * gasto, así que el máximo del diálogo y el tope del cobro **no pueden separarse**.
+ * El `motivo` es lo que se enseña cuando no cabe ni una: sin él el jugador ve un
+ * botón apagado sin saber si es que no tiene unidades, que ya está al tope o que ese
+ * consumible no se usa desde el almacén.
+ *
+ * **SIN SELECTOR CUANDO SOLO CABE UNA**, porque un diálogo con un número que solo
+ * puede ser uno es ruido.
+ */
 function useConsumable(game: any, item: any, redraw: () => void) {
+  const plan = game.planUseConsumable?.(item.id) ?? { unidades: 0, max: 0, motivo: null };
+  if (plan.unidades <= 0) {
+    sfx.error();
+    showToast(plan.motivo ?? 'Ese consumible ya no hace nada.', 'info');
+    return;
+  }
+
+  const aplicar = (units: number) => {
+    const res = game.useConsumable(item.id, units);
+    if (!res.ok) {
+      sfx.error();
+      showToast(res.msg || 'No se pudo usar.', 'error');
+      return;
+    }
+    sfx.use();
+    ui.selectedId = null;
+    redraw();
+  };
+
+  // El texto de una unidad y el de varias, porque "aplicado" no dice si se gastaron
+  // tres o veinte, y el jugador acaba mirando la pila para averiguarlo.
+  const textoUno = item.details || 'Aplicar el efecto de este consumible.';
+  if (plan.unidades <= 1) {
+    showConfirmModal(textoUno, () => aplicar(1));
+    return;
+  }
+
   showConfirmModal(
-    item.details || 'Aplicar el efecto de este consumible.',
-    () => {
-      const res = game.useConsumable(item.id);
-      if (!res.ok) {
-        sfx.error();
-        showToast(res.msg || 'No se pudo usar.', 'error');
-        return;
-      }
-      sfx.use();
-      ui.selectedId = null;
-      showToast(res.msg || `${item.name}: aplicado`, 'success');
-      redraw();
-    },
-    { sublabel: item.name, confirmText: 'Usar' }
+    textoUno,
+    (units?: number) => aplicar(Math.max(1, Math.floor(Number(units) || 1))),
+    {
+      quantity: {
+        max: plan.unidades,
+        // El nombre y la unidad salen de la ficha, y el verbo es el del botón: sin él
+        // el selector diría "3 a vender" de un consumible que no se vende.
+        itemName: item.name,
+        unitName: 'unidades',
+        // **EL IMPORTE DICE LO QUE SE APLICA, NO LO QUE SE GASTA.** Un consumible no se
+        // cobra ni se vende: lo que se gasta es la pila, y eso lo enseña el propio
+        // selector bajando el número.
+        amount: (n: number) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`,
+        verbo: 'aplicar',
+        sufijoImporte: ''
+      },
+    }
   );
 }
 
-/**
- * Vende un item. El precio, la cantidad y el borrado los decide el game loop.
- *
- * POR QUÉ SOLO PREGUNTA CUANDO HAY PILA. Con una sola unidad no hay nada que
- * decidir: preguntar "¿cuántas?" sobre un item único es un paso de más que
- * solo estorba. Y preguntar cuando la pila es de 1 dejaría un camino de "vender
- * todo" que nadie usaría nunca, porque el jugador que quiere venderlo todo
- * quiere precisamente eso y por eso es el valor por defecto del selector.
- *
- * El importe de cada cantidad lo PREGUNTA al game loop (`getSellTotal`) en vez
- * de multiplicar aquí: es la misma cuenta que hace `sellItem`, y por eso el
- * número que ve el jugador y el que se cobra no pueden separarse (R3).
- */
-/*
- * BORRADA: `subirNivelDeCompanio()`.
- *
- * Era la mitad del botón del compañero que no iba a la hoja de sintonización: le
- * pintaba su propio `showConfirmModal` con dos frases y, al confirmar, un `showToast`
- * con el resultado. El recolector tenía la hoja, con la misma información y además
- * la ruleta, así que la misma acción se hacía de dos maneras distintas.
- *
- * **LO QUE SE LLEVÓ Y LO QUE NO.** El coste, el saldo, el texto del fallo y la
- * secuencia los tiene ahora `showSintonizacion()`, que es el mismo código para los dos
- * objetivos. Y se conserva lo que esta función tenía de bueno y la hoja no: **que el
- * compañero sube el ingreso del recolector**, que es un efecto distinto al del
- * recolector y no se puede decir con el mismo texto.
- *
- * Lo que no se ha repetido es el aviso de "si falla no baja de nivel", porque la hoja lo
- * dice siempre, en la misma línea, para los dos.
- */
 function sellItem(game: any, item: any, redraw: () => void) {
   const qty = stackUnits(item);
   const total = game.getSellTotal?.(item.id)

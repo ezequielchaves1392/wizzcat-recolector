@@ -49,3 +49,147 @@ export const BUFF_FIELDS = {
 } as const;
 
 export type BuffKey = keyof typeof BUFF_FIELDS | 'afk';
+/**
+ * CUÁNTAS VECES CABE UN CONSUMIBLE, Y POR QUÉ ES UNA FUNCIÓN Y NO UN NÚMERO EN CADA
+ * `case`.
+ *
+ * El consumible se usaba **de a uno**, y con veinte tarjetas AFK en la pila eso son
+ * veinte confirmaciones para un efecto que el propio juego limita a tres. El tope de cada
+ * uno estaba escrito dentro del `case` que lo aplica --`Math.min(base + afkMs, ahora +
+ * afkMs * 3)`, `Math.min(..., ahora + 30 * 60_000)`-- así que **para preguntar "cuántas
+ * puedo gastar" había que volver a escribir los topes en otro sitio**, y un tope escrito
+ * dos veces es un tope que se separan.
+ *
+ * Aquí están los topes como números, **y solo como números**:
+ *
+ * · `AFK`: tres tarjetas. El buff se recalcula con `afkCardDurationMs()`, que es la misma
+ *   función que usa el `case` y la que lee el árbol, así que subir de nivel el AFK también
+ *   sube el tope sin tocar este sitio.
+ * · Las tarjetas de click: 30 minutos para la x2, 30 minutos para la x3, 2 horas para la de
+ *   pasivo. Es lo que ya ponían los `case`, escrito una vez.
+ *
+ * Y **el expansor no entra aquí** porque su tope no es un tiempo sino el **almacén**:
+ * el expansor T{n} vale hasta `maxCap`, y el expansor de una partida vieja hasta
+ * `WAREHOUSE_MAX_CAP`. El motor lo pregunta con la misma tabla, en `planUseConsumable()`.
+ */
+export const TOPE_DE_TARJETA_AFK = 3;
+export const TOPE_MS_CLICK_X2 = 30 * 60_000;
+export const TOPE_MS_CLICK_X3 = 30 * 60_000;
+export const TOPE_MS_CLICK_BOOST = 30 * 60_000;
+export const TOPE_MS_PASSIVE_BOOST = 2 * 60 * 60_000;
+
+/**
+ * Lo que una tarjeta tiene que mover para que cuente como gastada.
+ *
+ * ## POR QUÉ HAY UN SEGUNDO Y POR QUÉ NO ES UN NÚMERO MAGO
+ *
+ * El tope se mide **en el instante de la llamada** —`ahora + tope`— y `ahora` se lee en
+ * cada uso. Dos usos separados por un milisegundo dan dos techos distintos: el segundo
+ * "cabe" por un milisegundo, el `ceil` lo cuenta como una unidad entera y el jugador
+ * pierde una tarjeta por un tic del reloj. Eso es lo que pasaba con la segunda tarjeta
+ * de click, y es la mitad de lo que motivó el uso en lote.
+ *
+ * Un segundo es **una unidad de reloj, no una unidad de juego**: por debajo de eso el
+ * efecto no se ve, el número del temporizador tampoco cambia y la tarjeta es una
+ * etiqueta vacía. Y por encima sigue mandando el `ceil`, que es lo que conserva el caso
+ * bueno: un buff con veinte minutos puestos y treinta de tope **sí** acepta una tarjeta
+ * para llegar hasta el tope, y sin este margen también se rechazaría.
+ */
+export const MIN_MS_DE_UNIDAD = 1_000;
+
+/**
+ * Los únicos que se pueden usar en ráfaga y los que no, y por qué.
+ *
+ * `null` es "no tiene tope: se usa mientras haya unidades" — que hoy no es ninguno, pero
+ * lo deja escrito para que añadir un consumible nuevo sin tope sea una decisión y no un
+ * olvido.
+ *
+ * Las piedras y la nanopartícula **no están**, y no por descuido: se consumen en la
+ * Forja, una por tirada, y aplicarlas desde el almacén las gastaría sin que la Forja
+ * las viera. `useConsumable()` ya lo rechaza y este lo dice antes de preguntar.
+ */
+export function topeDeConsumible(buffId: string, afkMs: number): number | null {
+  switch (buffId) {
+    case 'afk': return TOPE_DE_TARJETA_AFK * afkMs;
+    case 'clickX2': return TOPE_MS_CLICK_X2;
+    case 'clickX3': return TOPE_MS_CLICK_X3;
+    case 'clickBoost': return TOPE_MS_CLICK_BOOST;
+    case 'passiveBoost': return TOPE_MS_PASSIVE_BOOST;
+    default: return null;
+  }
+}
+
+/**
+ * Cuántas unidades se pueden usar de un golpe sin que la siguiente se pierda.
+ *
+ * ## POR QUÉ ES UN `ceil` Y NO UN RESTO
+ *
+ * El tope se **recorta**, no se rechaza: con un AFK que vence dentro de dos minutos y
+ * un tope de veinte, una tarjeta deja el tope y no "lo que le queda". Así que el número de
+ * usos que caben es **cuántas tarjetas hacen falta para llegar al tope**, no las que caben
+ * *entras*: `ceil((techo - base) / paso)`. Un `floor` daría 0 con dieciocho minutos
+ * puestos de un tope de veinte, y el `case` del motor --que recorta en vez de rechazar--
+ * aceptaría esa tarjeta: el botón "no hace nada" con el motor diciendo que sí.
+ *
+ * `base` es **el buff que hay**, no cero: una tarjeta que alarga veinte minutos sobre un
+ * buff de diez deja 30, y el total sigue siendo el tope. Por eso el argumento es
+ * `base`, no `ahora`.
+ *
+ * @returns El número de usos que caben de verdad. Nunca negativo.
+ */
+export function cuantasVecesCabe(entrada: {
+  buffId: string;
+  ahora: number;
+  /** Milisegundos de efecto que aporta **una** unidad. */
+  pasoMs: number;
+  /** Cuánto le queda al efecto ahora mismo: su expiración. */
+  expiraEn?: number;
+  /** Cuántas unidades hay en el almacén. */
+  unidades: number;
+  /** Duración de una tarjeta AFK; solo para el AFK. */
+  afkMs: number;
+}): number {
+  const tope = topeDeConsumible(entrada.buffId, entrada.afkMs);
+  // Sin tope declarado, o sin unidades, no hay nada que calcular.
+  if (tope === null) return entrada.unidades;
+  if (entrada.unidades <= 0) return 0;
+  if (!(entrada.pasoMs > 0)) return 0;
+  // **EL TOPE ES UNA DURACIÓN Y `base` ES UN INSTANTE, ASÍ QUE LA RESTA ES ENTRE
+  //  INSTANTES.** El `case` recorta a `ahora + tope`, no a `tope`: son dos números de
+  //  la misma magnitud, pero no de la misma unidad. Restarlos tal cual da un número
+  //  negativo y este sitio dice "ya está al tope" para todo, que es lo que pasó la
+  //  primera vez --media partida entera con todos los consumibles rechazados--.
+  const base = Math.max(entrada.ahora, entrada.expiraEn ?? 0);
+  const falta = (entrada.ahora + tope) - base;
+  // **LO QUE SOBRA POR DEBAJO DE UN SEGUNDO NO CUENTA COMO UNA TARJETA.** Es el
+  //  desfase entre dos llamadas: el tope se mide en el instante de cada una, así que
+  //  usar dos veces seguidas deja siempre unos milisegundos de margen y el `ceil` los
+  //  redondearía a una tarjeta entera. Con este margen, la segunda tarjeta de un buff
+  //  lleno **se rechaza y no se cobra**, que es lo que el jugador espera.
+  if (falta < Math.min(entrada.pasoMs, MIN_MS_DE_UNIDAD)) return 0;
+  return Math.max(0, Math.min(entrada.unidades, Math.ceil(falta / entrada.pasoMs)));
+}
+
+/**
+ * Milisegundos de efecto que aporta **una** unidad de este consumible.
+ *
+ * Es el otro medio de la misma pregunta que `topeDeConsumible()`: el tope dice hasta
+ * donde llega el efecto y el paso cuánto se alarga cada vez. **Están en el mismo
+ * sitio y por el mismo motivo**: los dos salen de los `Math.min()` que aplicaban los
+ * `case` del motor, escritos una sola vez.
+ *
+ * El expansor **no aparece**, porque su paso son ranuras de almacén y no milisegundos:
+ * ese lo pregunta el motor con `EXPANSOR_TIERS`. Devolver `0` es lo honesto para
+ * "aquí no aplica esta regla", y no un número inventado.
+ */
+export function pasoDeConsumible(buffId: string, afkMs: number): number {
+  switch (buffId) {
+    case 'afk': return afkMs;
+    case 'clickX2': return 30_000;
+    case 'clickX3': return 30_000;
+    case 'clickBoost': return 30 * 60_000;
+    case 'passiveBoost': return 60 * 60_000;
+    case 'warehouseExpander': return 1;
+    default: return 0;
+  }
+}

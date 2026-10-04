@@ -379,6 +379,37 @@ getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pendin
   //  La regla que se cumple aquí es la misma que en el juego: el plan y la venta leen la
   //  MISMA cuenta, así que el botón no puede anunciar una cifra y el cobro otra.
   // -------------------------------------------------------------------------
+  /**
+   * El plan del consumible en el preview, **y porque hay que verlo.**
+   *
+   * El boton se apaga cuando no cabe ni una, asi que sin esto el dialogo de usar un
+   * consumible no aparece nunca en el banco de pruebas y el selector de cantidad no se
+   * puede revisar. El tope sale de la propia pila: **una tarjeta AFK da tres y un expansor
+   * da uno**, que es lo que hace que se vea el caso de "solo cabe una" sin selector.
+   */
+  planUseConsumable: (id: string) => {
+    const w = (MOCK.warehouse as any[]).find((x: any) => x.id === id);
+    if (!w) return { unidades: 0, max: 0, motivo: 'Ese item ya no esta en el almacen.' };
+    if (w.type !== 'consumable') return { unidades: 0, max: 0, motivo: 'Esto no se puede usar.' };
+    if (w.buffId === 'calibrationStone' || w.buffId === 'stabilityNano') {
+      return { unidades: 0, max: 0, motivo: 'Este consumible se usa en la Forja.' };
+    }
+    const n = w.stackable ? (w.stackCount || 1) : 1;
+    const tope = w.buffId === 'afk' ? 3 : 1;
+    const unidades = Math.min(n, tope);
+    return {
+      unidades,
+      max: unidades,
+      motivo: unidades > 0 ? null : 'El efecto ya esta al tope.'
+    };
+  },
+  /** El gasto en lote del preview: uno por unidad, que es lo que ve el banco. */
+  useConsumable: (id: string, units = 1) => {
+    const plan = fakeGame.planUseConsumable(id);
+    if (plan.unidades <= 0) return { ok: false, usadas: 0, msg: plan.motivo };
+    const usadas = Math.max(1, Math.min(units, plan.unidades));
+    return { ok: true, usadas, msg: usadas === 1 ? 'aplicado' : usadas + ' aplicados' };
+  },
   planSellMany: (ids: string[]) => {
     const vendibles: any[] = [];
     const bloqueados: any[] = [];
@@ -410,6 +441,15 @@ getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pendin
     return { ok: true, gained: plan.total, sold: plan.vendibles.length, bloqueados: plan.bloqueados };
   },
   getForgeInfo: () => ({ craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),
+  /**
+   * Que da la carta, para que la ficha del mercado enseñe el producto y no solo el
+   * precio: con "Precio 200" y "Tienes 213" al lado no hay forma de saber cual es cual.
+   * El preview usa la misma regla que el motor --una carta de cristal da un intento
+   * entero de subida--, porque un numero inventado en el banco es peor que ninguno.
+   */
+  getStoreItemYield: (itemKey: string) => (itemKey === 'upgradeCrystal'
+    ? { unidades: 200, recurso: 'cristales' }
+    : { unidades: 0, recurso: null }),
   buyStoreItem: () => true,
   buyNode: () => ({ success: true, msg: 'Nodo comprado' }),
   prestige: () => ({ success: true, gained: 8, msg: '+8 núcleos' }),

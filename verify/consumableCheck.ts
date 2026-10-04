@@ -277,18 +277,47 @@ async function main() {
       'expira=' + s(g).buffs.clickBoostExpiresAt);
     check('clickBoost: consume el item', wh(g).length === 0, ids(g).join(','));
   }
-  {
-    // Tope de 1 hora para el buff de click, aunque cada tarjeta dure 30 min.
+{
+    // **UNA TARJETA QUE NO MUEVE EL RELOJ NO SE COBRA.** El tope se mide en el
+    //  instante de cada llamada, así que usar dos veces seguidas deja siempre unos
+    //  milisegundos de margen y, sin el margen de un segundo, el motor cobraría la
+    //  segunda tarjeta por mover el reloj dos milisegundos. El jugador la ve gastar y
+    //  no ve pasar nada, que es la mitad de lo que motivó el uso en lote.
     const g = await boot(baseSave([consumable('b1', 'clickBoost', 5, { name: 'Buff Clicks x2' })],
       { buffs: BUFFS_ZERO }));
     g.useConsumable('b1');
     const tras = s(g).buffs.clickBoostExpiresAt - Date.now();
     check('clickBoost: la primera tarjeta da 30 minutos', tras <= MIN_30, `restante=${tras}`);
-    g.useConsumable('b1');
-    const tras2 = s(g).buffs.clickBoostExpiresAt - Date.now();
-    check('clickBoost: la segunda NO puede pasar de 1 hora', tras2 <= MIN_60, `restante=${tras2}`);
-    check('clickBoost: pero consume las dos unidades', find(g, 'b1')?.stackCount === 3,
-      String(find(g, 'b1')?.stackCount));
+    const segunda = g.useConsumable('b1');
+    check('clickBoost: la segunda ya esta al tope y lo dice',
+      !segunda.ok && /tope/i.test(segunda.msg ?? ''), segunda.msg ?? '');
+    check('clickBoost: y NO se gasta, que era el gasto sin efecto',
+      find(g, 'b1')?.stackCount === 4, String(find(g, 'b1')?.stackCount));
+    check('clickBoost: y el plan lo dice ANTES de gastar, no al fallar',
+      g.planUseConsumable('b1').unidades === 0,
+      'unidades=' + g.planUseConsumable('b1').unidades);
+    check('clickBoost: y el tope se respeta igual',
+      s(g).buffs.clickBoostExpiresAt - Date.now() <= MIN_30,
+      'restante=' + (s(g).buffs.clickBoostExpiresAt - Date.now()));
+  }
+  {
+    // **PERO UN BUFF A MEDIAS SÍ ACEPTA LA TARJETA, Y ESO ES LO QUE SALVA EL `ceil`.**
+    //  Con veinte minutos puestos de un tope de treinta, la tarjeta lleva el buff al
+    //  tope: son diez minutos de verdad. Con un `floor` —o sin el margen de un segundo—
+    //  esto se rechazaría, y el jugador se quedaría con un buff que no puede rematar
+    //  hasta que expire entero, que es la peor de las dos mitades.
+    const g = await boot(baseSave([consumable('b1', 'clickBoost', 2, { name: 'Buff Clicks x2' })],
+      { buffs: { ...BUFFS_ZERO, clickBoostExpiresAt: Date.now() + MIN_30 - 10 * 60_000 } }));
+    check('clickBoost: con veinte minutos de treinta, el plan ofrece una',
+      g.planUseConsumable('b1').unidades === 1,
+      'unidades=' + g.planUseConsumable('b1').unidades);
+    const r = g.useConsumable('b1', 2) as any;
+    check('clickBoost: y usarla en lote se queda en una y no cobra la segunda',
+      r.ok === true && r.usadas === 1 && find(g, 'b1')?.stackCount === 1,
+      `ok=${r.ok} usadas=${r.usadas} quedan=${find(g, 'b1')?.stackCount}`);
+    check('clickBoost: y el buff llega al tope entero',
+      s(g).buffs.clickBoostExpiresAt - Date.now() > MIN_30 - 2_000,
+      'restante=' + (s(g).buffs.clickBoostExpiresAt - Date.now()));
   }
   {
     const g = await boot(baseSave([consumable('b2', 'passiveBoost', 1, { name: 'Buff Pasivo x2' })]));
@@ -568,6 +597,121 @@ async function main() {
       Math.abs(segunda - primera) < 1000, `antes=${primera} despues=${segunda}`);
     check('guardar: y la pila sigue con 2 unidades', wh(g2)[0]?.stackCount === 2,
       JSON.stringify(wh(g2)[0]?.stackCount));
+  }
+
+// =========================================================================
+  //  4. USAR CONSUMIBLES DE A VECES, Y CUANTAS CABEN DE GOLPE
+  //
+  //  El consumible se usaba de a uno, y con veinte tarjetas AFK en la pila eso son
+  //  veinte confirmaciones para un efecto que el propio juego limita a tres. Y el
+  //  gasto era el otro extremo del problema: el tope vivia dentro del `case` que
+  //  aplica el efecto, asi que una tarjeta que no cabia **se cobraba igual**.
+  //
+  //  La regla de "cuantas caben" se comprueba contra el motor real y no contra una
+  //  cuenta de la vista: el maximo del dialogo y el tope del cobro tienen que ser el
+  //  mismo numero, y la unica forma de que no se separen es que salgan de la misma
+  //  funcion.
+  // =========================================================================
+  {
+    const g = await boot(baseSave([consumable('u1', 'afk', 20, { name: 'Tarjeta AFK' })],
+      { warehouseCapacity: 40 }));
+
+    const plan = g.planUseConsumable('u1');
+    check('lote: veinte tarjetas AFK y el plan dice tres, no veinte',
+      plan.unidades === 3 && plan.motivo === null,
+      `unidades=${plan.unidades} motivo=${plan.motivo}`);
+
+    // **Y USAR TRES DE UNA VEZ GASTA TRES, NI UNA MAS NI UNA MENOS.** Si el tope
+    //  estuviera solo en el gasto y no en el plan, el motor cobraria tres con un
+    //  boton que promete veinte, que es la discrepancia que R3 prohibe.
+    const tres = g.useConsumable('u1', 3) as any;
+    const queda = (g.getState().warehouse as any[]).find((w: any) => w.id === 'u1');
+    check('lote: usar tres de una vez gasta tres y no las veinte',
+      tres.ok === true && tres.usadas === 3 && (queda?.stackCount ?? 0) === 17,
+      `ok=${tres.ok} usadas=${tres.usadas} quedan=${queda?.stackCount}`);
+
+    // **Y EL EFECTO ES EL DE TRES TARJETAS, NO EL DE UNA.** Esta es la mitad que
+    //  faltaba: si se gastaran tres y solo se aplicara una, el jugador pagaria tres
+    //  por un efecto, y el "gasto en lote" seria una forma de perder recursos con
+    //  botones que encima lo anuncian.
+    const restante = s(g).afkExpiresAt - Date.now();
+    check('lote: y el buff dura tres tarjetas, no una',
+      restante > AFK_MS * 2 && restante <= AFK_MS * 3,
+      `restante=${restante} una=${AFK_MS} tope=${AFK_MS * 3}`);
+
+    // **Y EL TOPE SE APLICA AL EFECTO, ASI QUE EL PLAN SE QUEDA A CERO.** No es un
+    //  detalle: es lo que hace que el boton se apague antes de gastar.
+    const despues = g.planUseConsumable('u1');
+    check('lote: despues de gastarlas no cabe ninguna mas, y lo dice',
+      despues.unidades === 0 && !!despues.motivo,
+      `unidades=${despues.unidades} motivo=${despues.motivo}`);
+
+    const manual = g.useConsumable('u1', 2) as any;
+    const sigue = (g.getState().warehouse as any[]).find((w: any) => w.id === 'u1');
+    check('lote: y usarlas a mano tambien se rechaza sin gastar',
+      manual.ok === false && manual.usadas === 0 && (sigue?.stackCount ?? 0) === 17,
+      `ok=${manual.ok} usadas=${manual.usadas} quedan=${sigue?.stackCount}`);
+  }
+  {
+    // **EL EXPANSOR, QUE SU TOPE ES EL ALMACEN Y NO UN TIEMPO**, y por eso la cuenta
+    //  es distinta: no hay duracion que repartir, hay un techo al que llegar. Con 18 de
+    //  capacidad y un T1 que vale hasta 20, el motor acepta **una** tarjeta, y el
+    //  `ceil` es lo que lo dice: un `floor` daria cero y el expansor que el motor
+    //  acepta pareceria no caber.
+    const g = await boot(baseSave([consumable('e1', 'expansorT1', 5, { name: 'Expansor T1' })],
+      { warehouseCapacity: 18 }));
+    const plan = g.planUseConsumable('e1');
+    check('lote: el expansor a dos pasos de su techo da uno, no cero y no cinco',
+      plan.unidades === 1, `unidades=${plan.unidades}`);
+    const r = g.useConsumable('e1', 5) as any;
+    const queda = (g.getState().warehouse as any[]).find((w: any) => w.id === 'e1');
+    check('lote: y al pedir cinco usa una sola y deja las otras cuatro',
+      r.ok === true && r.usadas === 1 && (queda?.stackCount ?? 0) === 4,
+      `ok=${r.ok} usadas=${r.usadas} quedan=${queda?.stackCount}`);
+    check('lote: y la capacidad sube las ranuras de una vez',
+      s(g).warehouseCapacity === 18 + RANURAS_POR_EXPANSOR,
+      'cap=' + s(g).warehouseCapacity);
+  }
+  {
+    // **UN TOPE Y UN PASO DISTINTOS: DOS HORAS SON DOS TARJETAS, NO UNA.** Es el caso
+    //  que separa las dos mitades de la regla --`topeDeConsumible` y
+    //  `pasoDeConsumible`--: con la misma duration por tarjeta, cinco darian cinco
+    //  horas; con una hora por tarjeta, dos dan las dos horas del tope.
+    const g = await boot(baseSave([consumable('p1', 'passiveBoost', 5, { name: 'Buff Pasivo x2' })]));
+    const plan = g.planUseConsumable('p1');
+    check('lote: el pasivo dice dos, que es el tope de dos horas partido por una hora',
+      plan.unidades === 2, `unidades=${plan.unidades}`);
+    const r = g.useConsumable('p1', 5) as any;
+    const queda = (g.getState().warehouse as any[]).find((w: any) => w.id === 'p1');
+    check('lote: y al pedir cinco se cobran dos, no cinco',
+      r.ok === true && r.usadas === 2 && (queda?.stackCount ?? 0) === 3,
+      `ok=${r.ok} usadas=${r.usadas} quedan=${queda?.stackCount}`);
+    const resta = s(g).buffs.passiveBoostExpiresAt - Date.now();
+    check('lote: y el buff se lleva las dos horas enteras',
+      resta > MIN_60 && resta <= 2 * MIN_60, `restante=${resta}`);
+    check('lote: y ya no cabe ni una mas',
+      g.planUseConsumable('p1').unidades === 0);
+  }
+  {
+    // **LO QUE NO SE USA DESDE EL ALMACEN, DICIENTO ANTES DE GASTAR.** Las piedras
+    //  se consumen en la Forja una por tirada: aplicarlas desde aqui las gastaria sin
+    //  que la Forja las viera, y en lote eso seria un monton de stonesLost en silencio.
+    const g = await boot(baseSave([consumable('c1', 'calibrationStone', 4, { name: 'Piedra de Calibracion' })]));
+    const plan = g.planUseConsumable('c1');
+    check('lote: la piedra se rechaza en el almacen y el motivo lo dice',
+      plan.unidades === 0 && /Forja/.test(plan.motivo ?? ''),
+      `unidades=${plan.unidades} motivo=${plan.motivo}`);
+    check('lote: y ni siquiera en lote se gasta',
+      (g.useConsumable('c1', 4) as any).usadas === 0
+      && ((g.getState().warehouse as any[]).find((w: any) => w.id === 'c1')?.stackCount ?? 0) === 4);
+  }
+  {
+    // **Y UN ID QUE NO EXISTE NO PROMETE NADA, EN VEZ DE DECIR QUE ESTA AL TOPE.**
+    const g = await boot(baseSave([]));
+    const plan = g.planUseConsumable('no-existe');
+    check('lote: un id que no esta no ofrece nada y lo dice',
+      plan.unidades === 0 && !!plan.motivo && !/tope/i.test(plan.motivo ?? ''),
+      `unidades=${plan.unidades} motivo=${plan.motivo}`);
   }
 
   resumen('consumibles');

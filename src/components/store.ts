@@ -758,6 +758,28 @@ function detailSheet(
             <div class="font-mono text-[12px] text-[var(--text-main)] tabular">
               <span id="store-nanites-sheet">${formatNumber(state.nanites)}</span> ◆
             </div>
+            ${(() => {
+              // **QUÉ DA ESTA CARTA, Y POR QUÉ NO SE DEDUCE DE LA PRECIO.**
+              //
+              // Con "Precio 200" y "Tienes 213" al lado, los dos con el mismo símbolo, no
+              // hay forma de saber si esos 213 son lo que tienes o lo que te dan. Tras
+              // comprar, el saldo sube a 413 y eso tampoco contesta a la pregunta: el
+              // jugador se queda con la duda de si compró una unidad o un montón.
+              //
+              // El número lo pone el motor (`getStoreItemYield()`), que es quien escribe
+              // `state.crystals += ...`. Si la vista lo calculara con su propia fórmula,
+              // un rebalance dejaría el producto sin cuadrar con el precio (R3).
+              //
+              // Y solo sale si hay algo que decir: una caja o una ranura no dan un
+              // recurso, y teachar "Te da 0" es peor que no teachar nada.
+              const y: any = game.getStoreItemYield?.(itemKey) ?? { unidades: 0, recurso: null };
+              if (!y || !y.recurso || !(y.unidades > 0)) return '';
+              const n = y.unidades;
+              return `
+                <div class="font-mono text-[10px] text-[var(--text-muted)] tabular mt-0.5">
+                  te da ${formatNumber(n)} ${n === 1 ? y.recurso.slice(0, -1) : y.recurso}
+                </div>`;
+            })()}
           </div>
         </div>
 

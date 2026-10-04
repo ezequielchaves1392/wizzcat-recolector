@@ -938,7 +938,11 @@ async function main() {
       { id: 'm1', name: 'Uno', type: 'companion', details: 'x', rarity: 'Raro', tier: 1, potential: 3, sellPrice: 100 },
       { id: 'm2', name: 'Dos', type: 'companion', details: 'x', rarity: 'Raro', tier: 1, potential: 3, sellPrice: 100 }
     ], { crystals: 1e12, stones: 1e9, warehouseCapacity: 60, maxCompanionSlots: 4 }));
-    const forjado: any = g.forgeCompanion(['m1', 'm2'], 0, 0);
+    // **EL DADO TAMBIEN AQUI: LA FORJA TIRA, Y SIN CLAVARLA ESTA PRUEBA ES UN DADO.**
+    // Una fusión puede fallar, y cuando falla **se come los materiales**: el `.companion`
+    // salía `undefined` y la línea siguiente reventaba. Es el segundo banco que se cae
+    // por depender del azar en la misma tarde, después del de `loteCheck`.
+    const forjado: any = conRoll(0, () => g.forgeCompanion(['m1', 'm2'], 0, 0));
     const idForjado = forjado.companion.id;
     const nivelDe = () => (g.getState().companions as any[]).find((x: any) => x.id === idForjado)?.level ?? 0;
 

@@ -45,6 +45,7 @@ import {
   expansorPorBuff, type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
+import { cuantasVecesCabe, pasoDeConsumible } from './data/buffs';
 import {
   AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta, debeVenderseAuto,
   type ConfigAutoVenta, type TipoDeVentaAuto
@@ -713,6 +714,25 @@ function precioUnitarioTienda(itemKey: string): number {
  * vista, para elegir el sustantivo del selector ("¿cuántas **cajas**?"). Por eso
  * las dos cosas salen de aquí: la lista y el nombre.
  */
+/**
+ * POR QUÉ NO SE USA UN EXPANSOR, EN UNA FRASE, PARA LOS DOS SITIOS QUE LO PREGUNTAN.
+ *
+ * Lo preguntan dos: el botón, que necesita un motivo para apagarse, y el motor, que
+ * necesita negarse. Y **el mensaje es la mitad de la regla**: un "no se usa" sin decir
+ * cuál expansor falta deja al jugador adivinando qué comprar, que es justo lo que esta
+ * regla pretendía resolver. Por eso el texto sale de aquí y no de dos sitios.
+ *
+ * @param tipo El expansor de la tabla. `null` es el antiguo `warehouseExpander`, que no
+ *             tiene escalón siguiente.
+ */
+function motivoDeExpansorAlTope(tipo: any, capacidad: number): string {
+  if (!tipo) return `Almacén al máximo (${WAREHOUSE_MAX_CAP}).`;
+  const siguiente = EXPANSOR_TIERS.find((t) => t.tier === tipo.tier + 1);
+  return siguiente
+    ? `Tu almacén ya está en ${capacidad} y el ${tipo.name} solo vale hasta ${tipo.maxCap}. Necesitas un ${siguiente.name} (hasta ${siguiente.maxCap}).`
+    : `Tu almacén ya está en ${capacidad}, que es todo lo que da el ${tipo.name}. No hay expansor por encima.`;
+}
+
 function esCartaEnLote(itemKey: string): boolean {
   return itemKey === 'upgradeCrystal'
     || itemKey === 'crateT1'
@@ -3876,6 +3896,80 @@ const AFK_THRESHOLD_MS = 60000;
       };
     },
 
+/**
+     * CUÁNTOS CONSUMIBLES SE PUEDEN USAR DE UNA VEZ, Y CUÁNTOS.
+     *
+     * El consumible se usaba de a uno, y con veinte tarjetas AFK en la pila eso son
+     * veinte confirmaciones para un efecto que el propio juego limita a tres. El botón
+     * dice el tope y el motor lo es, así que **la pregunta y el cobro no pueden ser dos
+     * cálculos**: por eso los dos salen de `cuantasVecesCabe()`.
+     *
+     * **Y EL TOPE DEL EXPANSOR NO ESTÁ AQUÍ SINO EN LA TABLA**, porque es el almacén y no un
+     * tiempo: el expansor T{n} vale hasta `maxCap` y el de una partida vieja hasta
+     * `WAREHOUSE_MAX_CAP`. La cuenta es un `ceil` porque el expansor **recorta** en vez de
+     * rechazar --con 18 de capacidad y un T1 que vale hasta 20, un uso deja 20 y el
+     * siguiente ya no cabe-- y por eso "cuántos usos caben" es "cuántas tarjetas hacen
+     * falta para llegar al tope", no "cuántas caben enteras". Un `floor` diría 0 y el
+     * expansor que el motor acepta parecería no caber.
+     *
+     * `motivo` es `null` cuando no cabe ni una, y es lo que la vista enseña: sin él el
+     * jugador ve un botón apagado sin saber si es que no tiene, que ya está al tope o que
+     * ese consumible no se usa desde el almacén.
+     */
+    planUseConsumable: (itemId: string): { unidades: number; max: number; motivo: string | null } => {
+      const item: any = state.warehouse.find((w: any) => w.id === itemId);
+      if (!item) return { unidades: 0, max: 0, motivo: 'Ese item ya no está en el almacén.' };
+      if (item.type !== 'consumable') return { unidades: 0, max: 0, motivo: 'Esto no se puede usar.' };
+      const buffId = item.buffId ?? inferBuffIdFromName(item.name || '');
+      if (!buffId) return { unidades: 0, max: 0, motivo: 'Este consumible no tiene efecto conocido.' };
+      if (buffId === 'calibrationStone' || buffId === 'stabilityNano') {
+        return { unidades: 0, max: 0, motivo: 'Este consumible se usa en la Forja.' };
+      }
+      const unidades = item.stackable ? (item.stackCount || 1) : 1;
+      const ahora = Date.now();
+      const afkMs = afkCardDurationMs();
+
+      // **EL EXPANSOR, POR SU VEZ, Y CON SU MISMA TABLA.**
+      if (buffId === 'warehouseExpander' || buffId.startsWith('expansorT')) {
+        const tipo = buffId === 'warehouseExpander' ? null : expansorPorBuff(buffId);
+        if (buffId !== 'warehouseExpander' && !tipo) {
+          return {
+            unidades: 0,
+            max: 0,
+            motivo: `No hay expansor ${buffId}: la escalera de expansores y la del almacén se han separado.`
+          };
+        }
+        const tope = tipo ? tipo.maxCap : WAREHOUSE_MAX_CAP;
+        const paso = tipo ? tipo.slots : 1;
+        const max = state.warehouseCapacity >= tope
+          ? 0
+          : Math.max(0, Math.min(unidades, Math.ceil((tope - state.warehouseCapacity) / paso)));
+        return {
+          unidades: max,
+          max,
+          // El texto sale del helper que usa tambien el `case`: el boton apagado y el
+          // motor negandose tienen que decir la misma frase.
+          motivo: max > 0 ? null : motivoDeExpansorAlTope(tipo, state.warehouseCapacity),
+        };
+      }
+
+      // **Y LAS TARJETAS, POR TIEMPO, CON LA MISMA FUNCION QUE APLICA EL CASO.**
+      const pasoMs = pasoDeConsumible(buffId, afkMs);
+      const expiraEn = buffId === 'afk'
+        ? state.afkExpiresAt
+        : (state.buffs as any)[`${buffId}ExpiresAt`];
+      const max = cuantasVecesCabe({
+        buffId, ahora, pasoMs, expiraEn, unidades, afkMs
+      });
+      return {
+        unidades: max,
+        max,
+        motivo: max > 0
+          ? null
+          : `El efecto de ${item.name} ya está al tope. No se puede usar más.`
+      };
+    },
+
     /**
      * Consume un consumible del almacén y aplica su efecto.
      *
@@ -3883,7 +3977,7 @@ const AFK_THRESHOLD_MS = 60000;
      * aquí se aplica al estado y después se consume el item. El orden importa:
      * primero se resuelve el buff, y solo si se ha aplicado bien se gasta.
      */
-    useConsumable: (itemId: string): { ok: boolean; msg?: string } => {
+    useConsumable: (itemId: string, units = 1): { ok: boolean; msg?: string; usadas?: number } => {
       handleUserActivity();
       const item: any = state.warehouse.find((w: any) => w.id === itemId);
       if (!item) return { ok: false, msg: 'Ese item ya no está en el almacén.' };
@@ -3893,99 +3987,150 @@ const AFK_THRESHOLD_MS = 60000;
       const buffId = item.buffId ?? inferBuffIdFromName(item.name || '');
       if (!buffId) return { ok: false, msg: 'Este consumible no tiene efecto conocido.' };
 
+      // **EL PLAN SE CONSULTA ANTES DE APLICAR NADA, Y POR DOS MOTIVOS.**
+      //
+      //  El primero es un error que estuvo a punto de ser real: si se preguntara
+      //  después del `switch`, el expansor ya habría subido la capacidad, el plan
+      //  vería su propio efecto —`20 >= 20`— y el motor se rechazaría a sí mismo
+      //  después de haber aplicado la unidad. Con el tope del expansor, eso tiraba
+      //  el item sin gastarlo y con la capacidad ya subida.
+      //
+      //  El segundo es el que manda: es **la misma pregunta que hace el botón**, así
+      //  que el máximo del diálogo y el tope del cobro no pueden separarse. Por eso
+      //  sale de `planUseConsumable()` y no de una cuenta aquí.
+      const pedidas = Math.max(1, Math.floor(Number(units) || 1));
+      const plan: { unidades: number; max: number; motivo: string | null } =
+        estado.planUseConsumable(itemId);
+      // **LO QUE SE GASTA ES LO QUE PIDIÓ EL JUGADOR, RECORTADO CONTRA EL TOPE, Y SI
+      // SE RECORTA SE DICE CUÁNTAS.** Gastar un consumible que no hace falta es tirar
+      //  el recurso del jugador, y la alternativa —gastarlo y que el `Math.min` del
+      //  efecto lo ignore— es el bug de la píldora de AFK otra vez, en un sitio donde
+      //  el jugador ya ha confirmado un número.
+      const aUsar = Math.max(0, Math.min(pedidas, plan.unidades));
+      if (aUsar === 0) {
+        return { ok: false, usadas: 0, msg: plan.motivo ?? 'Ese consumible ya no hace nada.' };
+      }
+
       const ahora = Date.now();
       const afkMs = afkCardDurationMs();
       let nuevoItem = true;
 
-      switch (buffId) {
-        // Los expansores son diez `case`, uno por tier. Se podrían cubrir con un
-        // `default` que preguntara a la tabla, pero entonces un `buffId` mal
-        // escrito daría el mensaje de "no sé qué hace" y un expansor nuevo
-        // nacía muerto sin que nadie lo notara: **con diez casos escritos, el
-        // banco `consumableCheck` ve que los diez buffIds de la tabla tienen su
-        // caso**, y un undécimo expansor obliga a tocar este sitio a propósito.
-        case 'expansorT1': case 'expansorT2': case 'expansorT3': case 'expansorT4': case 'expansorT5':
-        case 'expansorT6': case 'expansorT7': case 'expansorT8': case 'expansorT9': case 'expansorT10': {
-          // El tipo sale de la tabla, y con un `case` por buffId no puede ser
-          // `undefined` salvo que alguien añada un expansor sin tocar aquí: en ese
-          // caso el mensaje lo dice en vez de dar un error de `undefined`.
-          const tipo = expansorPorBuff(buffId);
-          if (!tipo) {
-            return { ok: false, msg: `No hay expansor ${buffId}: la escalera de expansores y la del almacén se han separado.` };
-          }
-          // **EL TECHO ES LO QUE DECIDE SI SIRVE.** El expansor T{n} vale hasta
-          // `techoDeExpansor(n)`; a partir de ahí no se usa y hay que buscar uno
-          // de un tier superior. El mensaje dice el número y el nombre del
-          // siguiente, para que el rechazo conteste "¿y qué hago?" en vez de
-          // dejar al jugador adivinando.
+      // **UNA UNIDAD, UN EFECTO, Y EL EFECTO SE REPITE LAS VECES QUE DICHA EL PLAN.**
+      //  El `switch` es el de antes, sin tocar una coma: lo único nuevo es que vive
+      //  dentro de una función y se llama en bucle. Así gastar tres tarjetas de click
+      //  da noventa minutos en vez de dar treinta y cobrarse tres.
+      const aplicarUna = (): { ok: boolean; msg?: string } => {
+        switch (buffId) {
+          // Los expansores son diez `case`, uno por tier. Se podrían cubrir con un
+          // `default` que preguntara a la tabla, pero entonces un `buffId` mal
+          // escrito daría el mensaje de "no sé qué hace" y un expansor nuevo
+          // nacía muerto sin que nadie lo notara: **con diez casos escritos, el
+          // banco `consumableCheck` ve que los diez buffIds de la tabla tienen su
+          // caso**, y un undécimo expansor obliga a tocar este sitio a propósito.
+          case 'expansorT1': case 'expansorT2': case 'expansorT3': case 'expansorT4': case 'expansorT5':
+          case 'expansorT6': case 'expansorT7': case 'expansorT8': case 'expansorT9': case 'expansorT10': {
+            // El tipo sale de la tabla, y con un `case` por buffId no puede ser
+            // `undefined` salvo que alguien añada un expansor sin tocar aquí: en ese
+            // caso el mensaje lo dice en vez de dar un error de `undefined`.
+            const tipo = expansorPorBuff(buffId);
+            if (!tipo) {
+              return { ok: false, msg: `No hay expansor ${buffId}: la escalera de expansores y la del almacén se han separado.` };
+            }
+            // **EL TECHO ES LO QUE DECIDE SI SIRVE.** El expansor T{n} vale hasta
+            // `techoDeExpansor(n)`; a partir de ahí no se usa y hay que buscar uno
+            // de un tier superior. El mensaje dice el número y el nombre del
+            // siguiente, para que el rechazo conteste "¿y qué hago?" en vez de
+            // dejar al jugador adivinando.
           if (state.warehouseCapacity >= tipo.maxCap) {
-            const siguiente = EXPANSOR_TIERS.find(t => t.tier === tipo.tier + 1);
             return {
               ok: false,
-              msg: siguiente
-                ? `Tu almacén ya está en ${state.warehouseCapacity} y el ${tipo.name} solo vale hasta ${tipo.maxCap}. Necesitas un ${siguiente.name} (hasta ${siguiente.maxCap}).`
-                : `Tu almacén ya está en ${state.warehouseCapacity}, que es todo lo que da el ${tipo.name}. No hay expansor por encima.`
+              msg: motivoDeExpansorAlTope(tipo, state.warehouseCapacity),
             };
           }
-          state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + tipo.slots);
-          break;
-        }
-        case 'warehouseExpander':
-          // Stock de antes de los tipos (+1): sigue sirviendo con el tope
-          // nuevo. No es un cuarto tipo —no se vende ni sale de cajas— y por
-          // eso no está en la tabla.
-          //
-          // Y SIGUE SIENDO EL ÚNICO QUE LLEGA MÁS ALLÁ DE LA ESCALERA DE
-          // EXPANSORES. Si no existiera, un almacén de 65 se quedaría clavado
-          // para siempre; y bajarlo a 65 haría que `enforceWarehouseCapacity()`
-          // le borrara items a quien ya pasó de ahí.
-          if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
-            return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };
+            state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + tipo.slots);
+            break;
           }
-          state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + 1);
-          break;
-        case 'afk': {
-          // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
-          const base = Math.max(ahora, state.afkExpiresAt || 0);
-          state.afkExpiresAt = Math.min(base + afkMs, ahora + afkMs * 3);
-          break;
+          case 'warehouseExpander':
+            // Stock de antes de los tipos (+1): sigue sirviendo con el tope
+            // nuevo. No es un cuarto tipo —no se vende ni sale de cajas— y por
+            // eso no está en la tabla.
+            //
+            // Y SIGUE SIENDO EL ÚNICO QUE LLEGA MÁS ALLÁ DE LA ESCALERA DE
+            // EXPANSORES. Si no existiera, un almacén de 65 se quedaría clavado
+            // para siempre; y bajarlo a 65 haría que `enforceWarehouseCapacity()`
+            // le borrara items a quien ya pasó de ahí.
+            if (state.warehouseCapacity >= WAREHOUSE_MAX_CAP) {
+              return { ok: false, msg: `Almacén al máximo (${WAREHOUSE_MAX_CAP}).` };
+            }
+            state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + 1);
+            break;
+          case 'afk': {
+            // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
+            const base = Math.max(ahora, state.afkExpiresAt || 0);
+            state.afkExpiresAt = Math.min(base + afkMs, ahora + afkMs * 3);
+            break;
+          }
+          case 'clickBoost': {
+            const base = Math.max(ahora, state.buffs.clickBoostExpiresAt);
+            state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 30 * 60_000);
+            break;
+          }
+          case 'passiveBoost': {
+            const base = Math.max(ahora, state.buffs.passiveBoostExpiresAt);
+            state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60_000, ahora + 2 * 60 * 60_000);
+            break;
+          }
+          case 'clickX2': {
+            const base = Math.max(ahora, state.buffs.clickX2ExpiresAt);
+            state.buffs.clickX2ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
+            break;
+          }
+          case 'clickX3': {
+            const base = Math.max(ahora, state.buffs.clickX3ExpiresAt);
+            state.buffs.clickX3ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
+            break;
+          }
+          case 'calibrationStone':
+          case 'stabilityNano':
+            // No se usan desde el almacén: se consumen en la Forja
+            return { ok: false, msg: 'Este consumible se usa en la Forja.' };
+          default:
+            return { ok: false, msg: 'Este consumible no tiene efecto conocido.' };
         }
-        case 'clickBoost': {
-          const base = Math.max(ahora, state.buffs.clickBoostExpiresAt);
-          state.buffs.clickBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 30 * 60_000);
-          break;
+      return { ok: true };
+      };
+
+      // **Y SI UNA DE LAS VARIAS SE RECHAZA A MITAD, SE DICE CUANTAS SE APLICARON.** No
+      //  deberia pasar --el plan acaba de comprobar el tope-- pero, si pasara, devolver
+      //  `ok: false` sin mas dejaria un efecto aplicado y nada gastado, que es peor que
+      //  cualquier discrepancia: el jugador tiene que saber que se ha quedado sin pagar.
+      let aplicadas = 0;
+      for (let i = 0; i < aUsar; i++) {
+        const r = aplicarUna();
+        if (!r.ok) {
+          return aplicadas === 0
+            ? { ok: false, usadas: 0, msg: r.msg }
+            : { ok: false, usadas: aplicadas, msg: r.msg };
         }
-        case 'passiveBoost': {
-          const base = Math.max(ahora, state.buffs.passiveBoostExpiresAt);
-          state.buffs.passiveBoostExpiresAt = Math.min(base + 60 * 60_000, ahora + 2 * 60 * 60_000);
-          break;
-        }
-        case 'clickX2': {
-          const base = Math.max(ahora, state.buffs.clickX2ExpiresAt);
-          state.buffs.clickX2ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
-          break;
-        }
-        case 'clickX3': {
-          const base = Math.max(ahora, state.buffs.clickX3ExpiresAt);
-          state.buffs.clickX3ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
-          break;
-        }
-        case 'calibrationStone':
-        case 'stabilityNano':
-          // No se usan desde el almacén: se consumen en la Forja
-          return { ok: false, msg: 'Este consumible se usa en la Forja.' };
-        default:
-          return { ok: false, msg: 'Este consumible no tiene efecto conocido.' };
+        aplicadas++;
       }
 
-      consumeWarehouseItem(item.id, 1);
+      consumeWarehouseItem(item.id, aplicadas);
 
       refreshAfkCardCount();
       recalculatePassiveIncome();
       checkAchievements();
       onUpdate(state, isAfk);
       saveToFirebase();
-      return { ok: true, msg: `${item.name}: aplicado` };
+      return {
+        ok: true,
+        usadas: aUsar,
+        // **EL MENSAJE DICE CUÁNTAS, PORQUE EL JUGADOR PIDIÓ UN NÚMERO.** Con
+        // veinte tarjetas en la pila, "aplicado" no dice si se gastaron tres o veinte.
+        msg: aUsar === 1
+          ? `${item.name}: aplicado`
+          : `${item.name}: ${aUsar} aplicados`
+      };
     },
     click: () => {
       handleUserActivity();
@@ -5140,6 +5285,37 @@ const AFK_THRESHOLD_MS = 60000;
     },
 
     /** El unitario de la carta, con descuento: lo pinta la tarjeta (R3). */
+    /**
+     * QUÉ ENTREGA UNA UNIDAD DE ESTA CARTA, Y EN QUÉ UNIDADES DEL RECURSO.
+     *
+     * ## POR QUÉ ESTE MÉTODO EXISTE
+     *
+     * Porque la ficha del mercado decía **precio** y **cuánto tienes**, y nada más. Con
+     * las dos columnas al lado, un saldo de 213 ◆ al lado de un precio de 200 ◆ no dice si
+     * esos 213 son lo que tienes o lo que te dan: comprar y ver el saldo subir a 413 no
+     * contesta a la pregunta, y el jugador se queda con la duda de si acaba de comprar
+     * una unidad o un montón.
+     *
+     * **La respuesta la tiene que dar el motor**, porque el es quien escribe
+     * `state.crystals += valorDeUnCristal(...) * n`. Si la vista calculara el rendimiento
+     * con su propia fórmula, un cambio en la regla tendría dos números y el precio de
+     * la tienda y su producto dejarían de cuadrar (R3).
+     *
+     * `recurso` es `null` para las cartas que no dan un recurso --una caja, una ranura--:
+     * esas no tienen nada que sumar y el número no se enseña, en vez de enseñar un 0.
+     */
+    getStoreItemYield: (itemKey: string): { unidades: number; recurso: string | null } => {
+      if (itemKey === 'upgradeCrystal') {
+        return {
+          unidades: valorDeUnCristal(STORE_MATERIAL_TIER),
+          recurso: 'cristales'
+        };
+      }
+      const cons = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
+      if (cons) return { unidades: 1, recurso: null };
+      return { unidades: 0, recurso: null };
+    },
+
     getStoreUnitCost: (itemKey: string): number => precioUnitarioTienda(itemKey),
 
     /**

@@ -485,7 +485,6 @@ function nivelDe(w: any): number {
             // diferencia entre un jugador que abre una caja y uno que va a desequipar.
             motivoDeRejillaVacia(game, ui.tipo))
         : `
-          <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
           <!--
             EL ORDEN, Y POR QUE ES UN SELECT Y NO MAS BOTONES.
 
