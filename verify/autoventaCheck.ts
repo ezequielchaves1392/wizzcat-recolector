@@ -17,8 +17,11 @@
 
 import {
   AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta, debeVenderseAuto,
-  descripcionDeAutoVenta, TOPES_TIER, esTipoDeVentaAuto
+  descripcionDeAutoVenta, TOPES_TIER, TOPES_POTENCIAL, esTipoDeVentaAuto,
+  MAX_TIER_ITEM, MAX_POTENCIAL
 } from '../src/data/autoventa';
+import { MAX_CRATE_TIER } from '../src/data/store';
+import { POTENTIAL_WEIGHTS } from '../src/data/crafting';
 import { boot, reload, check, resumen, s, wh, nanites, baseSave, crate, collector, consumable } from './kit';
 
 /** Un filtro con lo que se le pase encima de los valores por defecto. */
@@ -176,8 +179,33 @@ async function main() {
     // compañeros, o el jugador lee que también se venden.
     check('autoventa: la frase no nombra los tipos que no estan marcados',
       !conFiltro.includes('Compañeros') && !conFiltro.includes('Consumibles'), conFiltro);
-    check('autoventa: los topes de la pantalla cubren al menos hasta T5',
-      TOPES_TIER.includes(5) && TOPES_TIER.includes(0));
+    // **LOS TOPES LLEGAN AL TECHO REAL DEL JUEGO, Y SE COMPRUEBA CONTRA LA TABLA DE LA
+    // QUE VIENEN.** Salieron hasta T5 y hasta star3 en un juego con diez cajas y cinco
+    // estrellas, y un filtro de venta que no llega al tope no puede decir "todo lo que
+    // no me sirva". La comprobacion es contra `MAX_CRATE_TIER` y `MAX_POTENCIAL`, que es
+    // donde estan los verdad: escribir 5 y 3 aqui seria volver a escribir el mismo bug.
+    check('autoventa: el tope de tier llega al ultimo tier que existe',
+      TOPES_TIER.includes(MAX_TIER_ITEM) && TOPES_TIER.length === MAX_TIER_ITEM + 1,
+      `topes=${TOPES_TIER.length} max=${MAX_TIER_ITEM}`);
+    check('autoventa: y el de potencial llega al ultimo potencial que existe',
+      TOPES_POTENCIAL.includes(MAX_POTENCIAL) && TOPES_POTENCIAL.length === MAX_POTENCIAL + 1,
+      `topes=${TOPES_POTENCIAL.length} max=${MAX_POTENCIAL}`);
+    check('autoventa: los dos empiezan por el 0, que es "sin tope"',
+      TOPES_TIER[0] === 0 && TOPES_POTENCIAL[0] === 0);
+    check('autoventa: y el techo sale de los datos, no de un numero escrito aqui',
+      MAX_POTENCIAL === Math.max(...Object.keys(POTENTIAL_WEIGHTS).map(Number)) &&
+      MAX_TIER_ITEM === MAX_CRATE_TIER,
+      `pot=${MAX_POTENCIAL} tier=${MAX_TIER_ITEM}`);
+    // Y que el filtro ACEPTA el tope mas alto: un desplegable que llega y una regla que
+    // no, es el mismo bug por la mitad.
+    const topeAlto = encendido({
+      tipos: { collector: true, companion: false, consumable: false },
+      tierMax: MAX_TIER_ITEM, potencialMax: MAX_POTENCIAL
+    });
+    check('autoventa: puesto al maximo, solo se escapan los que no existen',
+      debeVenderseAuto(item('collector', { tier: MAX_TIER_ITEM, potential: MAX_POTENCIAL }), topeAlto) &&
+      !debeVenderseAuto(item('collector', { tier: MAX_TIER_ITEM + 1 }), topeAlto),
+      'T' + MAX_TIER_ITEM + '=' + debeVenderseAuto(item('collector', { tier: MAX_TIER_ITEM }), topeAlto));
   }
 
   // -------------------------------------------------------------------------

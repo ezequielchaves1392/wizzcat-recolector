@@ -377,6 +377,40 @@ function draw(
             <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(ui.multisel ? 'check' : 'sparkle')}</span>
             ${ui.multisel ? 'Salir' : 'Selección múltiple'}
           </button>
+
+          <!--
+            EL BOTON DE APILAR, Y POR QUE DICE CUANTAS CELDAS LIBERA.
+
+            Las pilas se funden solas al cargar la partida y al anadir un item, asi que
+            el almacen normal ya va ordenado. Lo que no tiene camino es el item que llega
+            por la puerta de atras --una compra, una partida vieja--: se queda suelto hasta
+            la recarga, y el jugador ve seis celdas de Piedra con un 3 en cada una y un
+            almacen que dice que esta lleno.
+
+            El numero lo pone el MOTOR, que es quien sabe cuanto se funde de verdad. Un
+            boton de apilar sin numero es una caja de boton: lo aprietas y no sabes si ha
+            servido. Y sale de las CELDAS liberadas y no de los GRUPOS: fundir cuatro
+            celdas de 15 en una de 20 y otra de 40 son dos grupos y cero celdas, porque
+            el tope de 20 obliga a repartir.
+
+            Apagado cuando no hay nada que fundir, con el motivo en el title: un boton
+            gris sin explicacion es un boton que parece roto.
+          -->
+          ${(() => {
+            const plan = game.planApilar?.() ?? { liberadas: 0, grupos: [] };
+            const hay = plan.liberadas > 0;
+            const detalle = hay
+              ? plan.grupos.slice(0, 3).map((x: any) => `${x.nombre} x${x.unidades}`).join(' · ')
+              : 'Ya esta todo apilado.';
+            return `
+            <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition flex items-center gap-1.5
+                           ${hay ? 'btn-ghost text-[var(--text-main)]' : 'btn-ghost text-[var(--text-muted)] opacity-40 cursor-not-allowed'}"
+                    data-act="apilar" ${hay ? '' : 'disabled'}
+                    title="${detalle}">
+              <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('layers')}</span>
+              ${hay ? `Apilar · ${plan.liberadas}` : 'Apilar'}
+            </button>`;
+          })()}
         </div>
 
         ${ui.multisel ? multiSelBar(game) : ''}
@@ -1146,6 +1180,21 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         }
         redraw();
         break;
+      case 'ms-ninguno':      // --- Apilar. El motor decide y el aviso lo dice el motor: el numero de celdas
+      // liberadas sale de `apilar()` y no de una cuenta de la vista.
+      case 'apilar': {
+        sfx.nav();
+        const res = game.apilar?.();
+        if (!res?.ok) {
+          showToast(res?.msg ?? 'No hay nada que apilar.', 'info');
+          return;
+        }
+        showToast(res.liberadas > 0
+          ? `Apilado. ${res.liberadas} celda${res.liberadas === 1 ? '' : 's'} libre${res.liberadas === 1 ? '' : 's'}.`
+          : 'Ya estaba todo apilado.', 'success');
+        redraw();
+        break;
+      }
       case 'ms-ninguno':
         sfx.nav();
         ui.elegidos = [];

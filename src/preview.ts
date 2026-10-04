@@ -225,6 +225,9 @@ if (import.meta.env.DEV) (window as any).__previewState = MOCK;
  */
 const AUTO_VENTA_PREVIEW = { ...AUTO_VENTA_POR_DEFECTO, tipos: { ...AUTO_VENTA_POR_DEFECTO.tipos } };
 
+/** Si el boton de apilar ya se ha pulsado en el preview. Ver `apilar()`. */
+let PILAS_APILADAS = false;
+
 const fakeGame: any = {
   getState: () => MOCK,
   getDisplayName: () => MOCK.displayName,
@@ -344,7 +347,25 @@ const fakeGame: any = {
     }));
     return AUTO_VENTA_PREVIEW;
   },
-  getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
+  /**
+ * Apilar, en el preview. El boton de la pantalla lo lee con `planApilar()`, asi que sin
+ * estos dos metodos sale apagado y no se puede ni revisar.
+ *
+ * El preview **simula** el efecto en vez de reordenar el almacen de verdad: el boton tiene
+ * que verse, encenderse y apagar, que es lo que se revisa; lo que hace con las celdas es
+ * del motor y lo comprueban sus bancos.
+ */
+planApilar: () => (PILAS_APILADAS
+  ? { liberadas: 0, grupos: [] }
+  : { liberadas: 3, grupos: [{ nombre: 'Piedra de Calibración', unidades: 26 }] }),
+apilar: () => {
+  const r = PILAS_APILADAS
+    ? { ok: false as const, liberadas: 0, msg: 'Ya esta todo apilado.' }
+    : { ok: true as const, liberadas: 3, msg: 'Apilado. 3 celdas libres.' };
+  PILAS_APILADAS = true;
+  return r;
+},
+getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
   // -------------------------------------------------------------------------
   //  LA VENTA EN LOTE, Y POR QUÉ FALTA ESTO EN EL MOCK.
   //

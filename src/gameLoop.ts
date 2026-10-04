@@ -16,7 +16,7 @@ import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/pr
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
-import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias } from './data/stacking';
+import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
 
 // ==========================================================================
@@ -1036,6 +1036,91 @@ function grantCrystals(units: number) {
  * desde HEAD comprobando `tsc` con cada uno**, porque un error de sintaxis no
  * señala el sitio donde se cometió el error: señala el final del fichero.
  */
+/**
+ * LOS GRUPOS QUE SE FUNDEN, PARA QUE EL BOTON DIGA CUANTOS.
+ *
+ * Sin esto el boton seria un "apilar" sin numero, y un boton de apilar sin numero es
+ * una caja deBOTON: el jugador lo aprieta y no sabe si ha servido para algo.
+ *
+ * Compara por `stackKey()` y no por nombre: dos items con el mismo nombre y distinto
+ * `buffId` no son el mismo consumible, y fundirlos seria un bug de inventario. La clave
+ * es la que usa `mergeStacks()`, asi que lo que se cuenta es exactamente lo que se
+ * fusiona.
+ *
+ * Y el recuento sale **de la diferencia de celdas**, no de la suma de grupos: fundir
+ * cuatro celdas de 15 en una de 20 y otra de 40 son dos grupos y **cero celdas
+ * liberadas**, porque el tope de 20 obliga a repartir. Contar grupos diria "2" donde
+ * el jugador no ha ganado nada.
+ */
+function gruposQueSeFunden(antes: any[], despues: any[]): { nombre: string; unidades: number }[] {
+  const cuenta = new Map<string, number>();
+  const nombreDe = new Map<string, string>();
+  for (const w of antes) {
+    if (!isStackable(w)) continue;
+    const clave = stackKey(w);
+    cuenta.set(clave, (cuenta.get(clave) ?? 0) + 1);
+    if (!nombreDe.has(clave)) nombreDe.set(clave, w.name ?? 'Item');
+  }
+  const salida: { nombre: string; unidades: number }[] = [];
+  for (const [clave, celdas] of cuenta) {
+    if (celdas < 2) continue;
+    const unidades = despues
+      .filter((w: any) => isStackable(w) && stackKey(w) === clave)
+      .reduce((s: number, w: any) => s + stackUnits(w), 0);
+    salida.push({ nombre: nombreDe.get(clave) ?? 'Item', unidades });
+  }
+  return salida.sort((a, b) => b.unidades - a.unidades);
+}
+
+/**
+ * La clave de apilado de cada hueco, para poder reconectarlo despues.
+ *
+ * Un hueco esta anclado al **id** de un item, no a una posicion: por eso puede sobreviver
+ * a un cambio de orden. Pero la fusion se queda con el id del primero de cada grupo, y
+ * los ids que se van no se van solos.
+ */
+function anclajesDeHuecos(huecos: string[], almacen: any[]): Map<string, string> {
+  const mapa = new Map<string, string>();
+  for (const id of huecos ?? []) {
+    const w = almacen.find((x: any) => x.id === id);
+    // **SOLO LOS APILABLES.** Un hueco detrás de un recolector no se puede mover: los
+    // recolectores no se funden y el hueco se queda donde esta. Anotar los de todos
+    // seria trabajo para nada, y el codigo que los reconecta tendria que distinguir dos
+    // casos que en la practica son el mismo.
+    if (w && isStackable(w)) mapa.set(id, stackKey(w));
+  }
+  return mapa;
+}
+
+/**
+ * Devuelve cada hueco a un item que exista.
+ *
+ * El hueco que no se puede reconectar **se cae**, y no por pereza: un hueco anclado a un
+ * id que ya no esta en el documento no tiene donde pintarse, y dejarlo seria un
+ * `warehouseGaps` que crece con cada apilado hasta que el guardado pesa lo que el
+ * almacen entero.
+ *
+ * Y el hueco **no se multiplica**: si dos huecos acaban en el mismo item, se queda uno.
+ * El jugador pidio una separacion, no dos.
+ */
+function reconectaHuecos(huecos: string[], anclajes: Map<string, string>, despues: any[]): string[] {
+  const salida: string[] = [];
+  const visto = new Set<string>();
+  for (const id of huecos ?? []) {
+    let destino = id;
+    if (!despues.some((w: any) => w.id === id)) {
+      const clave = anclajes.get(id);
+      if (!clave) continue; // el hueco apuntaba a algo que no existe: se cae
+      destino = despues.find((w: any) => isStackable(w) && stackKey(w) === clave)?.id ?? '';
+      if (!destino) continue;
+    }
+    if (visto.has(destino)) continue;
+    visto.add(destino);
+    salida.push(destino);
+  }
+  return salida;
+}
+
 function desbloquearCosmetico(cosmeticId: string): boolean {
   if (state.cosmetics.unlocked.includes(cosmeticId)) return false;
   state.cosmetics.unlocked.push(cosmeticId);
@@ -3737,6 +3822,59 @@ const AFK_THRESHOLD_MS = 60000;
      // problema. Ver `planDeVenta()`.
      */
     planSellMany: (itemIds: string[]) => planDeVenta(Array.isArray(itemIds) ? itemIds : []),
+    /**
+     * APILAR, Y POR QUE HACE FALTA UN BOTON.
+     *
+     * Las pilas se funden solas en dos caminos: al **cargar** la partida --`partirPilas()`
+     * se llama en la migracion-- y al **anadir** un item, porque `addToWarehouse()` suma
+     * a la pila que ya existe. Lo que no tiene camino es el item que llega por la puerta
+     * de atras: una compra del mercado, un Companion movido de sitio, una partida vieja.
+     * Esos se quedan sueltos hasta la recarga, y el jugador ve ocho celdas de Piedra de
+     * Calibracion con un 3 en cada una y un almacen que dice que esta lleno.
+     *
+     * Un boton que lo arregla a voluntad es mejor que una segunda pasada de fusion en cada
+     * escritura: la fusion en cada escritura meteria celdas y moveria ids en cosas donde
+     * nadie lo ha pedido, y un item que aparece fundido con otro que el jugador queria
+     * tener en su sitio es un item que ha cambiado de sitio sin avisar.
+     */
+    planApilar: () => {
+      const antes = state.warehouse.length;
+      const { items } = partirPilas(state.warehouse);
+      return {
+        liberadas: Math.max(0, antes - items.length),
+        grupos: gruposQueSeFunden(state.warehouse, items)
+      };
+    },
+
+    /**
+     * Apila de verdad. **Un guardado, un aviso y un repintado**: son tres las cosas que
+     * tienen que ocurrir juntas y separarlas es como se pierde una.
+     */
+    apilar: () => {
+      handleUserActivity();
+      const antes = state.warehouse.length;
+      // **LOS HUECOS SE APUNTAN ANTES, Y SE RECONECTAN DESPUES.** Un hueco esta anclado
+      // al id de un item, y la fusion conserva el id del PRIMERO de cada grupo: el hueco
+      // que estaba detrás del que desaparece se queda apuntando al aire. Sin esta
+      // reconexion el jugador ve su hueco moverse de sitio solo, que es peor que no
+      // apilar. Ver `reconectaHuecos()`.
+      const anclajes = anclajesDeHuecos(state.warehouseGaps, state.warehouse);
+      const { items, changed } = partirPilas(state.warehouse);
+      if (!changed) return { ok: false, liberadas: 0, msg: 'Ya esta todo apilado.' };
+      state.warehouse = items;
+      state.warehouseGaps = reconectaHuecos(state.warehouseGaps, anclajes, items);
+      const liberadas = Math.max(0, antes - items.length);
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return {
+        ok: true,
+        liberadas,
+        msg: liberadas > 0
+          ? `${liberadas} celda${liberadas === 1 ? '' : 's'} libre${liberadas === 1 ? '' : 's'}.`
+          : 'Todo apilado.'
+      };
+    },
+
 
     /**
      * EL FILTRO DE AUTO-VENTA AL ABRIR CAJAS, Y POR QUÉ SE LEE Y SE ESCRIBE POR AQUÍ.

@@ -27,6 +27,9 @@
 //  el camino para imprimir, que es justo lo que ese tope cierra.
 // ==========================================================================
 
+import { MAX_CRATE_TIER } from './store';
+import { POTENTIAL_WEIGHTS } from './crafting';
+
 /** Los tres tipos de item que se pueden enviar a la venta automática. */
 export type TipoDeVentaAuto = 'collector' | 'companion' | 'consumable';
 
@@ -72,8 +75,34 @@ export const AUTO_VENTA_POR_DEFECTO: ConfigAutoVenta = {
  * El `0` es "sin tope" y va el primero porque es el que ya está puesto: un filtro
  * que nace sin límite se lee como "no filtra", que es exactamente lo que dice.
  */
-export const TOPES_TIER: number[] = [0, 1, 2, 3, 4, 5];
-export const TOPES_POTENCIAL: number[] = [0, 1, 2, 3];
+/**
+ * El tope de potencial sale de la tabla de pesos, no de un numero escrito aqui.
+ *
+ * `POTENTIAL_WEIGHTS` tiene las cinco claves y el filtro se offeringo hasta la tercera:
+ * el desplegable decia "hasta star3" en un juego donde el star5 existe y se gana, y un
+ * filtro de venta que no llega al tope **no puede decir "todo lo que no me sirva"**.
+ * Lo que sale de un numero escrito al lado es exactamente esta clase de mentira.
+ */
+export const MAX_POTENCIAL: number = Math.max(
+  ...Object.keys(POTENTIAL_WEIGHTS).map((k) => Number(k))
+);
+
+/**
+ * Y el de tier sale del tope de caja, que es el techo de un item: los items vienen de
+ * cajas y de forjas de items, asi que donde acaba la caja acaba el item.
+ *
+ * El mismo motivo: el desplegable llegaba a T5 en un juego con diez cajas.
+ */
+export const MAX_TIER_ITEM: number = MAX_CRATE_TIER;
+
+/**
+ * Los topes que se pueden elegir, para la pantalla.
+ *
+ * El `0` es "sin tope" y va el primero porque es el que ya esta puesto: un filtro
+ * que nace sin limite se lee como "no filtra", que es exactamente lo que dice.
+ */
+export const TOPES_TIER: number[] = [0, ...Array.from({ length: MAX_TIER_ITEM }, (_, i) => i + 1)];
+export const TOPES_POTENCIAL: number[] = [0, ...Array.from({ length: MAX_POTENCIAL }, (_, i) => i + 1)];
 
 /** Normaliza un topes: entero, y por lo menos 0. Un `NaN` es "sin tope". */
 function topeDe(n: unknown): number {
