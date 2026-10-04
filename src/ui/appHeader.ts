@@ -443,6 +443,32 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
           </h1>` : ''}
 
           ${opts.buffsHudId ? `
+            <!--
+              LOS BUFFS NO MOUEVEN EL NAV, Y ESTO ESTÁ MEDIDO.
+
+              La pregunta salió de verlos crecer y fearing que empujaran la fila, y la
+              respuesta es que no pueden, por dos motivos que son independientes:
+
+              · El nav es flex-shrink-0 y va **el segundo por la derecha**, con el botón
+                de ajustes detrás. Todo lo de anchura variable está a su izquierda, así que
+                la fila está anclada por la derecha y el nav no se mueve aunque lo de la
+                izquierda crezca sin límite.
+              · Y este contenedor es flex-grow, o sea que **se queda con el holgura que
+                sobra** en vez de dársela a la fila. Medido en la base a 1440 y a 1280, con
+                seis buffs, con ninguno y con catorce: el nav, la franja de saldos y el
+                ancho de este contenedor dan **exactamente los mismos números** en los tres
+                casos. Ni el nav ni los saldos se mueven.
+
+              Y cuando los buffs no caben, overflow-x-auto los desplaza: el coste es que
+              un buff se puede quedar fuera de vista, y se ha preferido eso a empujar la
+              fila. Por debajo de 1280 los buffs pasan a su propia fila **debajo** de la
+              cabecera, que ya no puede mover nada por construcción.
+
+              **NO QUITAR EL flex-grow NI EL overflow-x-auto PARA "ARREGLAR" NADA:**
+              sin el primero, los buffs empujan la franja de saldos; sin el segundo, un
+              buff con un temporizador largo ensancha la cabecera y la descuadra. Los dos
+              están aquí por lo que dice este párrafo.
+            -->
             <div id="${opts.buffsHudId}"
                  class="hidden xl:flex items-center gap-1.5 flex-nowrap min-w-0 flex-grow overflow-x-auto py-0.5"></div>` : ''}
         </div>
