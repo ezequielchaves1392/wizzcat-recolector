@@ -49,7 +49,7 @@ import { formatNumber } from '../utils/format';
 import { showTuningRoulette, tuningRoll } from './tuningRoulette';
 import { rarityClass } from './crateLoot';
 import { previewUpgradeChance, previewUpgradeCost } from '../gameLoop';
-import { collectorMaxLevel, nivelMaximoDeCompanio, costeDeNivel } from '../data/crafting';
+import { collectorMaxLevel, nivelMaximoDeCompanio, costeDeNivel, valorDeUnCristal } from '../data/crafting';
 import { CRISTAL_NOMBRE, bandaDeProbabilidad } from '../data/items';
 import type { BandaDeProbabilidad } from '../data/items';
 
@@ -79,14 +79,33 @@ export type ObjetivoDeSintonizacion =
  */
 function notaDeCoste(tier: number): string {
   const delItem = formatNumber(costeDeNivel(tier, 0));
+  // **LA UNIDAD DEL CRISTAL, DICHA DE UNA VEZ Y EN TODAS LAS PARTIDAS.**
+  //
+  // Preguntado: "cada cristal no me da una unidad? cuantos me esta dando?". La respuesta
+  // corta es que **una unidad de cristal es una nanita**: `state.crystals` y
+  // `state.nanites` son dos contadores de la misma unidad, y la caja da
+  // `rand(3 t, 5 t) x valorDeUnCristal(t)` de ellos. O sea que el "1.234 de cristal" de
+  // arriba **son 1.234 nanitas**, y sin esta linea no hay forma de saberlo: el jugador ve
+  // el saldo de una moneda nueva y un precio, y ninguna de las dos cosas dice en que
+  // estan contadas.
+  //
+  // Y el segundo dato es el que hace util la linea: **un cristal vale lo que una caja de
+  // ese nivel**, porque `valorDeUnCristal()` **es** `costeDeCaja()`. Con eso el jugador
+  // lee su propio progreso sin tener que recordar la tabla: "me falta lo que cuesta
+  // una caja T3" es literalmente lo que dice el numero.
+  //
+  // Los dos salen de funciones y no de numeros escritos, para que el dia que el cristal
+  // deje de valer una nanita, esta frase sea la que avisa. Que hoy valga una nanita es
+  // una decision de diseno, no un descuido: esta es la frase que la dice en pantalla.
+  const enQue = `1 de ${CRISTAL_NOMBRE.toLowerCase()} = 1 ◆, y ${formatNumber(valorDeUnCristal(tier))} es lo que cuesta una caja T${tier}`;
   if (tier <= 1) {
-    return `Este es el item más barato del juego: ${delItem} por nivel, y el coste sube en cada nivel.`;
+    return `Este es el item más barato del juego: ${delItem} por nivel, y el coste sube en cada nivel. ${enQue}.`;
   }
-  // El segundo número es el del T1 con la misma función, no con la del precio de la caja:
-  // son el mismo número —`costeDeNivel(tier, 0)` **es** `costeDeCaja(tier)` por
-  // construcción— y usar dos llamadas distintas para decir la misma regla es invites a que
-  // un día dejen de coincidir sin que nadie lo note.
-  return `Un T${tier} cuesta ${delItem} por nivel, contra ${formatNumber(costeDeNivel(1, 0))} de un T1: el coste sale del precio de la caja de ese nivel.`;
+  // El segundo numero es del T1 con la misma funcion, no con el del precio de la caja:
+  // son el mismo numero --`costeDeNivel(tier, 0)` **es** `costeDeCaja(tier)` por
+  // construccion-- y usar dos llamadas distintas para decir la misma regla es
+  // constructores distintos, y es un aviso a que un dia dejen de coincidir.
+  return `Un T${tier} cuesta ${delItem} por nivel, contra ${formatNumber(costeDeNivel(1, 0))} de un T1: el coste sale del precio de la caja de ese nivel. ${enQue}.`;
 }
 
 /**
