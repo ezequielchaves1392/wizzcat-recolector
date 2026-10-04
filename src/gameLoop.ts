@@ -556,6 +556,74 @@ function getSellPriceFor(item: any): number {
 }
 
 /**
+ * LO QUE SE PUEDE VENDER DE UNA SELECCIÓN, Y LO QUE NO.
+ *
+ * **POR QUÉ UN PLAN Y NO SELLAR Y YA.** Vender veinte celdas de un golpe necesita una
+ * respuesta a dos preguntas que la vista no puede responder por su cuenta: cuánto se
+ * cobra y **qué se queda fuera**. Lo segundo no es hipotético: el mismo "no puedes
+ * vender el último de su tipo" que ya existía para uno solo se vuelve **colectivo** en
+ * una selección, porque el critério es "que quede alguno", y con cinco recolectores
+ * marcados se puede vender cuatro y no el quinto.
+ *
+ * Y si la vista calculara eso, tendría la regla duplicada —y además la versión
+ * equivocada, que solo miraría un item cada vez—. Así que el plan **lo dice el motor**:
+ * la barra de la selección pinta `plan.total`, y `sellMany()` vende exactamente lo que
+ * el plan aprueba. Si los dos usaran expresiones distintas, el botón anunciaría una cifra
+ * y el cobro aplicaría otra (R3), y esa es la clase de fallo que ya se pagó una vez con
+ * el botón de vender que pintaba el precio unitario de una pila.
+ *
+ * **LO QUE BLOQUEA, Y SON CUATRO COSAS, NO UNA.** Lo que no está, lo que está equipado,
+ * lo que daría cero unidades y **lo que dejaría a un tipo sin ninguno**. Las tres primeras
+ * son las de siempre. La cuarta es la nueva, y es la que hace que un plan pueda tener
+ * una lista de descartes: si el jugador marcó los tres recolectores que tiene, dos se
+ * venden y el tercero no, y el motivo tiene que salir con el resultado.
+ */
+function planDeVenta(ids: string[]): {
+  vendibles: Array<{ id: string; units: number; total: number }>;
+  bloqueados: Array<{ id: string; motivo: string }>;
+  total: number;
+} {
+  const venta: Array<{ id: string; units: number; total: number }> = [];
+  const bloqueados: Array<{ id: string; motivo: string }> = [];
+
+  // Cuántos quedan de cada tipo **si se vendiera todo lo marcado**, que es la pregunta
+  // que decide el descarte. Cuenta ITEMS y no unidades, como `sellItem()`: recolectores y
+  // compañeros no son apilables, así que una unidad es un item.
+  const restantes = new Map<string, number>();
+  for (const w of state.warehouse as any[]) {
+    restantes.set(w.type, (restantes.get(w.type) ?? 0) + 1);
+  }
+  for (const id of ids) {
+    const item: any = (state.warehouse as any[]).find((w: any) => w.id === id);
+    if (!item) {
+      bloqueados.push({ id, motivo: 'ya no está en el almacén' });
+      continue;
+    }
+    const esEquipado = (item.type === 'collector' && state.equippedCollectorId === item.id) ||
+      (item.type === 'companion' && state.activeCompanions.includes(item.id));
+    if (esEquipado) {
+      bloqueados.push({ id, motivo: 'está equipado' });
+      continue;
+    }
+    const units = unidadesVendibles(item, undefined);
+    if (units <= 0) {
+      bloqueados.push({ id, motivo: 'no queda nada por vender' });
+      continue;
+    }
+    if (item.type === 'collector' || item.type === 'companion') {
+      const queda = (restantes.get(item.type) ?? 0) - 1;
+      restantes.set(item.type, queda);
+      if (queda <= 0) {
+        bloqueados.push({ id, motivo: 'es el último de su tipo' });
+        continue;
+      }
+    }
+    venta.push({ id, units, total: Math.floor(getSellPriceFor(item) * units) });
+  }
+  return { vendibles: venta, bloqueados, total: venta.reduce((a, v) => a + v.total, 0) };
+}
+
+/**
  * Cuántas unidades de una pila se pueden vender, ya recortadas a lo que hay.
  *
  * Sin `pedidas` devuelve la pila entera: es el comportamiento de siempre, y por
@@ -3220,6 +3288,74 @@ const AFK_THRESHOLD_MS = 60000;
      * sale esto". Un "+13" sin explicación obliga a abrir la caja de la forja para
      * descubrirlo, y la caja no lo dice.
      */
+    /**
+     * LAS FILAS ADITIVAS DE UN ITEM, Y POR QUÉ COEXISTEN CON `desglose`.
+     *
+     * `desglose` —lo que devuelve esto mismo hoy— es una lista de **multiplicadores**:
+     * "Base T3 23,3 · Potencial ×1,20 · Nivel ×1,24 · Total 39". `filas` es la misma
+     * cuenta pero **en sumas**: "Base del item 23 · Potencial 1★ +5 · Nivel 4 +11".
+     *
+     * ## POR QUÉ NO SUSTITUYE AL OTRO
+     *
+     * Porque el panel de la base **ya usa la forma de sumas** —la de `danosDeClick()`— y
+     * el hover del almacén usaba la de multiplicadores. Dos estilos para la misma cuenta
+     * en dos sitios de la misma pantalla: el hover salía con cuatro filas de factor y la
+     * base con cuatro de incremento, y el jugador tenía que hacer dos cuentas
+     * diferentes para el mismo número. Con `filas`, **el hover pinta exactamente las
+     * mismas filas que la card de la base** y no hay dos Criminal: es la misma función
+     * con el mismo reparto desde el total hacia atrás, sin redondeos intermedios.
+     *
+     * Y **SIN el grupo de la partida**, que es lo que el jugador pidió: aquí van solo lo
+     * que es del objeto —potencial, nivel y afijos—, porque el número grande de al lado
+     * es el del item y no el del click con las bonificaciones. Meter las de la partida
+     * sería mostrar en el hover filas cuya suma no da el número que está al lado.
+     *
+     * La suma se lleva en coma flotante y lo que se pinta es el suelo, igual que en
+     * `danosDeClick()`: el daño que se cobra también lo es, y redondear por pasos haría
+     * que la última fila no cuadrara con el número grande.
+     */
+    getStatFilas: (itemId: string): { base: number; total: number; filas: Array<{ nombre: string; detalle: string; suma: number }> } => {
+      const w: any = (state.warehouse as any[]).find((x: any) => x.id === itemId);
+      const vacio = { base: 0, total: 0, filas: [] as any[] };
+      if (!w) return vacio;
+      const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
+      const pot = potencialNormalizado(w.potential);
+      const multPot = 1 + 0.2 * pot;
+
+      const esRecolector = w.type === 'collector';
+      // **LA BASE DEL RECOLECTOR ES EL DAÑO GUARDADO PARTIDO POR EL POTENCIAL.** Es el
+      // mismo razonamiento que `danosDeClick()`: el campo `damage` ya lleva el potencial
+      // aplicado, así que para que "base + potencial = daño guardado" hay que deshacerlo.
+      // En el compañero la base es el poder, que no lleva nada aplicado encima.
+      const base = esRecolector
+        ? Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(w.damage) || 0) / multPot
+        : Number(w.power) || 0;
+
+      const filas: Array<{ nombre: string; detalle: string; suma: number }> = [];
+      let acum = base;
+      let mostrado = Math.floor(acum);
+      const anota = (nombre: string, detalle: string, mult: number) => {
+        if (Math.abs(mult - 1) <= 0.0001) return;
+        acum *= mult;
+        const ahora = Math.floor(acum);
+        // Un bono que no mueve el suelo no se pinta: una fila con un +0 es ruido.
+        if (ahora === mostrado) return;
+        filas.push({ nombre, detalle, suma: ahora - mostrado });
+        mostrado = ahora;
+      };
+
+      anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más`, multPot);
+      if (nivel > 0) anota(`Nivel ${nivel}`, esRecolector ? 'del recolector' : 'del compañero', multiplicadorDeNivel(nivel));
+      // **LOS AFIJOS SOLO EN EL RECOLECTOR, Y SOLO SI ESTÁ EQUIPADO.** Son del objeto
+      // porque van impresos en él, pero su bonificación solo cuenta mentre esté puesto:
+      // el hover es de la ficha de un item del almacén, que puede no estar equipado, y
+      // enseñar un +13 que no se está cobrando es la peor clase de mentira.
+      if (esRecolector && state.equippedCollectorId === itemId) {
+        anota('Afijos', 'del item', 1 + equippedAffixEffect().clickMult);
+      }
+
+      return { base: Math.floor(base), total: Math.floor(acum), filas };
+    },
     getStatPrincipal: (itemId: string) => {
       const w: any = (state.warehouse as any[]).find((x: any) => x.id === itemId);
       if (!w) return null;
@@ -3548,6 +3684,85 @@ const AFK_THRESHOLD_MS = 60000;
       onUpdate(state, isAfk);
       saveToFirebase();
       return { ok: true, gained: ganado, sold: vender };
+    },
+
+    /**
+     * LO QUE SE PUEDE VENDER DE UNA SELECCIÓN, SIN VENDER NADA.
+     *
+     * Lo pinta la barra de la selección múltiple y lo usa de paso `sellMany()`, que
+     * es la razón de que sea una función aparte: **el botón y el cobro tienen que salir
+     * del mismo sitio**. Si la barra sumara precios por su cuenta, bastaría un redondeo
+     * distinto para que el botón anunciara una cifra y el cobro otra.
+     *
+     * Devuelve también **qué queda fuera y por qué**, porque una selección puede
+     * contener algo que no se puede vender —el último recolector, un equipado— y sin
+     * el motivo el jugador ve que su selección no se vende entera y no sabe cuál es el
+     // problema. Ver `planDeVenta()`.
+     */
+    planSellMany: (itemIds: string[]) => planDeVenta(Array.isArray(itemIds) ? itemIds : []),
+
+    /**
+     * Vende una selección entera de una vez, con **un solo guardado**.
+     *
+     * Y aquí está la razón de que sea un método y no un bucle de `sellItem()` desde la
+     * vista: `sellItem()` escribe en Firestore, refresca el ingreso pasivo, comprueba
+     * logros y avisa a la pantalla **una vez por item**. Vender veinte celdas por el
+     * bucle eran veinte escrituras y veinte comprobaciones de logros para una acción que
+     * el jugador hizo una vez, y con veinte `onUpdate()` la barra de progreso se
+     * ralentiza sola justo cuando el jugador está haciendo la tarea más repetitiva del
+     * juego.
+     *
+     * **LO QUE NO ES UN BORRADO EN BLANCO.** Se vende exactamente lo que el plan
+     * aprueba y se devuelve el resto con su motivo, así que una selección con el último
+     * recolector dentro **vende los demás y dice cuál se quedó**. La alternativa —
+     * rechazarlo todo en bloque — es peor: el jugador que ha marcado veinte celdas ve
+     * que no pasa nada y no sabe por qué, y un fallo de una sola celda le bloquea la
+     * venta de las otras diecinueve.
+     */
+    sellMany: (itemIds: string[]) => {
+      handleUserActivity();
+      const plan = planDeVenta(Array.isArray(itemIds) ? itemIds : []);
+      if (plan.vendibles.length === 0) {
+        return {
+          ok: false,
+          msg: plan.bloqueados.length > 0
+            ? `No se puede vender nada: ${plan.bloqueados[0].motivo}.`
+            : 'No hay nada seleccionado para vender.',
+          gained: 0,
+          sold: 0,
+          bloqueados: plan.bloqueados
+        };
+      }
+
+      // El dinero se suma **una vez**, con la suma del plan, y no item a item. Es la
+      // diferencia entre 20 redondeos y uno: con veinte items, sumar y redondear veinte
+      // veces puede dejar una nanita de diferencia con lo que el botón enseñó.
+      const ganado = plan.total;
+      state.nanites += ganado;
+
+      for (const v of plan.vendibles) {
+        const item: any = (state.warehouse as any[]).find((w: any) => w.id === v.id);
+        if (!item) continue;
+        consumeWarehouseItem(item.id, v.units);
+        if (item.type === 'companion') {
+          state.companions = state.companions.filter((c: any) => c.id !== item.id);
+          state.activeCompanions = state.activeCompanions.filter((id) => id !== item.id);
+        }
+      }
+      syncWarehouseGaps();
+      syncCrateCounters();
+      refreshAfkCardCount();
+      syncCompanionsToWarehouse();
+      recalculatePassiveIncome();
+      checkAchievements();
+      onUpdate(state, isAfk);
+      saveToFirebase();
+      return {
+        ok: true,
+        gained: ganado,
+        sold: plan.vendibles.length,
+        bloqueados: plan.bloqueados
+      };
     },
 
     /**

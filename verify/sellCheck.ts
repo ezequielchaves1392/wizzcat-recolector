@@ -804,6 +804,177 @@ async function main() {
       `sold=${r.sold} ganado=${r.gained} unitario=${unitario}`);
   }
 
+  // --- 8. La venta en lote: UN método y un plan, no un bucle de sellItem -----
+  //
+  //  La barra de la selección múltiple pinta `planSellMany()` y el botón llama a
+  //  `sellMany()`. Las dos cosas tienen que salir de la misma cuenta, que es R3, y el
+  //  motivo por el que el plan es una función y no un número que la vista suma.
+  {
+    // **LAS DOS PILAS SON DE TIER DISTINTO A PROPÓSITO.** Dos cajas del mismo tier se
+    // funden al cargar —`mergeStacks()` las junta— y entonces `c2` no existe: el primer
+    // intento de esta prueba fallaba con "c2 ya no está en el almacén", que no tiene nada
+    // que ver con lo que estaba midiendo. Es el mismo fixture que se cayó dos veces más
+    // en este fichero, y por eso está dicho aquí y no en el fallo.
+    const g = await boot(baseSave([
+      crate('c1', 1, 4), crate('c2', 3, 3), consumable('u1', 'afk', 5),
+      collector('r1'), collector('r2'), collector('r3')
+    ], { nanites: 0, warehouseCapacity: 40 }));
+
+    const plan = g.planSellMany(['c1', 'c2', 'u1', 'r1']);
+    check('lote: el plan aprueba los cuatro y no bloquea ninguno',
+      plan.vendibles.length === 4 && plan.bloqueados.length === 0,
+      `vendibles=${plan.vendibles.length} bloqueados=${JSON.stringify(plan.bloqueados)}`);
+
+    // **R3 CON VARIAS PILAS: LA SUMA DEL PLAN TIENE QUE SER LA SUMA DE LOS TOTALES
+    // INDIVIDUALES.** Un plan que redondea por item y uno que redondea la suma darían
+    // números distintos, y el botón anunciaría uno y el cobro pagaría el otro. Con tres
+    // apilables de precios distintos es donde se nota.
+    const aPalo = ['c1', 'c2', 'u1'].reduce((a, id) => a + g.getSellTotal(id), 0);
+    check('lote: el total del plan es la suma de los totales de cada uno',
+      plan.total === aPalo + g.getSellTotal('r1'),
+      `plan=${plan.total} suma=${aPalo + g.getSellTotal('r1')}`);
+
+    const antes = nanites(g);
+    const r: any = g.sellMany(['c1', 'c2', 'u1', 'r1']);
+    check('lote: cobra EXACTAMENTE lo que el plan|anno',
+      r.ok && r.gained === plan.total && nanites(g) === antes + plan.total,
+      `cobro=${r.gained} plan=${plan.total} saldo=${nanites(g)} antes=${antes}`);
+    check('lote: y dice cuántos vendió, que no es cuántas unidades',
+      r.sold === 4, `sold=${r.sold}`);
+    check('lote: los cuatro se van del almacén',
+      !find(g, 'c1') && !find(g, 'c2') && !find(g, 'u1') && !find(g, 'r1'),
+      ids(g).join(','));
+    const g2 = await reload();
+    check('lote: los cuatro no vuelven al recargar',
+      !find(g2, 'c1') && !find(g2, 'u1') && !find(g2, 'r1'), ids(g2).join(','));
+  }
+
+  // --- 9. La regla del "último de su tipo" ES COLECTIVA, Y ES LO NUEVO ---------
+  //
+  //  Con uno solo, "no puedes vender el último de su tipo" significa lo obvious. En un
+  //  lote la misma regla pasa a ser una pregunta sobre el conjunto: con tres recolectores
+  //  marcados se pueden vender dos y el tercero no. Y la respuesta tiene que ser
+  //  explícita, porque el jugador ve cuatro marcas y una venta de tres.
+  {
+    const g = await boot(baseSave([
+      collector('r1'), collector('r2'), collector('r3'), crate('c1')
+    ], { nanites: 0, warehouseCapacity: 40 }));
+    const plan = g.planSellMany(['r1', 'r2', 'r3']);
+    check('lote: de tres recolectores marcados se venden dos',
+      plan.vendibles.length === 2,
+      `vendibles=${plan.vendibles.length} ids=${plan.vendibles.map((v: any) => v.id).join(',')}`);
+    check('lote: y el tercero sale con el motivo puesto',
+      plan.bloqueados.length === 1 && plan.bloqueados[0].motivo === 'es el último de su tipo',
+      JSON.stringify(plan.bloqueados));
+    check('lote: el precio del plan NO incluye lo que no se vende',
+      plan.total === plan.vendibles.reduce((a: number, v: any) => a + v.total, 0),
+      `total=${plan.total}`);
+
+    const antes = nanites(g);
+    const r: any = g.sellMany(['r1', 'r2', 'r3']);
+    check('lote: se venden los dos aunque el tercero no se pueda',
+      r.ok && r.sold === 2, `sold=${r.sold}`);
+    check('lote: y el descarte vuelve en la respuesta, no se pierde en silencio',
+      (r.bloqueados || []).length === 1,
+      JSON.stringify(r.bloqueados));
+    check('lote: queda un recolector, que es lo que la regla protege',
+      deType(g, 'collector') === 1, ids(g).join(','));
+
+    // **Y MARCÁNDOLOS LOS DOS, SE VENDE UNO Y QUEDA UNO.** La regla de "no puedes vender el
+    // último de su tipo" es la misma en un lote que en uno solo: significa **que quede
+    // alguno**, no que no se pueda marcar. La primera versión de esta comprobación pedía
+    // que marcar los dos no vendiera ninguno, que sería negarse entero y dejaría al
+    // jugador con veinte celdas marcadas y un botón inútil por una celda de más. Vende
+    // todo lo que pueda y dice lo que se quedó.
+    const g2 = await boot(baseSave([
+      collector('r1'), collector('r2'), crate('c1')
+    ], { nanites: 0, warehouseCapacity: 40 }));
+    const r2: any = g2.sellMany(['r1', 'r2']);
+    check('lote: marcados los dos últimos se vende uno, que es lo que la regla pide',
+      r2.ok === true && r2.sold === 1 && deType(g2, 'collector') === 1,
+      `ok=${r2.ok} sold=${r2.sold} quedan=${deType(g2, 'collector')}`);
+    check('lote: y el descarte viene con motivo, para que no sea un misterio',
+      (r2.bloqueados || []).length === 1 && /último/.test(r2.bloqueados[0].motivo),
+      JSON.stringify(r2.bloqueados));
+  }
+
+  // --- 9b. Y CON UNO SOLO DE SU TIPO, NO SE VENDE NINGUNO -------------------------
+  {
+    // El otro extremo, que es el que hereda la regla de siempre: si solo hay uno, no hay
+    // "vender todo lo que pueda" porque no puede ser ninguno.
+    const g = await boot(baseSave([collector('r1'), crate('c1')],
+      { nanites: 0, warehouseCapacity: 40 }));
+    const antes = nanites(g);
+    const r: any = g.sellMany(['r1', 'c1']);
+    check('lote: el único recolector no se puede vender ni en lote, y la caja sí',
+      r.ok === true && !!find(g, 'r1') && !find(g, 'c1') &&
+      (r.bloqueados || []).length === 1,
+      `ok=${r.ok} quedan=${ids(g).join(',')} bloqueados=${JSON.stringify(r.bloqueados)}`);
+    check('lote: y solo se cobra lo de la caja',
+      nanites(g) === antes + g.getSellTotal('c1') || !find(g, 'c1'),
+      `antes=${antes} ahora=${nanites(g)}`);
+  }
+
+  // --- 10. Un equipado marcado no se vende, y el motivo sale antes ---------------
+  {
+    const g = await boot(baseSave([
+      collector('r1'), collector('r2'), crate('c1')
+    ], { nanites: 0, warehouseCapacity: 40, equippedCollectorId: 'r1' }));
+    const plan = g.planSellMany(['r1', 'c1']);
+    check('lote: el equipado se bloquea con su motivo',
+      plan.bloqueados.length === 1 && plan.bloqueados[0].motivo === 'está equipado',
+      JSON.stringify(plan.bloqueados));
+    check('lote: y el resto de la selección sigue siendo vendible',
+      plan.vendibles.length === 1 && plan.vendibles[0].id === 'c1',
+      JSON.stringify(plan.vendibles));
+
+    const r: any = g.sellMany(['r1', 'c1']);
+    check('lote: se vende el que sí y el equipado SE QUEDA, que es lo que se quería',
+      r.ok === true && !!find(g, 'r1') && !find(g, 'c1'),
+      `ids=${ids(g).join(',')} bloqueados=${JSON.stringify(r.bloqueados)}`);
+  }
+
+  // --- 11. Una selección vacía o imposible se NEGA, no cobra ----------------------
+  {
+    const g = await boot(baseSave([crate('c1')], { nanites: 0, warehouseCapacity: 40 }));
+    const antes = nanites(g);
+    const r: any = g.sellMany([]);
+    check('lote: una selección vacía no cobra nada y lo dice',
+      r.ok === false && nanites(g) === antes && /nada seleccionado/.test(r.msg ?? ''),
+      `ok=${r.ok} msg=${r.msg ?? ''}`);
+    // Un id que no está tampoco, y con mensaje: una selección puede quedarse obsoleta
+    // entre que se marca y se pulsa, porque el juego sigue corriendo.
+    const r2: any = g.sellMany(['no-existe']);
+    check('lote: un id que ya no está no se cobra y se dice por qué',
+      r2.ok === false && /ya no est/.test(r2.msg ?? ''),
+      `ok=${r2.ok} msg=${r2.msg ?? ''}`);
+  }
+
+  // --- 12. El compañero se borra de los TRES sitios, como en la forja -------------
+  {
+    // Es el mismo forgetting que se corrigió en `consumeMaterialesDeForja()`: el
+    // compañero vive en el almacén y en `state.companions`, y si solo se quita de uno,
+    // `syncCompanionsToWarehouse()` lo vuelve a crear y sigue pagando ingreso pasivo.
+    const g = await boot(baseSave([
+      companion('m1'), companion('m2'), crate('c1')
+    ], {
+      nanites: 0, warehouseCapacity: 40,
+      companions: [
+        { id: 'm1', name: 'Compañero T3', type: 'passive', power: 10, rarity: 'Épico', tier: 3 },
+        { id: 'm2', name: 'Compañero T3', type: 'passive', power: 10, rarity: 'Épico', tier: 3 }
+      ]
+    }));
+    const r: any = g.sellMany(['m1', 'c1']);
+    check('lote: el compañero se va del almacén y de las fichas',
+      r.ok && !find(g, 'm1') &&
+      !g.getState().companions.some((c: any) => c.id === 'm1'),
+      ids(g).join(',') + ' fichas=' + g.getState().companions.map((c: any) => c.id).join(','));
+    const g2 = await reload();
+    check('lote: y no vuelve por la sincronización al recargar',
+      !find(g2, 'm1') && !g2.getState().companions.some((c: any) => c.id === 'm1'),
+      ids(g2).join(','));
+  }
+
   // --- Resumen -----------------------------------------------------------
   const fallos = rows.filter(r => !r.ok);
   rows.forEach(r => console.log(`${r.ok ? 'PASA' : 'FALLA'}  ${r.name}${r.detail ? '   [' + r.detail + ']' : ''}`));

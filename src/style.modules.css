@@ -384,6 +384,28 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+/* --------------------------------------------------------------------------
+   LA CELDA MARCADA PARA VENDER, Y POR QUÉ NO ES `is-selected`.
+
+   Las dos celdas pueden estar marcadas a la vez —una abierta y otra en la venta— y
+   si compartieran estilo el jugador vería un resaltado sin saber a qué se refiere. Aquí
+   van distintas:
+
+   · `is-selected` es **la ficha abierta**: un borde de acento y un tinte suave. Es
+     tranquilo, porque abrir una ficha no cambia nada en el juego.
+   · `is-picked` es **"esto va a venderse"**, que sí cambia algo: desaparece y se cobra
+     dinero. Por eso pide más presencia —borde doble, tinte más fuerte y un signo
+     deticado— y por eso lleva `cursor: pointer` en vez de `grab`: con la selección
+     múltiple encendida el arrastre está apagado y ofrecer una manecilla que no
+     arrastra es mentira en la forma más pequeña que hay.
+   --------------------------------------------------------------------------- */
+.inv-cell.is-picked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
+  cursor: pointer;
+}
+
 .inv-cell.is-stackable::after {
   content: attr(data-count);
   position: absolute;

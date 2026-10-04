@@ -80,7 +80,19 @@ const ui = {
   selectedId: null as string | null,
   filter: 'all' as string,
   sort: 'default' as string,
-  sheetOpen: false
+  sheetOpen: false,
+  /**
+   * SELECCIÓN MÚLTIPLE, Y POR QUÉ ES ESTADO Y NO UN `{...}` de cada celda.
+   *
+   * Vive aquí y no en el marcado porque tiene que sobrevivir al re-render que provoca
+   * cada toque: si el marcado fuera la verdad, marcar la segunda celda borraría la
+   * primera. Y son **dos cosas distintas**: `selectedId` es "esta es la celda cuya ficha
+   * estoy leyendo" y `elegidos` es "estas se venden juntas". Por eso NO son un solo
+   * campo, y por eso el modo se puede encender sin tener nada marcado: no es lo mismo
+   * mirar una ficha que preparar una venta.
+   */
+  multisel: false,
+  elegidos: [] as string[]
 };
 
 export function renderWarehouseTab(
@@ -124,12 +136,32 @@ function draw(
   }
   const selected = ui.selectedId ? warehouse.find((w: any) => w.id === ui.selectedId) : null;
 
+  // Lo mismo para la selección múltiple, y por el mismo motivo. Un id que ya no está
+  // en el almacén no puede seguir marcado: si se quedara, la barra anunciaría un precio
+  // por un objeto que no existe, que es la clase de número que no cuadra con el cobro.
+  //
+  // **Y EL MODO NO SE APAGA SOLO CUANDO NO QUEDA NADA MARCADO, A PROPÓSITO.** Encenderlo
+  // es el primer paso de marcar, así que el primer re-render viene con cero marcados y
+  // un apagado automático lo tiraría en el acto. Se apaga con el interruptor y con el
+  // botón de la barra, que están los dos a la vista, y mientras esté encendido la barra
+  // enseña cero en vez de desaparecer: un modo encendido sin nada marcado dice "elige",
+  // y un modo que se apaga solo parece un botón que no responde.
+  if (ui.elegidos.length > 0) {
+    ui.elegidos = ui.elegidos.filter((id) => warehouse.some((w: any) => w.id === id));
+  }
+
 
 // --- Celdas -----------------------------------------------------------
   const cell = (g: { item: any; count: number }, i: number) => {
     const w = g.item;
     const isSel = w.id === ui.selectedId;
     const isEquipped = esEquipado(w, state);
+    // Marcado para la venta en lote. Es un concepto DISTINTO de `isSel`: esa es la
+    // ficha que se está leyendo y la abre el panel de detalle; esta es una celda que
+    // va a la barra de "vender". Por eso el marcado no puede pintarse con `is-selected`,
+    // que ya significa lo otro: si compartieran clase, el jugador vería una celda
+    // resaltada sin haberla abierta y otra resaltada sin estar marcada.
+    const isMarcada = ui.multisel && ui.elegidos.includes(w.id);
     const count = g.count;
     // F30 · La esquina pinta el tope con un "+" cuando hay más, no un 99 pelado.
     // `data-count` sigue siendo el número REAL porque lo leen la arrastre y la
@@ -137,14 +169,29 @@ function draw(
     const tope = MAX_STACK[w.type] ?? 20;
     const texto = count > 0 ? textoDeCantidad(count, tope) : '';
     return `
-      <button class="inv-cell ${isSel ? 'is-selected' : ''} ${count > 0 ? 'is-stackable' : ''}"
+      <button class="inv-cell ${isSel ? 'is-selected' : ''} ${isMarcada ? 'is-picked' : ''} ${count > 0 ? 'is-stackable' : ''}"
               data-cell="${i}" data-id="${w.id}" data-count="${count}"
+              data-picked="${isMarcada ? '1' : '0'}"
+              aria-pressed="${ui.multisel ? String(isMarcada) : 'false'}"
               style="${isEquipped ? 'border-color:#fbbf24; box-shadow: inset 0 0 0 1px #fbbf24;' : ''}"
               aria-label="${w.name}">
         <span class="ring-${raritySlug(w.rarity)} w-8 h-8 rounded-lg grid place-items-center
                      ${rarityClass(w.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">
           ${ic(TYPE_ICON[w.type] ?? 'crate')}
         </span>
+        <!--
+          LA MARCA DE "VA A VENDERSE", Y POR QUÉ ES UNA ESQUINA Y NO UN CAMBIO DE COLOR.
+
+          Un cambio de color de fondo haría imposible distinguir "marcado para vender" de
+          "marcado como ficha abierta", que es justo lo que hay que distinguir. La marca
+          es un signo deticado en la esquina **inferior derecha**, que es donde no hay
+          nada: el stat va en la superior derecha, el contador de pila también arriba a la
+          derecha y el "EQ" abajo a la izquierda. Con cuatro Mogollete encima de la celda,
+          cada uno en su esquina, y sin solaparse con ninguno.
+        -->
+        ${isMarcada ? `<span class="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-md accent-bg text-slate-950
+                              grid place-items-center pointer-events-none
+                              [&>span>svg]:w-3 [&>span>svg]:h-3">${ic('check')}</span>` : ''}
         <span class="text-[9px] font-mono text-[var(--text-main)] text-center leading-tight line-clamp-2 w-full px-0.5">
           ${w.name}
         </span>
@@ -162,7 +209,7 @@ function draw(
             ? ` ${estrellasDe(w.potential)}`
             : ''}
         </span>
-        ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-panel)] rounded px-0.5">${texto}</span>` : ''}
+        ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-app)] rounded px-0.5">${texto}</span>` : ''}
         ${statCelda(w, game)}
         ${isEquipped ? `<span class="absolute bottom-0.5 left-1 text-[9px] font-mono text-amber-400">EQ</span>` : ''}
       </button>
@@ -304,7 +351,31 @@ function draw(
             <option value="tier" ${ui.sort === 'tier' ? 'selected' : ''}>Tier</option>
             <option value="name" ${ui.sort === 'name' ? 'selected' : ''}>Nombre</option>
           </select>
+
+          <!--
+            EL INTERRUPTOR DE LA SELECCIÓN MÚLTIPLE, Y POR QUÉ NO ES UN BOTON SUELTO EN LA
+            REJILLA.
+
+            Vender veinte celdas con veinte toques a "Vender" y veinte diálogos es la razón
+            de que esto exista. El interruptor va **junto a los filtros y no en la rejilla**
+            por dos razones: una rejilla que en cada celda lleva un botón de marcar es una
+            rejilla que ya no es una rejilla —el jugador no puede abrir la ficha de nada
+            sin desmarcar primero—, y el interruptor tiene que poder apagarse sin haber
+            tocado ninguna celda.
+
+            Y dice qué va a pasar mientras esté encendido, porque es lo que cambia: con el
+            modo apagado, tocar una celda abre su ficha; encendido, la marca. Sin ese aviso
+            el primer toque parece un fallo.
+          -->
+          <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer transition flex items-center gap-1.5
+                         ${ui.multisel ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}"
+                  data-act="multisel" aria-pressed="${ui.multisel}">
+            <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(ui.multisel ? 'check' : 'sparkle')}</span>
+            ${ui.multisel ? 'Salir' : 'Selección múltiple'}
+          </button>
         </div>
+
+        ${ui.multisel ? multiSelBar(game) : ''}
 
         <div class="inv-grid mb-2" id="inv-grid">${cells.join('')}</div>
 
@@ -339,6 +410,75 @@ function draw(
   // `wire` recibe `root` (el nodo que se recrea), no `container`. Es lo que
   // evita que los listeners se acumulen de un repintado a otro.
   wire(root, game, onStateChange, go);
+}
+
+/**
+ * LA BARRA DE LA SELECCIÓN MÚLTIPLE.
+ *
+ * **EL NÚMERO DEL BOTÓN LO PONE EL MOTOR, Y ES LO ÚNICO QUE NO SE PUEDE HACER DE OTRA
+ * MANERA.** La barra pinta `game.planSellMany()`, que es la misma función que usa
+ * `sellMany()` para decidir qué se vende. Si la barra sumara los precios por su cuenta,
+ * bastaría un redondeo distinto entre las dos para que el botón anunciara una cifra y el
+ * cobro otra: es R3, y es exactamente el fallo que ya se pagó una vez con el botón de
+ * vender una pila, que pintaba el precio unitario y cobraba el total.
+ *
+ * ## LO QUE SE PINTA, Y POR QUÉ ESTA ORDEN
+ *
+ * · **Cuántos y cuánto, antes del botón.** El jugador tiene que ver la magnitud de lo que
+ *   va a pasar antes de confirmar, no después en un aviso.
+ * · **El botón lleva el número, no un "Vender" a secas.** Es una venta en lote y no hay
+ *   deshacer: un botón que no dice lo que cuesta es un botón que hay que pulsar a ciegas.
+ * · **"Todos" y "Ninguno"** porque con veinte celdas marcar una a una es el trabajo que
+ *   se estaba intentando quitar. "Todos" marca **lo que hay en la rejilla que se está
+ *   viendo**, no todo el almacén: con un filtro puesto, lo que el jugador está viendo es
+ *   lo que ha pedido ver, y marcar cosas que no ve sería vender a ciegas.
+ * · **Los descartes salen, con su motivo.** Si el jugador ha marcado el último recolector,
+ *   el botón lo dice y el precio no lo incluye. Un botón que anuncia un total que luego no
+ *   se cobra entero es peor que un botón que se niegue.
+ */
+function multiSelBar(game: any): string {
+  const state = game.getState();
+  const plan = game.planSellMany(ui.elegidos);
+  const celdas = visibleStacksFor(game, state, ui.filter, ui.sort);
+  const visibles = celdas.map((c: any) => c.item.id);
+  const hayTodos = visibles.length > 0 && visibles.every((id: string) => ui.elegidos.includes(id));
+  /** El nombre del item, para poder decir "el Dron Explorador está equipado". */
+  const nombreDe = (id: string) => {
+    const w: any = (state.warehouse as any[]).find((x: any) => x.id === id);
+    return w?.name ?? null;
+  };
+
+  return `
+    <div class="card-glass border rounded-xl px-3 py-2.5 mb-3 flex flex-wrap items-center gap-2.5"
+         role="group" aria-label="Selección para vender">
+      <span class="text-[10px] font-mono text-[var(--text-muted)]">
+        <span class="text-[var(--text-main)] font-bold">${ui.elegidos.length}</span>
+        ${ui.elegidos.length === 1 ? 'marcada' : 'marcadas'}
+        ${ui.elegidos.length !== plan.vendibles.length
+          ? `<span class="text-rose-400"> · ${plan.vendibles.length} vendibles</span>`
+          : ''}
+      </span>
+
+      <button class="px-2.5 h-8 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
+              data-act="ms-todos" ${hayTodos ? 'disabled style="opacity:.4"' : ''}>Todos</button>
+      <button class="px-2.5 h-8 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
+              data-act="ms-ninguno" ${ui.elegidos.length === 0 ? 'disabled style="opacity:.4"' : ''}>Ninguno</button>
+
+      ${plan.bloqueados.length > 0 ? `
+        <span class="text-[9px] font-mono text-rose-400 leading-tight">
+          ${plan.bloqueados.map((b: any) => `${nombreDe(b.id) ?? 'Un item'}: ${b.motivo}`).join(' · ')}
+        </span>` : ''}
+
+      <button class="ml-auto px-3.5 h-9 rounded-lg text-[11px] font-bold cursor-pointer
+                     ${plan.vendibles.length > 0
+                       ? 'accent-bg text-slate-950'
+                       : 'btn-ghost text-[var(--text-muted)] cursor-not-allowed'}"
+              data-act="ms-vender" ${plan.vendibles.length > 0 ? '' : 'disabled'}>
+        ${plan.vendibles.length > 0
+          ? `Vender ${plan.vendibles.length} · ${formatNumber(plan.total)} ◆`
+          : 'Vender'}
+      </button>
+    </div>`;
 }
 
 /** Hoja de detalle. En móvil va abajo con arrastre de salida; en escritorio, arriba. */
@@ -417,13 +557,17 @@ function loreLine(item: any, state: any): string {
  * Sin eso, en el móvil el desglose sería inalcanzable y la mitad de la razón de existir
  * se pierde.
  */
-function statPrincipalHTML(stat: any): string {
+function statPrincipalHTML(stat: any, game?: any, itemId?: string): string {
   if (!stat) return '';
   const esMult = stat.subtipo === 'multiplier';
   const cifra = (stat.prefijo ?? '')
     + (esMult ? Number(stat.valor).toFixed(2).replace(/0$/, '') : formatNumber(stat.valor));
-  const filas: any[] = stat.desglose ?? [];
-  const conDesglose = filas.length > 1;
+  // **LAS FILAS LAS PIDE EL MOTOR, Y SON LAS MISMAS QUE LA CARD DE LA BASE.** La lista
+  // de multiplicadores que traía el stat se queda como respaldo: sin ella, un stat sin
+  // desglose se quedaría sin lista en vez de quedarse con la cuenta antigua, que es peor.
+  const filas = (game && itemId ? game.getStatFilas?.(itemId) : null)
+    ?? { base: 0, total: 0, filas: [] as any[] };
+  const conDesglose = !esMult && filas.filas.length > 0;
   return `
     <div class="${conDesglose ? 'group relative cursor-help' : ''} rounded-xl px-3 py-2 mb-2.5"
          style="border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
@@ -437,21 +581,39 @@ function statPrincipalHTML(stat: any): string {
       </div>
       ${conDesglose ? `
         <div class="hidden group-hover:block group-focus-within:block absolute z-30 left-0 right-0 top-full
-                    mt-1.5 rounded-lg px-2.5 py-2 text-left shadow-lg"
-             style="background: var(--bg-panel); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
-          <div class="label-caps mb-1">De dónde sale</div>
-          <ul class="space-y-0.5">
-            ${filas.map((f, i) => `
-              <li class="flex items-baseline justify-between gap-3 text-[10px] font-mono
-                         ${i === filas.length - 1
-                           ? 'accent-text font-bold border-t border-[var(--border-color)] pt-1 mt-0.5'
-                           : 'text-[var(--text-muted)]'}">
-                <span>${f.texto}</span>
-                <span class="tabular">${f.valor}</span>
+                    mt-1.5 rounded-lg px-2.5 py-2 text-left shadow-lg card-glass-elevated">
+          <div class="label-caps mb-1.5 flex items-center gap-1.5">
+            <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 opacity-70">${ic('bolt')}</span>
+            ${stat.subtipo === 'multiplier' ? 'De dónde sale el multiplicador' : 'De dónde sale'}
+          </div>
+          <ul class="space-y-1">
+            <li class="flex items-baseline justify-between gap-2">
+              <span class="text-[9px] font-mono text-[var(--text-muted)]">${textoDeLaBase(stat)}</span>
+              <span class="text-[10px] font-mono tabular text-[var(--text-muted)] flex-shrink-0">
+                ${formatNumber(filas.base)}
+              </span>
+            </li>
+            ${filas.filas.map((f: any) => `
+              <li class="flex items-baseline justify-between gap-2">
+                <span class="text-[9px] font-mono text-[var(--text-muted)] truncate">
+                  ${f.nombre}<span class="opacity-60"> · ${f.detalle}</span>
+                </span>
+                <span class="text-[10px] font-mono font-bold tabular accent-text flex-shrink-0">
+                  +${formatNumber(f.suma)}
+                </span>
               </li>`).join('')}
           </ul>
+          <div class="flex items-baseline justify-between gap-2 mt-1.5 pt-1.5 border-t border-[var(--border-color)]">
+            <span class="text-[9px] font-mono accent-text font-bold">${stat.etiqueta}</span>
+            <span class="text-[10px] font-mono font-bold tabular accent-text">${cifra}</span>
+          </div>
         </div>` : ''}
     </div>`;
+}
+
+/** Cómo se llama la base en la primera fila del desglose, que cambia con el stat. */
+function textoDeLaBase(stat: any): string {
+  return stat.tipo === 'companion' ? 'Poder del item' : 'Base del item';
 }
 
 /** Panel de detalle fijo en la columna derecha, solo en escritorio. */function detailPanel(item: any, state: any, game: any): string {
@@ -594,7 +756,7 @@ function detailContent(item: any, state: any, game: any): string {
           </p>
         ` : ''}
 
-        ${statPrincipalHTML(statPrincipal)}
+        ${statPrincipalHTML(statPrincipal, game, item.id)}
 
         ${isCollector || isCompanion ? loreLine(item, state) : ''}
 
@@ -790,12 +952,46 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
     redraw();
   });
 
+  // --- Selección múltiple ------------------------------------------------
+  // Van en el delegado de abajo y no aquí, porque los botones de la barra se pintan y
+  // se borran en cada repintado: un listener por nodo habría que volver a ligar veinte
+  // veces, que es justo lo que este fichero evita haciendo con `root`.
+
+  /**
+   * Marca o desmarca un id, y avisa si no se puede.
+   *
+   * **AVISA EN VEZ DE NO HACER NADA, Y POR QUÉ ES IMPORTANTE.** Tocar una celda que no
+   * se puede vender sin que pase nada parece un botón roto: el jugador toca, no ve
+   * cambio y toca otra vez pensando que se ha equivocado. Con el motivo escrito, el
+   * mismo toque dice "está equipado" y el jugador entiende la rejilla.
+   *
+   * El motivo lo pone el motor, no esta función: es el plan del motor el que sabe qué
+   * es vendible, y una comprobación de "¿está equipado?" aquí sería una copia de una
+   * regla que ya vive en dos sitios del game loop.
+   */
+  const marcarCelda = (id: string) => {
+    if (ui.elegidos.includes(id)) {
+      ui.elegidos = ui.elegidos.filter((x) => x !== id);
+      redraw();
+      return;
+    }
+    const soloEste = game.planSellMany([id]);
+    if (soloEste.vendibles.length === 0 && soloEste.bloqueados.length > 0) {
+      sfx.error();
+      showToast(`No se puede vender: ${soloEste.bloqueados[0].motivo}.`, 'info');
+      return;
+    }
+    sfx.pick();
+    ui.elegidos = [...ui.elegidos, id];
+    redraw();
+  };
+
   // --- Selección y arrastre --------------------------------------------
   // Un solo conjunto de manejadores de puntero para toda la rejilla. Cada
   // celda recibe listeners nuevos en cada re-render; si se cumularan, un
   // arrastre dispararía N veces. Se limpian antes de volver a ligar.
   const grid = root.querySelector('#inv-grid') as HTMLElement | null;
-  if (grid) setupDragAndDrop(grid, game, redraw);
+  if (grid) setupDragAndDrop(grid, game, redraw, marcarCelda);
 
   // --- Acciones de la hoja ---------------------------------------------
   // Delegado en `root`, no en `container`. Ver la nota de arriba: sobre
@@ -867,6 +1063,76 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
       case 'nada':
         // Botón informativo: no hace nada a propósito.
         return;
+
+      // --- La selección múltiple. Todas van antes de que `item` importa: son
+      // barra y rejilla enteras, no la ficha de una celda.
+      case 'multisel':
+        sfx.nav();
+        ui.multisel = !ui.multisel;
+        // **AL ENCENDER, SE CIERRA LA FICHA, Y POR QUÉ ES OBLIGATORIO.**
+        // `selectedId` y `elegidos` son dos conceptos y los dos se resaltan, pero con
+        // estilos distintos: si la ficha sigue abierta mientras se marca, hay **dos
+        // celdas de aspecto parecido y solo una es de la venta**. Se vio: el Blaser
+        // seguía con el borde de "tienes abierta esta ficha" al lado de otra marcada
+        // para vender, y la abierta parecía parte del lote. Sin ficha no hay dos
+        // meanings: en este modo lo resaltado es lo que se vende, y punto.
+        //
+        // Al salir se limpian las marcas, por el mismo motivo al revés: si no, al volver
+        // a entrar el jugador se encuentra una selección que no hizo.
+        if (ui.multisel) {
+          ui.selectedId = null;
+          ui.sheetOpen = false;
+        } else {
+          ui.elegidos = [];
+        }
+        redraw();
+        break;
+      case 'ms-ninguno':
+        sfx.nav();
+        ui.elegidos = [];
+        redraw();
+        break;
+      case 'ms-todos': {
+        sfx.nav();
+        // **SOLO LO QUE SE ESTÁ VIENDO, Y POR QUÉ.** Con un filtro puesto, "todos" es
+        // lo que hay en pantalla. Marcar lo que no se ve para venderlo sería dejar al
+        // jugador vendiendo cosas sin verlas, que es la forma más rápida de que un
+        // jugador no se fie de ese boton, y con razon.
+        const celdas = visibleStacksFor(game, game.getState(), ui.filter, ui.sort);
+        const ids = celdas.map((c: any) => c.item.id);
+        ui.elegidos = ids;
+        // Los que no se pueden vender no se marcan, y el motivo lo pone el motor: el
+        // plan dice cuál es el último de su tipo, que no lo sabe la vista.
+        const plan = game.planSellMany(ids);
+        const noVenden = plan.bloqueados.filter((b: any) => !ids.includes(b.id));
+        if (noVenden.length > 0) {
+          showToast(`${noVenden.length} no se pueden vender: ${noVenden[0].motivo}.`, 'info');
+        }
+        redraw();
+        break;
+      }
+      case 'ms-vender': {
+        if (ui.elegidos.length === 0) return;
+        const res = game.sellMany(ui.elegidos);
+        ui.elegidos = [];
+        if (res.ok) {
+          sfx.buy();
+          showToast(`Vendidos ${res.sold} por ${formatNumber(res.gained ?? 0)} ◆.`, 'success');
+        } else {
+          sfx.error();
+          showToast(res.msg || 'No se pudo vender.', 'error');
+        }
+        // Los descartes se dicen aunque la venta haya ido bien: es la parte de la
+        // respuesta que el jugador no puede deducir de la pantalla, que ahora es un
+        // item menos y ya no está.
+        const bloqueados = res.bloqueados || [];
+        if (bloqueados.length > 0) {
+          showToast(`Sin vender: ${bloqueados[0].motivo}.`, 'info');
+        }
+        redraw();
+        onStateChange?.();
+        break;
+      }
       case 'sell':
         if (!item) return;
         sellItem(game, item, redraw);
@@ -878,7 +1144,12 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
 // ==========================================================================
 //  Arrastre con Pointer Events
 // ==========================================================================
-function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
+function setupDragAndDrop(
+  grid: HTMLElement,
+  game: any,
+  redraw: () => void,
+  marcarCelda: (id: string) => void
+) {
   let dragId: string | null = null;
   let fromIndex = -1;
   let ghost: HTMLElement | null = null;
@@ -901,6 +1172,23 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
 
     const id = cell.dataset.id;
     if (!id) return;
+
+    // **EN SELECCIÓN MÚLTIPLE NO SE ARRASTRA NADA, Y NO ES UNA DECISIÓN DE ESTILO.**
+    // Los dos gestos son incompatibles sobre la misma celda: si el dedo se mueve ocho
+    // píxeles —que en un móvil es un temblor normal— el gesto pasa de "marcar" a
+    // "reordenar", y el jugador ha movido sin querer algo que creía haber marcado.
+    // Apagar el arrastre entero mientras el modo está encendido hace que el gesto sea
+    // inequívoco: aquí un toque marca y nada más.
+    if (ui.multisel) {
+      // Se registra igualmente el puntero para que `finish()` sepa que este toque ha
+      // empezado aquí y no venga de un arrastre anterior.
+      activePointer = e.pointerId;
+      dragId = id;
+      fromIndex = Number(cell.dataset.cell);
+      startX = e.clientX;
+      startY = e.clientY;
+      return;
+    }
 
     activePointer = e.pointerId;
     dragId = id;
@@ -974,6 +1262,15 @@ function setupDragAndDrop(grid: HTMLElement, game: any, redraw: () => void) {
     fromIndex = -1;
 
     if (!wasDragging) {
+      // Toque simple. **QUÉ HACE DEPENDE DEL MODO, Y NO ES LA MISMA COSA.**
+      //
+      // Con la selección múltiple encendida, un toque marca para vender y **no abre la
+      // ficha**: si abrió las dos cosas, el jugador no podría ni leer un item ni quitar
+      // la marca sin tener que apagar el modo, que es justo lo que se pidió al encenderlo.
+      if (ui.multisel) {
+        marcarCelda(draggedId);
+        return;
+      }
       // Toque simple: seleccionar
       sfx.pick();
       ui.selectedId = ui.selectedId === draggedId ? null : draggedId;
@@ -1161,7 +1458,7 @@ export function statCelda(w: any, game: any): string {
   const cifra = (stat.prefijo ?? '')
     + (esMult ? Number(stat.valor).toFixed(2).replace(/0$/, '') : formatNumber(stat.valor));
   return `<span class="absolute top-1 right-1 text-[10px] leading-none font-mono font-bold accent-text
-                       bg-[var(--bg-panel)] rounded px-1 py-px tabular"
+                       bg-[var(--bg-app)] rounded px-1 py-px tabular"
                 title="${stat.etiqueta}">${cifra}${stat.sufijo ?? ''}</span>`;
 }
 
