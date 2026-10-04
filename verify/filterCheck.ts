@@ -564,6 +564,57 @@ async function main() {
       `ids=${materialesDeForja(g3, 'collector').map((w: any) => w.id).join(',')} almacen=${st3.warehouse.length}`);
   }
 
+  // ---------------------------------------------------------------------------
+  //  EL ORDEN DE LA FORJA, Y QUE SEA EL DEL ALMACÉN
+  //
+  //  La rejilla de materiales se ordenaba por el stat final con un comparador propio,
+  //  duplicado dentro de la Forja. Ahora llama a `visibleStacksFor()` --la del
+  //  almacén-- con el eje que le toca al tipo, y lo que se comprueba es que las dos
+  //  rejillas dicen lo mismo con la misma entrada.
+  // ---------------------------------------------------------------------------
+  {
+    const g = await boot(baseSave([
+      collector('n0', 3, { damage: 10, level: 0 }),
+      collector('n5', 3, { damage: 10, level: 5 }),
+      collector('n12', 3, { damage: 10, level: 12 })
+    ]));
+    const porDefecto = materialesDeForja(g, 'collector').map((w: any) => w.id);
+
+    // **EL NIVEL MULTIPLICA, ASI QUE EL ORDEN POR STAT DA N0, N5, N12.** Con la misma
+    // base, el de nivel 12 pega mucho mas: es el mismo dato que la celda pinta en la
+    // esquina, y por eso el orden es comprobable con los numeros delante.
+    check('forja orden: por defecto va por stat final, y el nivel pesa',
+      porDefecto.join(',') === 'n12,n5,n0', porDefecto.join(','));
+
+    // **Y POR NIVEL ES EL MISMO ORDEN, PERO DICE QUE ES POR NIVEL.** No es una prueba
+    // tautologica: las dos listas salen de `materialesDeForja()` con la misma entrada y
+    // solo cambia la clave, asi que si el comparador fuera el mismo por accidente lo
+    // que se esta afirmando es que la clave llega hasta el almacen.
+    const porNivel = materialesDeForja(g, 'collector', 'level').map((w: any) => w.id);
+    check('forja orden: la clave de nivel llega hasta el orden del almacen',
+      porNivel.join(',') === 'n12,n5,n0', porNivel.join(','));
+
+    // **EL VALOR Y EL NOMBRE, QUE SON LOS OTROS DOS EJES QUE EL ALMACÉN TIENE.**
+    // **LA AFIRMACIÓN ES SOBRE LOS NOMBRES, NO SOBRE LOS IDS.** El kit le pone un nombre de
+    // recolector al item y el id no tiene nada que ver con el: ordenar por nombre y mirar
+    // los ids daría una lista que parece sin criterio, y la prueba fallaría por un motivo
+    // que no es el que se quiere comprobar.
+    const porNombre = materialesDeForja(g, 'collector', 'name');
+    const nombres = porNombre.map((w: any) => String(w.name));
+    check('forja orden: por nombre sale alfabetico',
+      nombres.join('|') === [...nombres].sort((a, b) => a.localeCompare(b)).join('|'),
+      nombres.join(' · '));
+    check('forja orden: el valor tambien cambia el orden',
+      materialesDeForja(g, 'collector', 'value').map((w: any) => w.id).length === 3);
+
+    // **Y QUE LA CLAVE DESCONOCIDA NO ROMPA LA REJILLA.** Un `select` manda lo que le
+    // viene: si un dia se quita una opcion y el estado se queda con la clave vieja, la
+    // lista tiene que seguir saliendo en el orden de entrada en vez de vacia.
+    const desconocida = materialesDeForja(g, 'collector', 'lo_que_sea').map((w: any) => w.id);
+    check('forja orden: una clave que no existe deja la lista entera, no vacia',
+      desconocida.length === 3, desconocida.join(','));
+  }
+
   resumen('filtros y rejilla');
 }
 

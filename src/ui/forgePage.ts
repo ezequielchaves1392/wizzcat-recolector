@@ -35,8 +35,7 @@ import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from '../components/crateLoot';
-import { statCelda } from '../components/warehouse';
-import { esEquipado } from '../components/warehouse';
+import { esEquipado, statCelda, visibleStacksFor } from '../components/warehouse';
 
 /** Estado de la pantalla. Vive aquí para sobrevivir a los re-renders. */
 interface ForgeUIState {
@@ -53,9 +52,25 @@ interface ForgeUIState {
    * recolectores con el yunque medio lleno.
    */
   tipo: 'collector' | 'companion';
+  /**
+   * ORDEN DE LA REJILLA DE MATERIALES, Y POR QUÉ ES ESTADO.
+   *
+   * Como el tipo: cambia al pulsar y tiene que sobrevivir al repintado que provoca el
+   * propio cambio. Si fuera un parametro, cada vez que se elige otro criterio la pantalla
+   * volveria al de antes y el selector no responderia a nada.
+   *
+   * La clave es de `visibleStacksFor()`, no un número: el orden vive en el almacen.
+   */
+  orden: string;
 }
 
-const ui: ForgeUIState = { selected: [], stones: 0, nano: false, tier: 0, tipo: 'collector' };
+const ui: ForgeUIState = {
+  selected: [], stones: 0, nano: false, tier: 0, tipo: 'collector',
+  // **'stat' Y NO '': EL VALOR POR DEFECTO ES EL QUE YA HABIA.** La rejilla se ha
+  // ordenado siempre por stat final, y por eso el statCelda de la esquina esta a la
+  // vista: sin el número, un orden por algo que no se ve no se puede comprobar.
+  orden: 'stat'
+};
 
 /**
  * Los dos nombres del tipo elegido, en todas las formas que hace falta.
@@ -115,7 +130,13 @@ export function renderForgePage(container: HTMLElement, game: any, go?: (r: any)
  * `sort` es estable en V8, así que devolver 0 conserva el orden de entrada y entre ellos no
  * hay que hacer nada más.
  */
-export function materialesDeForja(game: any, tipo: string): any[] {
+/**
+ * Los materiales fundibles de un tipo, en el orden pedido.
+ *
+ * `orden` es una clave de `visibleStacksFor()` y vale 'stat' por defecto, que es lo que
+ * ha hecho siempre esta rejilla.
+ */
+export function materialesDeForja(game: any, tipo: string, orden: string = 'stat'): any[] {
   const state = game.getState();
   // **LO EQUIPADO NO SE PINTA, Y ANTES SE PINTA GRIS.**
   //
@@ -134,26 +155,49 @@ export function materialesDeForja(game: any, tipo: string): any[] {
   // motor ya dice con su propio mensaje.
   // **EL PREDICADO ES EL DEL ALMACEN, NO UNO NUEVO.** Ver `esEquipado()`: el id manda y
   // la bandera de la ficha no, y por que es asi esta escrito alli.
+  // **EL ORDEN ES EL DEL ALMACÉN, NO UNO NUEVO.** `visibleStacksFor()` ya sabe
+  // ordenar por stat final, por rareza, por valor y por nombre, con el desempate por
+  // tier y con el multiplicador al final porque su 1,75 no son unidades por segundo.
+  // Escribir la mitad de esa regla otra vez en la Forja es la forma de que las dos
+  // rejillas ordenen distinto un dia de estos, y el jugador veria dos almacenes.
+  //
+  // `ejeDe()` resuelve el unico detalle que no es copia: **la Forja ya filtra por tipo**
+  // con el interruptor de arriba, asi que nunca hay un recolector y un companero en la
+  // misma lista, y por eso el "eje" se deduce del tipo y no se le pregunta al jugador.
+  // El multiplicador sigue quedandose fuera del stat por su cuenta, que es lo que hace
+  // `visibleStacksFor()` con el eje de segundo.
   const equipado = (w: any) => esEquipado(w, state);
-  /** El stat final del material, o `null` si en este eje no tiene cifra. */
-  const valorFinalDe = (w: any): number | null => {
-    const s = game.getStatPrincipal?.(w.id);
-    if (!s) return null;
-    if (w.type === 'companion' && (s as any).subtipo === 'multiplier') return null;
-    return s.valor;
-  };
-  return (((state.warehouse as any[]) || [])
-    .filter(w => w.type === tipo && !equipado(w))
-    .sort((a, b) => {
-      const va = valorFinalDe(a);
-      const vb = valorFinalDe(b);
-      if (va === null && vb === null) return (b.tier || 0) - (a.tier || 0);
-      if (va === null) return 1;
-      if (vb === null) return -1;
-      if (va !== vb) return vb - va;
-      return (b.tier || 0) - (a.tier || 0);
-    }));
+  return visibleStacksFor(game, state, tipo, ejeDe(tipo, orden))
+    .map((c: any) => c.item)
+    .filter((w: any) => !equipado(w));
 }
+
+/**
+ * Eje de stat que le toca a cada tipo en la rejilla de la Forja.
+ *
+ * El recolector se mide por clic y el companero por segundo, y comparar 30 por clic con
+ * 65 por segundo no dice nada --el clic ocurre mil veces en un segundo--. En el
+ * almacen son dos opciones porque una rejilla puede tener los dos; aqui son dos
+ * ramas de la misma pantalla porque el interruptor de arriba ya escogió uno.
+ */
+function ejeDe(tipo: string, orden: string): string {
+  return orden === 'stat' ? (tipo === 'collector' ? 'stat' : 'statSeg') : orden;
+}
+
+/**
+ * Los cuatro ejes del selector, y por que el de stat se llama "Mejor".
+ *
+
+ * "Mejor" y no "Mayor dano" porque la lista mezcla lo que sea del tipo elegido, y
+ * porque el stat que se compara es el final, con el nivel y los afijos dentro.
+ */
+const ORDENES_DE_FORJA: { id: string; label: string }[] = [
+  { id: 'stat', label: 'Mejor' },
+  { id: 'level', label: 'Nivel' },
+  { id: 'rarity', label: 'Rareza' },
+  { id: 'value', label: 'Valor' },
+  { id: 'name', label: 'Nombre' }
+];
 
 /**
  * Por que la rejilla esta vacia, y si es por culpa del filtro.
@@ -190,9 +234,9 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   const N = NOMBRES[ui.tipo];
 
   // El orden de la rejilla vive en `materialesDeForja()`, fuera de esta funcion, para
-  // que un banco lo pueda comprobar sin un DOM. El porque de que sea por el valor
-  // final y no por el de base esta en su JSDoc.
-  const materiales = materialesDeForja(game, ui.tipo);
+  // que un banco lo pueda comprobar sin un DOM, y **reutiliza el comparador del
+  // almacen**: el orden no se escribe dos veces. Ver el JSDoc de las dos funciones.
+  const materiales = materialesDeForja(game, ui.tipo, ui.orden);
 
   const tiers = Array.from(new Set(materiales.map(w => w.tier))).sort((a, b) => a - b);
 
@@ -251,6 +295,18 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
       </button>`;
   };
 
+/**
+ * El nivel de un material, o 0 si no lo tiene.
+ *
+ * `level` es un campo opcional y un companero recien salido de una caja no lo trae. La
+ * celda lo enseña solo cuando no es cero, asi que el numero que ve el jugador existe de
+ * verdad: mostrar "nivel 0" seria inventar un dato que el item no tiene.
+ */
+function nivelDe(w: any): number {
+  const n = Number(w?.level);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
   const matCell = (w: any) => {
     const isSel = ui.selected.includes(w.id);
     // **SIN ESTADO DE EQUIPADO, PORQUE AQUÍ NO HAY NINGUNO.** La celda lo llevaba
@@ -267,8 +323,20 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
         <span class="text-[9px] font-mono text-[var(--text-main)] text-center leading-tight line-clamp-2 w-full">
           ${w.name}
         </span>
+        <!--
+          **LO QUE FALTA EN LA CELDA ERA EL NIVEL, Y ES EL NÚMERO MÁS IMPORTANTE**
+          de la Forja: la fusion promedia lo que aporta el item y **el nivel multiplica
+          el daño entero**. Dos recolectores del mismo tier, el mismo potencial y el mismo
+          afijo se forjan distinto si uno es nivel 1 y el otro nivel 15, y la celda no lo
+          decia. El stat de la esquina lo disimula --va dentro-- pero el jugador que compara
+          dos celdas ve una cifra que no puede deconstruir.
+
+          Sale **solo si no es cero**, porque un companero recien salido de una caja no
+          tiene nivel y el "nivel 0" es una cosa inventada. Y en el title va la regla: el
+          nivel sube con cristales, no con la forja, y el material lo hereda multiplicado.
+        -->
         <span class="text-[9px] font-mono text-[var(--text-muted)]">
-          T${w.tier} · ${estrellasDe(w.potential)}
+          T${w.tier} · ${estrellasDe(w.potential)}${nivelDe(w) !== 0 ? ` · N${nivelDe(w)}` : ''}
         </span>
         <!-- **LA ESQUINA CON EL STAT FINAL, Y ES LA MISMA FUNCIÓN QUE LA DEL ALMACÉN.**
              La celda enseña el tier y las estrellas, y con eso se ordenaba por la base:
@@ -418,6 +486,31 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
             motivoDeRejillaVacia(game, ui.tipo))
         : `
           <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
+          <!--
+            EL ORDEN, Y POR QUE ES UN SELECT Y NO MAS BOTONES.
+
+            El almacen lo tiene y la Forja no, con veinte celdas de material en un
+            mismo tier: encontrar los dos mejores de nivel 12 es recorrer la rejilla a
+            ojo. Un select y no cinco botones porque **la eleccion es de una sola vez y
+            la opcion activa se ve sola**: cinco botones serian cinco cosas permanentes
+            compitiendo por el sitio al lado de los tabs de tier, que son los que de
+            verdad se cambian.
+
+            Y **las claves son las de visibleStacksFor(), no numeros**: el orden vive
+            en el almacen y las dos rejillas usan la misma regla. Ver
+            materialesDeForja().
+          -->
+          <div class="flex items-center gap-1.5 mb-2.5">
+            <label class="text-[9px] font-mono text-[var(--text-muted)] flex-shrink-0"
+                   for="forge-sort">Orden</label>
+            <select id="forge-sort" data-act="orden"
+                    class="h-9 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
+              ${ORDENES_DE_FORJA.map((o) => `
+                <option value="${o.id}" ${ui.orden === o.id ? 'selected' : ''}>${o.label}</option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
             ${tiers.map(t => `
               <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer flex-shrink-0 transition
                              ${t === ui.tier ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
@@ -499,6 +592,19 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
     const act = btn.dataset.act;
 
     switch (act) {
+      // **EL ORDEN SE APLICA Y SE REPINTA, Y NO CAMBIA NADA DEL JUEGO.** Es una
+      // preferencia de lectura: la lista se vuelve a pedir al motor con otro criterio y
+      // **la seleccion del yunque se queda**, porque reordenar no ha tocado lo que hay
+      // seleccionado. Es un `change` y no un `click` por lo mismo que la casilla de
+      // Ajustes: un `select` no produce `click` al elegir con el teclado.
+      case 'orden': {
+        const sel = e.target as HTMLSelectElement;
+        if (sel.tagName !== 'SELECT') return;
+        ui.orden = sel.value || 'stat';
+        sfx.nav();
+        redraw();
+        break;
+      }
       // **CAMBIAR DE TIPO VACÍA LA SELECCIÓN, Y NO ES COSMÉTICA.** Los ids de un
       // tipo no son de otro: al cambiar, el yunque se quedaría con huecos
       // invisibles y el jugador creería que ha perdido materiales que no tocó.

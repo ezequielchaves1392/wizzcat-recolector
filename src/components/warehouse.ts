@@ -1384,6 +1384,12 @@ export function visibleStacksFor(
   if (sort === 'name') items = [...items].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   else if (sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
   else if (sort === 'tier') items = [...items].sort((a, b) => (b.tier || 0) - (a.tier || 0));
+  // **EL NIVEL, QUE EN LA FORJA ES LA MITAD DEL NÚMERO Y EN EL ALMACÉN NO SE VE.**
+  // El nivel multiplica el daño entero del item, así que dos recolectores del mismo tier y
+  // el mismo potencial dan muy distinto. Es el eje que más se echa de menos en la rejilla de
+  // materiales, y por eso vive aquí y no en la Forja: **es la misma regla en las dos
+  // rejillas**.
+  else if (sort === 'level') items = [...items].sort((a, b) => ((b.level || 0) + 1) - ((a.level || 0) + 1));
   else if (sort === 'value') {
     const precio = (w: any) => game.getSellPrice?.(w.id) ?? w.sellPrice ?? 0;
     items = [...items].sort((a, b) => precio(b) - precio(a));
