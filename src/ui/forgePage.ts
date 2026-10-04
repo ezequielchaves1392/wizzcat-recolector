@@ -487,7 +487,19 @@ function nivelDe(w: any): number {
     </section>
 
     <section class="card-glass rounded-2xl p-3 md:p-4">
-      ${sectionHead('Materiales', 'layers', `
+<!-- LO QUE LLAMA A LOS MATERIALES: LA SECCIÓN DECÍA "MATERIALES" Y EL JUEGO NO TIENE
+         ESA PALABRA. El almacén guarda recolectores y compañeros, y el interruptor de
+         arriba ya dice cuáles. Una cabecera que dice una cosa y la lista de debajo dice
+         otra es el mismo fallo del "se necesitan 2" de A1 en pequeño: el jugador tiene
+         que adivinar si lo que busca es una cosa o la misma con otro nombre.
+
+         Y sale de NOMBRES[ui.tipo], el mismo sitio del que salen el "queda 1 material" y
+         el "ya hay un T7 en el yunque": una fuente para cómo llama el juego a cada tipo.
+         Aquí no hay texto nuevo que mantener. -->
+      <!-- Con mayúscula inicial porque es una cabecera de sección, y el plural sale del
+           mismo sitio que el resto de los textos del tipo: mayúscula no es un caso
+           especial, es lo que pasa cuando el nombre está en un sitio y no repetido. -->
+      ${sectionHead(N.vacio[0].toUpperCase() + N.vacio.slice(1), 'layers', `
         <span class="text-[10px] font-mono text-[var(--text-muted)]">${ui.selected.length}/${MATERIALES_POR_FUSION}</span>
       `)}
 
@@ -617,12 +629,29 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
         redraw();
         break;
       }
-      // **CAMBIAR DE TIPO VACÍA LA SELECCIÓN, Y NO ES COSMÉTICA.** Los ids de un
-      // tipo no son de otro: al cambiar, el yunque se quedaría con huecos
-      // invisibles y el jugador creería que ha perdido materiales que no tocó.
+// **CAMBIAR DE TIPO VACÍA LA SELECCIÓN, Y DICE POR QUÉ.** Los ids de un tipo no
+      // son de otro: al cambiar, el yunque se quedaría con huecos invisibles y el
+      // jugador creería que ha perdido materiales que no tocó.
+      //
+      // **Y EL AVISO NO ES COSMÉTICA, ES LA PARTE QUE FALTA DE B11.** El aviso del cambio
+      // de *tier* ya existía —"cambiaste de T7 a T10 y los materiales tenían que ser del
+      // mismo nivel"— y el del cambio de *tipo* no: **el yunque se vaciaba en silencio**.
+      // Con dos rejillas que no mezclan, un jugador que llena el yunque de recolectores y
+      // toca "Compañeros" pierde la selección sin una sola palabra, y lo único que ve es
+      // que el yunque aparece vacío. Es el mismo síntoma que el "ya está al tope" sin
+      // motivo: una cosa que pasa y no se explica.
       case 'tipo': {
+        const nuevoTipo = btn.dataset.tipo as 'collector' | 'companion';
+        if (nuevoTipo === ui.tipo) return;
         sfx.nav();
-        ui.tipo = btn.dataset.tipo as 'collector' | 'companion';
+        if (ui.selected.length) {
+          showToast(
+            `Yunque vaciado: cambiaste de ${NOMBRES[ui.tipo].vacio} a ` +
+            `${NOMBRES[nuevoTipo].vacio} y no se fusionan entre ellos.`,
+            'info'
+          );
+        }
+        ui.tipo = nuevoTipo;
         ui.selected = [];
         ui.tier = 0;
         redraw();

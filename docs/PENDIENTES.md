@@ -264,14 +264,22 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       Si se añade la tira, la forja necesita una regla para promediarla —que es la que F33 ya
       tenía— y las estrellas pasan a ser "de qué parte del rango viene", que es información
       distinta.
-- [ ] **B11 · En la Forja, "materiales" son "compañeros y armas".** Tres cosas en una:
-      (a) el nombre, que no es lo que hay en el almacén —el interruptor ya pone
-      "Recolectores / Compañeros", y el resto de la pantalla habla de "materiales"—;
-      (b) **un filtro como el del almacén**, con el filtro de tipo y los mismos botones de
-      orden; y (c) **que no se puedan mezclar**, que **hoy ya está medio hecho**: la rejilla
-      filtra por `ui.tipo`, así que un recolector no aparece en la pestaña de compañeros.
-      Falta lo que tú describes, que es el aviso: si hay un compañero en el yunque, al tocar
-      un recolector tiene que decir **por qué** no lo acepta, no simplemente no aparecer.
+- [-] **B11 · En la Forja, "materiales" son "compañeros y armas".** **Dos de las tres partes
+      hechas; la tercera ya lo estaba.**
+      (a) **El nombre.** La sección se llamaba "Materiales" y el juego no tiene esa palabra:
+      el almacén guarda recolectores y compañeros y el interruptor de arriba ya dice
+      cuáles. Ahora la cabecera sale de `NOMBRES[ui.tipo]`, el mismo sitio del que salen
+      el "queda 1 material" y el "ya hay un T7 en el yunque". Es el mismo fallo del
+      "se necesitan 2" de A1 en pequeño: una cabecera que dice una cosa y la lista de
+      debajo dice otra obliga al jugador a adivinar si busca una cosa o la misma.
+      (c) **Que no se mezclen: ya estaba, pero el aviso no.** El cambio de *tier* vaciaba el
+      yunque **con aviso** —"cambiaste de T7 a T10"— y el cambio de *tipo* lo vaciaba **en
+      silencio**. Un jugador que llena el yunque de recolectores y toca "Compañeros"
+      pierde la selección sin una palabra, y lo único que ve es un yunque vacío. Es el
+      mismo síntoma que el "ya está al tope" sin motivo: algo pasa y no se explica.
+      (b) **El filtro como el del almacén queda sin hacer.** Es una feature de verdad, con su
+      propio diseño, y no la meto de paso en un commit de dos avisos: se queda aquí con
+      su número, sin fecha.
 - [x] **B12 · El yunque de fusión quedó raro.** **No era estética: era un número escrito en
       un sitio que no lo era.** La rejilla del yunque tenía `grid-template-columns: repeat(3,
       1fr)` en el CSS desde los tiempos de la receta de tres, y cuando la receta pasó a dos
