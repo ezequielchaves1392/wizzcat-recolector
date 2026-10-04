@@ -286,7 +286,86 @@ const fakeGame: any = {
     }
     return null;
   },
+  /**
+   * Las filas aditivas del stat, con la misma cuenta que el motor: base del item, y
+   * una fila por cada multiplicador que mueva el suelo. Sin el grupo de la partida,
+   * porque el número grande de al lado es el del objeto.
+   *
+   * Sin esto el hover del almacén no sale en el preview —la cuarta vez que el preview se
+   * queda corto por un método que el producto tiene—. La cuenta se hace aquí porque en un
+   * mock no hay motor al que preguntarle, pero **la forma es la misma**: sin la fila del
+   * potencial y la del nivel, el hover del preview enseñaría una base pelada.
+   */
+  getStatFilas: (id: string) => {
+    const w: any = MOCK.warehouse.find((x: any) => x.id === id);
+    const vacio = { base: 0, total: 0, filas: [] as any[] };
+    if (!w) return vacio;
+    const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
+    const pot = Math.max(1, Math.min(5, Math.round(Number(w.potential) || 3)));
+    const multPot = 1 + 0.2 * pot;
+    const esRecolector = w.type === 'collector';
+    const base = esRecolector
+      ? (Number(w.damage) || 0) / multPot
+      : (Number(w.power) || 0);
+    const filas: any[] = [];
+    let acum = base;
+    let mostrado = Math.floor(acum);
+    const anota = (nombre: string, detalle: string, mult: number) => {
+      if (Math.abs(mult - 1) <= 0.0001) return;
+      acum *= mult;
+      const ahora = Math.floor(acum);
+      if (ahora === mostrado) return;
+      filas.push({ nombre, detalle, suma: ahora - mostrado });
+      mostrado = ahora;
+    };
+    anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más`, multPot);
+    if (nivel > 0) anota(`Nivel ${nivel}`, esRecolector ? 'del recolector' : 'del compañero', multiplicadorDeNivel(nivel));
+    return { base: Math.floor(base), total: Math.floor(acum), filas };
+  },
   getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pending: 8, resets: MOCK.resets, bonus: MOCK.bonus }),
+  // -------------------------------------------------------------------------
+  //  LA VENTA EN LOTE, Y POR QUÉ FALTA ESTO EN EL MOCK.
+  //
+  //  Sin estos dos métodos, `multiSelBar()` lanza al pintar y el almacén entero se queda
+  //  sin repintar: se ve el interruptor, se pulsa y no pasa absolutamente nada, sin
+  //  error en pantalla. Es la **tercera** vez que el preview se queda corto por un
+  //  método que el producto tiene —la primera fue el recolector equipado, la segunda el
+  //  stat principal— y las tres se$[...]  same: el banco visual aprueba una pantalla que
+  //  el producto no puede pintar.
+  //
+  //  La regla que se cumple aquí es la misma que en el juego: el plan y la venta leen la
+  //  MISMA cuenta, así que el botón no puede anunciar una cifra y el cobro otra.
+  // -------------------------------------------------------------------------
+  planSellMany: (ids: string[]) => {
+    const vendibles: any[] = [];
+    const bloqueados: any[] = [];
+    const quedan = new Map<string, number>();
+    for (const w of MOCK.warehouse) quedan.set(w.type, (quedan.get(w.type) ?? 0) + 1);
+    for (const id of (ids || [])) {
+      const w: any = MOCK.warehouse.find((x: any) => x.id === id);
+      if (!w) { bloqueados.push({ id, motivo: 'ya no está en el almacén' }); continue; }
+      const equipado = (w.type === 'collector' && MOCK.equippedCollectorId === w.id) ||
+        (w.type === 'companion' && (MOCK.activeCompanions || []).includes(w.id));
+      if (equipado) { bloqueados.push({ id, motivo: 'está equipado' }); continue; }
+      if (w.type === 'collector' || w.type === 'companion') {
+        const queda = (quedan.get(w.type) ?? 0) - 1;
+        quedan.set(w.type, queda);
+        if (queda <= 0) { bloqueados.push({ id, motivo: 'es el último de su tipo' }); continue; }
+      }
+      const units = Math.max(1, Math.floor(Number(w.stackCount) || 1));
+      vendibles.push({ id, units, total: units * 100 });
+    }
+    return { vendibles, bloqueados, total: vendibles.reduce((a, v) => a + v.total, 0) };
+  },
+  sellMany: (ids: string[]) => {
+    const plan = fakeGame.planSellMany(ids);
+    if (plan.vendibles.length === 0) {
+      return { ok: false, msg: 'No se puede vender nada.', gained: 0, sold: 0, bloqueados: plan.bloqueados };
+    }
+    MOCK.warehouse = MOCK.warehouse.filter((w: any) => !plan.vendibles.some((v: any) => v.id === w.id));
+    MOCK.nanites += plan.total;
+    return { ok: true, gained: plan.total, sold: plan.vendibles.length, bloqueados: plan.bloqueados };
+  },
   getForgeInfo: () => ({ craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),
   buyStoreItem: () => true,
   buyNode: () => ({ success: true, msg: 'Nodo comprado' }),

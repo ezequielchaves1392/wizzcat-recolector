@@ -244,7 +244,7 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
       { label: 'Piedras', value: String(stoneCount) }
     ])}
 
-    <div class="flex gap-1.5 mb-3 p-1 rounded-xl bg-[var(--bg-panel)] border border-[var(--border-color)]">
+    <div class="flex gap-1.5 mb-3 p-1 rounded-xl bg-[var(--bg-app)] border border-[var(--border-color)]">
       ${(['collector', 'companion'] as const).map(t2 => `
         <button class="flex-1 h-10 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition
                        ${ui.tipo === t2 ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
