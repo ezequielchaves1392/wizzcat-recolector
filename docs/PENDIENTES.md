@@ -420,7 +420,23 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
 
 ### Lote 8 · APARIENCIA
 
-- [ ] **F53 · Banners, marcos y títulos en Perfil, Menú y Ranking.**
+- [x] **F53 · Banners, marcos y títulos en Perfil, Menú y Ranking.** Hecho, y lo que
+      faltaba no era lo que decía el título. El marco y el título **ya llegaban** a la
+      cabecera y al ranking, y el Perfil ya tenía la tarjeta grande; lo que faltaba era
+      **que el banner se viera**, y en el ranking no se veía: el avatar lo llevaba como
+      halo y el halo ocupa 32 px de una fila de 1056. Ahora el banner es **fondo de la tira
+      entera**, al 26 %, en una capa `absolute` que no ocupa columna.
+      **Y DE PASO, TRES COSAS QUE ESTABAN ROTAS Y NO ERAN DE ESTA:**
+      - **Dos banners del catálogo no pintaban nada en ningún sitio.** Escribían
+        `backgroundImage` y `backgroundSize`, que no son propiedades CSS, y en un `style` en
+        línea una propiedad que no existe **se descarta en silencio**.
+      - **Los nueve marcos eran el mismo círculo de un píxel**, porque `glassBase` traía el
+        radio y lo heredaban todos. Ahora la base no lo lleva y **cada marco declara su
+        forma**: ocho formas distintas, y ninguna pareja copiada.
+      - **La vista previa del catálogo enseñaba la mitad de un marco.** Era un círculo
+        suelto, y los marcos con relleno `padding-box/border-box` salían como discos
+        sólidos. Ahora la carta pinta el componente real: lo que eliges es lo que te pones.
+      `identidadCheck` (+18).
 - [x] **F54 · Los marcos no desbordan el avatar.** Hecho, y era **el banner, no el
       marco**. El banner se escala a propósito para leerse como halo (`scale(1.32)` si
       es placa, `1.7` si es circular) y el avatar **no recortaba**: medido en la

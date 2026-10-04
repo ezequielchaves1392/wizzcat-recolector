@@ -20,10 +20,13 @@
 // ==========================================================================
 
 import { check, resumen, boot, baseSave, reload, s, collector } from './kit';
-import { miniIdentity } from '../src/ui/identity';
-import { identityCard } from '../src/ui/profilePage';
-import { COSMETICS, cosmeticsAlcanzables, viasSinResolver } from '../src/data/cosmetics';
-import { BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT } from '../src/services/rankingService';
+import { miniIdentity, rellenoDeBanner } from '../src/ui/identity';
+import { identityCard, unlockHint } from '../src/ui/profilePage';
+import { SECRET_ACHIEVEMENTS } from '../src/data/achievements';
+import { COSMETICS, cosmeticsAlcanzables, viasSinResolver, cosmeticStyle } from '../src/data/cosmetics';
+import {
+  BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT, FILAS_DE_EJEMPLO
+} from '../src/services/rankingService';
 import { coresGastadosEnArbol } from '../src/data/tree';
 
 const RANK_DOC = 'rankings/test';
@@ -409,6 +412,177 @@ async function main() {
       (s(g2).cosmetics.unlocked as string[]).length === antes,
       `antes=${antes} despues=${(s(g2).cosmetics.unlocked as string[]).length}`);
   }
+
+{
+  // ---------------------------------------------------------------------------
+  //  F53 · EL BANNER DE FONDO DE LA FILA DEL RANKING, Y DOS COSAS QUE SALIERON
+  //
+  //  El banner ya llegaba al avatar como halo, pero en el ranking una fila es una tira
+  //  larga y el halo solo ocupaba 32 px de ella. Puesto detrás de la tira entera, el
+  //  banner es lo que se ve al llegar a la pantalla.
+  //
+  //  Y al hacerlo aparecieron dos cosas que ninguna prueba miraba:
+  //
+  //  · **`border-radius: inherit` tiene que ir AL FINAL.** El estilo del catálogo va en
+  //    el atributo `style`, y ahí manda la última declaración de la misma propiedad, no
+  //    el `!important` de una hoja. Un banner circular de fondo en una tira de 1056 px no
+  //    es un banner: es un disco recortado a una franja.
+  //  · **`backgroundImage` no es CSS.** Es `background-image`. En un `style` en línea una
+  //    propiedad que no existe **se descarta en silencio**, así que el banner "Rejilla" y
+  //    el "Tormenta de Datos" salían **sin fondo ninguno** en todos los sitios del juego,
+  //    antes de esto. Dos banners del catálogo, invisibles, sin que nada lo delatara.
+  // ---------------------------------------------------------------------------
+  const bannerRejilla = COSMETICS.find(c => c.id === 'banner_grid')!;
+  const bannerCircular = COSMETICS.find(c => c.id === 'banner_crown')!;
+
+  const estilo = cosmeticStyle(bannerRejilla);
+  check('F53: el estilo del catálogo sale en kebab-case, que es lo que CSS entiende',
+    /background-image:/.test(estilo) && !/backgroundImage:/.test(estilo),
+    `estilo=${estilo.slice(0, 60)}`);
+  check('F53: y con background-size, que antes tampoco se aplicaba',
+    /background-size:\s*18px\s+18px/.test(estilo),
+    `estilo=${estilo.slice(-40)}`);
+
+  // **Y QUE LAS DOS BANDERAS QUE SALÍAN VACÍAS AHORA TIENEN FONDO.** Es la prueba que
+  //  habría pillado el bug: no "el estilo tiene una propiedad", sino "este cosmético
+  //  concreto pinta algo".
+  check('F53: y el banner que se perdía ahora tiene fondo de verdad',
+    /background-image:\s*linear-gradient/.test(estilo.replace(/\s/g, '')),
+    'el de la rejilla vuelve a pintar');
+  const circular = cosmeticStyle(bannerCircular);
+  check('F53: el circular conserva su relleno entero',
+    /conic-gradient/.test(circular), `circular=${circular.slice(0, 50)}`);
+
+  // **LAS DOS MARCAS DEL CATÁLOGO NO SON CSS.** `glow` y `gradient` los lee
+  // `titleStyleFor()` por su nombre; si seorzaran en el `style` saldrían como
+  // propiedades inventadas, que es inocuo pero mentira: el mapa dice qué es CSS y qué no.
+  const conMarcas = cosmeticStyle({
+    id: 'x', type: 'title', name: 'x', description: 'x', rarity: 'Común',
+    unlock: { kind: 'default', value: 0 },
+    style: { color: '#fff', glow: true, gradient: true, borderColor: '#0f0' } as any
+  });
+  check('F53: glow y gradient no se cuelan como si fueran CSS',
+    !/glow:/.test(conMarcas) && !/gradient:/.test(conMarcas),
+    `estilo=${conMarcas}`);
+  check('F53: y una clave nueva en camelCase sale convertida sin tocar nada más',
+    /border-color:#0f0/.test(conMarcas), `estilo=${conMarcas}`);
+
+  // **Y LA FORMA LA MANDA LA FILA, NO EL CATÁLOGO.** Es lo que evita el disco recortado.
+  const relleno = rellenoDeBanner(bannerCircular);
+  const iRadio = relleno.lastIndexOf('border-radius');
+  check('F53: el relleno del fondo deja la forma para el sitio que lo pinta',
+    iRadio !== -1 && relleno.slice(iRadio).startsWith('border-radius:inherit'),
+    `final=${relleno.slice(-34)}`);
+  check('F53: y lo pone al final, que en un style en línea es lo que gana',
+    relleno.trim().endsWith('border-radius:inherit'),
+    `relleno=${relleno.slice(-30)}`);
+
+  // **Y QUE LAS FILAS DE EJEMPLO LLEVEN COSMÉTICOS.** El respaldo del ranking existe para
+  // que se vea algo cuando no hay nadie registrado, y se veía sin marco, sin banner y
+  // sin título: cuatro rectángulos idénticos. Con eso, esta feature no se podía mirar en
+  // el preview, que es la única superficie donde se comprueba el render.
+  check('F53: las filas de ejemplo llevan título, marco y banner',
+    FILAS_DE_EJEMPLO.length > 0
+    && FILAS_DE_EJEMPLO.every((f: any) => !!(f.title && f.frame && f.banner)),
+    'el respaldo del ranking va sin cosméticos');
+  check('F53: y con ids que existen en el catálogo, que si no la fila sale sin fondo',
+    FILAS_DE_EJEMPLO.every((f: any) =>
+      COSMETICS.some(c => c.id === f.title)
+      && COSMETICS.some(c => c.id === f.frame)
+      && COSMETICS.some(c => c.id === f.banner)),
+    FILAS_DE_EJEMPLO
+      .filter((f: any) => !COSMETICS.some(c => c.id === f.banner))
+      .map((f: any) => String(f.banner)).join(',') || 'todos existen');
+}
+
+
+{
+  // ---------------------------------------------------------------------------
+  //  F53 (segunda parte) · LOS MARCOS DEL CATÁLOGO Y LA PISTA QUE LOS DESPBLOQUEA
+  //
+  //  **LOS NUEVE MARCOS ERAN EL MISMO CÍRCULO DE UN PÍXEL.** `glassBase` traía
+  //  `borderRadius: '9999px'` y lo heredaban todos: lo único que cambiaba entre marco y
+  //  marco era el color. Los nombres prometían cosas que el estilo no cumplía —"Óxido:
+  //  borde corroído", "Cascada: borde con degradado animado"— y un catálogo que miente es
+  //  peor que un marco feo.
+  //
+  //  Lo que se comprueba es la **forma**: radio, grosor y despiece. Es la regla que se
+  //  rompió, y una comprobación de "el estilo tiene un border-radius" habría pasado
+  //  con los nueve iguales.
+  // ---------------------------------------------------------------------------
+  const marcos = COSMETICS.filter(c => c.type === 'frame' && c.id !== 'frame_none');
+  // **LA HUELLA ES EL ESTILO ENTERO, Y POR QUÉ.** Dos marcos con el mismo estilo se
+  // renderizan igual: no hay forma de distinguirlos. Es la propiedad que se rompió, y
+  // compararla entera la hace imposible de colar.
+  const huella = (c: any) => JSON.stringify(Object.entries((c.style || {})).sort());
+  const repetidas = marcos.map(m => huella(m)).filter((f, i, t) => t.indexOf(f) !== i);
+  check('F53: ningun marco es una copia de otro, que es como se veían iguales',
+    repetidas.length === 0,
+    repetidas.length ? `${repetidas.length} estilos repetidos` : `${marcos.length} marcos distintos`);
+
+  // **Y QUE NO SE DISTINGAN SOLO POR EL COLOR.** Con la forma sola, nueve círculos de un
+  // píxel de colores distintos pasan la comprobación anterior y siguen siendo el mismo
+  // marco. Esta es la que se habría pasado entonces.
+  const forma = (c: any) => {
+    const s = c.style || {};
+    // El radio sale del catálogo; si no lo trae, `frameStyle()` le pone un círculo, que es
+    // el mismo valor para todos y por eso **no** cuenta como diferencia.
+    return [s.borderRadius ?? 'circulo', s.borderWidth ?? '1px', s.borderStyle ?? 'solid'].join('|');
+  };
+  check('F53: y hay de verdad varias formas, no solo varios colores',
+    new Set(marcos.map(m => forma(m))).size >= 4,
+    'formas=' + [...new Set(marcos.map(m => forma(m)))].join(' / '));
+  check('F53: y la base del catálogo NO declara un radio, que era lo que los igualaba',
+    !marcos.some((m: any) => (m.style || {}).borderRadius === undefined
+      && Object.keys(m.style || {}).length > 0
+      && !Object.values(m.style || {}).some((v: any) => String(v).includes('borderRadius'))),
+    'la base vuelve a declarar radio: ' + marcos.length);
+
+  // **Y QUE NINGUN MARCO HEREDE EL RADIO DE LA BASE.** La base ya no lleva radio: es lo
+  // que hacía que todos fueran círculos. Si alguien lo vuelve a añadir, todos los marcos
+  // que no declaren el suyo vuelven a ser iguales.
+  const conRadioEnBase = marcos.filter((m: any) => {
+    const r = (m.style || {}).borderRadius;
+    return r === undefined && forma(m) === 'circulo|1px|solid';
+  });
+  check('F53: los marcos circulares son los que lo dicen, no los que lo heredan',
+    conRadioEnBase.length === 0,
+    'heredan el radio: ' + conRadioEnBase.map((m: any) => m.id).join(','));
+
+  // ---------------------------------------------------------------------------
+  //  LA PISTA DE LOS LOGROS, CON SU NOMBRE.
+  //
+  //  Decía "Se desbloquea con un logro" para los cinco cosméticos que vienen de un
+  //  logro, y eso no es una pista: es la ausencia de pista. El perfil **sí** enseña la
+  //  lista de logros con su progreso, pero sin el nombre no hay forma de cruzar uno con el
+  //  otro.
+  // ---------------------------------------------------------------------------
+  const deLogro = COSMETICS.filter(c => c.unlock.kind === 'achievement');
+  const sinNombre = deLogro.filter(c => !/«.+»/.test(unlockHint(c)));
+  check('F53: los cosméticos de logro dicen CUAL logro es',
+    deLogro.length > 0 && sinNombre.length === 0,
+    sinNombre.length ? `sin nombre: ${sinNombre.map(c => c.id).join(',')}` : `${deLogro.length} nombrados`);
+  check('F53: y el nombre es el del logro, no el id del catálogo',
+    unlockHint(deLogro.find(c => c.id === 'frame_ember')!).includes('Maestro de Forja'),
+    unlockHint(deLogro.find(c => c.id === 'frame_ember')!));
+
+  // **Y UN LOGRO SECRETO NO SE NUNCA DICE, QUE ES LO ÚNICO QUE LO HACE SECRETO.**
+  // El filtro está en `nombreDeLogro()` y no en quien llama, para que ningún camino lo
+  // salte: mañana se añade un cosmético desde un secreto y esto sigue sin hablar.
+  const secretos: any[] = [];
+  for (const c of COSMETICS as any[]) {
+    const v = c.unlock.value;
+    if (c.unlock.kind === 'achievement' && SECRET_ACHIEVEMENTS.includes(v)) secretos.push(c);
+  }
+  check('F53: y si el logro es secreto, la pista no lo nombra',
+    secretos.length === 0 || secretos.every(c => !/«.+»/.test(unlockHint(c))),
+    secretos.map(c => c.id).join(',') || 'ningún cosmético viene de un secreto todavía');
+  check('F53: y un id que no existe no inventa un nombre',
+    unlockHint({ ...deLogro[0], id: 'x', unlock: { kind: 'achievement', value: 'no_existe' } } as any)
+      === 'Se desbloquea con un logro',
+    unlockHint({ ...deLogro[0], id: 'x', unlock: { kind: 'achievement', value: 'no_existe' } } as any));
+}
+
 
   resumen('identidad: lo equipado llega al ranking');
 }

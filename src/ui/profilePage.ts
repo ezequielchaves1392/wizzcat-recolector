@@ -17,6 +17,7 @@ import { pageShell, mountInto, wireNav, statStrip, sectionHead } from './pageShe
 import { COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosmetics';
 import { titleStyleFor, avatarStack } from './identity';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
+import { ACHIEVEMENTS } from '../achievements';
 import { estrellasDe } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -25,13 +26,32 @@ import { rarityClass, raritySlug, CRATE_META } from '../components/crateLoot';
 import type { CrateType } from '../data/store';
 import type { Cosmetic } from '../types/domain';
 
-/** Cómo se consigue un cosmético, en una frase. */
-function unlockHint(cos: Cosmetic): string {
+/**
+ * Cómo se consigue un cosmético, en una frase.
+ *
+ * **EL LOGRO, CON SU NOMBRE, Y POR QUÉ ANTES NO LO TENÍA.** Decía "Se desbloquea con un
+ * logro" para los cinco cosméticos que vienen de un logro, y eso no es una pista: es la
+ * ausencia de pista. El jugador lee la carta, ve que no la tiene, ve que hay un logro
+ * detrás, y no tiene ni idea de cuál —porque el perfil **sí** enseña la lista de logros
+ * con su progreso, pero sin el nombre del logro no puede cruzarlos. Poner el nombre es
+ * leer `ACHIEVEMENTS` por el id que el catálogo ya guardaba.
+ *
+ * **Y LOS SECRETOS SE QUEDAN OCULTOS, QUE ES LO ÚNICO QUE LOS HACE SECRETOS.** La
+ * salida `secret` sigue diciendo su pista o "Condición oculta", y un logro que esté en
+ * `SECRET_ACHIEVEMENTS` nunca se nombra aunque el catálogo lo traiga escrito: si el
+ * cosmético se desbloquea con un secreto, decir el nombre del secreto lo cuenta.
+ */
+export function unlockHint(cos: Cosmetic): string {
   const u = cos.unlock;
   switch (u.kind) {
     case 'default': return 'Disponible desde el principio';
     case 'cores': return `Compra con ${u.value} núcleos en la Ascensión`;
-    case 'achievement': return 'Se desbloquea con un logro';
+    case 'achievement': {
+      const nombre = nombreDeLogro(u.value as string);
+      return nombre
+        ? `Se desbloquea con «${nombre}»`
+        : 'Se desbloquea con un logro';
+    }
     case 'ranking': return u.value === 1 ? 'Solo para quien ocupe el 1er puesto'
       : u.value === 3 ? 'Solo para el Top 3 sostenido 7 días'
       : `Solo para el Top ${u.value} sostenido 7 días`;
@@ -41,6 +61,19 @@ function unlockHint(cos: Cosmetic): string {
     case 'secret': return u.hint ?? 'Condición oculta';
     default: return 'No disponible';
   }
+}
+
+/**
+ * El nombre de un logro por su id, o `null` si no existe o **si es secreto**.
+ *
+ * El filtro de secretos está aquí y no en quien llama, porque es la **única** forma de que
+ * ningún camino lo salte: mañana se añade un cosmético desde un secreto y esta función
+ * sigue sin decir el nombre. Un `SECRET_ACHIEVEMENTS.includes(...)` en la carta sería la
+ * cuarta copia de la lista de secretos.
+ */
+function nombreDeLogro(id: string): string | null {
+  if (SECRET_ACHIEVEMENTS.includes(id as any)) return null;
+  return ACHIEVEMENTS.find((a: any) => a.id === id)?.title ?? null;
 }
 
 /** Tarjeta de identidad: avatar con marco + banner + título. */
@@ -111,6 +144,12 @@ export function renderProfilePage(
 
   const unlockedCosmetics = state.cosmetics.unlocked as string[];
 
+  // **LAS INICIALES DE LA CARTA DE COSMÉTICOS, Y POR QUÉ SON LAS DEL JUGADOR.** La
+  // miniatura de cada marco lleva un avatar detrás porque un marco es un borde alrededor de
+  // algo: sin avatar, los marcos con relleno `padding-box` salen como discos sólidos y no
+  // se distinguen. Con el avatar del propio jugador se ve **el marco como se va a ver**.
+  const iniciales = (displayName || '?').trim().slice(0, 2).toUpperCase();
+
   // F15 · Cuántos de cada tipo, no un total mezclado. El encabezado decía
   // "12/34" sin distinguir título de marco, y con los secretos dentro de la
   // misma lista no se sabía qué era cada cosa. Sale de `COSMETICS_BY_TYPE`,
@@ -156,8 +195,27 @@ export function renderProfilePage(
 
         <div class="flex items-center gap-1.5 min-h-[28px]">
           ${tab === 'frame' ? `
-            <span class="w-7 h-7 rounded-full flex-shrink-0" style="${cosmeticStyle(cos)}"></span>
-          ` : tab === 'banner' ? `
+            <!--
+              EL MARCO SE ENSEÑA CON UN AVATAR DE VERDAD, NO CON UN CÍRCULO SUELTO.
+
+              Antes era un span redondo con el estilo del cosmético, y eso es **la mitad
+              de un marco**: un marco es un borde *alrededor de algo*, y un borde alrededor
+              de la nada solo enseña el trazo. Peor aún, los marcos con relleno
+              padding-box/border-box —Cascada y Cuántico— salían como **discos oscuros
+              sólidos**, porque su relleno del padding-box ocupa todo el interior y no hay
+              avatar que lo tape. Dos marcos que en el juego se ven opuestos se veían
+              iguales en la carta.
+
+              Con avatarStack() la carta pinta el componente real: es lo mismo que se
+              vera en la cabecera y en el ranking, así que **lo que eliges aquí es lo que
+              te vas a poner**. Y salen todos distintos sin tocar el catálogo.
+            -->
+            <span class="flex-shrink-0" aria-hidden="true">
+              ${avatarStack(
+                iniciales, { frame: cos.id },
+                'w-9 h-9', 'text-[10px]'
+              )}
+            </span>` : tab === 'banner' ? `
             <span class="w-9 h-6 rounded-md flex-shrink-0" style="${cosmeticStyle(cos)}"></span>
           ` : `
             <span class="title-display text-[9px] truncate flex-1"

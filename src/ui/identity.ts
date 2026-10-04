@@ -134,6 +134,31 @@ function frameStyle(frame: Cosmetic): string {
 }
 
 /**
+ * El relleno de un banner para ponerlo **de fondo de algo que no es el avatar**.
+ *
+ * ## POR QUÉ ES UNA FUNCIÓN Y NO EL ESTILO DEL CATÁLOGO TAL CUAL
+ *
+ * `cosmeticStyle()` trae **geometría y relleno**: el radio es parte de la identidad del
+ * cosmético. En el avatar esa geometría es lo que hace que un marco tenga esquinas o sea
+ * un anillo. De fondo en una fila del ranking, la geometría correcta es **la de la fila**.
+ *
+ * `border-radius: inherit` va **al final a propósito** y no es un descuido: el estilo del
+ * catálogo va en el atributo `style`, y en un `style` en línea manda **la última
+ * declaración de la misma propiedad**, no el `!important` de una hoja. Ponerlo detrás no
+ * la reemplazaría.
+ *
+ * Y por qué importa: un banner circular (`border-radius: 9999px`) de fondo en una fila de
+ * 700×80 no es un banner, es un disco recortado a una franja. La forma la pone la fila.
+ *
+ * La opacidad y la posición **no** vienen aquí: son del sitio que lo pinta, porque el
+ * avatar y la fila los necesitan distintos. Lo único que sale del catálogo es lo único que
+ * es del cosmético: el relleno.
+ */
+export function rellenoDeBanner(banner: Cosmetic): string {
+  return `${cosmeticStyle(banner)};border-radius:inherit`;
+}
+
+/**
  * Avatar de 32 px con marco y halo del banner, nombre y título.
  *
  * El título por defecto ("Sin título") se enseña o no según `hideDefaultTitle`:

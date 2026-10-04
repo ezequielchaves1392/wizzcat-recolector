@@ -464,6 +464,31 @@
   border-radius: 0.75rem;
   border: 1px solid var(--border-color);
   background: color-mix(in srgb, var(--text-main) 3%, transparent);
+  /* F53 · El banner de fondo necesita las dos cosas que un `overflow: visible` no da:
+     `relative` para que la capa se mida contra la fila y no contra la pantalla, y
+     `hidden` para que el relleno del catálogo no salga por las esquinas redondeadas. */
+  position: relative;
+  overflow: hidden;
+}
+
+/* El banner de la fila. La opacidad es la del cosmético en el avatar (0,8) partida por
+   cuatro y algo: en el avatar el halo solo ocupa 32 px y puede ir fuerte; en una tira de
+   700 px, al 80 % no se leen ni los números de la derecha. 0,26 es lo más que aguanta
+   el texto de la fila sin apagarlo. */
+.rank-banner {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.26;
+  pointer-events: none;
+}
+
+/* Y el contenido por delante, explícitamente. Sin esto no basta con lo anterior: un
+   elemento posicionado pinta ENCIMA de los que no lo están, así que la capa —que es
+   `absolute`— taparía el texto aunque su `z-index` fuese 0. */
+.rank-row > *:not(.rank-banner) {
+  position: relative;
+  z-index: 1;
 }
 
 .rank-row.is-me {

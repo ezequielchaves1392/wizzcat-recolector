@@ -30,7 +30,8 @@ import {
   type LeaderboardEntry, type BoardKind
 } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
-import { miniIdentity } from '../ui/identity';
+import { miniIdentity, rellenoDeBanner } from '../ui/identity';
+import { COSMETICS_BY_ID } from '../data/cosmetics';
 
 /**
  * Pestaña activa.
@@ -151,8 +152,28 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
   const valor = boardValue(r, kind);
   const unidades = unidadesDe(kind);
 
+  // **EL BANNER DE FONDO DE LA FILA ENTERA, Y POR QUÉ ES UNA CAPA SUELTA.**
+  //
+  // El avatar ya lleva el banner como halo, y con eso el cosmético se ve: pero en el
+  // ranking una fila es una tira larga y el halo solo ocupa 32 px de ella. Puesto detrás
+  // de toda la tira, el banner es lo que se ve al llegar a la pantalla: es el color del
+  // jugador en la tabla, y sin él las filas son todas el mismo rectángulo.
+  //
+  // **Es una capa aparte y no un `background` en la fila** por dos razones. Una: la fila
+  // ya tiene su fondo —y `is-me` tiene el suyo, acento al 12 %— y escribir el banner
+  // encima lo borraría. Dos: el contenido de la fila está en una rejilla de cuatro
+  // columnas, y meter el fondo en el mismo elemento obliga a envolver todo en un div para
+  // poder poner el relleno debajo, lo que parte la rejilla en dos. Con la capa suelta, el
+  // fondo **no ocupa columna**: es `position: absolute` y la rejilla ni lo ve.
+  //
+  // Y el relleno sale de `rellenoDeBanner()`, que deja la forma para la fila. Un banner
+  // circular de fondo en una tira de 700×80 no es un banner: es un disco recortado.
+  const banner = bannerId ? COSMETICS_BY_ID[bannerId] : undefined;
+
   return `
     <div class="rank-row ${isMe ? 'is-me' : ''}">
+      ${banner && banner.id !== 'banner_none' ? `
+        <span class="rank-banner" aria-hidden="true" style="${rellenoDeBanner(banner)}"></span>` : ''}
       <div class="rank-pos" data-tier="${i + 1 <= 3 ? i + 1 : ''}">${i + 1}</div>
 
       ${miniIdentity(r.username, { title: r.title, frame: frameId, banner: bannerId })}

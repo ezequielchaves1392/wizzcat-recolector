@@ -229,14 +229,28 @@ export async function savePlayerScore(
  * hay de sobra para las cuatro tablas: los últimos puestos de cada criterio
  * están dentro, y un jugador con cero en un criterio no aparecería igual.
  */
-export async function getTopRankings(limitRows = 40): Promise<LeaderboardEntry[]> {
-  const fallbackData: LeaderboardEntry[] = [
-    { uid: 'mock_1', username: 'QuantumApex', score: 1450200, nanites: 1450200, totalClicks: 8420, achievements: 12, secretAchievements: 1, forgedCount: 8, cores: 14, updatedAt: Date.now() },
-    { uid: 'mock_2', username: 'NexusGrid', score: 12100, nanites: 12100, totalClicks: 312, achievements: 4, secretAchievements: 0, forgedCount: 0, cores: 0, updatedAt: Date.now() },
-    { uid: 'mock_3', username: 'AgujaCero', score: 41500, nanites: 41500, totalClicks: 2105, achievements: 3, secretAchievements: 0, forgedCount: 1, cores: 5, updatedAt: Date.now() },
-    { uid: 'mock_4', username: 'ByteSmith', score: 9800, nanites: 9800, totalClicks: 640, achievements: 7, secretAchievements: 1, forgedCount: 3, cores: 2, updatedAt: Date.now() }
-  ];
+/**
+ * LAS FILAS DE EJEMPLO, Y POR QUÉ AHORA LLEVAN COSMÉTICOS.
+ *
+ * El respaldo existe para que el ranking se vea cuando todavía no hay nadie registrado,
+ * y se veía **sin marco, sin banner y sin título**: cuatro rectángulos idénticos. Con eso,
+ * F53 —el banner de fondo de la fila, el marco del avatar y el título— **no se podía
+ * mirar en el preview**, que es la única superficie donde se comprueba el render.
+ *
+ * Los ids son **del catálogo de verdad**, no inventados: uno que desapareciera lo salta
+ * `fila()` y la fila sale sin fondo, que es lo que tiene que pasar con un cosmético que ya
+ * no existe. Y por eso se exportan y hay una prueba que mira que sigan existiendo: es
+ * justo el fallo que no se ve, un id que nadie encuentra y una fila a medio pintar.
+ */
+export const FILAS_DE_EJEMPLO: LeaderboardEntry[] = [
+  { uid: 'mock_1', username: 'QuantumApex', score: 1450200, nanites: 1450200, totalClicks: 8420, achievements: 12, secretAchievements: 1, forgedCount: 8, cores: 14, updatedAt: Date.now(), title: 'title_champion', frame: 'frame_gold', banner: 'banner_crown' },
+  { uid: 'mock_2', username: 'NexusGrid', score: 12100, nanites: 12100, totalClicks: 312, achievements: 4, secretAchievements: 0, forgedCount: 0, cores: 0, updatedAt: Date.now(), title: 'title_recruited', frame: 'frame_steel', banner: 'banner_grid' },
+  { uid: 'mock_3', username: 'AgujaCero', score: 41500, nanites: 41500, totalClicks: 2105, achievements: 3, secretAchievements: 0, forgedCount: 1, cores: 5, updatedAt: Date.now(), title: 'title_smith', frame: 'frame_ember', banner: 'banner_sunset' },
+  { uid: 'mock_4', username: 'ByteSmith', score: 9800, nanites: 9800, totalClicks: 640, achievements: 7, secretAchievements: 1, forgedCount: 3, cores: 2, updatedAt: Date.now(), title: 'title_ghost', frame: 'frame_matrix', banner: 'banner_datastorm' }
+];
 
+export async function getTopRankings(limitRows = 40): Promise<LeaderboardEntry[]> {
+  const fallbackData = FILAS_DE_EJEMPLO;
   try {
     const fetchPromise = async () => {
       const q = query(collection(db, 'rankings'), orderBy('score', 'desc'), limit(limitRows));

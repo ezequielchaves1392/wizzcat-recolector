@@ -26,7 +26,24 @@
 // (line endings note)
 import type { Cosmetic } from '../types/domain';
 
-const glassBase = { border: '1px solid', borderRadius: '9999px' };
+/**
+ * La base de los marcos: **un borde y nada más.**
+ *
+ * Antes eran dos cosas —`border: '1px solid'` **y** `borderRadius: '9999px'`— y el radio
+ * era la razón de que **los nueve marcos se vieran iguales**: todos heredarían el mismo
+ * círculo de un píxel, y lo único que cambiaría sería el color. Es lo que dice la captura
+ * del Perfil: nueve círculos iguales con un tinte distinto.
+ *
+ * ## POR QUÉ EL RADIO NO ESTÁ AQUÍ
+ *
+ * Porque **cada marco tiene que declarar su forma**, y un radio en la base es una
+ * afirmación falsa sobre los ocho que lo llevan. Aquí solo está el grosor y el estilo, que
+ * sí comparten todos; el radio, el ancho y el despiece son de cada uno.
+ *
+ * Y si un marco no declara radio, `frameStyle()` le pone un círculo: los marcos de una
+ * partida vieja, que no tienen ninguno, siguen viéndose como se veían.
+ */
+const glassBase = { border: '1px solid' };
 
 /**
  * Cajas que pueden dar cosméticos. Son los mismos ids que `CrateType`, pero se
@@ -82,24 +99,37 @@ export const COSMETICS: Cosmetic[] = [
   // ---------------------------------------------------------------- MARCOS
   { id: 'frame_none', type: 'frame', name: 'Sin marco', description: 'Perfil limpio.', rarity: 'Común',
     unlock: { kind: 'default', value: 0 }, style: {} },
+  // Acero: sobrio y cuadrado, como dice su descripción. Un píxel y esquinas suaves, que
+  // es lo que lo separa de los círculos de una vez y para siempre.
   { id: 'frame_steel', type: 'frame', name: 'Acero', description: 'Borde metálico sobrio.', rarity: 'Raro',
     unlock: { kind: 'achievement', value: 'first_click' },
-    style: { ...glassBase, borderColor: '#52525b' } },
+    style: { ...glassBase, borderRadius: '0.375rem', borderColor: '#52525b' } },
+
+  // Neón: círculo de dos píxeles con pulso. El primero que se ve de lejos.
   { id: 'frame_neon', type: 'frame', name: 'Neón', description: 'Borde con brillo pulsante.', rarity: 'Épico',
     unlock: { kind: 'cores', value: 40 },
-    style: { ...glassBase, borderColor: 'var(--accent)', boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 60%, transparent)', animation: 'framePulse 3s ease-in-out infinite' } },
+    style: { ...glassBase, borderRadius: '9999px', borderWidth: '2px', borderColor: 'var(--accent)', boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 60%, transparent)', animation: 'framePulse 3s ease-in-out infinite' } },
+
+  // Brasa: **doble aro**, que es lo que la distingue de Neón y Vacío sin mirar el color.
   { id: 'frame_ember', type: 'frame', name: 'Brasa', description: 'Borde naranja de fundición.', rarity: 'Épico',
     unlock: { kind: 'achievement', value: 'smith_25' },
-    style: { ...glassBase, borderColor: '#f97316', boxShadow: '0 0 20px #f9731666' } },
+    style: { ...glassBase, borderRadius: '9999px', borderWidth: '2px', borderColor: '#f97316', boxShadow: '0 0 20px #f9731666, inset 0 0 0 1px #fb923c66' } },
+
+  // Vacío: círculo **fino** con sombra interior, que se come la luz del avatar por dentro.
   { id: 'frame_void', type: 'frame', name: 'Vacío', description: 'Borde que absorbe la luz.', rarity: 'Legendario',
     unlock: { kind: 'cores', value: 250 },
-    style: { ...glassBase, borderColor: '#7c3aed', boxShadow: '0 0 24px #7c3aed80, inset 0 0 20px #00000080' } },
+    style: { ...glassBase, borderRadius: '9999px', borderWidth: '1px', borderColor: '#7c3aed', boxShadow: '0 0 24px #7c3aed80, inset 0 0 20px #00000080' } },
+  // Oro: el único de tres píxeles, y el único con brillo animado de tono.
   { id: 'frame_gold', type: 'frame', name: 'Oro Prohibido', description: 'Solo para el Top 1.',
     rarity: 'Divino', unlock: { kind: 'ranking', value: 1 },
-    style: { ...glassBase, borderColor: '#fde047', boxShadow: '0 0 26px #fde04790', animation: 'frameShimmer 4s linear infinite' } },
+    style: { ...glassBase, borderRadius: '9999px', borderWidth: '3px', borderColor: '#fde047', boxShadow: '0 0 26px #fde04790', animation: 'frameShimmer 4s linear infinite' } },
+  // Cascada: placa con esquinas marcadas y borde de degradado. El relleno va con la
+  // técnica `padding-box/border-box`, y **solo funciona si hay algo dentro**: el relleno
+  // del padding-box ocupa todo el interior. Por eso el catálogo lo enseña con un avatar
+  // detrás y no con un círculo suelto.
   { id: 'frame_matrix', type: 'frame', name: 'Cascada', description: 'Borde con degradado animado.',
     rarity: 'Legendario', unlock: { kind: 'ranking', value: 10 },
-    style: { ...glassBase, borderColor: 'transparent', background: 'linear-gradient(#09090b,#09090b) padding-box, linear-gradient(90deg,#22c55e,#06b6d4,#a855f7) border-box', borderWidth: '2px' } },
+    style: { ...glassBase, borderRadius: '0.75rem', borderColor: 'transparent', background: 'linear-gradient(#09090b,#09090b) padding-box, linear-gradient(90deg,#22c55e,#06b6d4,#a855f7) border-box', borderWidth: '2px' } },
 
   // ---------------------------------------------------------------- BANNERS
   { id: 'banner_none', type: 'banner', name: 'Sin fondo', description: 'Fondo transparente.', rarity: 'Común',
@@ -135,9 +165,11 @@ export const COSMETICS: Cosmetic[] = [
   { id: 'title_scraplord', type: 'title', name: 'Señor de Chatarra', description: 'Recicló más chatarra que nadie en la base.',
     rarity: 'Raro', unlock: { kind: 'crate', value: 1 },
     style: { color: '#a3a3a3', font: 'mono' } },
+  // Óxido: **cuadrado de esquinas cortadas y discontinuo**, del montón y sin pulir, que es
+  // lo que dice su nombre. El único marco con `dashed` y esquinas de verdad.
   { id: 'frame_oxy', type: 'frame', name: 'Óxido', description: 'Borde corroído, del montón y sin pulir.',
     rarity: 'Raro', unlock: { kind: 'crate', value: 1 },
-    style: { ...glassBase, borderColor: '#a16207', borderStyle: 'dashed' } },
+    style: { ...glassBase, borderRadius: '0.1875rem', borderWidth: '2px', borderStyle: 'dashed', borderColor: '#a16207' } },
 
   { id: 'title_burnout', type: 'title', name: 'Fundido', description: 'Se quedó sin refrigerante a mitad de una fusión.',
     rarity: 'Épico', unlock: { kind: 'crate', value: 3 },
@@ -153,9 +185,10 @@ export const COSMETICS: Cosmetic[] = [
     rarity: 'Épico', unlock: { kind: 'crate', value: 6 },
     style: { backgroundImage: 'repeating-linear-gradient(115deg,rgba(56,189,248,.28) 0 2px,transparent 2px 10px),linear-gradient(180deg,#082f49,#0c4a6e)' } },
 
+  // Cuántico: círculo de trazos cortos, como una señal que solo se ve cuando la miras.
   { id: 'frame_quantum', type: 'frame', name: 'Cuántico', description: 'Borde que solo está ahí cuando lo miras.',
     rarity: 'Mítico', unlock: { kind: 'crate', value: 10 },
-    style: { ...glassBase, borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, repeating-linear-gradient(90deg,#22d3ee 0 6px,transparent 6px 12px) border-box' } },
+    style: { ...glassBase, borderRadius: '9999px', borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, repeating-linear-gradient(90deg,#22d3ee 0 6px,transparent 6px 12px) border-box' } },
   { id: 'banner_aurora', type: 'banner', name: 'Aurora', description: 'El cielo de la Cyber Base visto desde el tejado.',
     rarity: 'Legendario', unlock: { kind: 'crate', value: 10 },
     style: { background: 'linear-gradient(120deg,#4c1d95,#0e7490 45%,#10b981)' } },
@@ -254,8 +287,32 @@ export function viasSinResolver(): { kind: string; count: number }[] {
   return [...cuenta].map(([kind, count]) => ({ kind, count }));
 }
 
-/** CSS inline a partir del mapa de estilos del cosmético. */
+/**
+ * CSS inline a partir del mapa de estilos del cosmético.
+ *
+ * ## LAS CLAVES EN CAMELCASE HAY QUE CONVERTLAS, Y POR QUÉ NO ERA VISIBLE
+ *
+ * `backgroundImage` y `backgroundSize` no son propiedades CSS: CSS escribe
+ * `background-image` y `background-size`. En un atributo `style` una propiedad que no
+ * existe **se descarta en silencio** —no es un error, no avisa, simplemente no pinta—,
+ * así que el banner "Rejilla" (el que usa `backgroundImage`) y "Tormenta de Datos" salían
+ * **sin fondo ninguno** en todos los sitios: la ficha del Perfil, el halo del avatar y la
+ * fila del ranking. Dos banners del catálogo, invisibles, sin que nada lo delatara.
+ *
+ * Solo se convertían las que están en camelCase, y **solo las que son de estilo**: `glow`
+ * y `gradient` no son CSS sino banderas del catálogo, y `titleStyleFor()` las lee por su
+ * nombre. Convertirlas habría producido `glow:true` → una propiedad inventada, que es
+ * inocua pero mentira: el mapa de estilos dice qué es CSS y qué es una marca.
+ *
+ * Con `kebab()` la lista es explícita y un banner nuevo que escriba `borderRadius` o
+ * `backgroundColor` funciona sin que nadie se acuerde de esta línea.
+ */
+const CLOVES_QUE_NO_SON_CSS = new Set(['glow', 'gradient']);
+
 export function cosmeticStyle(cos: Cosmetic | undefined): string {
   if (!cos) return '';
-  return Object.entries(cos.style).map(([k, v]) => `${k}:${v}`).join(';');
+  return Object.entries(cos.style)
+    .filter(([k]) => !CLOVES_QUE_NO_SON_CSS.has(k))
+    .map(([k, v]) => `${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${v}`)
+    .join(';');
 }
