@@ -1030,7 +1030,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1849**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1858**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -1072,6 +1072,55 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 
       partida vieja con `shards: 9999` carga igual, el estado no las arrastra, el documento
       las pierde al cargar sin tocar nada y no vuelven al recargar.
 
+### Lo que se ha pedido de la ficha y del almacén
+
+- [-] **Equipar desde el propio bloque de la base, con un selector, y que al tocar uno se
+      sutituyan.** Se empezó por el motor y se paró a mitad: `equipCollector()` y
+      `equipCompanion()` son **conmutadores**, así que elegir lo que ya está puesto lo quitaría,
+      y `equipCompanion()` además **ordena la lista por tier** al insertar, de modo que con
+      las ranuras llenas la elección del jugador saltaba de sitio. Sustituir no era solo pintar
+      un selector: hacía falta una función aparte en el motor, porque el comportamiento de los
+      botones no se puede reusar tal cual. **Descartado a petición del jugador.**
+
+- [x] **Ordenar el almacén por el stat, en DOS ejes y no en uno.** "Recolección por click" y
+      "Recolección por segundo" son preguntas distintas sobre objetos distintos, así que son
+      dos opciones del mismo desplegable.
+      **UN RECOLECTOR DE 30 POR CLIC Y UN COMPAÑERO DE 65 POR SEGUNDO NO SE COMPARAN.** El
+      clic se repite mil veces en un segundo, así que ordenando por el número "mayor"
+      cualquier compañero iría siempre delante y la lista no diría nada. Por eso cada eje
+      **solo ordena lo que se puede comparar** y deja lo demás al final, en el orden que ya
+      traían: un `null` no es un cero, es "en este eje no hay cifra".
+      **Y EL MULTIPLICADOR NO ENTRA EN EL EJE DE POR SEGUNDO.** Su 1,75 no son unidades, son
+      1,75 veces lo de los demás; si se tratara como una cifra más saldría el primero por
+      error, porque 1,5 es menos que el 20 del de click.
+      El stat sale del motor —`getStatPrincipal()`—, o sea que **el orden es el del número que
+      se ve en la esquina de la celda**. A igual de stat, delante el de tier más alto: dos
+      recolectores con el mismo daño no son iguales, y sin ese desempate el orden dependía del
+      guardado y el mismo almacén salía distinto en dos dispositivos. Todo fijo en
+      `filterCheck`.
+
+- [x] **La valoracion sin toggle y con estilo, en LOS DOS sitios donde estaba.** Estaba dentro
+      de un `<details>` en la ficha del almacén **y otra vez en el panel del jugador**: la
+      segunda se había quedado atrás la primera vez. Un acordeón abierto no aporta nada —la
+      flechita solo abre y cierra algo que no hace falta cerrar— y en el panel del jugador
+      encima ocupaba la misma altura que uno que no se puede cerrar.
+      **Y "ESTÁ TODO PLANO" TIENE NOMBRE:** un desglose en una lista de texto donde cada fila
+      es "esto es lo que multiplica" y "por cuánto" pegados en la misma línea. Ahora cada fila
+      son dos columnas, la etiqueta a la izquierda y el factor a la derecha y en el color del
+      acento, con el bloque dentro de una tarjeta con borde y fondo. Medido: los cuatro
+      factores alineados en el mismo píxel.
+
+- [x] **Las estrellas solo para lo que tiene potencial, en la rejilla tambien.** La ficha ya
+      las condicionaba y **la celda no**, así que una caja, una llave y una carta salian con
+      tres estrellas en la rejilla. Y la causa era la misma en los dos sitios: la función de
+      estrellas con un potencial ausente devuelve el valor por defecto, que es tres.
+      **Y NO ES SOLO LA CELDA: el listado del panel de administración hacía lo mismo.** Los tres
+      sitios donde quedan estrellas miran el tipo antes de preguntar. La Forja, el perfil y el
+      panel del jugador los dejan como estaban porque solo pintan recolectores y compañeros.
+
+- [x] **Los companions del mock con potencial y los items tambien.** El `preview` los montaba
+      sin potencial, así que las estrellas de la ficha salian del valor por defecto de la
+      funcion y no del item. Un banco visual aprobando una pantalla que el producto no tiene.
 ### La ficha del inventario, y el stat que enseña
 
 - [x] **El stat principal va en grande, con su etiqueta al lado y dentro de un borde.**

@@ -878,7 +878,7 @@ function pintarDetalle() {
                   </td>
                   <td class="py-1.5 pr-2" style="color:${colorRareza(it.rarity)}">${esc(it.rarity || '—')}</td>
                   <td class="py-1.5 pr-2 text-right text-[var(--text-muted)]">
-                    ${it.level != null ? it.level : '—'} ${estrellasDe(it.potential)}
+                    ${it.level != null ? it.level : '—'} ${(it.type === 'collector' || it.type === 'companion') && it.potential ? estrellasDe(it.potential) : ''}
                   </td>
                   <td class="py-1.5 pr-2 text-right text-[var(--text-main)]">
                     ${it.damage != null ? formatNumber(it.damage) : '—'}

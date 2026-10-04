@@ -25,7 +25,7 @@ import { visibleStacksFor, moveItemTo, matchesFilter } from '../src/components/w
 import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave,
-  collector, companion, crate, consumable
+  collector, companion, crate, consumable, ficha
 } from './kit';
 
 /** Los ids de las celdas, que es lo que el jugador ve y lo que se comprueba. */
@@ -92,6 +92,88 @@ async function main() {
     const g = await boot(baseSave([collector('r1')]));
     check('filtro desconocido: no muestra nada en vez de mostrarlo todo',
       celdas(g, 'filtroQueNoExiste').length === 0, celdas(g, 'filtroQueNoExiste').join(','));
+  }
+
+  // =========================================================================
+  //  1b. Ordenar por el stat: DOS EJES, Y UNO SOLO MENTIRÍA
+  // =========================================================================
+  //
+  //  Lo que se pidió fue encontrar los mejores, y detrás hay dos preguntas: qué
+  //  recolector da más **por clic** y qué compañero da más **por segundo**. Son dos
+  //  ejes y por eso dos opciones.
+  //
+  //  El error que hay que evitar es ordenar por el número "mayor" mezclando los dos: un
+  //  clic se repite mil veces en un segundo, así que cualquier compañero ganaría siempre y
+  //  la lista no diría nada. Y el multiplicador tampoco entra en el eje de por segundo,
+  //  porque su 1,75 no son unidades: son 1,75 veces lo de los demás.
+  {
+    const g = await boot(baseSave([
+      // Dos recolectores con el MISMO daño y distinto tier: es el caso del desempate.
+      collector('r1', 3), collector('r2', 7), collector('r3', 5), collector('r4', 1),
+      companion('m1'), companion('m2'), companion('m3'),
+      crate('c1')
+    ]));
+
+    // **EL DAÑO SE PONE DESPUÉS DE CARGAR, Y POR QUÉ ES ASÍ.** La carga recalcula el
+    // daño de un recolector desde su tier y su potencial, así que un `damage: 100`
+    // escrito en la partida guardada no llega al estado: la primera versión de esta
+    // prueba los puso ahí y la carga los cambió todos, y el orden que se comprobaba era
+    // el del tier. Para probar dos recolectores **con el mismo daño y distinto tier** hay
+    // que fijarlo en el estado, que es donde vive la cifra que ordena.
+    const wh = s(g).warehouse as any[];
+    const danio = (id: string, d: number) => { wh.find((w: any) => w.id === id).damage = d; };
+    danio('r1', 100); danio('r2', 100); danio('r3', 300); danio('r4', 10);
+
+    // Y las fichas de los compañeros, que es de donde el motor saca el tipo y el poder.
+    s(g).companions = [
+      ficha('m1', 3, { type: 'click', power: 20 }),
+      ficha('m2', 5, { type: 'passive', power: 65 }),
+      ficha('m3', 4, { type: 'multiplier', power: 0.5 })
+    ];
+
+    const stat = g.getStatPrincipal;
+    // **EL ORDEN POR CLIC, Y LOS QUE NO MIDEN EN ESE EJE AL FINAL.** El compañero de 65/s
+    // tiene un número más grande que cualquier recolector de esta partida, y aun así no
+    // puede ir delante: son grandezas distintas.
+    const porClic = celdas(g, 'collector', 'stat');
+    check('orden stat: los recolectores van de mas dano a menos',
+      porClic.join(',') === 'r3,r2,r1,r4', porClic.join(','));
+    check('orden stat: a igual de dano, delante el de tier mas alto',
+      porClic.indexOf('r2') < porClic.indexOf('r1'), porClic.join(','));
+
+    const porSegundo = celdas(g, 'companion', 'statSeg');
+    check('orden stat/s: los companeros de mas ingreso a menos',
+      porSegundo.join(',') === 'm2,m1,m3', porSegundo.join(','));
+
+    // **EL MULTIPLICADOR AL FINAL, Y NO UN CERO.** Su stat vale 1,5, que es menos que el 20
+    // del de click, así que si se tratara como una cifra más ya saldría el primero por
+    // error. Va al final porque en este eje no tiene cifra.
+    check('orden stat/s: el multiplicador va al final, y no es un cero',
+      porSegundo[porSegundo.length - 1] === 'm3', porSegundo.join(','));
+
+    // **Y CON TODO, LO QUE NO PERTENECE AL EJE SE QUEDA AL FINAL.** Un item que no se
+    // puede comparar no se pierde: se va al final, que es donde está lo demás.
+    const todoClic = celdas(g, 'all', 'stat');
+    const todoSeg = celdas(g, 'all', 'statSeg');
+    check('orden stat: con todo, los recolectores delante y el resto detras',
+      todoClic.slice(0, 4).join(',') === 'r3,r2,r1,r4' &&
+      !todoClic.slice(0, 4).some((x: string) => x.startsWith('m') || x.startsWith('c')),
+      todoClic.join(','));
+    check('orden stat: no se pierde ningun item al ordenar',
+      new Set(todoClic).size === todoClic.length && todoClic.length === 8, todoClic.join(','));
+    check('orden stat/s: los de por segundo delante y el resto detras',
+      todoSeg.slice(0, 2).join(',') === 'm2,m1' &&
+      !todoSeg.slice(0, 2).some((x: string) => x.startsWith('r') || x.startsWith('c')),
+      todoSeg.join(','));
+
+    // **Y EL ORDEN ES EL DEL NÚMERO QUE SE VEN.** El stat de la esquina de la celda y el
+    // de la ficha salen de la misma función, así que ordenar por aquí tiene que dar el
+    // mismo orden que ordenar leyendo los números. Si divergieran, el jugador vería una
+    // lista que no cuadra con lo que tiene delante de los ojos.
+    const leido = (ids: string[]) => ids.map((id: string) => stat(id)?.valor ?? -1);
+    check('orden stat: el orden es el del stat que se ve en la celda',
+      leido(porClic).every((v: number, i: number, arr: number[]) => i === 0 || arr[i - 1] >= v),
+      porClic.map((id: string) => id + '=' + stat(id)?.valor).join(' '));
   }
 
   // =========================================================================

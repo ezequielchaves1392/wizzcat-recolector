@@ -193,7 +193,17 @@ function statCelda(w: any, game: any): string {
         </span>
         <span class="text-[9px] font-mono ${isEquipped ? 'text-amber-400' : 'text-[var(--text-muted)]'}">
           ${w.tier ? `T${w.tier}` : (w.rarity ?? '')}
-          ${` ${estrellasDe(w.potential)}`}
+          <!--
+            LAS ESTRELLAS SOLO PARA LO QUE TIENE POTENCIAL, Y ESTO ES LA SEGUNDA VEZ QUE
+            SE ARREGLA. La ficha ya las condicionaba, pero la CELDA no, así que una caja,
+            una llave o una carta salían con tres estrellas en la rejilla. Y la causa es
+            la misma en las dos: la función de estrellas con un potencial ausente devuelve
+            el valor por defecto, que es tres. Con la condición no hace falta tocar la
+            función: lo que no tiene potencial no pregunta.
+          -->
+          ${(w.type === 'collector' || w.type === 'companion') && w.potential
+            ? ` ${estrellasDe(w.potential)}`
+            : ''}
         </span>
         ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-panel)] rounded px-0.5">${texto}</span>` : ''}
         ${statCelda(w, game)}
@@ -318,6 +328,21 @@ function statCelda(w: any, game: any): string {
             class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
             <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Mi orden</option>
             <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
+            <!--
+              LOS DOS EJES DEL STAT, Y POR QUÉ NO ES UNO.
+
+              "Recolección por click" y "Recolección por segundo" son preguntas distintas
+              sobre objetos distintos: el recolector se mide por clic y el compañero por
+              segundo, y un 30 por clic no se compara con un 65 por segundo porque el clic
+              se repite mil veces en un segundo. Ordenar por el número "mayor" mezclando los
+              dos pondría siempre a los compañeros delante y no diría nada.
+
+              El multiplicador tampoco entra en el de por segundo: su 1,75 no son unidades
+              por segundo, son 1,75 veces lo de los demás. Queda al final, no en cero: cero
+              es una cifra y el multiplicador no tiene ninguna en ese eje.
+            -->
+            <option value="stat" ${ui.sort === 'stat' ? 'selected' : ''}>Recolección por clic</option>
+            <option value="statSeg" ${ui.sort === 'statSeg' ? 'selected' : ''}>Recolección por segundo</option>
             <option value="rarity" ${ui.sort === 'rarity' ? 'selected' : ''}>Rareza</option>
             <option value="tier" ${ui.sort === 'tier' ? 'selected' : ''}>Tier</option>
             <option value="name" ${ui.sort === 'name' ? 'selected' : ''}>Nombre</option>
@@ -1145,6 +1170,51 @@ export function visibleStacksFor(
   else if (sort === 'value') {
     const precio = (w: any) => game.getSellPrice?.(w.id) ?? w.sellPrice ?? 0;
     items = [...items].sort((a, b) => precio(b) - precio(a));
+  }
+  // --- Ordenar por el stat, y por QUÉ son dos ejes y no uno -----------------------
+  //
+  // Lo que se pidió fue "encontrar los mejores", y hay dos preguntas distintas detrás:
+  // el recolector que más da **por clic** y el compañero que más da **por segundo**. Son
+  // dos ejes distintos, y por eso son dos opciones y no una.
+  //
+  // **UN RECOLECTOR DE 30 POR CLIC Y UN COMPAÑERO DE 65 POR SEGUNDO NO SE COMPARAN.** El
+  // clic ocurre mil veces en un segundo, así que un compañero de 65/s gana siempre y el
+  // orden por el número "mayor" no diría nada. Y el multiplicador **tampoco**: su 1,75 no
+  // son 1,75 unidades por segundo, es 1,75 veces lo de los demás, así que en la misma
+  // columna que un pasivo de 65 son dos cosas distintas con el mismo tipo de letra.
+  //
+  // Por eso cada eje **solo compara lo que se puede comparar** y deja lo demás al final,
+  // en el orden que ya traían. Un `null` no es un cero: es "en este eje no hay cifra", y
+  // confundirlos con un cero pondría un multiplicador o una caja por delante de todo.
+  else if (sort === 'stat' || sort === 'statSeg') {
+    const eje = sort === 'stat' ? 'click' as const : 'segundo' as const;
+    /** La cifra del item en el eje pedido, o null si en ese eje no tiene cifra. */
+    const cifra = (w: any): number | null => {
+      const s = game.getStatPrincipal?.(w.id);
+      if (!s) return null;
+      // El recolector es el único que mide por clic; su stat no lleva "/s" y el del
+      // compañero sí. Son las dos ramas de la misma pregunta.
+      if (eje === 'click') return w.type === 'collector' ? s.valor : null;
+      // Y por segundo solo entran los dos compañeros que **producen**: el multiplicador
+      // no produce, transforma.
+      if (w.type !== 'companion') return null;
+      return s.subtipo === 'multiplier' ? null : s.valor;
+    };
+    items = [...items].sort((a, b) => {
+      const ca = cifra(a);
+      const cb = cifra(b);
+      // Los que no tienen cifra al final, y entre ellos sin moverse: `sort` es estable en
+      // V8, así que conservando el orden de entrada no hay que hacer nada más.
+      if (ca === null && cb === null) return 0;
+      if (ca === null) return 1;
+      if (cb === null) return -1;
+      if (ca !== cb) return cb - ca;
+      // **A igual de stat, el de tier más alto delante.** Dos recolectores con el mismo
+      // daño por clic no son iguales: el de tier alto vale más, forja a más y sube mejor.
+      // Sin este desempate el orden entre ellos depende del guardado, y el mismo almacén
+      // salía distinto en dos dispositivos.
+      return (b.tier || 0) - (a.tier || 0);
+    });
   }
 
   // Los items iguales se acumulan en la celda del primero, estén o no juntos en

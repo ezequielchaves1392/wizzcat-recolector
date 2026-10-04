@@ -58,13 +58,40 @@ export function renderPanel(
       // que se puede llamar igual que desde la ficha, sin pasar por el motor: no
       // depende del estado de la partida, sale del item.
       const valoracion = valuationBreakdown(equippedItem);
+      // **NO ES UN ACORDEÓN, Y ES LA MISMA REGLA QUE EN LA FICHA DEL ALMACÉN.** Estaba
+      // dentro de un `<details>` abierto, o sea que la flechita no hacía falta para nada y
+      // solo añadía un clic de inexplicable. Aquí además el espacio es el que es: este
+      // bloque comparte la tarjeta del recolector equipado con el nombre y la rareza, y
+      // un acordeón abierto ocupa la misma altura que uno que no se puede cerrar.
+      //
+      // **Y NO ES "TODO PLANO" PORQUE UN DESGLOSE EN UNA LISTA DE TEXTO NO SE LEE.** Las
+      // cifras se separan de su etiqueta, que es justo lo que un desglose no debe hacer:
+      // cada fila es "esto es lo que multiplica" y "por cuánto", en dos columnas, con el
+      // factor a la derecha y en el color del acento para que la columna se vea de un
+      // vistazo sin leer. El bloque lleva borde y fondo porque es una tarjeta dentro de
+      // una tarjeta, y sin eso se pierde en el fondo.
       const valoracionHTML = valoracion.length ? `
-        <details class="mt-2.5" open>
-          <summary class="label-caps cursor-pointer select-none">Valoración</summary>
-          <ul class="mt-1 space-y-0.5">
-            ${valoracion.map(v => `<li class="text-[9px] font-mono text-[var(--text-muted)]">${v}</li>`).join('')}
+        <div class="mt-2.5 rounded-lg px-2.5 py-2"
+             style="border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+                    background: color-mix(in srgb, var(--accent) 5%, transparent)">
+          <div class="label-caps mb-1.5 flex items-center gap-1.5">
+            <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 opacity-70">${ic('scale')}</span>
+            Valoración
+          </div>
+          <ul class="space-y-1">
+            ${valoracion.map(v => {
+              // "Nivel 12: ×2.60" -> etiqueta a la izquierda, factor a la derecha.
+              const corte = v.lastIndexOf(': ');
+              const etiqueta = corte > 0 ? v.slice(0, corte) : v;
+              const valor = corte > 0 ? v.slice(corte + 2) : '';
+              return `
+                <li class="flex items-baseline justify-between gap-3">
+                  <span class="text-[9px] font-mono text-[var(--text-muted)]">${etiqueta}</span>
+                  ${valor ? `<span class="text-[9px] font-mono font-bold tabular accent-text">${valor}</span>` : ''}
+                </li>`;
+            }).join('')}
           </ul>
-        </details>
+        </div>
       ` : '';
 
       collectorContainer.innerHTML = `
