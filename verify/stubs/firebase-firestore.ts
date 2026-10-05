@@ -28,6 +28,24 @@ export const initializeFirestore = (app: any, _opciones?: unknown) => app;
 
 export const doc = (_db: any, ...path: string[]) => ({ id: path.join('/') });
 export const getDoc = async (ref: any) => {
+  // FALLO DE LECTURA, Y POR QUÉ HACE FALTA UN CONMUTADOR PROPIO.
+  //
+  // `fallar` hace fallar las ESCRITURAS, que es lo que necesita la cola de
+  // pendientes. Lo que no se podía provocar era que **la carga de la partida fallara**,
+  // y ese es el fallo más caro del juego: si la lectura falla, el motor se queda con
+  // una partida nueva en memoria y el guardado automático la escribe encima de la
+  // buena. La escritura tiene éxito, así que no falla, no avisa y nadie lo nota.
+  //
+  // Aquí el error lleva el texto de la cuota de Firestore a propósito, porque es el
+  // caso real que pasó, y para que la prueba compruebe también que se distingue de
+  // una caída de red cualquiera.
+  if (globalThis.__MEM_DB__?.fallarLectura) {
+    const e: any = new Error(
+      '[code=resource-exhausted] Quota exceeded. Simulado para las pruebas.'
+    );
+    e.code = 'firestore/resource-exhausted';
+    throw e;
+  }
   const doc = globalThis.__MEM_DB__?.[ref.id];
   // SE DEVUELVE UNA COPIA, y es lo que hace Firestore. Antes devolvía el objeto
   // tal cual, con lo que `__MEM_DB__` guardaba una REFERENCIA VIVA al array

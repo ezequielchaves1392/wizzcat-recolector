@@ -9,7 +9,7 @@ import './style.modules.css';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
-import { renderBloqueado, renderSesionOcupada } from './components/blocked';
+import { renderBloqueado, renderSesionOcupada, renderErrorDeCarga } from './components/blocked';
 import {
   anotarLatido, consultarSesion, idDeSesion, soltarSesion,
   REINTENTO_MS, VENTANA_MS
@@ -548,8 +548,36 @@ onAuthStateChanged(auth, async (user) => {
   // sobreescribiría el de la sesión que ya está jugando.
   if (!(await ocuparSesion(user.uid, nombre))) return;
 
-  await initGame(user, nombre);
+  // **AQUI ESTABA EL AGUJERO QUE DEJABA LA PANTALLA EN NEGRO.** El arranque era una
+  // cadena de `await` sin un solo `catch`: cualquier fallo --sin red, cuota de Firestore
+  // agotada, un dato del documento que no se puede migrar--iba al `catch` del motor,
+  // que escribia una linea en la consola, y el `await` de aqui se resolvia igual. El
+  // jugador se quedaba con un `#app` vacio y sin una palabra: ni error, ni boton, ni
+  // una pista de que el navegador no era el culpable.
+  //
+  // El `catch` esta DESPUES de `ocuparSesion` a proposito: si la sesion esta ocupada,
+  // `ocuparSesion` ya ha pintado su pantalla y no hay nada que avisar.
+  try {
+    await initGame(user, nombre);
+  } catch (e) {
+    mostrarFalloDeCarga(e);
+  }
 });
+
+/**
+ * El arranque ha fallado: se dice qué ha pasado y se ofrece reintentar.
+ *
+ * **NO ES ADORNAR UN ERROR, ES EVITAR UN DAÑO.** El motor deja el guardado
+ * deshabilitado cuando la carga falla —`cargaFallida()`—, precisamente para que esto
+ * no pueda dejar al jugador jugando de mentira con una partida en blanco. Si aqui se
+ * hiciera un `console.error` y ya esta, la pantalla seguiria vacia y el jugador no
+ * sabria si su progreso sigue a salvo.
+ */
+function mostrarFalloDeCarga(error: unknown) {
+  const app = document.querySelector('#app') as HTMLElement | null;
+  if (!app) return;
+  renderErrorDeCarga(app, error, () => { window.location.reload(); });
+}
 
 async function initGame(user: any, username?: string) {
   activeUser = user;

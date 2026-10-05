@@ -1298,6 +1298,34 @@ const AFK_THRESHOLD_MS = 60000;
    */
   let guardadoFallando = false;
 
+/**
+ * QUE NO SE HA PODIDO LEER LA PARTIDA DEL SERVIDOR.
+ *
+ * **ESTE FLAG IMPIDE QUE SE BORRE UNA PARTIDA, Y POR ESO NO ES UNA DEFENSA SINO UN
+ * PORQUE.** Si la lectura inicial falla —sin red, o con la cuota de Firestore
+ * agotada— el juego se queda con los valores por defecto, que son los de una partida
+ * nueva. Y a los quince segundos el guardado automatico escribe esos valores encima
+ * de la partida de verdad: no se pierde un guardado, se pierde la partida entera, y no
+ * hay ningun aviso en el journey que lo explique.
+ *
+ * Es el fallo mas caro que puede tener este juego y el mas silencioso, porque la
+ * escritura **si tiene exito**: no falla, no avisa y por eso nadie sospecha. Por eso
+ * el `catch` de la carga lo pone a `true` y el guardado se niega entero mientras
+ * siga puesto, no solo el automatico: cualquier guardado manual tampoco, porque
+ * escribiria lo mismo.
+ *
+ * **NO ES EL ESTADO DEL JUEGO, ES EL DEL GUARDADO.** El juego sigue funcionando
+ * localmente y el jugador puede jugar: lo que no puede es enviarlo. Por eso el aviso
+ * al jugador lo pone la pantalla de arranque, no el bucle.
+ */
+let partidaNoCargada = false;
+
+/** Si el guardado esta habilitado. La carga que falla lo deshabilita. */
+function sePuedeGuardar(): boolean {
+  return !partidaNoCargada;
+}
+
+
   /**
    * El ranking va fallando, y ya se le ha avisado.
    *
@@ -1950,7 +1978,12 @@ const AFK_THRESHOLD_MS = 60000;
       });
     }
   } catch (error) {
-    console.error("Error al sincronizar con Firebase:", error);
+    // **Y AQUI SE MARCA QUE NO SE HA PODIDO LEER, QUE ES LO QUE IMPIDE GUARDAR.**
+    // Antes solo se escribia una linea en la consola y el juego continuaba con una
+    // partida nueva en memoria, que es exactamente el estado que el guardado automatico
+    // iba a escribir encima de la buena.
+    partidaNoCargada = true;
+    console.error('Error al sincronizar con Firebase:', error);
   }
 
   function syncCompanionsToWarehouse() {
@@ -2817,6 +2850,11 @@ const AFK_THRESHOLD_MS = 60000;
   }
 
   async function saveToFirebase() {
+    // **PRIMERO DE TODO, Y POR ENCIMA DE LA COLA.** La cola local es buena idea y aqui
+    // seria un error: apuntar "lo que hay que subir" de una partida que no se ha leido
+    // es apuntar una partida en blanco. Con el flag puesto no se anota nada, no se
+    // escribe nada, y el siguiente arranque vuelve a leer la partida de verdad.
+    if (!sePuedeGuardar()) return;
     if (!user) return;
 
     /**
@@ -3702,6 +3740,16 @@ const AFK_THRESHOLD_MS = 60000;
       target: a.progress(state).target
     })),
     // Cancela un buff activo. El tiempo restante se pierde, no se devuelve el item.
+    /**
+     * Si la carga del servidor fallo y por eso el guardado esta deshabilitado.
+     *
+     * Lo lee el arranque para enseñar la pantalla de "no se ha podido cargar" en vez
+     * de dejar al jugador mirando un `#app` vacio. Va en la API y no en un modulo
+     * suelto porque el flag es de ESTA partida: los bancos de pruebas crean motores
+     * seguidos en el mismo proceso, y un flag de modulo dejaria a todos sin guardar
+     * en cuanto uno fallara al cargar.
+     */
+    cargaFallida: () => partidaNoCargada,
     cancelBuff: (buffKey: BuffKey) => {
       handleUserActivity();
       const labels: Record<BuffKey, string> = {

@@ -258,6 +258,66 @@ async function main() {
       `${(globalThis as any).__MEM_DB__[claveDeRanking()].cores} vs ${(globalThis as any).__MEM_DB__['users/test'].totalCores}`);
   }
 
+
+  // =========================================================================
+  //  La carga fallida NO puede guardarse. Y esto no es una prueba de que "no
+  //  pasa": es la prueba de que el daño NO ocurre.
+  // =========================================================================
+  //
+  // **POR QUE ESTA EN `guardadoCheck` Y NO EN UNO NUEVO.** El fallo no es del
+  //  arranque: es del guardado. Si la lectura inicial falla, el motor se queda con una
+  //  partida nueva en memoria, y a los quince segundos el guardado automático escribe
+  //  esos valores encima de la partida de verdad. **La escritura tiene éxito**, así que
+  //  no falla, no avisa y no hay ni un error en el journey que lo explique: la partida
+  //  entera desaparece sin ruido. Es el peor fallo posible en este juego y el más
+  //  silencioso, y solo se detecta comprobando que el documento sigue como estaba.
+  {
+    // **LA FOTO SE SACA DEL MISMO `baseSave` QUE VA EN LA BASE DE DATOS.** Antes se
+    // copiaba el documento que habia antes del `boot`, y eso comparaba la partida de un
+    // banco con la de otro: la diferencia la hacia el `boot`, no el guardado, y la
+    // prueba podia fallar con el motor haciendo lo correcto.
+    const esperado: any = JSON.parse(JSON.stringify(baseSave([])));
+    (globalThis as any).__MEM_DB__.fallarLectura = true;
+    const g = await boot(baseSave([]));
+    (globalThis as any).__MEM_DB__.fallarLectura = false;
+
+    check(
+      'guardado: si la carga falla, el motor lo dice',
+      g.cargaFallida() === true,
+      'cargaFallida=' + String(g.cargaFallida?.())
+    );
+
+    // **LO QUE SE COMPRUEBA ES EL DAÑO, NO LA LLAMADA.** Que `saveToFirebase` no se
+    // llama es un detalle de implementación; lo que importa es que el documento de la
+    // partida **sigue siendo exactamente el que había**. Por eso la comparación es
+    // documento entero contra documento entero, y no un contador de escrituras: un
+    // guardado en blanco se distingue por haber cambiado cualquier campo.
+    g.flush();
+    g.flush();
+    const ahora: any = JSON.parse(JSON.stringify(guardado()));
+    const cambiados = Object.keys(esperado).filter((k) =>
+      JSON.stringify(ahora[k]) !== JSON.stringify(esperado[k]));
+    check(
+      'guardado: y no se escribe una partida en blanco encima',
+      cambiados.length === 0,
+      'han cambiado: ' + (cambiados.join(',') || 'nada')
+    );
+    check(
+      'guardado: ni las nanitas ni el inventario se pisan',
+      ahora.nanites === esperado.nanites
+      && JSON.stringify(ahora.warehouse) === JSON.stringify(esperado.warehouse),
+      `nanites=${ahora.nanites} esperado=${esperado.nanites}`
+    );
+
+    // Y el estado bueno: con la lectura bien, el motor dice que se puede guardar.
+    const g2 = await boot(baseSave([]));
+    check(
+      'guardado: y con la lectura bien, guardar si esta habilitado',
+      g2.cargaFallida() === false,
+      'cargaFallida=' + String(g2.cargaFallida?.())
+    );
+  }
+
   resumen('el guardado: que el aviso diga la verdad');
 }
 

@@ -105,7 +105,17 @@ export async function boot(save?: any, extra?: { onAchievement?: (a: any) => voi
   await new Promise((r) => setTimeout(r, 0));
   await new Promise((r) => setTimeout(r, 0));
   limpiarCola();
+  // **EL FALLO PROGRAMADO SOBREVIVE AL REINICIO, Y TIENE QUE SOBREVIVIR.**
+  // `boot()` borra la base de datos entera para que cada banco empiece limpio, y con
+  // ella se iba el conmutador `fallarLectura` que el banco había puesto justo antes: la
+  // lectura no fallaba nunca y la prueba pasaba sin comprobar nada. Es el mismo motivo
+  // por el que `fallar` se pone DESPUÉS de esta línea en los bancos que lo usan.
+  //
+  // Es el único campo que se arrastra, y solo porque es lo que se pide a la base de
+  // datos y no un dato guardado.
+  const fallaLectura = (globalThis as any).__MEM_DB__?.fallarLectura === true;
   globalThis.__MEM_DB__ = {};
+  if (fallaLectura) (globalThis as any).__MEM_DB__.fallarLectura = true;
   if (save) globalThis.__MEM_DB__[DB] = JSON.parse(JSON.stringify(save));
   return anotarJuego(await createGameLoop(USER, () => {}, undefined, extra?.onAchievement));
 }

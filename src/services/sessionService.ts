@@ -114,12 +114,21 @@ const SIN_SESION: EstadoSesion = { ocupada: false, latido: 0, dispositivo: '' };
  */
 export async function consultarSesion(uid: string, miId: string): Promise<EstadoSesion> {
   try {
-    const snap = await getDoc(doc(db, 'users', uid, 'sesion'));
+    const snap = await getDoc(doc(db, 'users', uid));
     if (!snap.exists()) return SIN_SESION;
 
-    const d = snap.data() as any;
-    const latido = typeof d.latido === 'number' ? d.latido : 0;
-    const dispositivo = String(d.dispositivo || '');
+    // **EL LATIDO VIVE DENTRO DE LA PARTIDA, EN LA CLAVE `sesion`.** No en un
+    // subdocumento, y por dos razones que seuzzaron a la vez: las reglas de seguridad
+    // solo dejan escribir en `users/{uid}` —todo lo demas cae en el
+    // `match /{document=**}` que cierra la puerta— y la API pide un numero PAR de
+    // segmentos, mientras que `users/{uid}/sesion` son TRES. Con la ruta mala, la
+    // escritura fallaba siempre, la lectura tambien, y como las dos van dentro de un
+    // `try` que solo avisa, **el aviso aparecia y el juego seguia como si nada**:
+    // ninguna sesion se detectaba nunca y la proteccion contra dos pestanas
+    // escribiendo a la vez llevaba tiempo sin existir sin que se notara.
+    const d = (snap.data() as any)?.sesion;
+    const latido = typeof d?.latido === 'number' ? d.latido : 0;
+    const dispositivo = String(d?.dispositivo || '');
 
     if (dispositivo === miId) return { ocupada: false, latido, dispositivo };
     if (latido <= 0) return SIN_SESION;
@@ -141,7 +150,7 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
  *
  * ## Y ADEMÁS EN `rankings/{uid}`, PORQUE ES EL ÚNICO SITIO DONDE SE PUEDE LEER
  *
- * El latido de arriba va a `users/{uid}/sesion`, y **otro jugador no puede
+ * El latido de arriba va a `la clave `sesion` de la partida, y **otro jugador no puede
  * leerlo**: las reglas de Firestore dan a `users/{uid}` solo a su dueño y a un
  * admin, que es exactamente lo que impide que alguien se entere de que está
  * suspendido. Por eso el estado "en línea" del ranking no puede salir de ahí.
@@ -162,16 +171,20 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
  */
 export async function anotarLatido(uid: string, miId: string): Promise<void> {
   try {
+    // **UN CAMPO, Y CON MERGE.** Va dentro de la partida porque es el unico sitio
+    // donde las reglas ya dejan escribir, pero `merge: true` con una sola clave
+    // anidada no puede tocar nanitas ni inventario: Firestore fusiona por el primer
+    // nivel, asi que lo unico que se reemplaza es el mapa `sesion` entero.
     await setDoc(
-      doc(db, 'users', uid, 'sesion'),
-      { dispositivo: miId, latido: Date.now(), v: 1 },
+      doc(db, 'users', uid),
+      { sesion: { dispositivo: miId, latido: Date.now(), v: 1 } },
       { merge: true }
     );
   } catch (e) {
     console.warn('[sesion] No se ha podido anotar el latido.', e);
   }
   try {
-    await setDoc(doc(db, 'rankings', uid), { latido: Date.now() }, { merge: true });
+    await anotarPresencia(uid);
   } catch (e) {
     console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
   }
@@ -191,14 +204,55 @@ export async function anotarLatido(uid: string, miId: string): Promise<void> {
  */
 export async function soltarSesion(uid: string, miId: string): Promise<void> {
   try {
-    const ref = doc(db, 'users', uid, 'sesion');
+    const ref = doc(db, 'users', uid);
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
-    if ((snap.data() as any)?.dispositivo !== miId) return;
-    await updateDoc(ref, { dispositivo: deleteField(), latido: deleteField() });
+    const sesion = (snap.data() as any)?.sesion;
+    if (!sesion) return;
+    if (sesion.dispositivo !== miId) return;
+    // Se borra el mapa entero y no sus dos campos: con `update` un mapa anidado se
+    // reemplaza, no se fusiona, asi que esto es lo unico que deja la partida sin rastro
+    // de la sesion.
+    await updateDoc(ref, { sesion: deleteField() });
   } catch (e) {
     // Al cerrar la pestaña puede que la red ya no esté. El reloj de expiración
     // es la red de seguridad: aunque esto falle, la cuenta se libera sola.
     console.warn('[sesion] No se ha podido soltar la sesion.', e);
+  }
+}
+
+/**
+ * Cada cuánto se escribe la presencia en la clasificación.
+ *
+ * **SESENTA SEGUNDOS, Y NO QUINCE, Y POR QUÉ.** La presencia es una pregunta de
+ * "está jugando ahora", y la ventana que la lee son 45 segundos. Escribiendo cada
+ * 60 segundos se sigue contestando bien y se gasta la **cuarta parte** de escrituras
+ * que antes. No es una optimisation de gusto: la cuota de Firestore del proyecto es
+ * diaria y compartida, y una cuarta parte de escrituras por cliente es la diferencia
+ * entre que el juego cargue y que salga un "Quota exceeded" en blanco.
+ *
+ * El latido de la sesion sigue a quince segundos, porque de el depende el bloqueo y
+ * ese necesita margen. La presencia no bloquea nada: solo paints un punto.
+ */
+export const RITMO_PRESENCIA_MS = 60_000;
+
+let ultimaPresencia = 0;
+
+/**
+ * Anota la presencia en la clasificación, **como mucho una vez por `RITMO_PRESENCIA_MS`**.
+ *
+ * El reloj es de módulo y no un temporizador: así el ritmo lo manda el dato y no el
+ * llamador, y una segunda pestaña no puede saltárselo escribiendo. NUNCA lanza, por
+ * lo mismo que el latido: la presencia es una mejora de la pantalla de clasificación,
+ * y una mejora de pantalla no puede ser la razón de que el juego deje de funcionar.
+ */
+export async function anotarPresencia(uid: string): Promise<void> {
+  const ahora = Date.now();
+  if (ahora - ultimaPresencia < RITMO_PRESENCIA_MS) return;
+  ultimaPresencia = ahora;
+  try {
+    await setDoc(doc(db, 'rankings', uid), { latido: ahora }, { merge: true });
+  } catch (e) {
+    console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
   }
 }

@@ -188,3 +188,75 @@ function escapeTexto(valor: unknown): string {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string;
   });
 }
+
+/**
+ * PANTALLA DE "NO SE HA PODIDO CARGAR LA PARTIDA", Y POR QUÉ HACE FALTA.
+ *
+ * ## LO QUE PASABA
+ *
+ * El arranque era una cadena de `await` sin una sola red de seguridad: si algo fallaba,
+ * el `catch` del motor escribía una línea en la consola y la partida **seguía adelante con
+ * los valores por defecto**. Para el jugador eso era una pantalla en negro sin una sola
+ * palabra: no había ni un error visible, ni un botón, ni una pista de que el navegador no
+ * era el culpable. Y el motivo real —que se había agotado la cuota de Firestore— solo
+ * aparecía en la consola, en un texto que hay que saber buscar.
+ *
+ * ## POR QUÉ ES OBLIGATORIA Y NO UN ADORNO
+ *
+ * Un fallo de red es el único caso en el que el juego **no puede jugar**, así que no es
+ * una situación que se pueda dejar pasar con un aviso flotante que se va solo: hace falta
+ * algo que quede, que explique y que ofrezca reintentar. Y encima hay un motivo de datos
+ * que es el importante: si la carga falla y el juego sigue con los valores por defecto,
+ * el guardado automático de quince segundos **escribe una partida en blanco encima de la
+ * de verdad**. Eso no lo arregla esta pantalla; lo arregla `partidaNoCargada()`, que en
+ * `gameLoop.ts` se niega a guardar. Aquí solo se cuenta lo que pasó.
+ */
+
+/** Si el error es de cuota de Firestore, que tiene arreglo distinto y se dice de otro modo. */
+export function esCuotaAgotada(error: unknown): boolean {
+  const codigo = (error as any)?.code ?? '';
+  const texto = String((error as any)?.message ?? error ?? '');
+  return String(codigo).includes('resource-exhausted') || /quota exceeded/i.test(texto);
+}
+
+export function renderErrorDeCarga(
+  container: HTMLElement,
+  error: unknown,
+  onReintentar: () => void
+): void {
+  const cuota = esCuotaAgotada(error);
+  const titulo = cuota ? 'Se ha agotado la cuota del juego' : 'No se ha podido cargar la partida';
+  const explicacion = cuota
+    ? 'El servidor de la partida ha llegado a su límite de uso de hoy. No es un fallo de tu ' +
+      'equipo ni de tu navegador, y **tu partida sigue guardada donde estaba**: no se ha ' +
+      'tocado nada. El límite se repone solo, así que dentro de un rato vuelve a funcionar.'
+    : 'El juego no ha conseguido leer tu partida del servidor. **No se ha guardado nada**, ' +
+      'así que tu progreso sigue donde estaba. Esto suele ser la conexión.';
+  const pie = cuota
+    ? 'Si vuelve a pasar en cuanto se reponga el límite, el culpable es el ritmo de ' +
+      'guardado, no tu juego.'
+    : 'Si tienes el juego abierto en otra pestaña, ciérrala antes de reintentar.';
+
+  container.innerHTML = `
+    <div class="min-h-screen flex items-center justify-center p-6 bg-[var(--bg-app)]">
+      <div class="card-glass border rounded-2xl p-6 max-w-sm w-full flex flex-col gap-4">
+        <div class="label-caps text-rose-400">Sin conexión con la partida</div>
+        <div class="font-['Orbitron'] font-bold text-base leading-tight">${escapeTexto(titulo)}</div>
+        <div class="text-xs text-[var(--text-muted)] leading-relaxed">${escapeTexto(explicacion)}</div>
+        <button data-reintentar
+                class="w-full py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs
+                       rounded-xl hover:opacity-90 transition cursor-pointer">
+          REINTENTAR
+        </button>
+        <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+          ${escapeTexto(pie)}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // El botón se ata con `addEventListener` sobre el nodo recién creado, no con un
+  // atributo `onclick`: es la misma red de seguridad que R5, y aquí importa más porque
+  // este nodo vive dentro de `#app`.
+  container.querySelector('[data-reintentar]')?.addEventListener('click', onReintentar);
+}

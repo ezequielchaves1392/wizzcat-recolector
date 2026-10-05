@@ -2314,3 +2314,45 @@ _Cosas que estorban al trabajo más que al juego._
         exista para él. `consumableCheck` se queda en 136.
       **Comprobado en el píxel** en `preview.html` con los datos de ejemplo: la
       tarjeta AFK se pinta sin `data-cancel` y la de Clics x2 sí lo trae.
+- [x] **El juego se quedó en negro y no decia por qué** (`Quota exceeded` de Firestore).
+      Le pasó al jugador con la consola abierta. Eran tres fallos, y el tercero es el
+      que de verdad importaba.
+      - **La ruta del latido de sesión no era válida y la protección contra dos
+        pestañas llevaba tiempo muerta sin que se notara.** `doc(db, 'users', uid,
+        'sesion')` son **tres** segmentos, y la API pide un número **par** para un
+        documento. Las reglas tampoco lo permitían: todo lo que no esté declarado cae en
+        el `match /{document=**}` que cierra la puerta. O sea que la escritura fallaba
+        siempre, la lectura también, y **las dos van dentro de un `try` que solo avisa**:
+        el aviso salía en la consola y el juego seguía como si nada, sin detectar nunca
+        una sesión ocupada. Ahora el latido vive en la clave `sesion` del documento de la
+        partida, con `merge: true` y un solo campo, así que no puede tocar nanitas.
+      - **La presencia iba cada quince segundos, y la cuota de Firestore es diaria y
+        compartida.** La clasificación pregunta "está jugando ahora" con una ventana de
+        45 segundos, así que **una escritura cada 60 segundos contesta igual y gasta la
+        cuarta parte**. El latido de sesión sigue a quince, porque de él depende el
+        bloqueo y ese necesita margen; la presencia no bloquea nada.
+      - **Y el que de verdad podía borrar una partida: la carga fallida se guardaba.**
+        Si la lectura inicial falla, el motor se quedaba con una partida **nueva** en
+        memoria, y a los quince segundos el guardado automático escribía esos valores
+        encima de la de verdad. **La escritura tiene éxito**, así que no falla, no avisa
+        y no hay ni un error en el journey que lo explique: la partida entera desaparece
+        en silencio. Ahora el `catch` de la carga pone `partidaNoCargada`, `saveToFirebase()`
+        se niega entero mientras siga puesto, y la API lo expone para que el arranque
+        avise. **Comprobado quitar el guardia a propósito:** sin él, el banco falla
+        diciendo que han cambiado `saveVersion`, `nanites`, `warehouse`, `crates`,
+        `companions`, `activeCompanions`, `equippedCollectorId`, `warehouseCapacity`,
+        `maxCompanionSlots`, `buffs` y `cosmetics`.
+      - **Y la pantalla en negro.** El arranque era una cadena de `await` sin un solo
+        `catch`: cualquier fallo iba al `catch` del motor, que escribía una línea en la
+        consola, y el jugador se quedaba con un `#app` vacío. Ahora hay una pantalla que
+        dice qué ha pasado —**con otro texto si es cuota de Firestore**, que tiene arreglo
+        distinto— y un botón de reintentar. Es además el aviso de que no se ha guardado
+        nada, que es lo que el jugador necesita saber.
+      - Para poder probarlo, el stub de Firestore **sabe hacer fallar la lectura** y no
+        solo la escritura, y `boot()` arrastra ese conmutador al reiniciar la base de
+        datos: si no, el banco lo pedía y `boot()` se lo borraba, y la prueba pasaba sin
+        comprobar nada.
+      **Lo que NO arregla el código:** la cuota del proyecto está agotada y es un límite
+      **diario** del plan gratuito de Firebase (20.000 escrituras al día). Se repone solo
+      a medianoche en el huso del Pacífico, o se quita cambiando el proyecto al plan Blaze,
+      que es una decisión suya y no del código.
