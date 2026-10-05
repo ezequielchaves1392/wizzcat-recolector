@@ -93,21 +93,47 @@ async function main() {
     //
     // Antes sí eran el mismo número y la prueba lo exigía con `===`, porque el
     // tope de pila era 20 y el de apertura también. Con la caja apilando de 99 en
-    // 99 (G3) ya no: el de apertura sigue en 20 porque es una decisión de
-    // **cuántas aperturas de golpe se le ofrecen a alguien**, no de cuántas caben
-    // en una celda. Son dos cosas distintas y atarlas era casualidad, no regla.
+    // **EL TOPE DE APERTURA ES EL DE LA PILA, LEÍDO DE SU TABLA.** Estaba en veinte,
+    // con el argumento de que una lista de cincuenta premios no cabe en una pantalla.
+    // El argumento era cierto y la conclusión estaba equivocada: la lista **ya no es
+    // una línea por caja**, porque `resumenDePremios()` agrupa las monedas y los
+    // materiales. Lo que no se agrupa son los objetos, y eso es una columna con scroll,
+    // que es lo que ha sido siempre.
     //
-    // Lo que sí tiene que ser cierto es la **garantía**: abrir N cajas de golpe
-    // no puede ocupar más de una ranura nueva, porque si no el diálogo ofrecería
-    // una apertura que no cabe. De ahí sale la desigualdad: si el lote fuera mayor
-    // que el tope de pila, abrirlo entero necesitaría más de una ranura y el
-    // almacén decidiría por su cuenta cuántos Botín de menos.
-    check('lote: el tope de apertura cabe en una sola pila, así que no gasta dos ranuras',
+    // Y el 20 era una **copia** del 99 de la pila que se quedó vieja cuando la pila
+    // subió. Dos números que hablan del mismo tope y que solo se comparaban entre sí el
+    // día que alguien los miraba juntos.
+    check('lote: el tope de apertura es el de la pila, no un número copiado',
+      MAX_APERTURA_LOTE === TOPE_PILA.crate,
+      `lote=${MAX_APERTURA_LOTE} pila=${TOPE_PILA.crate}`);
+    // La garantía sigue siendo la misma: abrir el tope entero **no puede ocupar más de
+    // una ranura nueva**, porque si no el almacén decidiría por su cuenta qué botín se
+    // queda por el camino.
+    check('lote: abrir el tope entero sigue gastando una sola ranura',
       MAX_APERTURA_LOTE <= TOPE_PILA.crate,
       `lote=${MAX_APERTURA_LOTE} pila=${TOPE_PILA.crate}`);
     check('lote: y sigue siendo un tope de verdad, no "todas las que haya"',
       MAX_APERTURA_LOTE >= 10 && Number.isFinite(MAX_APERTURA_LOTE),
       `lote=${MAX_APERTURA_LOTE}`);
+
+    // **Y CON 99 APERTURAS, EL ESPACIO SIGUE SIENDO EL QUE MANDA.** Es el motivo por el
+    // que se puede subir el tope sin abrir la puerta a perder botín: el diálogo ofrece
+    // hasta lo que cabe y no una unidad más. Se comprueba en los tres casos que importan:
+    // almacén entero, un hueco y sin límite conocido.
+    check('lote: con el almacén lleno no se ofrece ni una apertura en lote',
+      maximoDeApertura(99, 0) === 0, `ofrece=${maximoDeApertura(99, 0)}`);
+    // **Y CON 99 APERTURAS EL ESPACIO SIGUE SIENDO EL QUE MANDA, Y SE NOTA.** Con 40
+    // huecos ofrece 40 y no 99: es lo peor que puede pasar —un hueco por apertura—, y es
+    // justo lo que el jugador pidió al subir el tope. Un tope de apertura sin el mínimo
+    // de espacio sería una puerta a perder botín en silencio.
+    check('lote: con huecos de sobra ofrece la pila entera',
+      maximoDeApertura(99, 120) === 99, `ofrece=${maximoDeApertura(99, 120)}`);
+    check('lote: y con huecos justos ofrece los huecos, que es lo peor que puede pasar',
+      maximoDeApertura(99, 40) === 40, `ofrece=${maximoDeApertura(99, 40)}`);
+    check('lote: un hueco da una apertura, no las que caben en la pila',
+      maximoDeApertura(99, 1) === 1, `ofrece=${maximoDeApertura(99, 1)}`);
+    check('lote: y ni una de más: la pila manda cuando no hay hueco que lo quite',
+      maximoDeApertura(150, 99) === 99, `ofrece=${maximoDeApertura(150, 99)}`);
 
     // Y que abrir de verdad N cajas gaste N cajas. Y solo N cajas.
     const g = await boot(baseSave([crate('c1', 1, 20)],

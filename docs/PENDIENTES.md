@@ -238,7 +238,38 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       a medias—, que es lo que se puede comprobar sin DOM. Lo que no comprueba es que las
       tres ruletas la lean, porque eso es leer código y una prueba que lee código no lo
       comprueba: lo lee. Anotado abajo como pendiente de banco.
-- [ ] **F49 · Mejora automática de cristales** hasta agotarlos.
+- [x] **F49 · Mejora automática de cristales** hasta agotarlos. Hecho, y lo que salió es
+      que **no es una ruleta más**: es el mismo intento repetido, y esa es toda la
+      diferencia que importa.
+      - **No puede ser peor que gastar a pulso, y se demuestra.** Un fallo **no baja el
+        nivel** —eso estaba escrito a propósito para que la escalera no tuviera
+        retorno— y el cristal no tiene otro uso en el juego: su única función es pagar un
+        intento. De las dos cosas sale que un cristal gastado en automático y otro gastado
+        a mano valen lo mismo. **El automático no cambia la economía: cambia quién
+        pulsa**, y por eso no necesita más permiso que el botón.
+      - **El botón usa el modo sin guardado y sin repintado.** `saveToFirebase()` escribe
+        en local y en la red, y `onUpdate()` repinta la página entera: hacer eso por
+        intento serían decenas de escrituras sobre el mismo documento para acabar en el
+        mismo sitio. Con el automático ocurren **una vez, al final**.
+      - **El bucle para por una razón y no por un número de vueltas.** Sale cuando ya no
+        se puede intentar —sin saldo o en el techo— y **un fallo no lo para**: es un
+        intento más. Si saliera en el primer fallo, gastar doscientos cristales sería un
+        intento y medio, que es lo contrario de "automático".
+      - **Hay tope de intentos, y avisa.** El nivel tiene techo y el cristal no, así que
+        con una cantidad enorme el bucle se comería la pestaña. Cuando llega al tope
+        **para y lo dice**: el mensaje lleva los intentos, los aciertos y los cristales
+        que quedan. Un tope callado sería un "hasta agotar" que miente.
+      - **El automático no tiene ruleta.** Un intento se enseña con la ruleta porque es
+        **un evento**; setenta y nueve intentos son un resultado. El resumen lo devuelve
+        el motor, no lo calcula la vista, y el botón **no promete a qué nivel sube**
+        porque eso depende de un dado.
+      - **Solo para recolectores.** `upgradeCompanion()` no tiene modo automático y no se
+        ofrece uno a medias: un botón que pregunta si quieres automático para después
+        decirte que no es peor que no ofrecerlo.
+      `potencialCheck` +7: equivalencia con el pulso con el mismo dado, que para con menos
+      de lo que cuesta el siguiente intento, que el resumen cuadra con el estado, que un
+      fallo no para el bucle, que sin cristales no hace nada y lo dice, que el techo sigue
+      siendo el techo y que un id que no existe se niega.
 - [x] **F50 · Precisión de los contadores.** Estaba arreglado —tres decimales en vez de
       dos, que era lo que congelaba el saldo con pocas nanitas— pero **nunca se marcó
       porque no había banco**, y eso es justo lo que hizo que pasara inadvertido tanto
@@ -610,7 +641,26 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
 
 ### Lote 9 · CAJAS
 
-- [ ] **F56 · Validar la apertura masiva** antes de abrir: cajas, llaves y **espacio**.
+- [x] **F56 · Abrir hasta 99 cajas de una vez, y validar el espacio.** Hecho, y lo que
+      estaba mal no era el número sino **de dónde salía**.
+      - **El 20 era una copia del 99 de la pila que se quedó vieja.** Dos números que
+        hablan del mismo tope y que solo se comparaban entre sí el día que alguien los
+        miraba juntos. Ahora `MAX_APERTURA_LOTE` **es** `TOPE_PILA.crate`: no hay número
+        que mantener y la comparación del banco solo puede decir que coinciden.
+      - **El argumento en contra era cierto y la conclusión estaba equivocada.** Decía
+        que una lista de cincuenta premios no cabe en una pantalla, y es verdad —pero
+        **la lista ya no es una línea por caja**: `resumenDePremios()` agrupa monedas y
+        materiales, así que noventa y nueve cajas suelen salir en cuatro o cinco filas. Lo
+        que no se agrupa son los objetos, y eso es una columna con scroll, que es lo que
+        ha sido siempre.
+      - **El espacio sigue mandando, y se nota.** El mínimo de `maximoDeApertura()` es el
+        número de huecos y no el de cajas porque lo peor que puede pasar es **un hueco
+        más por apertura**. Con cuarenta huecos ofrece cuarenta y no noventa y nueve:
+        abrir un tope sin ese mínimo sería una puerta a perder botín en silencio, que es
+        la peor clase de fallo de una lotería —el jugador cree que ha perdido el premio
+        por mala suerte y la culpa es del inventario—.
+      `loteCheck` 75 → 83, con los cuatro casos que importan: almacén entero, un hueco,
+      huecos justos y huecos de sobra.
 - [ ] **F57 · "Eliminar el sistema de cajas y llaves tradicionales (o unificar su lógica)"**
       — **no está claro qué quieres decir** y es lo más caro de deshacer. Es pregunta tuya.
 - [ ] [x] **F58 · Lista consolidada y agrupable.** Hecho en `loteCheck`.
@@ -2132,3 +2182,35 @@ _Cosas que estorban al trabajo más que al juego._
       probar sin DOM es lo que hay alrededor: que `mountInto` sustituya el nodo, que lo
       haga antes de quitar el viejo, y que devuelva los scrolls del árbol nuevo por la ruta
       de índices. Esa parte es lógica pura y se puede aislar.
+
+- [x] **Notas de parche al entrar, desactivables en Ajustes.** El encargo: un cartel al
+      entrar con los cambios de la versión, con una casilla para callarlo, y **sin cálculos
+      internos**: "Se añadieron nuevos compañeros y recolectores", "Se modificó el
+      ranking".
+      - **La versión sale de `package.json`**, y no de una constante al lado de las notas.
+        Es el único sitio donde el número puede ser verdad a la vez: una constante
+        escrita a mano se queda vieja el día que se sube la versión y nadie se entera,
+        que es justo el fallo que esto vino a arreglar. Publicar un parche son dos
+        pasos: subir la versión y añadir la nota.
+      - **La marca de "ya visto" guarda una versión, no un sí.** Con un booleano, un
+        jugador que desactiva las notas, juega dos meses y las vuelve a activar se
+        encuentra con que ya no le aparecen nunca: habría perdido las notas sin saber
+        que existían. Desactivado es "no mostrar", no "marcar como visto", así que al
+        reactivar aparecen lo pendiente. Un ajuste que se puede volver a poner **tiene**
+        que devolver lo que apagó.
+      - **Se monta al entrar y no en cada navegación.** `showPatchNotes()` lo pregunta a
+        `debeMostrarNotas()`, que son tres condiciones comprobables —hay nota de esta
+        versión, la preferencia está activa y no se ha visto— y que el banco puede
+        preguntar sin DOM. Un "si la versión es distinta" escrito en el punto de montarlo
+        es un "si" que nadie lee dos veces igual.
+      - **La regla de contenido es mecánica, no de estilo, y por eso se puede comprobar.**
+        El banco vigila que ninguna nota hable de ficheros, funciones ni
+        identificadores; que cada línea sea una frase con mayúscula y punto; que no
+        lleve cifras internas —un 12 %, un "de 3 a 4"—; que no repita línea; y que la nota
+        tenga entre tres y doce líneas. Un cartel de parche lleno de internals es un
+        commit log, y todo el mundo deja de leerlo al segundo commit.
+      **Lo que no se comprueba, y se dice:** que cada línea nombre algo que exista en la
+      pantalla. Eso no es decidible y un banco que fingiera comprobarlo daría la
+      impresión de que comprueba algo que no comprueba.
+      `leyendaCheck` 21 → 31. Versión subida a 1.2.0 y `preview.html?vista=notas` para
+      poder mirarlo sin jugar: vive en `main.ts`, así que sin esa vista no había forma.

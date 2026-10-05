@@ -27,23 +27,35 @@ import {
 } from './crateLoot';
 import { formatNumber } from '../utils/format';
 import type { CrateType } from '../data/store';
+import { TOPE_PILA } from '../data/stacking';
 
 /**
  * CUÁNTAS CAJAS SE ABREN DE UNA VEZ.
  *
- * **Y POR QUÉ 20 SI LA PILA CABE 99.** Antes eran el mismo número y no era
- * casualidad: veinte cajas era exactamente una pila, así que el diálogo y la
- * esquina de la celda decían lo mismo. Con la caja apilando de 99 en 99 (G3) los
- * dos topes se separan, y este ya no es el del almacén: es una decisión de
- * **cuántas aperturas de golpe se le ofrecen a alguien**.
+ * **Y AHORA ES EL TOPE DE LA PILA, LEÍDO DE SU TABLA.** Estaba en veinte, con un
+ * argumento que parecía bueno: una lista de cincuenta premios no cabe en una pantalla y
+ * un scroll que esconde el final esconde justo la parte que más importa. El argumento
+ * era cierto y la conclusión estaba equivocada, porque **la lista ya no es una línea por
+ * caja**: `resumenDePremios()` agrupa las monedas y los materiales, así que noventa y
+ * nueve cajas suelen salir en cuatro o cinco filas. Lo que no se agrupa son los objetos,
+ * y treinta objetos en una columna con scroll es una columna con scroll: se ha visto
+ * siempre.
  *
- * **Y NO ES MÁS PORQUE UNA LISTA DE 50 PREMIOS NO CABE EN UNA PANTALLA.** Con 20
- * caben en una columna con scroll y el jugador ve el total sin desplazar. Un tope
- * más alto no daría más información: daría un scroll que esconde el final, que
- * es justo la parte que más importa. Subir el tope de pila a 99 **no obliga** a
- * subir este: son dos cosas distintas y atarlas era casualidad.
+ * **EL NÚMERO NO SE ESCRIBE AQUÍ.** Sale de `TOPE_PILA.crate`, que es la regla de
+ * almacenamiento. Diecinueve sonaba a decisión de diseño y era una **copia** del 99 de la
+ * pila que se quedó vieja cuando la pila subió: dos números que hablan del mismo tope y
+ * que solo se comparaban entre sí el día que alguien los comparaba. El banco `loteCheck`
+ * hace esa comparación —`MAX_APERTURA_LOTE <= TOPE_PILA.crate`— y ahora que son el mismo
+ * número solo puede decir que lo son.
+ *
+ * **LO QUE SIGUE SIENDO EL LÍMITE NO ES ESTE, SON LOS HUECOS.** Abrir noventa y nueve
+ * cajas con el almacén lleno es pedir un botín que no cabe: lo que no entra **se pierde
+ * sin decir nada** y el jugador ve una tirada con una línea donde no hay objeto. Por eso
+ * `maximoDeApertura()` sigue acotando por los huecos libres, y por eso el mínimo sigue
+ * siendo el número de huecos y no el de cajas: lo peor que puede pasar es **un hueco más
+ * por apertura**.
  */
-export const MAX_APERTURA_LOTE = 20;
+export const MAX_APERTURA_LOTE = TOPE_PILA.crate;
 
 /**
  * Cuántas cajas se pueden abrir de golpe con lo que hay encima.
