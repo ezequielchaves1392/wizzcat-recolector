@@ -212,6 +212,65 @@ export const LORE: Record<string, string> = {
   'Fénix de Datos': 'Renace de cada reinicio con más hambre.',
   'Centinela Eterno': 'Juró guardar tu base hasta el fin de los ciclos.',
   'Espectro Azulado': 'Solo sale de la legendaria. Por eso brilla.',
+  // =========================================================================
+  //  F52 · EL LORE DE LOS OBJETOS QUE NO ERAN RECOLECTORES NI COMPAÑEROS
+  //
+  //  Arriba hay sesenta nombres de tier y seis exclusivos, y todos tienen su línea.
+  //  **Los demás objetos del juego no tenían ninguna**: las cinco consumibles, los
+  //  diez expansores, las tres tarjetas de ranura y las diez cajas tienen un
+  //  `details` —"Sube 12 puntos la probabilidad"— y nada más.
+  //
+  //  Y ese `details` es una descripción mecánica, no un lore: dice lo que hace el
+  //  objeto y no de dónde sale. La diferencia se ve en la ficha del almacén, que para
+  //  un recolector enseña su línea de sabor y para una caja enseña solo la mecánica.
+  //  **El jugador tenía veintiocho objetos sin una sola frase de sabor**, y son los
+  //  que más se tocan: una caja es lo que se abre quince veces por hora.
+  //
+  //  **LAS REGLAS QUE CUMPLE ESTE BLOQUE, Y SON LAS DE ARRIBA.** Ni un número: el
+  //  stat va al lado, en grande, y un "treinta segundos" en el lore es una segunda
+  //  copia de una cifra que ya se lee. Ni una explicación de lo que hace: el
+  //  `details` la pone justo encima y repetirla es hacer que la ficha tenga dos
+  //  frases que dicen lo mismo y ninguna que diga algo.
+  //
+  //  **Y LA MISMA TABLA, PORQUE ES LA MISMA REGLA.** El lore se busca por nombre con
+  //  `lorePara()`, así que añadir aquí una entrada hace que el objeto la encuentre sin
+  //  tocar la ficha ni el almacén ni la forja. No hay un segundo sitio donde mirar el
+  //  sabor de un objeto, y no lo hay por casualidad: habría sido el sitio donde los
+  //  dos se separan.
+  // -------------------------------------------------------------- CONSUMIBLES
+  'Tarjeta AFK': 'La máquina sigue trabajando cuando tú cierras los ojos.',
+  'Tarjeta Click x2': 'Diez segundos de dedos que no son los tuyos.',
+  'Tarjeta Click x3': 'Préstamo del doble: se devuelve solo y cobra intereses.',
+  'Piedra de Calibración': 'Alguien tuvo que medirlo antes de que lo fusieras.',
+  'Nanopartícula de Estabilidad': 'Tan pequeña que decide cómo se rompe lo grande.',
+  // --------------------------------------------------------------- EXPANSORES
+  'Expansor T1': 'Un centímetro más de pared, y ya no cabe lo que sobraba.',
+  'Expansor T2': 'Alargó el pasillo hasta donde estaba el ruido.',
+  'Expansor T3': 'La obra que siempre se aplazaba por falta de sitio.',
+  'Expansor T4': 'Ganada en la discusión sobre qué se guarda y qué se tira.',
+  'Expansor T5': 'Un almacén con sala para las dudas.',
+  'Expansor T6': 'El espacio que se ganó discutiendo con el inventario.',
+  'Expansor T7': 'Ni una caja más en el suelo, que es como empezó esto.',
+  'Expansor T8': 'La cubicación dejó de ser una disculpa.',
+  'Expansor T9': 'Cabe lo que faltaba, y lo que va a faltar.',
+  'Expansor T10': 'El último metro cuadrado de la Cyber Base.',
+  // ------------------------------------------------------- TARJETAS DE RANURA
+  'Slot de Compañero 2': 'Uno ya no es compañía: es un puesto.',
+  'Ranura de Escuadrón (ranuras 3 y 4)': 'Formación. Ya no son tres cosas sueltas.',
+  'Ranura de Escuadrón (ranuras 5 y 6)': 'Y aquí ya no se cuentan: se siguen.',
+  // -------------------------------------------------------------------- CAJAS
+  // ------------------------------------------------------ CRISTALES
+  'Cristal de Mejora': 'No se bebe. Se gasta, y por eso vale lo que vale.',
+  'Caja T1': 'La que se podía abrir sin pedir permiso.',
+  'Caja T2': 'Lleva tu nombre. La de al lado también lo lleva.',
+  'Caja T3': 'Nadie recuerda quién la trajo ni de dónde.',
+  'Caja T4': 'Cerrada con llave de la casa, y la casa no era esta.',
+  'Caja T5': 'Empieza a saber a algo que no es chatarra.',
+  'Caja T6': 'El precinto ya no es lo que se rompe primero.',
+  'Caja T7': 'Hay que llevarla en dos manos y no basta.',
+  'Caja T8': 'La etiqueta dice que no, en un idioma que ya no se habla.',
+  'Caja T9': 'Lo que hay dentro pesa más de lo que debería pesar.',
+  'Caja T10': 'La última. La que se abre una vez y se recuerda siempre.',
 };
 
 /**

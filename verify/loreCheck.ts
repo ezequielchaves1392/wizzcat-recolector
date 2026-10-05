@@ -15,6 +15,10 @@
 // ==========================================================================
 
 import { TIER_SYSTEM, LORE, lorePara, lineaTipoCompanion } from '../src/data/tiers';
+import {
+  CONSUMABLES_SIN_EXPANSOR, EXPANSOR_TIERS, COMPANION_SLOT_BUY, CRATE_TYPES, CRATE_TIERS, type CrateType
+} from '../src/data/store';
+import { CRISTAL_NOMBRE } from '../src/data/items';
 import { CRATE_ONLY_COMPANIONS } from '../src/components/crateLoot';
 import { check, resumen } from './kit';
 
@@ -27,7 +31,38 @@ async function main() {
   ];
   const nombresCaja = CRATE_ONLY_COMPANIONS.map(c => c.name);
   const extra = ['Artillero Táctico'];
-  const todos = [...nombresTier, ...nombresCaja, ...extra];
+
+  // -----------------------------------------------------------------------
+  //  F52 · LOS OBJETOS QUE NO SON RECOLECTORES NI COMPAÑEROS.
+  //
+  //  Esta lista **no está escrita a mano**: sale de las mismas tablas que producen el
+  //  juego, que es lo único que hace que no se pueda quedar vieja. Si mañana se añade
+  //  una consumible nueva y nadie le pone nombre, esta lista la recoge y el banco dice
+  //  que le falta lore. Si la lista estuviera escrita aquí, el banco mediría 28
+  //  nombres que ya nadie usa y pasaría en verde con el juego entero roto.
+  //
+  //  **Y POR QUÉ SE COMPARAN POR NOMBRE Y NO POR ID.** Porque el lore se busca por
+  //  nombre, con la misma función para todo. Un id obligaría a decidir el texto por
+  //  objeto, y dos objetos que compartieran id compartirían también su historia.
+  // -----------------------------------------------------------------------
+  //
+  //  **DE `CONSUMABLES_SIN_EXPANSOR`, NO DE `CONSUMABLES`.** Los dos existen y se parecen
+  //  mucho: el segundo es el primero **más los diez expansores**. Pedir los dos aquí no
+  //  da error y da el doble: la lista salía de 38 nombres con diez repetidos, y el banco
+  //  que dice "cada nombre tiene su lore" pasaba en verde con el mismo nombre contado
+  //  dos veces. Un nombre repetido en la lista es un objeto que se comprueba dos veces y
+  //  otro que no se comprueba nunca.
+  const nombresDeObjeto = [
+    ...Object.values(CONSUMABLES_SIN_EXPANSOR).map(c => c.name),
+    ...EXPANSOR_TIERS.map(e => `Expansor T${e.tier}`),
+    ...COMPANION_SLOT_BUY.map(c => c.etiqueta),
+    ...CRATE_TIERS.map(t => CRATE_TYPES[t as CrateType].name),
+    // El cristal también entra por su nombre, y el nombre sale de `data/items`: es el
+    // único que existe, y el que traía el mock antes ('Cristal de Afino') ya no lo es.
+    CRISTAL_NOMBRE
+  ];
+
+  const todos = [...nombresTier, ...nombresCaja, ...extra, ...nombresDeObjeto];
 
   // -----------------------------------------------------------------------
   //  1. TODO NOMBRE TIENE LORE.
@@ -132,6 +167,32 @@ async function main() {
     check('lore: ninguno explica lo que hace el objeto, que ya lo dice la etiqueta',
       dice.length === 0,
       dice.map(([n, t]) => n + ' -> ' + t).join(' | ') || 'ninguno');
+  }
+
+  // -----------------------------------------------------------------------
+  //  F52 · LOS VEINTIOCHO OBJETOS QUE NO SON RECOLECTORES NI COMPAÑEROS.
+  //
+  //  La comprobación de arriba ya los incluye en la lista de nombres, y eso ya dice que
+  //  no falta ninguno. Lo que falta es decir **que la lista es la de verdad**: que no se
+  //  cuele un objeto que el juego produce y que el banco no está mirando, porque un
+  //  banco que compara el catálogo contra una lista suya no sabe que le falta algo.
+  //
+  //  Por eso el número se compara contra el que sale de las tablas, no contra un número
+  //  escrito aquí. Si mañana se añade un consumible más, este banco dice 29 y el de
+  //  arriba exige su lore: el olvido se vuelve imposible.
+  // -----------------------------------------------------------------------
+  {
+    const esperados = Object.keys(CONSUMABLES_SIN_EXPANSOR).length + EXPANSOR_TIERS.length
+      + COMPANION_SLOT_BUY.length + CRATE_TIERS.length + 1;
+    check('lore: F52 los veintiocho objetos tienen lore',
+      nombresDeObjeto.length === esperados && nombresDeObjeto.every(n => lorePara(n) !== null),
+      `objetos=${nombresDeObjeto.length} esperados=${esperados} sin lore=${nombresDeObjeto.filter(n => lorePara(n) === null).join(',')}`);
+
+    // Y que un nombre no aparezca dos veces en la lista, que sería la forma de que un
+    // objeto se contara dos veces y otro se quedara sin comprobar.
+    const repetidos = nombresDeObjeto.filter((n, k) => nombresDeObjeto.indexOf(n) !== k);
+    check('lore: F52 ningún nombre de objeto está repetido en la lista',
+      repetidos.length === 0, [...new Set(repetidos)].join(','));
   }
 
   resumen('lore: cada nombre tiene el suyo y ninguno sobra');

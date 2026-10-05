@@ -18,6 +18,8 @@
 // ==========================================================================
 
 import './style.css';
+import { CRATE_TYPES } from './data/store';
+import { CRISTAL_NOMBRE, CRISTAL_RAREZA } from './data/items';
 import './style.modules.css';
 import { renderLayoutHTML } from './ui/layout';
 import { wirePreviewAudio } from './previewAudio';
@@ -133,7 +135,19 @@ const MOCK: any = {
     { id: 'c3', name: 'Titán de Acero', type: 'companion', potential: 3, details: 'Recolección por segundo: +68/s', rarity: 'Legendario', tier: 9, power: 68 },
     { id: 'c4', name: 'Dron Explorador', type: 'companion', potential: 3, details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6 },
     { id: 'c5', name: 'Fénix de Datos', type: 'companion', potential: 3, details: 'Recolección por segundo: +40/s', rarity: 'Mítico', tier: 9, power: 40 },
-    { id: 'cr1', name: 'Caja Legendaria', type: 'crate', details: 'Contiene recompensas máximas', rarity: 'Legendario', stackable: true, stackCount: 3 },
+    // F52 · EL MOCK USA LOS NOMBRES DE VERDAD, Y ANTES NO.
+    //
+    // Decía "Caja Legendaria", que fue el nombre que tenían las cajas antes de F31:
+    // entonces había cuatro, una por rareza. Desde que hay una caja por tier, la caja
+    // legendaria se llama "Caja T8", y el motor la crea con el nombre de
+    // `CRATE_TYPES[tier]`, que es de donde sale el lore.
+    //
+    // **El síntoma no es que el preview se quedara viejo: es que hacía imposible
+    // revisar F52.** Con este nombre el objeto no encuentra su lore, la ficha sale sin
+    // él y no hay forma de saber si el fallo es del mock o del juego. Un mock que
+    // fabrica un objeto que el juego no fabrica mide un objeto que no existe — el mismo
+    // criterio que se aplicó a los bancos, y por el mismo motivo.
+    { id: 'cr1', name: CRATE_TYPES[8].name, type: 'crate', details: CRATE_TYPES[8].details, rarity: CRATE_TYPES[8].rarity, stackable: true, stackCount: 3 },
     { id: 'st1', name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: 7 },
     { id: 'nn1', name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 2 },
     { id: 'af1', name: 'Tarjeta AFK', type: 'consumable', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk', stackable: true, stackCount: 2 },
@@ -143,8 +157,13 @@ const MOCK: any = {
     // forma de mirar esa pantalla sin jugar una partida hasta el nivel 12, así
     // que si el ejemplo no trae cristales, la pantalla no existe para el que
     // la quiere mirar.
-    { id: 'xt1', name: 'Cristal de Afino', type: 'crystal', details: 'x1 a la probabilidad de mejora.', rarity: 'Común', tier: 1, stackable: true, stackCount: 40 },
-    { id: 'xt2', name: 'Cristal de Fase', type: 'crystal', details: 'x1.75 a la probabilidad de mejora.', rarity: 'Raro', tier: 2, stackable: true, stackCount: 12 }
+    // F52 · 'Cristal de Afino' y 'Cristal de Fase' eran los nombres ANTES de que los
+    // cristales dejaran de tener nivel. Hoy hay uno solo, `CRISTAL_NOMBRE`, y el juego
+    // no crea items de cristal: son un contador. El mock los trae igualmente porque sin
+    // ellos el botón de mejorar con cristales y la ruleta del sintonizador no se pueden
+    // revisar —lo dice el comentario de abajo—, pero los trae **con el nombre de
+    // verdad**, que es lo único que hace que sirvan para mirar el lore.
+    { id: 'xt1', name: CRISTAL_NOMBRE, type: 'crystal', details: 'Una unidad por intento de sintonización.', rarity: CRISTAL_RAREZA, tier: 1, stackable: true, stackCount: 40 },
   ],
   companions: [
     { id: 'c1', name: 'Avatar del Vacío', type: 'passive', power: 65, rarity: 'Divino', tier: 10 },

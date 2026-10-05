@@ -475,7 +475,40 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
 - [ ] **F51 · Explicar los afijos.** Incluye la pregunta concreta: "¿cuántos afijos puede
       tener un Mítico?". La respuesta sale de `AFIX_MIN_POR_RARIDAD` y no está escrita en
       ninguna parte que el jugador pueda leer.
-- [ ] **F52 · Lore de todos los items**, no solo de los que tienen entrada.
+- [x] **F52 · Lore de todos los items**, no solo de los que tienen entrada. Hecho, y lo
+      que faltaba eran **veintinueve objetos**: las cinco consumibles, los diez expansores,
+      las tres tarjetas de ranura, las diez cajas y el cristal. Todos tenían un `details`
+      —"Sube 12 puntos la probabilidad"— y nada más.
+      **La diferencia entre `details` y lore es la que lo hace un bug y no una mejora de
+      estilo.** El `details` dice lo que hace el objeto; el lore dice de dónde sale. En la
+      ficha del almacén un recolector enseñaba su línea de sabor y una caja enseñaba solo
+      la mecánica, y **una caja es lo que se abre quince veces por hora**: el objeto que
+      más se toca era el que no tenía una sola frase de sabor.
+      - **La ficha ya no lo esconde detrás de un ternario.** Decía
+        `isCollector || isCompanion ? loreLine(...) : ''`, y el ternario era correcto
+        cuando solo esos dos tipos tenían lore. La condición ahora es la del propio item:
+        si tiene nombre con lore, se enseña. Y como el lore se busca por **nombre** con la
+        misma función para todo, no hizo falta tocar el almacén, la forja ni la tienda: una
+        entrada en `LORE` y el objeto la encuentra. No hay un segundo sitio donde mirar el
+        sabor de un objeto, y no lo hay por casualidad: habría sido donde los dos se
+        separan.
+      - **Cumplen las reglas de los otros**: ni un número (el stat va al lado, en grande) ni
+        una explicación de lo que hace (el `details` la pone justo encima). El banco de
+        leyendas ya lo vigila sobre `LORE` entero, así que el bloque nuevo entró sin
+        excepciones.
+      - **La lista de nombres del banco no está escrita a mano**: sale de `store.ts` y de
+        `data/items`. Y dos comprobaciones propias: que los veintinueve tengan lore y que
+        **ninguno esté repetido** en la lista —que es como se cuece el error de mirar lo
+        mismo dos veces y no mirar lo demás—.
+      - **Y el preview fabricaba objetos que el juego no fabrica.** La caja del mock se
+        llamaba "Caja Legendaria", que fue su nombre antes de F31, y los cristales del mock
+        eran "Cristal de Afino" y "Cristal de Fase", que dejaron de existir cuando los
+        cristales dejaron de tener nivel. Con esos nombres **no había forma de revisar
+        F52**: el objeto no encontraba su lore y la ficha salía sin él, sin que se pudiera
+        saber si el fallo era del mock o del juego. Mismo criterio que el de los bancos que
+        fabrican un `Cristal Singular` inexistente, y por el mismo motivo.
+      `loreCheck` 11 → 15. Verificado en `preview.html` a 390×844: caja, piedra,
+      nanopartícula, tarjeta AFK y cristal muestran su cita en la ficha.
 
 ### Lote 8 · APARIENCIA
 

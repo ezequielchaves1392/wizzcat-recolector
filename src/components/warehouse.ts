@@ -870,7 +870,22 @@ function detailContent(item: any, state: any, game: any): string {
 
         ${statPrincipalHTML(statPrincipal, game, item.id)}
 
-        ${isCollector || isCompanion ? loreLine(item, state) : ''}
+        <!--
+          F52 · EL LORE SE ENSEÑA PARA **TODOS** LOS TIPOS, Y ANTES NO.
+
+          Esta línea estaba detrás de un ternario que solo la pintaba para recolectores y
+          compañeros, y con razón: antes solo esos dos tipos tenían lore. Lo que pasó es
+          que el lore se escribió para ellos y **el resto se quedó fuera**, así que una caja,
+          una piedra de calibración o un expansor llegaban a su ficha con su línea mecánica
+          mecánico y nada más. Veintiocho objetos sin una frase de sabor, entre ellos los que
+          más se tocan.
+
+          La condición ahora es la del propio item y no la del tipo: **si tiene nombre con
+          lore, se enseña**, y la función devuelve nada para lo que no lo tenga, que es
+          lo que hace que esto no pueda enseñar una caja vacía. Un solo sitio donde se
+          decide y una sola fuente de verdad para el texto.
+        -->
+        ${loreLine(item, state)}
 
         ${item.stackable ? `
           <div class="mb-2.5">
