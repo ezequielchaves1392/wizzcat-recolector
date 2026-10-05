@@ -1398,6 +1398,86 @@ export function rangoDeAfijosForjados(
 }
 
 /**
+ * EL SUELO DE AFIJOS DE UNA RAREZA, Y CÓMO SE DICE EN PALABRAS.
+ *
+ * F51. La regla "más rareza, más afijos" estaba escrita en un comentario y en
+ * ninguna parte que el jugador pudiera leer. La pregunta que se hacía —"¿cuántos
+ * afijos puede tener un Mítico?"— tiene respuesta exacta y la daba
+ * `AFIX_MIN_POR_RARIDAD`, así que lo que faltaba no era el número: era que
+ * alguien lo dijera.
+ *
+ * **Y EL NÚMERO NO SE ESCRIBE AQUÍ, SE LEE DE LA TABLA.** Esta función monta la
+ * frase con `AFIX_MIN_POR_RARIDAD[rareza]`, de modo que el día que la tabla suba
+ * el suelo de un Mítico la frase lo dice sola. Una explicación con el número
+ * escrito a mano es una segunda fuente de la verdad, y es exactamente el tipo de
+ * cosa que se queda diciendo la regla vieja después de que la regla haya cambiado.
+ *
+ * **Y DICE "FORJADO", QUE NO ES UN ADVERBIO.** Los afijos **solo** existen en los
+ * recolectores que salen de la forja: ni la tienda ni las cajas los dan, porque
+ * `pickAffixes()` es el único sitio que los escribe. Un "un Mítico lleva 4
+ * afijos" sin ese matiz es mentira comprobable en diez segundos —el jugador abre
+ * un Mítico de la tienda, ve que no tiene ninguno y deja de leer todo lo demás—,
+ * así que la frase lleva el "forjado" dentro y no en una nota aparte.
+ */
+export function fraseDeSueloDeAfijos(rareza: string): string {
+  const suelo = AFIX_MIN_POR_RARIDAD[rareza];
+  if (suelo === undefined) return '';
+  if (suelo === 0) return `Un ${rareza} forjado no lleva afijos por rareza.`;
+  if (suelo >= AFIX_MAX) {
+    return `Un ${rareza} forjado lleva los ${AFIX_MAX} afijos: no puede llevar ni uno más.`;
+  }
+  return `Un ${rareza} forjado lleva al menos ${suelo} afijos.`;
+}
+
+/**
+ * LA EXPLICACIÓN COMPLETA, EN UNA FRASE QUE CABE EN UNA TARJETA.
+ *
+ * Las dos mitades de la regla, que es lo que el jugador no puede deducir:
+ * **el suelo lo pone la rareza** —y por eso no hay forma de negociarlo a la baja—
+ * y **el techo lo ponen los materiales** —y por eso buscar buenos parents vale
+ * algo—. Con una regla y sin la otra, la mitad de las preguntas que se hacen en
+ * la forja no tienen respuesta.
+ *
+ * El texto se arma con `AFIX_MAX` y con la lista de rarezas de
+ * `AFIX_MIN_POR_RARIDAD`, en el mismo orden que el juego las ordena, para que
+ * añadir una rareza nueva no deje un texto que se la salta en silencio.
+ */
+export function explicacionDeAfijos(): string {
+  const suelo = Object.entries(AFIX_MIN_POR_RARIDAD)
+    .map(([rareza, n]) => `${rareza} ${n}`)
+    .join(' · ');
+  return `Solo la forja da afijos. El suelo lo pone la rareza (${suelo}) y el techo los `
+    + `materiales que pones, hasta ${AFIX_MAX}.`;
+}
+
+/**
+ * Cuántos afijos **aportan** los materiales de una selección, y solo eso.
+ *
+ * Es la pregunta que el jugador sí puede hacer antes de forjar: sus dos padres traen
+ * afijos, y la media de los dos es lo que su forjado puede heredar de ellos.
+ *
+ * **NO ES EL TECHO DEL ITEM Y NO SE PIDE QUE LO SEA.** El techo de verdad lo da
+ * `rangoDeAfijosForjados()`, que es el suelo de la rareza **más** esta aportación. Y
+ * el suelo depende de la rareza del item que salga, que a su vez depende del potencial
+ * que todavía no ha salido del dado: **antes de forjar no se sabe**. Un banco lo
+ * detectó —la vista decía 2 y la regla daba 5— y tenía razón: la vista enseñaba un
+ * número que no era el que el item iba a tener, y solo por cómo estaba redactado
+ * ("hasta N") parecía que sí.
+ *
+ * Por eso esto se llama **aporte** y la vista lo enseña como aportación, no como techo.
+ * El número que sí se puede enseñar sin mentir es la parte que depende del jugador, y
+ * es justo la parte por la que merece la pena buscar buenos materiales.
+ *
+ * Devuelve `null` si no hay materiales suficientes: sin dos padres no hay linaje, y
+ * teach "aporta 0" es peor que no teach nada.
+ */
+export function aporteDeAfijos(materials: Array<{ affixes?: string[] }>): number | null {
+  if (materials.length < MATERIALES_POR_FUSION) return null;
+  const linea = materials.reduce((a, m) => a + (m.affixes?.length ?? 0), 0) / materials.length;
+  return Math.max(0, Math.min(AFIX_MAX, Math.floor(linea)));
+}
+
+/**
  * Reparte los afijos del item forjado.
  *
  * **La rareza da el suelo y el linaje da el techo** (`rangoDeAfijosForjados()`),

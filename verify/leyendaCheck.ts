@@ -1,7 +1,7 @@
 import { check, resumen } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { chanceDeSintonizacion } from '../src/data/items';
-import { costeDeNivel } from '../src/data/crafting';
+import { AFIX_MIN_POR_RARIDAD, AFIX_MAX, explicacionDeAfijos, fraseDeSueloDeAfijos, aporteDeAfijos, rangoDeAfijosForjados, costeDeNivel } from '../src/data/crafting';
 import { CRATE_TYPES, COMPANION_SLOT_BUY, STORE_ITEMS } from '../src/data/store';
 import { ACHIEVEMENTS } from '../src/achievements';
 import { CRATE_LOOT } from '../src/components/crateLoot';
@@ -348,6 +348,91 @@ async function main() {
   //  hablando de llaves**, así que es el que hay que contrastar con la regla que
   //  ahora hay: la caja se abre sola.
   // =========================================================================
+
+  // ---------------------------------------------------------------------------
+  //  F51 · LA EXPLICACIÓN DE LOS AFIJOS DICE LA REGLA QUE EL JUEGO APLICA.
+  //
+  //  Es el quinto bloque de este banco por el mismo motivo que los otros cuatro:
+  //  **una línea que describe una regla puede quedarse diciendo la regla vieja** y no
+  //  hay forma de verlo leyendo el texto, porque el texto está bien escrito. Lo que lo
+  //  delata es que el código haga otra cosa.
+  //
+  //  Y el que se encontró aquí era de los gordos. La forja decía "El recolector forjado
+  //  hereda los afijos de la rareza de sus materiales", y son dos cosas falsas en una
+  //  frase:
+  //
+  //    · **El suelo lo pone la rareza del item que sale**, no la de los materiales. Los
+  //      materiales no tienen una rareza de afijos: tienen afijos, y de eso dan el techo.
+  //    · **Lo que se hereda son los afijos en sí** —los buenos se transmiten de verdad—,
+  //      no "los afijos de una rareza".
+  //
+  //  Un jugador que lo leyera y comprobara la forja con dos materiales sin afijos
+  //  concluiría que la rareza no hace nada, y la rareza es justamente la mitad de la
+  //  regla.
+  // ---------------------------------------------------------------------------
+  {
+    // La explicación sale de la tabla, no de un número escrito aquí.
+    const texto = explicacionDeAfijos();
+    check('leyenda: la explicación de los afijos nombra el suelo de cada rareza',
+      Object.entries(AFIX_MIN_POR_RARIDAD).every(([rareza, n]) => texto.includes(`${rareza} ${n}`)),
+      texto);
+
+    check('leyenda: y nombra el tope del juego, que es donde acaba la regla',
+      texto.includes(String(AFIX_MAX)), texto);
+
+    // **Y QUE DIGA "FORJADO", QUE NO ES UN ADVERBIO.** Los afijos solo los da la forja:
+    // ni la tienda ni las cajas los dan, porque `pickAffixes()` es el único sitio que los
+    // escribe. Un texto que dice "un Mítico lleva 4 afijos" sin ese matiz es una mentira
+    // comprobable en diez segundos, y un jugador que pilla una mentira en un texto deja
+    // de fiarse de los otros veinte.
+    const conSuelo = fraseDeSueloDeAfijos('Mítico');
+    check('leyenda: el suelo de afijos dice forjado y promete un mínimo con nombre y apellidos',
+      conSuelo.includes('forjado') && conSuelo.includes('4'), conSuelo);
+
+    // La rareza desconocida no tiene suelo: inventar uno sería peor que no decir nada.
+    check('leyenda: una rareza que no existe no tiene suelo de afijos que explicar',
+      fraseDeSueloDeAfijos('Rarisima') === '', JSON.stringify(fraseDeSueloDeAfijos('Rarisima')));
+
+    // **Y QUE EL NÚMERO DE LA PANTALLA SEA LA MISMA PIEZA QUE USA LA REGLA.** No que
+    // coincida con el resultado final —no puede, el suelo depende del dado— sino que sea
+    // exactamente la parte que la regla llama "lo que arrastra el linaje". Es lo que
+    // impide que la vista tenga su propia cuenta: el día que la media cambie, la vista y
+    // la forja se separan en silencio.
+    const conAfijos = (n: number) => [
+      { affixes: Array.from({ length: n }, () => 'a') }, { affixes: [] as string[] }
+    ];
+    const desajustes: string[] = [];
+    for (const [n, rareza] of [[0, 'Común'], [4, 'Legendario'], [6, 'Divino']] as const) {
+      const m = conAfijos(n) as any;
+      const rango = rangoDeAfijosForjados(m, rareza, false);
+      // La regla, escrita con la aportación de la vista en medio: el suelo de la
+      // rareza más lo que aportan los materiales, acotado por el tope del juego.
+      //
+      // **Y EL ACOTE IMPORTA CON UN DIVINO.** Su suelo ya es el tope entero, así que
+      // sumar la aportación da más de seis y la regla se queda en seis. Por eso la
+      // comprobación no es "más" sino "exactamente igual": un item con ocho afijos
+      // sería el mismo bug que este, al revés.
+      const esperado = Math.min(AFIX_MAX, (AFIX_MIN_POR_RARIDAD[rareza] ?? 0) + (aporteDeAfijos(m) ?? 0));
+      if (rango.maximo !== esperado) desajustes.push(`${rareza}: la vista y la regla dan ${esperado} y ${rango.maximo}`);
+    }
+    check('leyenda: el número de afijos de la forja es la parte que usa la regla',
+      desajustes.length === 0, desajustes.join(' | ') || 'aportación = parte de linaje de la regla');
+
+    // Sin dos materiales no hay linaje: es preferible no enseñar nada a enseñar un cero.
+    check('leyenda: sin dos materiales no se enseña una aportación de afijos',
+      aporteDeAfijos([] as any) === null && aporteDeAfijos([{ affixes: [] }] as any) === null,
+      String(aporteDeAfijos([] as any)));
+
+    // **Y QUE NUNCA SE PASE DEL TOPE.** Con dos materiales de seis afijos cada uno la media
+    // da seis, y el tope del juego es seis: no puede salir un siete por mucho que los
+    // padres lleven, porque un item con siete afijos no existe.
+    const tope = aporteDeAfijos([
+      { affixes: Array.from({ length: 6 }, () => 'a') },
+      { affixes: Array.from({ length: 6 }, () => 'a') }
+    ] as any);
+    check('leyenda: la aportación de afijos nunca pasa del tope del juego',
+      tope === AFIX_MAX, `aportación=${tope} tope=${AFIX_MAX}`);
+  }
 
   resumen('leyendas: cada texto dice la regla que el juego aplica');
 }

@@ -29,7 +29,7 @@
 import { ic } from './icons';
 import { getSkipRoulette } from '../roulettePrefs';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION } from '../data/crafting';
+import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -272,6 +272,18 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     ? successChance(matTier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0)
     : 0;
   const ready = elegidos.length === MATERIALES_POR_FUSION;
+  // F51 · CUÁNTOS AFIJOS APORTAN TUS MATERIALES. Lo único de la regla que depende de
+  // ti, y lo único que se puede decir **antes** de tirar el dado.
+  //
+  // **NO ES EL TECHO DEL ITEM, Y POR ESO NO SE ENSEÑA COMO TAL.** El techo de verdad
+  // es el suelo de la rareza **más** esto, y el suelo depende del potencial que
+  // todavía no ha salido del dado. Un banco lo detectó: la vista decía 2 y la regla
+  // daba 5, y solo por cómo estaba redactado —"hasta N"— parecía que no mentía.
+  //
+  // Por eso la línea de la pantalla dice **aportan** y no "lleva hasta": son los afijos
+  // que los padres ponen en el item, que es exactamente lo que premia buscar buenos
+  // materiales en vez de la primera pareja que se vea.
+  const aportan = ui.tipo === 'collector' ? aporteDeAfijos(elegidos) : null;
 
   // --- Fragmentos -------------------------------------------------------
 
@@ -369,7 +381,7 @@ function nivelDe(w: any): number {
     </div>
     <p class="text-[9px] text-[var(--text-muted)] mb-3 leading-relaxed">
       ${ui.tipo === 'collector'
-        ? 'El recolector forjado hereda los afijos de la rareza de sus materiales.'
+        ? 'El recolector forjado hereda los afijos de sus materiales; cuántos lleva los decide la rareza que le toca.'
         : 'El compañero forjado hereda el potencial, y la nanopartícula se lo sube +1.'}
       Misma probabilidad, mismas piedras y mismo fallo en las dos.
     </p>
@@ -423,6 +435,31 @@ function nivelDe(w: any): number {
             Selecciona ${MATERIALES_POR_FUSION} ${N.muchos} del mismo tier.
           </p>
         `}
+        <!--
+          F51 · LOS AFIJOS, Y POR QUÉ ESTÁN AQUÍ Y NO EN LA FICHA.
+
+          La ficha del almacén enseña **qué afijos lleva** un item forjado, que es un
+          hecho. Lo que no decía en ninguna parte es **cómo se decide cuántos**: el suelo
+          lo pone la rareza y el techo los materiales que pones. Sin esa frase, buscar
+          buenos materiales parece superstición, y forjar con los dos primeros que
+          aparezcan parece exactamente lo mismo.
+
+          Y va **debajo del desglose de probabilidad** porque es el otro número que se
+          está decidiendo en esta pantalla y porque tiene la misma forma: la cifra grande
+          es el resultado y la línea de debajo es de dónde sale. Aquí la línea dice de
+          dónde sale el número de afijos.
+
+          **EL NÚMERO SALE DE LA REGLA, NO DE AQUÍ.** AporteDeAfijos() es la mitad de
+          rangoDeAfijosForjados(): la media de los afijos de los dos padres, acotada por
+          el tope del juego. Es la misma cuenta, así que no puede enseñar una aportación
+          que la forja no vaya a respetar —y no dice "hasta" por lo que explica el
+          comentario del dato de arriba.
+        -->
+        ${aportan !== null && ready ? `
+          <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            ${aportan > 0 ? `Aportan ${aportan} afijos` : 'Tus materiales no traen afijos'} · ${explicacionDeAfijos()}
+          </p>
+        ` : ''}
       </div>
 
       <div class="mt-3 pt-3 border-t border-[var(--border-color)]">

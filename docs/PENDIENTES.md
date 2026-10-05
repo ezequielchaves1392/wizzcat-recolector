@@ -472,9 +472,38 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
 
 ### Lote 7 · INFORMACIÓN
 
-- [ ] **F51 · Explicar los afijos.** Incluye la pregunta concreta: "¿cuántos afijos puede
-      tener un Mítico?". La respuesta sale de `AFIX_MIN_POR_RARIDAD` y no está escrita en
-      ninguna parte que el jugador pueda leer.
+- [x] **F51 · Explicar los afijos.** Hecho, y lo que salió fue **un texto que mentía**
+      y una pregunta que no tenía dónde responderse.
+      **La respuesta concreta —"¿cuántos afijos puede tener un Mítico?"— es 4, y ahora está
+      escrita donde el jugador la lee.** La regla vive en `AFIX_MIN_POR_RARIDAD` y
+      `AFIX_MAX`; lo que faltaba no era el número, era que alguien lo dijera, y que lo
+      dijera **leyéndose de la tabla** y no con un número escrito al lado: una explicación
+      con el 4 a mano es una segunda fuente de la verdad, y es exactamente lo que se
+      queda diciendo la regla vieja después de que la regla haya cambiado.
+      - **La frase dice "forjado", y no es un adverbio.** Los afijos solo los da la forja:
+        ni la tienda ni las cajas los dan, porque `pickAffixes()` es el único sitio que los
+        escribe. Un "un Mítico lleva 4 afijos" sin ese matiz es una mentira comprobable en
+        diez segundos —abres un Mítico de la tienda, no tiene ninguno, y dejas de fiarte
+        de los otros veinte textos—.
+      - **Va en la forja, debajo del desglose de probabilidad**, porque es el otro número
+        que se está decidiendo en esa pantalla y porque tiene la misma forma: la cifra
+        grande es el resultado y la línea de debajo es de dónde sale.
+      - **Lo que enseña la forja es lo que APORTAN los materiales, y lo dice con esa
+        palabra.** El techo de verdad es el suelo de la rareza más esa aportación, y el
+        suelo depende del potencial que todavía no ha salido del dado: **antes de forjar no
+        se sabe**. Un banco pilló que mi primer intento enseñaba "hasta 2" cuando la regla
+        daba 5, y tenía razón: era un número que no era el del item, y solo por cómo
+        estaba redactado parecía que no mentía. La función ahora se llama `aporteDeAfijos`
+        y su comentario explica por qué no puede ser el techo.
+      - **Y el texto de la forja que sí mentía, corregido.** Decía "El recolector forjado
+        hereda los afijos de la rareza de sus materiales", y son dos cosas falsas en una
+        frase: el suelo lo pone la rareza **del item que sale**, no la de los materiales,
+        y lo que se hereda son los afijos en sí. Un jugador que lo comprobara con dos
+        materiales sin afijos concluiría que la rareza no hace nada, y la rareza es la
+        mitad de la regla.
+      `leyendaCheck` 14 → 21, el bloque quinto de "cada texto dice la regla que el juego
+      aplica". Verificado en `preview.html` a 390×844: 0 px de desborde y la línea
+      aparecen: la del reparto y la de la regla completa.
 - [x] **F52 · Lore de todos los items**, no solo de los que tienen entrada. Hecho, y lo
       que faltaba eran **veintinueve objetos**: las cinco consumibles, los diez expansores,
       las tres tarjetas de ranura, las diez cajas y el cristal. Todos tenían un `details`
