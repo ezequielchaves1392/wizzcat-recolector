@@ -184,7 +184,11 @@ en producción.
   la carga pone `partidaNoCargada` y `saveToFirebase()` se niega entero mientras siga
   puesto. La comparación es documento entero contra documento entero, porque un guardado
   en blanco se distingue por haber cambiado cualquier campo. El stub de Firestore sabe
-  hacer fallar la LECTURA, no solo la escritura, que es lo que hace falta para llegar. | 28 |
+  hacer fallar la LECTURA, no solo la escritura, que es lo que hace falta para llegar. Y
+  **cuantas escrituras se pagan**: seis guardados seguidos escriben la partida seis veces
+  —una compra no puede esperar— y el ranking **ninguna** si su fila no ha cambiado, que
+  era la mitad de las escrituras del juego. El stub cuenta lo que ve de verdad, porque un
+  total estimado puede estar mal y seguir pareciendo una cifra exacta. | 32 |
 | `sessionCheck` | **Una sola sesion por jugador**: la ventana de 45 s, el caso de la
   pestaña propia, el latido viejo que no bloquea, y **el reloj de las esperas**. Lo
   ultimo es lo que evita la pantalla en negro: con la cuota agotada Firestore no rechaza
@@ -726,7 +730,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **31 bancos** dan **2018 pruebas**, todas en verde.
+   tocar nada. Los **31 bancos** dan **2022 pruebas**, todas en verde.
 
    Y el total **ya no varía**: `playthroughCheck` tenía un `check()` dentro de un `if`
    que dependía de qué botín salió de la caja, así que esa prueba solo existía cuando el

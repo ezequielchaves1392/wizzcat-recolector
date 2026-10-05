@@ -2388,3 +2388,45 @@ _Cosas que estorban al trabajo más que al juego._
       **Lo que sigue sin arreglar, y no es del código:** la cuota del proyecto. Con
       esta pantalla ya se ve qué es, pero mientras no se reponga a medianoche (huso del
       Pacífico) el juego no cargará: **el reloj da el aviso, no el servicio.**
+- [ ] **Bajar el número de entradas a Firestore.** No es una feature nueva: es la
+      consecuencia de que la cuota **sea del proyecto y no del jugador**. Firestore da
+      20.000 escrituras al día en el plan gratuito y las gastan a la vez todas las
+      pestañas de todas las personas, así que el presupuesto se reparte sin que nadie lo
+      sepa. Medido antes del arreglo, **una pestaña abierta escribía 780 documentos a la
+      hora**, y eso es la cuota del día entero en cuatro horas.
+      - [x] **El ranking ya no se escribe cada quince segundos.** Era **la mitad de
+        todas las escrituras del juego**: el guardado escribía dos documentos por
+        ticking y el segundo era la tabla de posiciones, que no necesita saber que subes
+        un entero por segundo. Ahora se escribe al arrancar, cuando **su fila cambia**, o
+        cada cinco minutos. Con lo que se gana: **de 780 a unas 352 escrituras por
+        hora**, y un jugador que deja la partida abierta sin hacer nada **deja de
+        escribir en el ranking por completo**.
+      - [x] **La firma se compara con lo que la fila enseña, no con el estado entero.**
+        Cambiar un contador que la fila ni muestra no es un motivo para escribirla, y
+        escribir una fila idéntica se cobra igual.
+      - [x] **La red de seguridad de la partida pasa de quince a treinta segundos.** No
+        se toca el guardado de una compra, una forja o una ascensión: eso sigue siendo en
+        el acto. Lo que se alarga es el temporizador de lo que se produce solo, y para
+        ese caso está la cola local, que escribe en `localStorage` de forma síncrona en
+        cada guardado.
+      - [x] **El latido de sesión va a la mitad de la ventana en vez de a un tercio:** 22
+        segundos en vez de 15, que es el mínimo para distinguir "esta pestaña viva" de
+        "la otra se ha ido".
+      - [x] **Y un banco que cuenta las escrituras de verdad**, con contadores en el stub,
+        porque un total estimado puede estar mal y seguir pareciendo una cifra exacta.
+        Comprueba las dos mitades: que la partida se sigue escribiendo, y que el ranking
+        **no** se reescribe si su fila no ha cambiado.
+      **Lo que NO se ha hecho, y es deliberado:**
+      - **No se toca el guardado de las acciones.** Una compra no puede esperar a que
+        pase el rato: si el jugador apaga el portátil en mitad, lo comprado tiene que
+        estar en la nube. Reducir eso sí perdería progreso real.
+      - **No se fusionan las dos lecturas del arranque.** `consultarSesion()` y la
+        carga leen `users/{uid}` dos veces, y se podrían leer una. No está hecho porque
+        las lecturas son de 50.000 al día, no de 20.000, y el mezclarse con la comprobación
+        de sesión toca el punto más delicado del arranque —el que decide si entras o
+        no— a cambio de media lectura por arranque.
+      **Y lo que sigue sin arreglar, que no es del código:** la cuota del proyecto. Con
+      esto una pestaña abierta unas cuatro horas deja de quemarla, pero varias personas
+      a la vez la acaban. Si el juego va a tener más de una persona a la vez de forma
+      normal, la solución de verdad es el **plan Blaze**, que cobra solo lo que se pasa
+      del límite diario y tiene un aviso antes de cobrar.

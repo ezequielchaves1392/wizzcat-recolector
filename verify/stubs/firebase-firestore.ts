@@ -58,7 +58,28 @@ export const getDoc = async (ref: any) => {
 
 const clonar = (v: any) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 
+/**
+ * CUENTA LAS ESCRITURAS, Y POR QUE HACE FALTA.
+ *
+ * Lo que cobra Firestore es **una escritura por documento**, no por campo, así que
+ * `merge: true` con cuarenta campos sigue siendo una. Y la cuota es de 20.000 al día
+ * para todo el proyecto, no para cada jugador: varias pestañas a la vez se la reparten
+ * sin enterarse.
+ *
+ * Por eso hace falta poder mirarlas. Un cálculo de "escribimos cada quince segundos
+ * así que son 240 por hora" puede estar mal y seguir pareciendo una cifra exacta;
+ * contar lo que el stub ha visto de verdad no. `escrituras` es el total y `filas` solo
+ * las de `rankings/`, que son las que se pueden dejar de escribir sin perder nada.
+ */
+export function contarEscritura(ref: any): void {
+  const db = globalThis.__MEM_DB__ as any;
+  if (!db) return;
+  db.escrituras = (db.escrituras ?? 0) + 1;
+  if (String(ref?.id ?? '').startsWith('rankings/')) db.filas = (db.filas ?? 0) + 1;
+}
+
 export const setDoc = async (ref: any, data: any, options?: { merge?: boolean }) => {
+  contarEscritura(ref);
   // FALLO PROGRAMADO.
   //
   // La cola de nanitas pendientes vive o muere de que `setDoc` falle, y su
@@ -152,6 +173,7 @@ export const getDocs = async (_q: any) => ({ docs: [] as any[], empty: true });
  * en un banco.
  */
 export const updateDoc = async (ref: any, data: any) => {
+  contarEscritura(ref);
   if (globalThis.__MEM_DB__?.fallar) {
     throw new Error('FirestoreError: unavailable: Sin conexión (simulado)');
   }

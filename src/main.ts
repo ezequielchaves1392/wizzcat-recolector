@@ -489,8 +489,21 @@ function limpiarPantallaOcupada() {
  * congela JavaScript— no llegue a dejar el latido caducado y a perder la
  * cuenta. Y al descargar la página se suelta, para no esperar a que expire.
  */
+/**
+ * Cada cuánto se refresca el latido mientras se está jugando.
+ *
+ * **LA MITAD DE LA VENTANA, Y NO UN TERCIO.** Con la ventana en 45 s, refrescar cada
+ * 15 s eran tres refrescos por ventana; 22 s son dos, y es el mínimo que sigue
+ * distinguiendo "esta pestaña viva" de "la otra se ha ido" sin quedarse sin margen. La
+ * comprobación que importa es la del **arranque** —"¿hay otra sesión con un latido
+ * reciente?"—, y para eso basta con que el latido propio no envejezca más que la ventana.
+ *
+ * Y es una escritura de las que cuentan para la cuota, que es compartida por todo el
+ * proyecto: un tercio de las escrituras del juego eran solo para mantener vivo un
+ * reloj que el propio jugador no ve.
+ */
 function mantenerLatido(uid: string, miId: string) {
-  const refresco = setInterval(() => { void anotarLatido(uid, miId); }, Math.floor(VENTANA_MS / 3));
+  const refresco = setInterval(() => { void anotarLatido(uid, miId); }, Math.floor(VENTANA_MS / 2));
 
   const soltar = () => {
     clearInterval(refresco);

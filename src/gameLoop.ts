@@ -1286,7 +1286,40 @@ function redencionDeUnaLlave(tier: number): number {
 const AFK_THRESHOLD_MS = 60000;
 
   const userRef = doc(db, 'users', user.uid);
+/**
+ * Cada cuánto se escribe el documento de la clasificación.
+ *
+ * **CINCO MINUTOS, Y AQUÍ ESTÁ EL AHORRO DE VERDAD.** Antes de este cambio el guardado
+ * escribía DOS documentos cada quince segundos, y el segundo era el ranking: la tabla
+ * de posiciones no es una cosa que necesite saber que subes un entero por segundo. Con
+ * el juego guardado cada quince, el ranking se escribía cuatro veces más de lo que
+ * ninguna clasificación ha necesitado nunca, y era **la mitad de todas las escrituras
+ * del juego**.
+ *
+ * Y además **solo se escribe si el marcador ha cambiado**: si nadie ha producido nada
+ * nuevo ni ha desbloqueado nada, la fila sería idéntica byte a byte y Firestore la
+ * cobra igual. Un jugador con el juego abierto sin hacer nada deja de escribir en el
+ * ranking por completo, que es el caso que más cuota quemaba.
+ */
+const RITMO_RANKING_MS = 5 * 60_000;
+
   const rankingRef = doc(db, 'rankings', user.uid);
+
+/**
+ * Lo último que se escribió en la fila de la clasificación, y cuándo.
+ *
+ * **ESTÁN AQUÍ Y NO EN EL SITIO DEL TEMPORIZADOR POR UNA RAZÓN CONCRETA.** El primer
+ * guardado ocurre durante la carga —el de la migración del almacén—, y ese va antes en
+ * el fichero que el `setInterval` que crea el bucle. Declarados allí, el primer guardado
+ * los encontraba antes de inicializarse y el arranque moría con un
+ * "Cannot access before initialization" dentro de un `catch` que solo escribe en la
+ * consola: partida no guardada y ni un aviso.
+ *
+ * Sirven para no reescribir una fila idéntica, que es la mitad de las escrituras del
+ * juego. La firma se compara con lo que la fila **enseña**, no con el estado entero.
+ */
+let rankingUltimaFirma = '';
+let rankingUltimoEnvio = 0;
 
   /**
    * El último guardado falló.
@@ -2959,7 +2992,34 @@ function sePuedeGuardar(): boolean {
       //
       //  Ahora tienen su propio `try` y su propio aviso, y el indicador grande
       //  solo se enciende si falla **la partida**.
-      try {
+      // **AQUI ESTA LA MITAD DEL AHORRO, Y NO ES UNA OPTIMIZACION ESTETICA.**
+      //
+      // Se escribe cuando pasa el rato O cuando el marcador ha cambiado, y solo una vez
+      // por periodo: la fila del ranking no necesita nivel de frames, y el juego ya
+      // guarda la partida entera cada treinta segundos, que es lo que de verdad no se
+      // puede perder. La firma se calcula con lo que la fila **enseña**, no con el
+      // estado entero: cambiar un contador que la fila ni enseña no es un motivo para
+      // escribirla, y escribir una fila idéntica le cobra igual a Firestore.
+      const firma = [
+        state.totalNanitesProduced,
+        state.totalClicks,
+        state.unlockedAchievements.length,
+        state.forgedCount,
+        state.totalCores,
+        state.cosmetics.title,
+        state.cosmetics.frame ?? '',
+        state.cosmetics.banner ?? ''
+      ].join('|');
+      const ahora = Date.now();
+      // Y solo una vez por periodo: la fila no necesita nivel de frames.
+      const hayQueEscribirElRanking = rankingUltimoEnvio === 0
+        || ahora - rankingUltimoEnvio >= RITMO_RANKING_MS
+        || firma !== rankingUltimaFirma;
+
+        try {
+        if (hayQueEscribirElRanking) {
+          rankingUltimoEnvio = ahora;
+          rankingUltimaFirma = firma;
         await setDoc(rankingRef, {
           userId: user.uid,
           username: displayName || 'Operativo',
@@ -2990,6 +3050,7 @@ function sePuedeGuardar(): boolean {
           },
           updatedAt: new Date()
         }, { merge: true });
+        }
       } catch (rankingError) {
         // Se avisa por consola y con un aviso propio, y NO se toca el indicador
         // grande. La partida está guardada; lo que falla es una tabla de posiciones.
@@ -3200,7 +3261,28 @@ function sePuedeGuardar(): boolean {
   window.addEventListener('keydown', handleUserActivity);
   window.addEventListener('click', handleUserActivity);
 
-  const saveInterval = setInterval(saveToFirebase, 15000);
+/**
+ * Cada cuánto se guarda la partida en la nube, que es lo único que no depende de una
+ * acción del jugador.
+ *
+ * **TREINTA SEGUNDOS, Y LA RAZÓN ES LA CUOTA.** Firestore da 20.000 escrituras al día
+ * en el plan gratuito y **son de todo el proyecto**, no de cada jugador: con la tabla
+ * de hace un rato, una pestaña abierta cuatro horas se gastaba la cuota del día entero,
+ * y con cuatro personas probando a la vez se agotaba en minutos. Y ese es un
+ * presupuesto que se puede gastar donde **sí** aporta: una compra, una forja, una
+ * ascensión o subir de nivel guardan en el acto, porque esas no se repiten solas; lo
+ * único que este temporizador hace es la red de seguridad de lo que se produce solo.
+ *
+ * Y para ese caso está la cola local: `anotarPendiente()` escribe en `localStorage` de
+ * forma síncrona en CADA guardado, así que perder hasta treinta segundos de ingreso
+ * pasivo no cuesta nada porque el saldo se recupera al recargar. Con quince no se
+ * ganaba nada que alguien notara.
+ */
+const RITMO_GUARDADO_MS = 30_000;
+
+
+
+  const saveInterval = setInterval(saveToFirebase, RITMO_GUARDADO_MS);
   const handleUnload = () => { saveToFirebase(); };
   window.addEventListener('beforeunload', handleUnload);
 

@@ -318,6 +318,76 @@ async function main() {
     );
   }
 
+
+  // =========================================================================
+  // =========================================================================
+  //  CUANTAS ESCRITURAS HACE EL JUEGO, Y POR QUE SE MIDEN EN VEZ DE CALCULARSE.
+  // =========================================================================
+  //
+  // **LA CUOTA ES DEL PROYECTO, NO DEL JUGADOR.** Firestore da 20.000 escrituras al
+  // dia en el plan gratuito y las gastan a la vez todas las pestanas de todas las
+  // personas. Es un presupuesto compartido, asi que la pregunta que importa no es
+  // "cuanto escribe este jugador" sino "cuanto escribe el que deja la partida abierta
+  // sin hacer nada", que es el caso que de verdad lo quemaba.
+  //
+  // **Y SE MIDE CON EL CONTADOR DEL STUB, NO CON UNA SUMA DE INTERVALOS.** Un numero
+  //  estimado puede estar mal y seguir pareciendo una cifra exacta; aqui se cuentan las
+  //  escrituras que el stub ha visto de verdad, que es lo que se cobra.
+  {
+    const g = await boot(baseSave([]));
+
+    // **EL CONTADOR SE COGE DESPUÉS DEL ARRANQUE, Y NO ANTES.** `boot()` reemplaza
+    // `__MEM_DB__` entero por uno limpio, así que una referencia cogida ANTES apunta al
+    // objeto viejo y cuenta ceros siempre: la prueba pasaría sin mirar nada.
+    const db = (globalThis as any).__MEM_DB__;
+
+    // El ranking se escribe UNA vez al arrancar —el jugador tiene que existir en la
+    // tabla— y a partir de ahí la fila solo se toca si cambia o si pasan cinco minutos.
+    const filasAlArrancar: number = db.filas ?? 0;
+
+    // Seis guardados seguidos sin que cambie nada. La partida se escribe seis veces,
+    // porque una compra no puede esperar; el ranking **ninguna**, porque su fila sería
+    // idéntica byte a byte y Firestore la cobra igual. Antes eran seis y seis.
+    db.escrituras = 0;
+    db.filas = 0;
+    for (let n = 0; n < 6; n++) {
+      await g.flush();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    check(
+      'cuota: seis guardados escriben la partida seis veces',
+      db.escrituras >= 6 && db.escrituras <= 8,
+      `escrituras=${db.escrituras} de 6 guardados`
+    );
+    check(
+      'cuota: y el ranking NINGUNA, que era la mitad de las escrituras',
+      db.filas === 0,
+      `filas=${db.filas} de 6 guardados`
+    );
+    check(
+      'cuota: y al arrancar sí se escribe, o el jugador no estaría en la tabla',
+      filasAlArrancar === 1,
+      `filas=${filasAlArrancar}`
+    );
+
+    // Y LA CONTRAPARTIDA OBLIGATORIA: si el marcador cambia, el ranking se escribe
+    // aunque no haya pasado el rato. Una clasificación que no sube cuando subes es
+    // peor que no haberla, así que el ahorro no puede quedarse con el marcador.
+    db.filas = 0;
+    // Un clic sube `totalNanitesProduced`, que es justo lo que la fila enseña. El clic no
+    // guarda por su cuenta —guardar en cada clic sería lo contrario de lo que se está
+    // buscando—, así que el guardado se pide a mano, como lo haría cualquier otra acción.
+    g.click();
+    await g.flush();
+    await new Promise((r) => setTimeout(r, 0));
+    check(
+      'cuota: pero si el marcador cambia, el ranking se escribe',
+      db.filas === 1,
+      `filas=${db.filas} tras un clic`
+    );
+  }
+
   resumen('el guardado: que el aviso diga la verdad');
 }
 
