@@ -310,6 +310,42 @@ export function showSintonizacion(
           </span>
         </span>
       </button>
+      <!--
+        F49 · EL BOTÓN DE "HASTA QUE SE ACIETEN", Y POR QUÉ ESTÁ DEBAJO Y NO EN EL
+        LUGAR DE LA OTRO.
+
+        **Debajo**, porque los dos botones hacen la misma cosa a distinta escala y el que
+        cambia el estado del item es el de uno: el automático gasta una reserva entera de
+        cristales, y eso es una decisión mayor que gastar uno. Ponerlos en paralelo
+        invitaría a leerlos como dos opciones del mismo peso.
+
+        Y **solo para recolectores**: upgradeCompanion() no tiene modo automático, y un
+        botón que se dividiera entre los dos —"¿quieres automático?"— para después
+        decirte que no, es peor que no ofrecerlo. Cuando el automático de compañero exista,
+        este mismo sitio lo acomodará para los dos.
+
+        **EL SALTO DE NIVEL NO SE DICE EN EL BOTÓN**, se dice en el aviso que devuelve el
+        motor: es el motor quien sabe cuántos intentos hubo y cuántos aciertos, y un botón
+        que estima dice "subirá hasta el 20" estaría prometiendo un resultado que depende
+        de un dado.
+      -->
+      ${!esCompanero ? `
+        <button data-sintonizar-todo ${alcanza ? '' : 'disabled style="opacity:.45"'}
+                class="w-full rounded-xl border px-3 py-2.5 flex items-center gap-2.5 text-left
+                       ${alcanza ? 'cursor-pointer transition active:scale-[0.99] hover:border-[var(--accent)]' : ''}
+                       border-[var(--border-color)] mt-2"
+                style="background: color-mix(in srgb, var(--accent) 3%, transparent)">
+          <span class="flex-shrink-0 accent-text [&>span>svg]:w-4 [&>span>svg]:h-4">${ic('layers')}</span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">Sintonizar hasta agotar los cristales</span>
+            <span class="block text-[9px] font-mono ${alcanza ? 'text-[var(--text-muted)]' : 'text-rose-400'} mt-0.5">
+              ${alcanza
+                ? `Gasta los ${formatNumber(tienes)} en intentos seguidos. Un fallo no baja el nivel.`
+                : 'No hay cristales suficientes ni para un intento.'}
+            </span>
+          </span>
+        </button>
+      ` : ''}
 
       <p class="text-[10px] font-mono text-[var(--text-muted)] mt-3 leading-relaxed">
         ${notaDeCoste(tierItem)} La
@@ -374,6 +410,45 @@ export function showSintonizacion(
       // del fallo lo redacta el motor, que es quien sabe cuánto costó y a qué
       // nivel quedó.
       showTuningRoulette(roll, redraw);
+    });
+  });
+  overlay.querySelectorAll('[data-sintonizar-todo]:not([disabled])').forEach(b => {
+    b.addEventListener('click', () => {
+      // F49 · EL AUTOMÁTICO NO TIENE RULETA, Y POR QUÉ NO.
+      //
+      // Un intento se enseña con la ruleta porque es **un evento**: pasó algo y hay que
+      // verlo pasar. Setenta y nueve intentos no son setenta y nueve eventos, son un
+      // resultado, y setenta y nueve ruletas encadenadas serían setenta y nueve pantallas
+      // para un número que el jugador va a leer igual. Por eso el automático enseña **un
+      // aviso con el resumen** —intentos, aciertos, fallos y nivel— y se queda ahí.
+      //
+      // Y el resumen **no lo calcula esta vista**: lo devuelve el motor, que es quien
+      // sabe cuánto se ha gastado y a qué nivel se ha quedado (R3). Una cifra calculada
+      // en la vista es una segunda verdad sobre el mismo objeto.
+      // **EL NIVEL DE ANTES, LEÍDO DEL ITEM Y ANTES DE LLAMAR.** El motivo es el mismo
+      // que el del otro manejador: `equipo` es la referencia viva al item del almacén,
+      // no una copia, así que después de la llamada ya está al nivel nuevo y la
+      // comparación no diría nada. Es lo que permite distinguir "subió" de "gastó y
+      // falló", que es la única cosa que el sonido necesita saber.
+      const antesDeAuto = equipo.level || 0;
+      const res = (game as any).upgradeCollectorHastaAgotar?.(equipo.id);
+      if (!res) {
+        showToast('Este recolector no se puede sintonizar en automático.', 'error');
+        return;
+      }
+      if (res.intentos === 0) {
+        sfx.error();
+        showToast(res.msg || 'No se pudo sintonizar.', 'error');
+        redraw();
+        return;
+      }
+      // **EL SONIDO ES EL DE UN ACIERTO SI HUBO ALGO QUE SUBIERA.** Con once aciertos y
+      // nueve fallos no hay un único resultado que celebrar ni que lamentar: lo que se
+      // comunica es que se ha hecho algo, y el número exacto está en el texto.
+      if (res.level > antesDeAuto) sfx.reward(true);
+      else sfx.error();
+      showToast(res.msg, res.level > antesDeAuto ? 'success' : 'info');
+      redraw();
     });
   });
   document.body.appendChild(overlay);

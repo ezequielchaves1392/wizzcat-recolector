@@ -159,6 +159,21 @@ import {
 //
 // Un número que hay que ir a cambiar a mano en dos sitios es un número que algún
 // día se cambia en uno y se olvida del otro.
+
+/**
+ * CUÁNTOS INTENTOS DE SINTONIZACIÓN SE ENCADENAN COMO MÁXIMO.
+ *
+ * Existe porque el nivel tiene techo y el cristal no: con una cantidad enorme de
+ * cristales el bucle de "hasta agotar" se comería la pestaña. Y no es un número que se
+ * pueda leer como un tope de progreso —no limita lo que un jugador puede subir— sino
+ * como un tope de **una pulsación**. Por eso el método **avisa cuando lo toca** en vez
+ * de cortar en silencio: el mensaje lleva los intentos, los aciertos y los cristales
+ * que quedan, y el botón se vuelve a pulsar para seguir por donde iba.
+ *
+ * Con el precio del primer nivel, 400 intentos son del orden de cuatro mil cristales:
+ * una cantidad que ya justifica una pulsación y no un cálculo.
+ */
+export const MAX_INTENTOS_AUTOMATICOS = 400;
 export const SAVE_VERSION = 10;
 
 /**
@@ -4383,7 +4398,7 @@ const AFK_THRESHOLD_MS = 60000;
      * un argumento obligatorio obligaría a tocar veinte llamadas para cambiar una regla
      * que no les afecta. Sin argumento hace lo de siempre: el equipado.
      */
-    upgradeCollector: (itemId?: string) => {
+    upgradeCollector: (itemId?: string, opciones?: { sinGuardar?: boolean; sinRepintar?: boolean }) => {
       handleUserActivity();
       const objetivo = itemId ?? state.equippedCollectorId;
       if (!objetivo) return { success: false, rolled: false, msg: 'No hay ningún recolector equipado.' };
@@ -4466,18 +4481,83 @@ const AFK_THRESHOLD_MS = 60000;
 
       if (roll <= successChance) {
         item.level = level + 1;
-        onUpdate(state, isAfk);
-        saveToFirebase();
+        if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+        if (!opciones?.sinGuardar) saveToFirebase();
         return { success: true, rolled: true, level: item.level, msg: `¡Mejora exitosa! ${item.name} ascendió al nivel ${item.level}.` };
       } else {
         // Fallo: conserva el nivel y el cristal gastado. Antes retrocedía un
         // nivel, y con el coste creciente eso era una escalera sin retorno:
         // el jugador que fallaba dos veces quedaba atrapado para siempre.
         // La pérdida real es el cristal, que es el coste que se eligió arriesgar.
-        onUpdate(state, isAfk);
-        saveToFirebase();
+        if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+        if (!opciones?.sinGuardar) saveToFirebase();
         return { success: false, rolled: true, level, msg: `Fallo en el sintonizador. ${item.name} se mantiene en nivel ${level}. (-${crystalCost} cristales)` };
       }
+    },
+    /**
+     * F49 · SINTONIZAR HASTA QUE SE ACIETEN LOS CRISTALES.
+     *
+     * Repite el mismo intento hasta que **no se puede seguir**, y solo entonces
+     * devuelve. No es un atajo del botón de uno: es el botón de uno repetido, con la
+     * misma probabilidad por nivel y el mismo precio por nivel, porque **llama al
+     * mismo método**. Si mañana cambia el precio o la probabilidad, los dos caminos
+     * cambian juntos o no cambia ninguno.
+     *
+     * ## POR QUÉ GASTARLOS SOLOS NO ES PEOR QUE GASTARLOS A PULSO
+     *
+     * Un fallo **no baja el nivel**: conserva el nivel y se come el cristal, y eso
+     * estaba escrito a propósito para que la escalera no tuviera retorno. Y el cristal
+     * no tiene otro uso en el juego: su única función es pagar un intento. De las dos
+     * cosas sale que **un cristal gastado automáticamente y un cristal gastado a mano
+     * valen exactamente lo mismo** —valen un intento—, así que el automático no cambia
+     * la economía: cambia quién pulsa.
+     *
+     * ## Y POR QUÉ EL MODO AUTOMÁTICO PASA `sinGuardar`
+     *
+     * Por el guardado. `saveToFirebase()` hace una escritura local síncrona y otra a la
+     * red, y `onUpdate()` repinta la página entera: hacer eso por intento serían
+     * decenas de escrituras sobre el mismo documento y decenas de repintados para
+     * acabar en el mismo sitio. Con el modo automático, el guardado y el repintado
+     * ocurren **una vez, al final**. El único que se ve es el último, que es el que
+     * importa.
+     *
+     * ## Y POR QUÉ HAY UN TOPE DE INTENTOS
+     *
+     * Porque el nivel tiene techo y el cristal no, y con una cantidad enorme de
+     * cristales el bucle se comería la pestaña. Cuando llega al tope **para y lo
+     * dice**: el mensaje lleva los intentos, los aciertos y los cristales que quedan.
+     * Un tope callado sería un "hasta agotar" que miente; uno que avisa es un botón
+     * que se vuelve a pulsar y sigue por donde iba.
+     */
+    upgradeCollectorHastaAgotar: (itemId?: string) => {
+      let intentos = 0;
+      let aciertos = 0;
+      let fallos = 0;
+      let nivel = 0;
+      let motivo = '';
+
+      while (intentos < MAX_INTENTOS_AUTOMATICOS) {
+        const r = estado.upgradeCollector(itemId, { sinGuardar: true, sinRepintar: true });
+        // **`rolled: false` es "no se ha podido intentar"**, no "ha fallado": sin saldo
+        // o en el techo. Es el único motivo por el que el bucle para, y por eso no
+        // sale en el primer fallo —que sí cuenta como intento y vuelve a tirar—.
+        if (!r.rolled) { motivo = r.msg ?? ''; break; }
+        intentos++;
+        if (r.success) aciertos++; else fallos++;
+        nivel = r.level ?? nivel;
+      }
+
+      // Un guardado y un repintado, después del bucle.
+      saveToFirebase();
+
+      const resumen = `${intentos} intentos · ${aciertos} aciertos y ${fallos} fallos · nivel ${nivel}`;
+      const agotado = intentos < MAX_INTENTOS_AUTOMATICOS;
+      return {
+        intentos, aciertos, fallos, level: nivel, agotado,
+        msg: agotado
+          ? `${resumen}. ${motivo}`
+          : `${resumen}. Se ha llegado al tope de ${MAX_INTENTOS_AUTOMATICOS} intentos seguidos.`
+      };
     },
     // F27 · `expandWarehouse()` (+5 por 500, tope 50) y `unlockCompanionSlot()`
     // (tope 5) estaban aquí sin que ninguna vista los llamara: eran un tercer
