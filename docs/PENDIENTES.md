@@ -2272,10 +2272,11 @@ _Cosas que estorban al trabajo más que al juego._
         mensaje de error en vez de como el resultado de una tirada que no salió.
       - **Con el ajuste de "saltar la ruleta" apagado no se pinta la cinta**, solo la
         card: es lo que esa preferencia significa en las otras dos ruletas.
-      - **Y el preview no podía enseñar el trompo**, porque a su motor de ejemplo le
-        faltaba `forgeCollector()` y el botón FORJAR se llamaba a `undefined`. Una
-        pantalla que el preview no puede enseñar es una pantalla que nadie ha revisado.
-      **Lo que no se ha podido comprobar:** el píxel. `preview.html?vista=forja` está
-      lanzando `__preview_iframe__` —su propio centinela— desde antes de este cambio, así
-      que la medida de la cinta ahora mismo no sale. La causa del desbordamiento sí
-      está localizada y es aritmética: 18 celdas de 56 px en un contenedor de 448.
+      - **CORRECCIÓN A LO QUE SE ESCRIBIÓ AL HACER ESTE CAMBIO.** Se puso que al motor
+        de ejemplo del preview le faltaba `forgeCollector()` y que por eso el trompo no
+        se podía enseñar. **Es falso: ya estaba**, y el botón FORJAR del preview sí
+        produce un resultado. Lo que sigue sin comprobarse es el píxel, pero por otro
+        motivo y que no es de este cambio: `preview.html?vista=forja` lanza
+        `__preview_iframe__`, que es su propio centinela.
+        **La causa del desbordamiento sí está localizada y es aritmética**: 18 celdas
+        de 56 px en un contenedor de 448.
