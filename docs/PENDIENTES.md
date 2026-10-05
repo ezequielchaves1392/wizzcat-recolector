@@ -2356,3 +2356,35 @@ _Cosas que estorban al trabajo más que al juego._
       **diario** del plan gratuito de Firebase (20.000 escrituras al día). Se repone solo
       a medianoche en el huso del Pacífico, o se quita cambiando el proyecto al plan Blaze,
       que es una decisión suya y no del código.
+- [x] **La pantalla seguía en negro después de arreglar lo anterior.** El aviso de error
+      no saltaba porque **no había ningún error**: con la cuota agotada, Firestore no
+      rechaza la petición, la **retarda** —"Using maximum backoff delay" quiere decir
+      "todavía no"—. Una promesa que no contesta no se rechaza nunca, así que el `catch`
+      no se ejecutaba, el `await` no terminaba nunca, y el arranque se quedaba esperando
+      en silencio para siempre. **Un `catch` no sirve contra una espera que no acaba.**
+      - **`src/utils/timeout.ts`, y `conTiempoLimite()` es una regla, no un parche.**
+        Convierte "esperar para siempre" en "esperar un rato y fallar". Vive fuera de la
+        vista porque los tres que la necesitan —la comprobación de sesión, la anotación
+        del latido y la carga de la partida— son **el mismo problema**: una red que no
+        contesta. Si el reloj viviera en la pantalla, el cuarto sitio que espera al
+        servidor se olvidaría de ponerlo y volvería a dejar la pantalla en negro.
+      - **No es una cancelación.** La promesa sigue esperando; el reloj solo decide
+        cuándo dejamos de esperar. Por eso el botón de reintentar **recarga la página**:
+        es lo único que corta de verdad una petición colgada.
+      - **La comprobación de sesión también lleva plazo, y al pasarse se deja entrar.**
+        Es la misma política que ya tenía para un corte de red, aplicada al caso que se
+        dio: un límite de tiempo es un corte de red que ha decidido no avisar, y **un
+        corte de red no puede ser la razón de que un jugador se quede fuera de su
+        partida**.
+      - **La pantalla tiene ahora TRES textos**, y no son una formalidad: el jugador
+        hace una cosa distinta en cada caso. Con la cuota agotada toca **esperar**; si el
+        servidor no contesta toca **reintentar**; lo de otra pestaña es lo de siempre.
+        Decirle a alguien que espere cuando lo que necesita es reintentar es la forma de
+        que se vaya a esperar.
+      **Comprobado:** el banco del reloj pide una promesa que **no resuelve nunca** y
+      comprueba que sale un error con nombre —y que un fallo de verdad no se disfraza de
+      "se acabó el tiempo"—, que es justo el detalle que hace que el texto de la pantalla
+      sea el correcto. `sessionCheck` pasa a 25 y el total a 2018.
+      **Lo que sigue sin arreglar, y no es del código:** la cuota del proyecto. Con
+      esta pantalla ya se ve qué es, pero mientras no se reponga a medianoche (huso del
+      Pacífico) el juego no cargará: **el reloj da el aviso, no el servicio.**

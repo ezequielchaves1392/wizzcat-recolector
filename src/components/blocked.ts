@@ -219,22 +219,49 @@ export function esCuotaAgotada(error: unknown): boolean {
   return String(codigo).includes('resource-exhausted') || /quota exceeded/i.test(texto);
 }
 
+/**
+ * Si lo que falló es que el servidor **no contestó**, en vez de que contestara que no.
+ *
+ * **ES UN TERCER CASO Y NO UNA VARIEDAD DEL SEGUNDO.** Con la cuota agotada, Firestore
+ * no dice "no": dice "todavía no", y la petición se queda colgada hasta que el reloj del
+ * arranque la declara perdida. El aviso de cuota y el de "no contesta" no pueden ser el
+ * mismo texto: en el primero hay que esperar a que se reponga el límite, y en el segundo
+ * lo único que funciona es reintentar, porque la red puede volver en cualquier momento.
+ */
+function esSinRespuesta(error: unknown): boolean {
+  return String((error as any)?.name ?? '') === 'TiempoAgotadoError';
+}
+
 export function renderErrorDeCarga(
   container: HTMLElement,
   error: unknown,
   onReintentar: () => void
 ): void {
   const cuota = esCuotaAgotada(error);
-  const titulo = cuota ? 'Se ha agotado la cuota del juego' : 'No se ha podido cargar la partida';
+  const sinRespuesta = esSinRespuesta(error);
+
+  // Los TRES textos, y por qué son tres: el jugador puede hacer una cosa distinta en cada
+  // uno. Con la cuota agotada toca esperar; sin respuesta toca reintentar; y una cosa que no
+  // es ninguna de las dos suele ser una pestaña abierta en otra parte. Decirle a alguien
+  // que espere cuando lo que necesita es reintentar es la forma de que se vaya a esperar.
+  const titulo = cuota
+    ? 'Se ha agotado la cuota del juego'
+    : sinRespuesta
+      ? 'El servidor no está contestando'
+      : 'No se ha podido cargar la partida';
   const explicacion = cuota
-    ? 'El servidor de la partida ha llegado a su límite de uso de hoy. No es un fallo de tu ' +
-      'equipo ni de tu navegador, y **tu partida sigue guardada donde estaba**: no se ha ' +
-      'tocado nada. El límite se repone solo, así que dentro de un rato vuelve a funcionar.'
-    : 'El juego no ha conseguido leer tu partida del servidor. **No se ha guardado nada**, ' +
-      'así que tu progreso sigue donde estaba. Esto suele ser la conexión.';
+    ? 'El servidor de la partida ha llegado a su límite de uso de hoy. No es un fallo de tu '
+      + 'equipo ni de tu navegador, y tu partida sigue guardada donde estaba: no se ha '
+      + 'tocado nada. El límite se repone solo, así que dentro de un rato vuelve a funcionar.'
+    : sinRespuesta
+      ? 'Se le ha pedido tu partida al servidor y no ha contestado a tiempo. No se ha '
+        + 'guardado nada, así que tu progreso sigue donde estaba. Esto es una espera, no un '
+        + 'problema con tu cuenta.'
+      : 'El juego no ha conseguido leer tu partida del servidor. No se ha guardado nada, '
+        + 'así que tu progreso sigue donde estaba. Esto suele ser la conexión.';
   const pie = cuota
-    ? 'Si vuelve a pasar en cuanto se reponga el límite, el culpable es el ritmo de ' +
-      'guardado, no tu juego.'
+    ? 'Si vuelve a pasar en cuanto se reponga el límite, el culpable es el ritmo de '
+      + 'guardado, no tu juego.'
     : 'Si tienes el juego abierto en otra pestaña, ciérrala antes de reintentar.';
 
   container.innerHTML = `

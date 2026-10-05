@@ -26,6 +26,8 @@
 // ==========================================================================
 
 import { check, resumen } from './kit';
+import { conTiempoLimite, esTiempoAgotado } from '../src/utils/timeout';
+import { PLAZO_DE_LECTURA_MS } from '../src/services/sessionService';
 import { estaOnline } from '../src/services/rankingService';
 
 // La misma regla que usa el juego, pero sin Firestore: el reloj es lo único que
@@ -190,6 +192,64 @@ async function main() {
       && !estaOnline(ahora - VENTANA_MS - 1, ahora),
       `ventana=${VENTANA_MS} ms`);
   }
+
+  // =========================================================================
+  //  El reloj de las esperas. Y por que vive en el propio banco y no en el juego.
+  // =========================================================================
+  //
+  // **LO QUE SE COMPRUEBA ES QUE UNA PROMESA COLGADA SE CONVIERTE EN UN ERROR.**
+  // Con la cuota de Firestore agotada el servidor no contesta con un error: contesta
+  // "Using maximum backoff delay", y la peticion se queda esperando. Una promesa que no
+  // contesta no se rechaza nunca, asi que un `catch` no sirve y el arranque se quedaba
+  // con la pantalla en negro para siempre. Esto es lo que convierte una espera en un
+  // fallo con nombre, que es lo unico que permite enseñarle algo al jugador.
+  {
+    // 1) Lo que contesta, pasa tal cual.
+    check(
+      'reloj: lo que llega antes del plazo se devuelve intacto',
+      await conTiempoLimite(Promise.resolve(7), 1000, 'prueba') === 7,
+      'no llego'
+    );
+    // 2) La que no contesta, falla. Y falla CON NOMBRE, no con un string suelto.
+    const colgada: Promise<never> = new Promise<never>(() => { });
+    let nombre = '';
+    try {
+      await conTiempoLimite(colgada, 20, 'colgada');
+    } catch (e: any) {
+      nombre = String(e?.name ?? '');
+    }
+    check(
+      'reloj: una promesa que no contesta se convierte en un error',
+      nombre === 'TiempoAgotadoError',
+      `nombre=${nombre}`
+    );
+    check(
+      'reloj: y el error lleva la etiqueta de lo que se esperaba',
+      esTiempoAgotado({ name: 'TiempoAgotadoError' }) && !esTiempoAgotado(new Error('otra cosa')),
+      'no se reconoce'
+    );
+    // 3) Un fallo de verdad sale sin convertirse en "se acabo el tiempo".
+    let real = '';
+    try {
+      await conTiempoLimite(Promise.reject(new Error('quota')), 1000, 'prueba');
+    } catch (e: any) {
+      real = String(e?.message ?? '');
+    }
+    check(
+      'reloj: un fallo de verdad no se disfraza de tiempo agotado',
+      real === 'quota',
+      `mensaje=${real}`
+    );
+    // 4) Y el temporizador se limpia, que es lo que evita que el proceso se quede vivo.
+    //    Se mide con el reloj del banco: si el temporizador siguiera vivo, el proceso
+    //    no terminaria nunca, y eso se veria en la suite entera, no aqui.
+    check(
+      'reloj: el plazo de las llamadas del modulo es corto',
+      PLAZO_DE_LECTURA_MS > 0 && PLAZO_DE_LECTURA_MS <= 15_000,
+      `plazo=${PLAZO_DE_LECTURA_MS}`
+    );
+  }
+
   resumen('sesion: una sola sesion por jugador');
 }
 

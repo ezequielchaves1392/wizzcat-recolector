@@ -10,6 +10,7 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
 import { renderBloqueado, renderSesionOcupada, renderErrorDeCarga } from './components/blocked';
+import { conTiempoLimite } from './utils/timeout';
 import {
   anotarLatido, consultarSesion, idDeSesion, soltarSesion,
   REINTENTO_MS, VENTANA_MS
@@ -558,7 +559,7 @@ onAuthStateChanged(auth, async (user) => {
   // El `catch` esta DESPUES de `ocuparSesion` a proposito: si la sesion esta ocupada,
   // `ocuparSesion` ya ha pintado su pantalla y no hay nada que avisar.
   try {
-    await initGame(user, nombre);
+    await conTiempoLimite(initGame(user, nombre), PLAZO_DE_ARRANQUE_MS, 'el arranque');
   } catch (e) {
     mostrarFalloDeCarga(e);
   }
@@ -578,6 +579,24 @@ function mostrarFalloDeCarga(error: unknown) {
   if (!app) return;
   renderErrorDeCarga(app, error, () => { window.location.reload(); });
 }
+
+/**
+ * Cuánto se espera a que la partida se monte antes de decir que no se ha podido.
+ *
+ * **VEINTICINCO SEGUNDOS, Y POR QUÉ EL ARRANQUE NECESITABA UN RELOJ.**
+ *
+ * Con la cuota de Firestore agotada el servidor no contesta con un error: contesta
+ * "Using maximum backoff delay", que significa "todavía no". **La promesa no se rechaza
+ * nunca**, así que el `catch` de abajo no saltaba y el `await` no terminaba nunca: el
+ * juego se quedaba con el `#app` vacío **para siempre**, sin un solo error que contar.
+ *
+ * Veinticinco segundos es mucho más que arrancar de verdad —que lleva un par de segundos—
+ * y muy poco para alguien mirando una pantalla en blanco. Y cuando se pasa, lo que se
+ * enseña es el aviso con su botón de reintentar, que recarga la página entera: es lo
+ * único que corta la petición colgada, porque **el reloj no cancela nada**, solo decide
+ * cuándo dejamos de esperar.
+ */
+const PLAZO_DE_ARRANQUE_MS = 25_000;
 
 async function initGame(user: any, username?: string) {
   activeUser = user;

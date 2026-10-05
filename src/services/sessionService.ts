@@ -42,6 +42,7 @@
 
 import { doc, getDoc, setDoc, deleteField, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { conTiempoLimite } from '../utils/timeout';
 
 /**
  * Cuánto vive un latido sin refrescar.
@@ -52,6 +53,24 @@ import { db } from '../firebase';
  * hasta el día siguiente.
  */
 export const VENTANA_MS = 45_000;
+
+/**
+ * Cuánto se espera a Firestore antes de dar la comprobación por perdida.
+ *
+ * **OCHO SEGUNDOS, Y POR QUÉ HACE FALTA.** Con la cuota agotada, Firestore no
+ * contesta con un error: contesta "Using maximum backoff delay", que significa
+ * "todavía no". La petición se queda colgada, y como las dos llamadas de este
+ * fichero son `await` en el arranque, **el juego entero se quedaba esperando en
+ * silencio y la pantalla no se montaba nunca**. Un rechazo lo atrapa cualquiera; una
+ * promesa que no contesta, no.
+ *
+ * Ocho segundos es mucho más que una respuesta normal y muy poco para alguien que
+ * está mirando una pantalla en blanco. Y el resultado de pasarse **es el mismo que
+ * el de cualquier otra inability de comprobar**: se deja entrar. Un corte de red no
+ * puede ser la razón de que un jugador se quede fuera de su partida, y un límite de
+ * tiempo es un corte de red que ha decidido no avisar.
+ */
+export const PLAZO_DE_LECTURA_MS = 8_000;
 
 /** Cada cuánto se vuelve a preguntar mientras se espera a que se libere. */
 export const REINTENTO_MS = 12_000;
@@ -114,7 +133,12 @@ const SIN_SESION: EstadoSesion = { ocupada: false, latido: 0, dispositivo: '' };
  */
 export async function consultarSesion(uid: string, miId: string): Promise<EstadoSesion> {
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
+    // Con plazo: una petición colgada no puede dejar el arranque esperando para siempre.
+    const snap = await conTiempoLimite(
+      getDoc(doc(db, 'users', uid)),
+      PLAZO_DE_LECTURA_MS,
+      'consultarSesion'
+    );
     if (!snap.exists()) return SIN_SESION;
 
     // **EL LATIDO VIVE DENTRO DE LA PARTIDA, EN LA CLAVE `sesion`.** No en un
@@ -175,11 +199,11 @@ export async function anotarLatido(uid: string, miId: string): Promise<void> {
     // donde las reglas ya dejan escribir, pero `merge: true` con una sola clave
     // anidada no puede tocar nanitas ni inventario: Firestore fusiona por el primer
     // nivel, asi que lo unico que se reemplaza es el mapa `sesion` entero.
-    await setDoc(
+    await conTiempoLimite(setDoc(
       doc(db, 'users', uid),
       { sesion: { dispositivo: miId, latido: Date.now(), v: 1 } },
       { merge: true }
-    );
+    ), PLAZO_DE_LECTURA_MS, 'anotarLatido');
   } catch (e) {
     console.warn('[sesion] No se ha podido anotar el latido.', e);
   }
@@ -205,7 +229,7 @@ export async function anotarLatido(uid: string, miId: string): Promise<void> {
 export async function soltarSesion(uid: string, miId: string): Promise<void> {
   try {
     const ref = doc(db, 'users', uid);
-    const snap = await getDoc(ref);
+    const snap = await conTiempoLimite(getDoc(ref), PLAZO_DE_LECTURA_MS, 'soltarSesion');
     if (!snap.exists()) return;
     const sesion = (snap.data() as any)?.sesion;
     if (!sesion) return;
@@ -251,7 +275,11 @@ export async function anotarPresencia(uid: string): Promise<void> {
   if (ahora - ultimaPresencia < RITMO_PRESENCIA_MS) return;
   ultimaPresencia = ahora;
   try {
-    await setDoc(doc(db, 'rankings', uid), { latido: ahora }, { merge: true });
+    await conTiempoLimite(
+      setDoc(doc(db, 'rankings', uid), { latido: ahora }, { merge: true }),
+      PLAZO_DE_LECTURA_MS,
+      'anotarPresencia'
+    );
   } catch (e) {
     console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
   }
