@@ -49,6 +49,39 @@ export const BUFF_FIELDS = {
 } as const;
 
 export type BuffKey = keyof typeof BUFF_FIELDS | 'afk';
+
+/**
+ * SI UN BUFF SE PUEDE CANCELAR DESDE EL HUD.
+ *
+ * **POR QUE ESTA AQUI Y NO EN CADA SITIO.** La regla la leen dos: el boton de la
+ * tarjeta, que tiene que decidir si se pinta, y el motor, que tiene que negarla. Si
+ * cada uno escribiera su propio `if (key === 'afk')`, bastaria con que uno de los
+ * dos se quedara atras para que el sintoma fuera un boton que no hace nada -- que es
+ * peor que no tenerlo, porque el jugador no tiene forma de saber por que.
+ *
+ * **Y POR QUE EL AFK NO.** Cancelar es razonable en una mejora temporal: se deja de
+ * usar y el tiempo se pierde. El AFK no es una mejora, es **lo que permite jugar sin
+ * mirar la ventana**, y su tiempo se acumula -- tres tarjetas son media hora --, asi que
+ * la cruce era un boton de veinte pixeles para tirar media hora y la tarjeta que la
+ * compro. Ademas el efecto no se ve en el boton: al cancelarlo el HUD lo esconde y no
+ * hay ningun sitio donde volver a ponerlo sin gastar otra tarjeta, o sea que la cruce
+ * podia dejar la partida en un estado del que no se sale.
+ *
+ * El valor por defecto de un buff nuevo es **que se puede cancelar**, porque es lo
+ * esperable; negar es lo que hay que escribir a proposito.
+ */
+export const BUFF_CANCELABLE: Record<BuffKey, boolean> = {
+  clickBoost: true,
+  clickX2: true,
+  clickX3: true,
+  passiveBoost: true,
+  afk: false
+};
+
+/** Si este buff ofrece su boton de cancelar. La funcion es la que usan los dos. */
+export function sePuedeCancelar(buffId: string): boolean {
+  return (BUFF_CANCELABLE as Record<string, boolean>)[buffId] ?? true;
+}
 /**
  * CUÁNTAS VECES CABE UN CONSUMIBLE, Y POR QUÉ ES UNA FUNCIÓN Y NO UN NÚMERO EN CADA
  * `case`.

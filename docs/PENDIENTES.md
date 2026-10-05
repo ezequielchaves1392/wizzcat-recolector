@@ -63,7 +63,7 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
       Los históricos (`totalNanitesProduced`, `totalClicks`, `cratesOpened`) ya no se
       reinician, y **el ranking lleva lo producido**. De paso: `maxCompanionSlots` se
       reiniciaba a 1 y eran **ranuras compradas con recurso** —cobrar y perderlas al
-      ascender—; las del árbol nunca општились porque viven en `nodeLevels`.
+      ascender—; las del árbol nunca se perdían porque viven en `nodeLevels`.
 - [x] **G3 · El stack de cajas.** Pides el tope a 99, y el síntoma que describías
       (`120/20`) era de **pintado**, no de almacenamiento. **Causa raíz: hay DOS topes y
       uno se quedó atrás.** `TOPE_PILA` (cómo se guarda) estaba a 20 y `MAX_STACK` (qué
@@ -2280,3 +2280,32 @@ _Cosas que estorban al trabajo más que al juego._
         `__preview_iframe__`, que es su propio centinela.
         **La causa del desbordamiento sí está localizada y es aritmética**: 18 celdas
         de 56 px en un contenedor de 448.
+- [x] **La tarjeta AFK se podía cancelar, y no debía.** Lo pidió el jugador: *"la
+      tarjeta afk debería deshabilitar la cancelación de ganancias… no está
+      funcionando"*.
+      - **La regla vive en `data/buffs.ts`, no en el HUD ni en el motor.**
+        `BUFF_CANCELABLE` + `sePuedeCancelar()`, y los dos sitios la leen. Es lo
+        importante del arreglo: si el botón de la tarjeta escribiera su propio
+        `if (key === 'afk')` y el motor otro, bastaría con que uno de los dos se
+        quedara atrás para que el síntoma fuera **un botón que no hace nada**, que es
+        peor que no tenerlo porque el jugador no tiene forma de saber por qué.
+        La negación **está en el motor** y no solo escondida en el markup: con el
+        botón oculto, `cancelBuff('afk')` seguía tirando media hora de tiempo
+        acumulado con una sola llamada.
+      - **Por qué el AFK y ningún otro.** Cancelar es razonable en una mejora
+        temporal: se deja de usar y el tiempo se pierde. El AFK no es una mejora, es
+        **lo que permite jugar sin mirar la ventana**, y su tiempo se acumula —tres
+        tarjetas son media hora—, así que la × era un botón de veinte píxeles para
+        tirar media hora y la tarjeta que la compró. Y hay un efecto que no se ve en
+        el botón: **al cancelarlo el HUD lo esconde y no hay ningún sitio donde
+        volver a ponerlo sin gastar otra tarjeta**, o sea que la × podía dejar la
+        partida en un estado del que no se sale.
+      - **La × se quita del markup en vez de apagarse con `disabled`.** Un botón
+        apagado encima de una × sigue siendo un botón que parece pulsable.
+      - **Dos comprobaciones del banco decían lo contrario y ahora dicen lo nuevo.**
+        Una afirmaba que el AFK se podía cancelar, y la otra que cancelarlo ponía su
+        barra a cero. Esta última ya no tiene sentido: **el total concedido del AFK se
+        limpia al expirar, no al cancelar**, porque cancelar no es una operación que
+        exista para él. `consumableCheck` se queda en 136.
+      **Comprobado en el píxel** en `preview.html` con los datos de ejemplo: la
+      tarjeta AFK se pinta sin `data-cancel` y la de Clics x2 sí lo trae.

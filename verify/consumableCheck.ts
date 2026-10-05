@@ -551,12 +551,29 @@ async function main() {
     const g = await boot(baseSave([consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' })]));
     g.useConsumable('u1');
     check('cancelar: el item se ha gastado al usarlo', wh(g).length === 1, ids(g).join(','));
+    const antes = s(g).afkExpiresAt;
     const etiqueta = g.cancelBuff('afk');
-    check('cancelar: se puede cancelar el buff AFK', !!etiqueta, String(etiqueta));
-    check('cancelar: y el buff se desactiva', s(g).afkExpiresAt === 0, 'expira=' + s(g).afkExpiresAt);
-    check('cancelar: el item NO se devuelve', wh(g).length === 1, ids(g).join(','));
-    check('cancelar: el tiempo restante se pierde, no se recupera',
-      s(g).afkCards === 1, 'afkCards=' + s(g).afkCards);
+
+    // **EL AFK NO SE PUEDE CANCELAR, Y SE COMPRUEBA EN EL MOTOR Y NO EN EL BOTON.**
+    // Ocultar la cruce en la tarjeta habria hecho pasar la mitad de esta comprobacion:
+    // el boton ya no estaria, pero `cancelBuff()` seguiria tirando media hora de tiempo
+    // acumulado con una sola llamada. Por eso la prueba va contra el motor.
+    check('cancelar: el AFK NO se puede cancelar', etiqueta === false, String(etiqueta));
+    check(
+      'cancelar: y sigue puesto, con el mismo tiempo',
+      s(g).afkExpiresAt === antes && antes > 0,
+      'expira=' + s(g).afkExpiresAt + ' antes=' + antes
+    );
+    check(
+      'cancelar: y el tiempo concedido no se toca',
+      (s(g).afkTotalMs as number) > 0,
+      'afkTotalMs=' + String(s(g).afkTotalMs)
+    );
+    check(
+      'cancelar: y el item sigue gastado igual',
+      wh(g).length === 1 && s(g).afkCards === 1,
+      wh(g).length + ' tarjetas=' + s(g).afkCards
+    );
   }
   {
     const g = await boot(baseSave([consumable('b1', 'clickBoost', 1, { name: 'Buff Clicks x2' })]));
@@ -804,9 +821,18 @@ async function main() {
           && s(g).buffs.clickX2TotalMs === 0 && s(g).buffs.clickX2ExpiresAt === 0;
       })(),
       `total=${s(g).buffs.clickX2TotalMs} expira=${s(g).buffs.clickX2ExpiresAt}`);
-    check('b13: y cancelar el AFK también',
-      (() => { const a = g2.cancelBuff('afk'); return a === 'AFK' && s(g2).afkTotalMs === 0; })(),
-      'afkTotalMs=' + String(s(g2).afkTotalMs));
+    // **Y EL AFK NO: SU BARRA NO SE PUEDE PONER A CERO POR LA VIA DE CANCELAR.**
+    // El total concedido del AFK se limpia al expirar, no al cancelar, porque cancelar
+    // no es una operacion que exista para el. Si se limpiara aqui, la siguiente barra
+    // arrancaria con el ancho de un buff que sigue vivo.
+    check(
+      'b13: el AFK no se puede cancelar y su total no se toca',
+      (() => {
+        const antes = s(g2).afkTotalMs as number;
+        const a = g2.cancelBuff('afk');
+        return a === false && s(g2).afkTotalMs === antes && (antes as number) > 0;
+      })(),
+      'vuelve=' + String(s(g2).afkExpiresAt > 0) + ' total=' + String(s(g2).afkTotalMs));
   }
   {
     // **UNA PARTIDA VIEJA NO TIENE EL CAMPO, Y ESO NO PUEDE SER UN NaN.**

@@ -44,7 +44,7 @@ import {
   COMPANION_SLOT_COSTS, RANURA_POR_CARTA, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP,
   expansorPorBuff, type CrateType
 } from './data/store';
-import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, type BuffKey } from './data/buffs';
+import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, sePuedeCancelar, type BuffKey } from './data/buffs';
 import {
   cuantasVecesCabe, pasoDeConsumible, anotaTotalDeBuff,
   BUFF_TOTAL_CAMPOS, BUFF_TOTAL_FIELDS
@@ -3711,6 +3711,13 @@ const AFK_THRESHOLD_MS = 60000;
         passiveBoost: 'Pasivo x2',
         afk: 'AFK'
       };
+      // LA NEGACION VIENE DE LA REGLA, NO DE UN `if` ESCRITO AQUI.
+      //
+      // El boton de la tarjeta y esta linea leen las dos `sePuedeCancelar()`. Si cada
+      // sitio escribiera su propio caso para el AFK, bastaria con que uno de los dos se
+      // quedara atras para que el sintoma fuera un boton que no hace nada, que es peor
+      // que no tenerlo. El por que de que el AFK no se pueda esta en la regla.
+      if (!sePuedeCancelar(buffKey)) return false;
       if (buffKey === 'afk') {
         if (state.afkExpiresAt <= Date.now()) return false;
         state.afkExpiresAt = 0;

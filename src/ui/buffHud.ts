@@ -5,7 +5,7 @@
 // la cabecera (móvil). Se parchean a la vez para que no haya dos implementaciones.
 
 import { ic, type IconName } from './icons';
-import { totalConcedidoDe } from '../data/buffs';
+import { totalConcedidoDe, sePuedeCancelar } from '../data/buffs';
 
 /**
  * El HUD de buffs, y **por qué la barra usa el total concedido y no la duración de la
@@ -114,10 +114,19 @@ function buildCard(def: BuffDef): string {
                 style="width:100%"></span>
         </span>
       </span>
+      <!--
+        LA CRUCE SOLO SI LA REGLA DICE QUE SI, Y VA EN EL IF Y NO EN UN DISABLED:
+        un boton apagado encima de una cruce sigue siendo un boton que parece que se
+        puede pulsar, y el jugador no tiene forma de saber por que no hace nada.
+        La regla es sePuedeCancelar(), la misma que lee el motor: si aqui y alla se
+        separan, uno deja de cancelar y el otro sigue.
+      -->
+      ${sePuedeCancelar(def.key) ? `
       <button data-cancel="${def.key}" title="Cancelar ${def.label}" aria-label="Cancelar ${def.label}"
               class="hit-expand w-5 h-5 flex items-center justify-center rounded-md text-[11px] leading-none
                      opacity-40 hover:opacity-100 hover:bg-white/10 active:scale-90
                      transition cursor-pointer shrink-0">${ic('close', 'w-3 h-3')}</button>
+      ` : ''}
     </div>
   `;
 }
