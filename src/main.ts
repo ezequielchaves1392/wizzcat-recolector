@@ -1,5 +1,7 @@
 import { renderBuffHud, resetBuffHud, buffLabel } from './ui/buffHud';
 import { setSkipRoulette } from './roulettePrefs';
+import { setPatchNotes } from './patchNotesPrefs';
+import { showPatchNotes } from './ui/patchNotes';
 import { renderPanel } from './ui/playerPanel';
 import { formatNumber } from './utils/format';
 import './style.css';
@@ -264,6 +266,17 @@ async function returnToLogin(motivo?: string) {
     returningToLogin = false;
     renderAuth(app, (loggedInUser, username) => {
       initGame(loggedInUser, username);
+      // F49 · LAS NOTAS DE PARCHE, AL ENTRAR Y NO EN CADA NAVEGACIÓN.
+      //
+      //  Va aquí y no en `renderRoute()` porque "al entrar al juego" es un momento y
+      //  una navegación no lo es: en la base, en el almacén y en el Perfil no sale nada,
+      //  y aunque la marca de "ya visto" lo taparía, un cartel que se pide en cada
+      //  navegación es un cartel que depende de dónde está el jugador.
+      //
+      //  Y **después de `initGame()`**, para que la pantalla de juego ya esté montada
+      //  detrás del cartel: una nota de parche sobre la pantalla de acceso sería un
+      //  aviso de lo que todavía no se puede usar.
+      showPatchNotes();
     });
   }, 120);
 }
@@ -771,26 +784,6 @@ function instalaDelegacionDeAjustes() {
   // sesión, mirando el nodo en el momento**, igual que el resto de lo de la hoja.
   onAudioStateChange(paintAudioButtons);
   paintAudioButtons();
-
-  // -------------------------------------------------------------------------------------
-  //  LA CASILLA DE SALTAR LA RULETA, Y POR QUÉ ESCUCHA `change` Y NO `click`
-  // -------------------------------------------------------------------------------------
-  //
-  // Es un `input` real y su estado lo lleva el navegador. Atenderlo en el `click` del
-  // delegado de arriba funciona con el ratón y con el dedo, pero **no con el teclado**:
-  // el espacio sobre una casilla no produce `click`, produce `change`. Y una casilla que
-  // no se puede marcar con el teclado es un control roto para quien navega así.
-  //
-  // Va como `addEventListener` aparte y no dentro del `click` porque **son eventos
-  // distintos**: un `change` no se puede capturar en un `click` sin leer el atributo
-  // `checked` en el momento del clic, que es el camino corto y el que se equivoca en
-  // cuanto el navegador cambia el orden de uno de los dos.
-  app.addEventListener('change', (e) => {
-    const mark = (e.target as HTMLElement).closest?.('[data-setting]') as HTMLElement | null;
-    if (!mark || mark.dataset.setting !== 'skip-roulette') return;
-    sfx.nav();
-    setSkipRoulette((mark as HTMLInputElement).checked);
-  });
 }
 
 function renderRoute(route: Route) {

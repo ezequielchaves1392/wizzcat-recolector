@@ -52,6 +52,7 @@
 
 import { ic, type IconName } from './icons';
 import { getSkipRoulette } from '../roulettePrefs';
+import { getPatchNotes } from '../patchNotesPrefs';
 import { routeTitle, type Route } from './router';
 import { navDesktopHTML } from './navBars';
 import { isMusicEnabled, isSfxEnabled } from '../utils/audio';
@@ -378,6 +379,30 @@ export function settingsSheetHTML(): string {
             <span class="block text-[12px] font-bold text-[var(--text-main)]">Saltar la ruleta</span>
             <span id="skip-roulette-hint" class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5 leading-relaxed">
               Va directo al cartel, en cajas, en el sintonizador y en la forja. El premio no cambia: ya estaba decidido.
+            </span>
+          </span>
+        </label>
+        <!--
+          LAS NOTAS DE PARCHE, Y POR QUÉ ESTÁN EN ESTA HOJA Y NO EN EL PERFIL.
+
+          Es la misma razón que el check de arriba, y está escrita aquí para que no haya
+          que volver a preguntarlo: Ajustes es donde se cambian las cosas de la pantalla,
+          y un jugador que no quiere un cartel al entrar no debería tener que entrar en el
+          Perfil para callarlo. Además **esta casilla es reversible de verdad**: al
+          desactivarla no se marca la versión como vista, así que si la vuelves a activar
+          te aparecen las notas que te habías perdido. Un ajuste que se puede volver a
+          poner **tiene** que devolver lo que apagó, o no es un ajuste: es una puerta de
+          un solo sentido.
+        -->
+        <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
+          <input type="checkbox" data-setting="patch-notes"
+                 class="w-5 h-5 flex-shrink-0 accent-[var(--accent)]"
+                 ${getPatchNotes() ? 'checked' : ''}
+                 aria-describedby="patch-notes-hint">
+          <span class="min-w-0">
+            <span class="block text-[12px] font-bold text-[var(--text-main)]">Notas de parche</span>
+            <span id="patch-notes-hint" class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5 leading-relaxed">
+              Un cartel al entrar con los cambios de la versión. No cambia nada del juego.
             </span>
           </span>
         </label>

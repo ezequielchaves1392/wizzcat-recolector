@@ -28,6 +28,7 @@ import { renderBuffHudForPreview } from './ui/buffHud';
 import { renderWarehouseTab } from './components/warehouse';
 import { renderStoreTab } from './components/store';
 import { renderForgePage } from './ui/forgePage';
+import { showPatchNotes } from './ui/patchNotes';
 import { renderProfilePage } from './ui/profilePage';
 import { renderPrestigePage } from './ui/prestigePage';
 import { renderRankings } from './components/rankings';
@@ -593,6 +594,17 @@ switch (vista) {
     break;
   case 'prestigio':
     renderPrestigePage(app, fakeGame, ir);
+    break;
+  case 'notas':
+    // El cartel de notas de parche, y solo el cartel. Vive en `main.ts`, que es donde se
+    // llama al entrar, así que sin esta vista **no hay forma de mirarlo sin jugar**:
+    // `verify/` no puede pintarlo —necesita DOM de verdad— y la pantalla de acceso no lo
+    // enseña. Con esta vista se puede revisar el texto, el ancho y que en un móvil de
+    // 390 px la lista de ocho líneas cabe con su botón.
+    //
+    // Y sale aunque el jugador ya lo haya visto: la preferencia vive en el
+    // almacenamiento local y aquí interesa verla, no respetar el estado de nadie.
+    showPatchNotes();
     break;
   case 'ranking':
     renderRankings(app, { uid: 'me' }, ir, MOCK);

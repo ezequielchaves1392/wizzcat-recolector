@@ -1,3 +1,6 @@
+import { dirname, resolve as resolver } from 'node:path';
+import { VERSION, NOTAS, notaDeEstaVersion } from '../src/data/patchNotes';
+import { getPatchNotes, setPatchNotes, getNotasVistas, setNotasVistas } from '../src/patchNotesPrefs';
 import { check, resumen } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { chanceDeSintonizacion } from '../src/data/items';
@@ -434,6 +437,128 @@ async function main() {
       tope === AFIX_MAX, `aportación=${tope} tope=${AFIX_MAX}`);
   }
 
+
+  // ---------------------------------------------------------------------------
+  //  LAS NOTAS DE PARCHE DICEN LO QUE SE VE, NO CÓMO ESTÁ HECHO
+  //
+  //  Es un banco de contenido, y su regla es la del encargo: **macro**. "Se añadieron
+  //  doce logros nuevos" informa; "se subió el suelo de afijos de la rareza Mítica de tres
+  //  a cuatro" solo le importa a quien mantiene el juego.
+  //
+  //  Y hay una razón de fondo para que la regla sea esta y no "que sean cortas": un
+  //  commit log es exactamente una lista de cambios internos, y todo el mundo lo deja de
+  //  leer al segundo commit. Un cartel de parche lleno de internals se vuelve ruido en la
+  //  cuarta actualización, y un cartel que se ha vuelto ruido no vuelve a avisar de
+  //  nada. Las tres comprobaciones de abajo son las tres formas de que esto se convierta
+  //  en un commit log.
+  // ---------------------------------------------------------------------------
+  {
+    const version = VERSION;
+    const nota = notaDeEstaVersion();
+
+    // 1) **HAY NOTA DE LA VERSIÓN QUE SE ESTÁ JUGANDO.** Sin esto el cartel no sale, y
+    //    no sale en silencio: se ve bien que no sale. Publicar es subir la versión en
+    //    `package.json` **y** añadir la línea aquí, y esta comprobación es la que avisa de
+    //    que falta la segunda.
+    check('notas: la versión del juego tiene su nota de parche',
+      nota !== null, `${version} · ${NOTAS.length} notas, ninguna de ${version}`);
+    check('notas: y la nota es la primera, que es la que se enseña',
+      NOTAS[0]?.version === version, `primera=${NOTAS[0]?.version} version=${version}`);
+
+    // 2) **LA VERSIÓN VIENE DE `package.json`.** El número del cartel no puede tener su
+    //    propia copia: una constante escrita a mano se queda vieja el día que se sube la
+    //    versión y nadie se entera, que es justo el fallo que este módulo vino a
+    //    arreglar. La prueba es que coincidan, y la coincidencia es lo único que se
+    //    comprueba —no reescribimos `package.json` desde un banco.
+    // **Y NO HAY UNA COPIA DEL NÚMERO EN NINGÚN SITIO.** El módulo lo importa del
+    // `package.json` del proyecto, así que la única forma de que el cartel diga una
+    // versión que no es la del juego es que alguien escriba el número a mano en las
+    // notas, y eso lo pilla el check de arriba. Comprobar que el módulo lee bien el
+    // fichero no tiene sentido: leerían los dos el mismo —y el bundler de los bancos
+    // sustituye `node:fs` por un stub, así que ni siquiera se podría.
+    //
+    // Y **la lista no tiene versiones repetidas**: dos notas con el mismo número
+    // significan que se subió la versión dos veces sin decidir cuál se enseña, y
+    // `find()` se quedaría con la primera sin decir nada.
+    const versionesRepetidas = NOTAS.map(n => n.version).filter((v, k, l) => l.indexOf(v) !== k);
+    check('notas: ninguna versión está repetida, y el número del cartel es el de la nota',
+      versionesRepetidas.length === 0 && version === NOTAS[0]?.version,
+      versionesRepetidas.length ? `repetidas: ${versionesRepetidas.join(',')}` : version);
+
+    // 3) **NINGUNA NOTA HABLA DE CÓMO ESTÁ HECHO.** Las tres formas que se cuelan:
+    //    un fichero, un identificador en camelCase y una función. Es una lista negra y no
+    //    es perfecta —una nota podría decir "AFIX_MAX" sin querer y pasar si no está en
+    //    la lista—, pero pilla las tres que se han colado, y **más importante**: hace que
+    //    quien escribe la nota se pregunte si lo que va a escribir es para el jugador.
+    const INTERNOS = /\b\w+\.(ts|tsx|css|html)\b|\b[a-z]+[A-Z][a-zA-Z]*\s*[(:=]|\bfunction\b|\bconst\b|\bif\s*\(/;
+    const conInternos: string[] = [];
+    for (const n of NOTAS) {
+      for (const linea of n.lineas) {
+        if (INTERNOS.test(linea)) conInternos.push(`${n.version}: "${linea}"`);
+      }
+    }
+    check('notas: ninguna nota habla de ficheros, funciones ni identificadores internos',
+      conInternos.length === 0, conInternos.slice(0, 2).join(' | ') || `${NOTAS.length} notas`);
+
+    // Y el reverso, que es la regla de verdad: **cada nota es una frase, no un trozo de
+    // commit.** Lo que se puede comprobar sin soit-máquina sobre si algo "se ve" son cuatro
+    // cosas mecánicas, y son las cuatro que se rompen cuando alguien pega un diff:
+    //
+    //   · Que la línea sea una frase: empieza en mayúscula y acaba en punto.
+    //   · Que no lleve cifras internas —un 12 %, un ×3, un "de 3 a 4"—. Las notas hablan
+    //     de cosas que se ven, y un porcentaje es una regla, no una cosa que se vea.
+    //   · Que no haya dos líneas iguales: una repetida es una línea que no dice nada.
+    //   · Que la nota tenga un tamaño de nota: ni dos líneas ni cincuenta. Un cartel de
+    //     parche con cincuenta líneas no se lee, y uno que no se lee no avisa de nada.
+    //
+    // Lo que **no** se comprueba es si cada línea nombra algo que exista en la pantalla:
+    // eso no es decidible, y un banco que finge comprobarlo da la impresión de que
+    // comprueba algo que no comprueba.
+    const frases = NOTAS.flatMap(n => n.lineas.filter(
+      l => !/^[A-ZÁÉÍÓÚÑ¿¡].*\.$/.test(l.trim())
+    ));
+    check('notas: cada línea es una frase, con mayúscula y punto',
+      frases.length === 0, frases.slice(0, 2).join(' | ') || 'todas son frases');
+
+    const conCifras = NOTAS.flatMap(n => n.lineas.filter(
+      l => /\d\s*(%|x|×)|\bde\s+\d+\s+a\s+\d+/.test(l)
+    ));
+    check('notas: ninguna línea lleva una cifra interna',
+      conCifras.length === 0, conCifras.slice(0, 2).join(' | ') || 'ninguna cifra');
+
+    const repetidas = NOTAS.flatMap(n => {
+      const vistas = n.lineas.filter((l, i) => n.lineas.indexOf(l) !== i);
+      return vistas.map(l => `${n.version}: "${l}"`);
+    });
+    check('notas: y ninguna nota repite una línea',
+      repetidas.length === 0, repetidas.slice(0, 2).join(' | ') || 'sin repeticiones');
+
+    const cortas = NOTAS.filter(n => n.lineas.length < 3 || n.lineas.length > 12);
+    check('notas: cada nota tiene tamaño de nota, ni dos líneas ni un changelog',
+      cortas.length === 0,
+      cortas.map(n => `${n.version}=${n.lineas.length} líneas`).join(', ')
+        || NOTAS.map(n => `${n.version}=${n.lineas.length}`).join(' · '));
+
+    // 4) **LA CASILLA DE AJUSTES EXISTE Y ES DE LOS AJUSTES.** Un cartel que no se puede
+    //    desactivar es una decisión de diseño, no un ajuste, y el encargo la llamaba
+    //    ajuste: tiene que haber un sitio donde apagarlo.
+    check('notas: el ajuste existe y es una preferencia de las que se guardan',
+      typeof getPatchNotes() === 'boolean' && typeof setPatchNotes === 'function',
+      `por defecto=${getPatchNotes()}`);
+
+    // 5) **LA MARCA DE "YA VISTO" GUARDA UNA VERSIÓN, NO UN "SÍ".** Con un booleano,
+    //    desactivar y volver a activar las notas no las devolvería nunca, y un jugador
+    //    que las apagó dos meses las perdería sin enterarse de que existían. Y como no
+    //    se guarda nada al desactivar, reactivarlas muestra lo pendiente.
+    const anterior = getNotasVistas();
+    try {
+      setNotasVistas(version);
+      check('notas: la marca de visto guarda la versión y solo esa',
+        getNotasVistas() === version, `guardado="${getNotasVistas()}"`);
+    } finally {
+      localStorage.setItem('cyberforge_patch_notes_visto', anterior);
+    }
+  }
   resumen('leyendas: cada texto dice la regla que el juego aplica');
 }
 
