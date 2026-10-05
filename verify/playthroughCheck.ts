@@ -56,7 +56,7 @@ import { danioDeRango, valorDeUnCristal } from '../src/data/crafting';
 import { CRATE_TYPES, type CrateType } from '../src/data/store';
 import {
   boot, reload, recargar, bootNew, check, resumen, s, wh, ids, nanites, deType, find,
-  baseSave, collector, consumable, guardado
+  baseSave, collector, consumable, guardado, conRoll
 } from './kit';
 
 /** Cuántos clicks se dan en un paso. Suficiente para que la cifra sea legible. */
@@ -499,7 +499,18 @@ async function main() {
     // `openCrateBox('c1', 'k1')`: el id de la caja y el de la llave, y el motor
     // comprobaba que la llave sirviera para ese cofre. Ya no hay llave que
     // comprobar, y por eso la llamada es de un argumento.
-    const r = g12.openCrateBox('c1');
+    // **EL DADO ESTA FIJADO, Y POR QUE ESTA FIJADO.** Esta apertura era la unica prueba
+    // del banco que dependia del azar: la comprobacion de las nanitas estaba dentro de
+    // un 'if (premio.kind === 'nanites')', asi que solo se ejecutaba una de cada cuatro
+    // veces y **el total del banco se movia entre dos numeros**. Un banco cuyo total se
+    // mueve no sirve para notar que le falta una prueba, que es justo lo que se le pide.
+    //
+    // El valor es el primer tranche de la tabla de botin de la caja comun, que es la fila
+    // de las nanitas con peso 34 de 143 -- y no es una constante magica que alguien
+    // ajusto: es la razon por la que esta fila sale primero. Si la tabla se reordena, esta
+    // prueba **avisa en vez de dejar de comprobarse**, que es lo unico que se le puede
+    // pedir a un dado.
+    const r: any = conRoll(0.01, () => g12.openCrateBox('c1'));
 
     // CUÁNTAS UNIDADES DE CRISTAL SOLTÓ EL BOTÍN DE ESTA CAJA.
     //
@@ -511,13 +522,13 @@ async function main() {
     // falle del todo nadie sabrá si es ella o el juego.
     const sueltas = r.reward?.kind === 'crystals' ? (r.reward.amount ?? 0) : 0;
     // **Y AQUÍ NO HAY QUE RESTAR NADA, Y ES LA DIFERENCIA CON LA VIEJA.** Antes abrir
-    // consumía una llave, así que lo esperado era `llaves - 1 + sueltas`. Ahora lo
+    // consumía una llave, así que lo esperado era 'llaves - 1 + sueltas'. Ahora lo
     // único que se consume es la caja, y el cristal solo puede **sumar**: por eso
-    // lo esperado es `cristales + sueltas`, sin el `- 1`.
+    // lo esperado es 'cristales + sueltas', sin el '- 1'.
     //
     // **LO QUE ENTREGA EL BOTÍN SON UNIDADES YA CONVERTIDAS**, no intentos: la fila
-    // multiplica `rand(3n, 5n)` por `valorDeUnCristal(n)`. Lo que dice la etiqueta es
-    // exactamente lo que se compara con `state.crystals`.
+    // multiplica 'rand(3n, 5n)' por 'valorDeUnCristal(n)'. Lo que dice la etiqueta es
+    // exactamente lo que se compara con 'state.crystals'.
     const cristalesDeFabrica = crystals + sueltas;
 
     check('caja: se abre', r.ok === true, r.msg ?? '');
@@ -547,12 +558,21 @@ async function main() {
     const premio = r.reward;
     check('caja: vuelve un premio con etiqueta y nombre',
       Boolean(premio && premio.label && premio.name), JSON.stringify(premio?.label ?? null));
-    if (premio?.kind === 'nanites') {
-      const ganado = nanites(g12) - antes;
-      check('caja: si son nanitas, entran las que dice la etiqueta',
-        premio.label.includes(String(ganado)) || premio.label.includes('K'),
-        `etiqueta="${premio.label}" entraron=${ganado}`);
-    }
+    // **Y LA COMPROBACION YA NO ESTA DENTRO DE UN `if`.** Es la misma prueba de antes --
+    // la cifra que anuncia la casilla tiene que ser la que ha entrado -- y ahora se
+    // ejecuta siempre. Si el botin dejara de ser de nanitas, esto falla y dice cual fue
+    // la etiqueta, en vez de saltarse en silencio.
+    check(
+      'caja: el botin es de nanitas, con el dado fijado',
+      premio?.kind === 'nanites',
+      `kind=${premio?.kind} etiqueta="${premio?.label}"`
+    );
+    const ganado = nanites(g12) - antes;
+    check(
+      'caja: si son nanitas, entran las que dice la etiqueta',
+      Boolean(premio?.label?.includes(String(ganado)) || premio?.label?.includes('K')),
+      `etiqueta="${premio?.label}" entraron=${ganado}`
+    );
 
     // Dos turnos antes de recargar, y el motivo es el mismo que documenta `boot()`:
     // `openCrateBox` llama a `saveToFirebase()` SIN `await`, así que su escritura

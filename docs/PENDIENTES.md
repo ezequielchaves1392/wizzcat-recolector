@@ -2157,13 +2157,18 @@ _Cosas que estorban al trabajo más que al juego._
       deja para cuando se toque uno de esos ficheros. **Lo que ya no es aceptable es que
       alguien escriba el 5 otra vez**, y por eso el número tiene nombre y el comentario
       al lado del `AFIX_MAX` avisa de que son dos topes distintos.
-- [ ] **`playthroughCheck` tiene una prueba que depende del dado** y no lo dice:
+- [x] **`playthroughCheck` tiene una prueba que depende del dado** y no lo dice:
       `caja: si son nanitas, entran las que dice la etiqueta` solo se ejecuta cuando el
       botín de la caja sale de nanitas, así que el total del banco **varía entre 1964 y
       1965** según la tirada. No es un fallo —por eso `AGENTS.md` avisa de que una prueba
       que depende del dado no se cuenta— pero un banco cuyo total se mueve es un banco
-      del que no se puede fiar uno para detectar que le falta una prueba. Habría que
-      forzarlo con `conRoll` o quitar el `if`, en vez de dejarlo condicional.
+      del que no se puede fiar uno para detectar que le falta una prueba.
+      **Hecho.** El dado va fijado con `conRoll(0.01, ...)` en esa apertura, y el `if`
+      desapareció: ahora hay **una prueba que avisa** si el botín deja de ser de nanitas,
+      con la etiqueta en el mensaje, y otra que se ejecuta siempre. El valor no es una
+      constante mágica: es el primer tranche de la tabla de botín de la caja común, que es
+      la fila de las nanitas con peso 34 de 143. `playthroughCheck` pasa a 105 y el total
+      del banco es 2009 **las dos veces seguidas**, que es lo que no se podía comprobar.
 - [ ] **Que las tres ruletas lean la preferencia de saltar, comprobado y no leído.**
       `crateRoulette.ts`, `tuningRoulette.ts` y `forgePage.ts` llaman a
       `getSkipRoulette()`, y el conmutador está en Ajustes de la cabecera. Es cierto, y es

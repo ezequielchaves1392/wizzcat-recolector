@@ -152,7 +152,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 24 bancos
+### Los 31 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -168,7 +168,7 @@ en producción.
 | `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
 | `tickCheck` | El ritmo del ingreso pasivo: entra **entero y de una vez**, una vez por segundo, aunque el tick sea de 500 ms. Con ingreso impar (7/s daba +3 y +4). Todos los orígenes, incluido el compañero de tipo `click`. Nada sin mirar. Y sobre todo que **el ingreso por segundo no cambia**: diez ticks son cinco cobros. |
 | `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 42 |
-| `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. Y F27: un solo camino de ampliación (comprar expansor y usarlo). | 95 |
+| `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. Y F27: un solo camino de ampliación (comprar expansor y usarlo). | 105 |
 | `toastCheck` | **La pila de avisos flotantes.** `showToast` es el overlay más llamado del juego (71 llamadas entre las siete pantallas, la terminal y el propio `gameLoop`) y no estaba cubierto por nada. Que no haya un nodo por aviso, que lo repetido se cuente (`×5`) en vez de apilar cinco iguales, el tope de cuatro vivos, que se coloque midiendo la cabecera y no con una constante, y que lo retirado no se quede apuntado en la lista. **Y los logros (B3-B4)**, que son un aviso más y compartían el mismo fallo silencioso: que `useConsumable` con un expansor emita el logro (es la vía nueva tras F27: comprar mete el item y ampliar es usarlo), que no lo emita dos veces, y que la pista mida la capacidad real con el árbol en vez de la base sola. La pista se compara **alcanzando el tope**, no igualando cifras: va topeada a 20 y la capacidad no, y comparar `20 === 26` fallaría con un bug inexistente. Ver abajo, porque necesita un stub con DOM de verdad. | 32 |
 | `rouletteCheck` | **La matemática del trompo.** Que la curva frene de verdad —es el ajuste de `2t - t²`, deceleración constante— y no un `ease-out` cualquiera, que `instante()` la deshaga, que **la casilla ganadora para en el marcador**, que las vueltas se cuenten en ventanas visibles para que el trompo dure igual en móvil y en escritorio, y que **cada chasquido caiga en una frontera de casilla** con los intervalos espaciándose al frenar. Es la otra mitad de "que la ruleta no mienta": `lootCheck` comprueba que el número de la casilla sea el que entra en la cuenta, este que el desplazamiento deje esa casilla bajo la aguja. Y una segunda mitad, la **ruleta del sintonizador**: que el motor distinga *el dado salió mal* de *no se llegó a tirar* (`rolled`), que un rechazo no gaste cristal ni mueva el nivel, y que la flecha del acierto sea `4 → 5` y no el `5 → 5` que sale de releer el item después del sorteo. Y **el check de F17**: que saltar vaya directo al cartel, con la preferencia persistiendo, coaccionando y sobreviviendo a la recarga. | 63 |
 
@@ -714,13 +714,15 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **24 bancos** dan **1552 pruebas**, todas en verde.
+   tocar nada. Los **31 bancos** dan **2009 pruebas**, todas en verde.
 
-   Y el total **varía en ±1 según la ejecución**: `playthroughCheck` tiene un
-   `check()` dentro de un `if` que depende de qué botín salió de la caja, así que
-   esa prueba solo existe cuando el premio son nanitas. Por eso dos commits
-   seguidos discutieron si eran 962 o 963. Un total exacto no es un dato que se
-   pueda comprobar: lo que se comprueba es que todos los bancos impriman.
+   Y el total **ya no varía**: `playthroughCheck` tenía un `check()` dentro de un `if`
+   que dependía de qué botín salió de la caja, así que esa prueba solo existía cuando el
+   premio eran nanitas y dos commits seguidos discutieron si eran 962 o 963. El dado va
+   ahora fijado con `conRoll(0.01, ...)` —el primer tranche de la tabla de botín de la
+   caja común, que es la fila de las nanitas—, y la prueba **avisa si la tabla se
+   reordena** en vez de dejar de comprobarse. Comprobado: dos ejecuciones seguidas dan
+   las dos el mismo total.
 
 > **Las cifras de la tabla de arriba se comprueban, pero no se acumulan.** Cuando
 > se añadió un banco o se amplió una sección, la tabla se quedó con los números
