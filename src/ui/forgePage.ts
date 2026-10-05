@@ -898,80 +898,135 @@ function runForge(game: any, materials: any[], stones: number, nano: boolean, re
   }, ui.tipo === 'companion');
 }
 
-/** Ruleta de la forja: 18 celdas, la 9ª alineada con la aguja. */
+/**
+ * LA CARTA DEL RESULTADO, Y POR QUÉ ES UNA CARTA Y NO UNAS LÍNEAS DE TEXTO.
+ *
+ * El resultado de una forja es **un objeto**, y se estaba enseñando como tres líneas de
+ * texto centradas: el nombre, el tier con sus estrellas y la rareza, y los afijos. Es la
+ * misma información que enseña la ficha del almacén, partida y más pequeña, y esa es
+ * exactamente la razón de que no se leyera bien: **una cifra suelta al lado de un nombre
+ * es una etiqueta, y una etiqueta hay que descifrarla**. Con la card, el objeto se ve
+ * como un objeto: el anillo de la rareza, el nombre, y debajo las líneas con su etiqueta
+ * al lado, que es como se lee en todas partes lo demás.
+ *
+ * Y hay una razón de juego además de estética: **el fallo también es una card**. Antes el
+ * fallo salía como una frase suelta con un "+N cristales" y se leía como un mensaje de
+ * error, no como el resultado de la tirada que fue. Con la misma card y el color del
+ * yunque, el jugador ve que lo que pasó es que no salió —no que el juego se rompió— y que
+ * le ha costado lo que cuesta.
+ *
+ * **EL AFUSO DE ESTA FUNCIÓN ES `result`, QUE ES LO QUE DECIDIÓ EL MOTOR.** Nada se
+ * calcula aquí: ni el nivel, ni los afijos, ni la cantidad de cristales. Si la forja
+ *mintiera, no lo haría esta tarjeta.
+ */
+function cardDeResultado(
+  result: any,
+  esCompanion: boolean,
+  onClose: () => void
+): string {
+  const exito = !!result.success;
+  const w = result.collector || result.companion;
+  const nombre = exito ? (w?.name ?? 'Forja completada') : 'El yunque se enfrió';
+  const tono = exito ? rarityClass(w?.rarity ?? '') : 'text-rose-400';
+
+  // Las tres líneas de abajo. La del medio es la única que cambia por tipo, y por eso
+  // lleva su propio comentario: un "sin afijos" debajo de un compañero sería una fila
+  // que no significa nada, porque no le faltan afijos — es que no tiene ese atributo.
+  const lineas = exito ? [
+    { etiqueta: 'Nivel', valor: `T${w.tier} · ${estrellasDe(w.potential)}` },
+    {
+      etiqueta: esCompanion ? 'Poder' : 'Afijos',
+      valor: esCompanion
+        ? `+${w.power}/s al ingreso`
+        : ((w.affixes || []).length
+          ? (w.affixes as string[]).map(id => AFFIX_BY_ID[id]?.name).filter(Boolean).join(' · ')
+          : 'Ninguno heredado')
+    },
+    { etiqueta: esCompanion ? 'Forja' : 'Forjada por', valor: esCompanion ? 'Por ti' : (w.forgedBy ?? '-') }
+  ] : [
+    { etiqueta: 'Consuelo', valor: `+${formatNumber(result.crystals ?? 0)} cristales` },
+    { etiqueta: 'Yunque', valor: 'Sigue frío. Los materiales se gastan igual.' }
+  ];
+
+  return `
+    <div class="absolute inset-0 bg-black/55" data-forge-cerrar></div>
+    <div class="relative card-glass-elevated border rounded-2xl w-full max-w-xs p-4 flex flex-col gap-3
+                pointer-events-auto animate-rise-in">
+      <div class="flex items-start gap-3">
+        <span class="w-12 h-12 rounded-xl grid place-items-center flex-shrink-0 border ${tono}">
+          <span class="[&>span>svg]:w-6 [&>span>svg]:h-6">${ic(exito ? 'sparkle' : 'close')}</span>
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="label-caps ${exito ? 'accent-text' : 'text-rose-400'}">
+            ${exito ? 'Forja completada' : 'Forja fallida'}
+          </div>
+          <div class="font-['Orbitron'] font-bold text-[14px] ${tono} leading-tight mt-0.5 break-words">
+            ${nombre}
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-[var(--border-color)] divide-y divide-[var(--border-color)]">
+        ${lineas.map(l => `
+          <div class="flex items-baseline gap-3 px-3 py-1.5">
+            <span class="text-[10px] font-mono text-[var(--text-muted)] w-[86px] flex-shrink-0">${l.etiqueta}</span>
+            <span class="text-[11px] font-mono text-[var(--text-main)] min-w-0 break-words">${l.valor}</span>
+          </div>`).join('')}
+      </div>
+
+      <button data-forge-cerrar
+              class="w-full py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs rounded-xl
+                     hover:opacity-90 transition cursor-pointer">
+        CONTINUAR
+      </button>
+    </div>`;
+}
+
+/**
+ * EL TROMPO DE LA FORJA, Y LAS TRES COSAS QUE ESTABAN MAL.
+ *
+ * Las tres son de la misma familia: **el CSS estaba escrito y el markup no lo usaba**, o
+ * al revés. Se lee bien el código y no se ve nada, porque lo que falla es una conexión
+ * entre dos sitios que no están uno al lado del otro.
+ *
+ * · **`reel` era siempre `null`.** La función hacía
+ *   `overlay.querySelector('.forge-roulette')`, y el `div` de la cinta llevaba
+ *   `id="forge-track"` y ningún clase. Como el elemento no existía, `place()` salía en su
+ *   primera línea y **la cinta no se colocaba nunca**: el desplazamiento no se calculaba,
+ *   la celda ganadora no llegaba a la aguja y la tira se salía por la derecha. El CSS de
+ *   `.forge-roulette` —el recorte, la aguja, el fondo— llevaba tiempo en el fichero sin que
+ *   nadie lo notara, porque una regla que no se aplica no falla: no hace nada.
+ * · **Había dos temporizadores idénticos**, y los dos llamaban a `onDone()`. Con el trompo
+ *   saltado pasaban los dos —900 ms y 2200 ms— así que el resultado se pasaba de redibujar
+ *   y a guardar dos veces. Con el trompo puesto, el segundo ya no hacía falta para nada.
+ * · **`pl-8` en la cinta y `BASE_PAD` en el cálculo.** El padding venía dos veces: una del
+ *   markup y otra del script. Con la runway encima, la celda quedaba desplazada.
+ */
 function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean) {
-  // F17 · LA PREGUNTA SE HACE UNA VEZ Y ANTES DE PINTAR NADA.
+  // F17 · LA PREFERENCIA SE MIRA UNA VEZ Y ANTES DE PINTAR NADA, Y AHORA SÍ SE USA.
   //
-  // El trompo de la forja es el único de los tres que **no miraba la preferencia**, y no
-  // por una regla propia: se escribió antes de que existiera y nadie volvió a ella.
-  // Sin esto, un jugador que apaga el trompo se lo come veinte veces seguidas porque el
-  // ajuste dice "saltar la ruleta" y la forja no es una ruleta según el jugador.
+  // El trompo de la forja es el único de los tres que no miraba la preferencia, y no por
+  // una regla propia: se escribió antes de que existiera y nadie volvió a ella. Con el
+  // ajuste apagado **no se pinta la cinta**: se enseña directamente la card del
+  // resultado, que es lo que significa "saltar la ruleta" en las otras dos.
   const saltar = getSkipRoulette();
 
+  const exito = !!result.success;
+  const cerrar = () => {
+    window.clearInterval(tickTimer);
+    onDone();
+    overlay.style.transition = 'opacity 320ms ease';
+    overlay.style.opacity = '0';
+    window.setTimeout(() => overlay.remove(), 340);
+  };
+
   const overlay = document.createElement('div');
-  overlay.className = 'fixed inset-0 z-[75] flex flex-col items-center justify-center p-6';
-  overlay.style.cssText = 'background: rgb(0 0 0 / 0.8); backdrop-filter: blur(8px);';
+  overlay.className = 'fixed inset-0 z-[75] flex flex-col items-center justify-center gap-5 p-4';
+  overlay.style.cssText = 'background: rgb(0 0 0 / 0.82); backdrop-filter: blur(8px);';
   overlay.style.animation = 'riseIn 240ms ease both';
 
-  const success = !!result.success;
-  const w = result.collector || result.companion;
-  const label = success ? (w?.name ?? 'Forja completada') : 'FALLO DE FORJA';
-  const tone = success ? '#fbbf24' : '#f87171';
-
-  const sub = success
-    ? [
-        `T${w.tier} · ${estrellasDe(w.potential)} · ${w.rarity}`,
-        // **EL COMPAÑERO NO TIENE AFIJOS NI FIRMA.** Poner "Sin afijos" debajo de un
-        // compañero sería una fila que no significa nada: no le faltan afijos,
-        // es que no tiene ese atributo. En su lugar va su poder, que es lo que
-        // realmente hereda de la media.
-        esCompanion
-          ? `Poder: +${w.power}/s`
-          : ((w.affixes || []).length
-            ? (w.affixes as string[]).map(id => AFFIX_BY_ID[id]?.name).filter(Boolean).join(' · ')
-            : 'Sin afijos'),
-        esCompanion ? 'Fusionado por ti' : `Forjada por: ${w.forgedBy ?? '-'}`
-      ].join('<br>')
-    : `+${formatNumber(result.crystals ?? 0)} cristales de consuelo`;
-
-  const CELLS = 18;
-  const WIN = 9;
-  const cells = Array.from({ length: CELLS }, (_, i) => {
-    const isWin = i === WIN;
-    return `
-      <div class="w-14 h-14 rounded-xl grid place-items-center flex-shrink-0 border md:w-16 md:h-16
-                  ${isWin ? (success ? 'border-amber-400 text-amber-300' : 'border-rose-500 text-rose-400')
-                          : 'border-[var(--border-color)] text-[var(--text-muted)] opacity-35'}"
-           style="${isWin ? 'box-shadow: 0 0 24px -6px currentColor' : ''}">
-        <span class="[&>span>svg]:w-5 [&>span>svg]:h-5 md:[&>span>svg]:w-6 md:[&>span>svg]:h-6">
-          ${ic(isWin ? (success ? 'sparkle' : 'close') : 'core')}
-        </span>
-      </div>`;
-  }).join('');
-
-  overlay.innerHTML = `
-    <div class="w-full max-w-md flex flex-col gap-3">
-      <div class="text-center label-caps" style="color:${tone}">
-        ${success ? 'Forja completada' : 'El yunque se enfrió'}
-      </div>
-        <div class="flex gap-1.5 pl-8" id="forge-track" style="will-change:transform">${cells}</div>
-      </div>
-      <div class="text-center flex flex-col gap-1">
-        <div class="font-['Orbitron'] font-bold text-[15px]" style="color:${tone}">${label}</div>
-        <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">${sub}</div>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
-  const track = overlay.querySelector('#forge-track') as HTMLElement | null;
-  const reel = overlay.querySelector('.forge-roulette') as HTMLElement | null;
-
-  // **CON EL TROMPO SALTADO NO HAY CINTA, Y POR ESO NO HAY NADA QUE COLOCAR.** Los dos
-  // nodos se buscan igual y salen `null`, y `place()` abria el `children[9]` de un `null`.
-  // La cuenta del taper tampoco se pone: es el sonido del trompo girando, y sin trompo
-  // sonaria veinte veces por forja solo.
+  // El sonido del trompo girando, y **solo con el trompo**: con el ajuste apagado sonaría
+  // veinte veces por forja sin que hubiera cinta.
   let ticks = 0;
   const maxTicks = 22;
   let tickTimer = 0;
@@ -983,13 +1038,47 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
     }, 70);
   }
 
+  // **LA CINTA, DENTRO DE LA CLASE QUE YA EXISTÍA.** El `overflow: hidden` y la aguja son
+  // de esa clase: sin ella la tira no se recorta y se ve entera —que es lo que pasaba— y
+  // la aguja no aparece, que es lo que hace falta para entender dónde va a parar.
+  const CELLS = 18;
+  const WIN = 9;
+  const cells = Array.from({ length: CELLS }, (_, i) => {
+    const isWin = i === WIN;
+    return `
+      <div class="w-11 h-11 rounded-lg grid place-items-center flex-shrink-0 border sm:w-12 sm:h-12
+                  ${isWin ? (exito ? 'border-amber-400 text-amber-300' : 'border-rose-500 text-rose-400')
+                          : 'border-[var(--border-color)] text-[var(--text-muted)] opacity-35'}"
+           style="${isWin ? 'box-shadow: 0 0 24px -6px currentColor' : ''}">
+        <span class="[&>span>svg]:w-4 [&>span>svg]:h-4 sm:[&>span>svg]:w-5 sm:[&>span>svg]:h-5">
+          ${ic(isWin ? (exito ? 'sparkle' : 'close') : 'core')}
+        </span>
+      </div>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div class="w-full max-w-md flex flex-col gap-4">
+      ${saltar ? '' : `
+        <div class="forge-roulette">
+          <div class="flex gap-1.5" id="forge-track" style="will-change:transform">${cells}</div>
+        </div>`}
+      ${cardDeResultado(result, esCompanion, () => {})}
+    </div>`;
+
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-forge-cerrar]').forEach(el =>
+    el.addEventListener('click', () => { cerrar(); }));
+
+  const track = overlay.querySelector('#forge-track') as HTMLElement | null;
+  const reel = overlay.querySelector('.forge-roulette') as HTMLElement | null;
+
   // Posicionamiento de la ruleta.
   //
   // El desplazamiento NO se mide: se calcula con valores del estilo calculado
   // (`getComputedStyle`), que no depende del layout ni de las transformaciones
   // y por tanto nunca devuelve un dato obsoleto. Medir con
-  // `getBoundingClientRect` en la misma tarea en la que se acaba de insertar
-  // el DOM daba posiciones viejas, y la celda objetivo acababa 500px
+  // `getBoundingClientRect` en la misma tarea en la que se acaba de insertar el
+  // DOM daba posiciones viejas, y la celda objetivo acababa 500px
   // desviada, es decir fuera de la ventana de la ruleta.
   //
   //   travel = pista + WIN·(celda + hueco) + celda/2 - aguja
@@ -1001,15 +1090,15 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
   // `rAF` no se dispara en una pestaña oculta, así que hay dos disparos y una
   // pasada de corrección: si la celda no queda clavada en la aguja, se ajusta.
   const GAP = 6;      // gap-1.5 en Tailwind
-  const BASE_PAD = 32; // pl-8
+  const BASE_PAD = 32; // el margen del script, y no el del markup
   let positioned = false;
 
   const place = () => {
     if (positioned) return;
-    // **SIN CINTA NO HAY NADA QUE COLOCAR, Y POR ESO LA COMPROBACION DE LOS DOS.**
-    // La celda sale de la pista y la aguja sale del carrete: con el trompo saltado no
-    // existe ninguna de las dos, y `children[9]` de un `null` es un fallo de ejecucion
-    // en el momento del resultado, que es el peor sitio posible para uno.
+    // **SIN CINTA NO HAY NADA QUE COLOCAR, Y POR ESO LA COMPROBACIÓN DE LOS DOS.** La
+    // celda sale de la pista y la aguja sale del carrete: con el trompo saltado no existe
+    // ninguna de las dos, y `children[9]` de un `null` es un fallo de ejecución en el
+    // momento del resultado, que es el peor sitio posible para uno.
     const cell = track?.children[WIN] as HTMLElement | undefined;
     if (!cell || !track || !reel) return;
     positioned = true;
@@ -1030,7 +1119,7 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
     if (!cell || !reel) return;
     const cr = cell.getBoundingClientRect();
     const rr = reel.getBoundingClientRect();
-    const needle = rr.left + reel.clientLeft + reel.clientWidth / 2;
+    const needle = rr.left + reel.clientLeft + rr.width / 2;
     const delta = (cr.left + cr.width / 2) - needle;
     if (Math.abs(delta) < 1 || !track) return;
     const current = parseFloat(track.style.getPropertyValue('--forge-travel')) || 0;
@@ -1041,20 +1130,8 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
     requestAnimationFrame(() => { place(); verify(); });
     window.setTimeout(() => { place(); verify(); }, 60);
     window.setTimeout(verify, 220);
+    // Un solo cierre, y con la card ya en pantalla debajo. Antes había dos
+    // temporizadores iguales y los dos llamaban a onDone.
+    window.setTimeout(cerrar, 2200);
   }
-
-  window.setTimeout(() => {
-    window.clearInterval(tickTimer);
-    onDone();
-    overlay.style.transition = 'opacity 320ms ease';
-    overlay.style.opacity = '0';
-    window.setTimeout(() => overlay.remove(), 340);
-  }, 2200);
-  window.setTimeout(() => {
-    window.clearInterval(tickTimer);
-    onDone();
-    overlay.style.transition = 'opacity 320ms ease';
-    overlay.style.opacity = '0';
-    window.setTimeout(() => overlay.remove(), 340);
-  }, saltar ? 900 : 2200);
 }

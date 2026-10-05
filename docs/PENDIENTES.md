@@ -2246,3 +2246,36 @@ _Cosas que estorban al trabajo más que al juego._
       devolviendo 502 en cuanto a la aplicación entera, y no es del cambio: las filas de
       ejemplo llevan a propósito una en línea y otra con el latido viejo para que se
       vean las dos en cuanto `preview.html?vista=ranking` levante.
+- [x] **La ruleta de la forja: no se ve, no se posiciona y avisa dos veces.** Las tres
+      cosas eran de la misma familia —**el CSS estaba escrito y el markup no lo
+      usaba**—, que es la clase de fallo que no se ve leyendo el código porque lo que
+      falla es una conexión entre dos sitios que no están uno al lado del otro.
+      - **`reel` era siempre `null`.** La función hacía
+        `querySelector('.forge-roulette')` y el `div` de la cinta llevaba
+        `id="forge-track"` y **ninguna clase**. Como el elemento no existía, `place()`
+        salía en su primera línea y **la cinta no se colocaba nunca**: el desplazamiento
+        no se calculaba, la celda ganadora no llegaba a la aguja y la tira se salía por la
+        derecha —18 celdas de 56 px son 1116 px en un hueco de 448—. Y el CSS de
+        `.forge-roulette`, con su recorte y su aguja, llevaba tiempo en el fichero sin que
+        nadie lo notara, **porque una regla que no se aplica no falla: no hace nada.**
+      - **Había dos temporizadores idénticos** y los dos llamaban a `onDone()`. Con el
+        trompo saltado pasaban los dos —900 ms y 2200 ms—, así que el resultado se
+        pasaba de redibujar y de guardar dos veces.
+      - **`pl-8` en la cinta y `BASE_PAD` en el cálculo**: el padding venía dos veces.
+      - **El resultado es una card y no tres líneas de texto.** El resultado de una
+        forja es **un objeto**, y se enseñaba como un nombre, un tier y una lista de
+        afijos: la misma información que la ficha del almacén, partida y más pequeña. Y
+        eso es justo lo que hacía que no se leyera bien —**una cifra suelta al lado de un
+        nombre es una etiqueta, y una etiqueta hay que descifrarla**—. Con la card se ve
+        como lo que es: el anillo de la rareza, el nombre, y debajo las líneas con su
+        etiqueta al lado. **El fallo también es una card**, que antes salía como un
+        mensaje de error en vez de como el resultado de una tirada que no salió.
+      - **Con el ajuste de "saltar la ruleta" apagado no se pinta la cinta**, solo la
+        card: es lo que esa preferencia significa en las otras dos ruletas.
+      - **Y el preview no podía enseñar el trompo**, porque a su motor de ejemplo le
+        faltaba `forgeCollector()` y el botón FORJAR se llamaba a `undefined`. Una
+        pantalla que el preview no puede enseñar es una pantalla que nadie ha revisado.
+      **Lo que no se ha podido comprobar:** el píxel. `preview.html?vista=forja` está
+      lanzando `__preview_iframe__` —su propio centinela— desde antes de este cambio, así
+      que la medida de la cinta ahora mismo no sale. La causa del desbordamiento sí
+      está localizada y es aritmética: 18 celdas de 56 px en un contenedor de 448.
