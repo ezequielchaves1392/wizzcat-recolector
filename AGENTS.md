@@ -90,7 +90,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 31 bancos = 2022 pruebas. El total es estable y comprobable: da 2022 las dos veces seguidas. Antes no lo era, porque una prueba de playthroughCheck estaba dentro de un if que dependia del dado; ahora el dado va fijado con conRoll.
+npm run verify    # 32 bancos = 2049 pruebas. El total es estable y comprobable: da 2049 las dos veces seguidas. Antes no lo era, porque una prueba de playthroughCheck estaba dentro de un if que dependia del dado; ahora el dado va fijado con conRoll.
 ```
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
@@ -120,7 +120,7 @@ El resto está en `docs/REGLAS-Y-TECNOLOGIAS.md`.
 ```bash
 npm run dev       # servidor de desarrollo
 npm run build     # tsc && vite build — el type-check es puerta de entrada
-npm run verify    # banco de pruebas propio: 31 bancos sobre el game loop real
+npm run verify    # banco de pruebas propio: 32 bancos sobre el game loop real
 ```
 
 Para un banco suelto:

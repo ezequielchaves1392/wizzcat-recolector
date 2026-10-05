@@ -32,6 +32,8 @@ import {
 import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from '../ui/identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
+import { abreTarjetaDe } from '../ui/tarjetaAjena';
+import { esc } from '../utils/esc';
 
 /**
  * Pestaña activa.
@@ -40,6 +42,21 @@ import { COSMETICS_BY_ID } from '../data/cosmetics';
  * pestaña volvería a vale 'nanitas' al re-pintar, y la lista no cambiaría.
  */
 let tableroActivo: BoardKind = 'definitivo';
+
+/**
+ * El nombre de cada fila pintada, por uid.
+ *
+ * **POR QUÉ UN MAPA Y NO UN ATRIBUTO.** El `data-ver` lleva el uid, que viene de
+ * Firestore y no tiene nada que escapar. El nombre sí lo tiene —lo escribe un jugador—,
+ * y meterlo en un atributo significa meter texto de otro dentro del HTML dos veces, con
+ * dos `esc()` distintos que se pueden olvidar el uno del otro. Con el mapa, el texto del
+ * otro solo pasa por el `esc()` del markup, una vez.
+ *
+ * Y se vacía en cada pintado, porque si no cambiar de pestaña dejaría dentro nombres de
+ * filas que ya no están y el mapa crecería sin que nada lo limpiese.
+ */
+const nombreDeFila = new Map<string, string>();
+
 
 export function renderRankings(
   container: HTMLElement,
@@ -95,6 +112,14 @@ export function renderRankings(
       const def = BOARDS.find(b => b.id === tableroActivo)!;
       const lista = sortByBoard(rows, tableroActivo);
 
+      // **EL MAPA DE NOMBRES SE VACÍA EN CADA PINTADO, Y POR AQUÍ.** Es lo único que
+      // garantiza que no guarda los nombres de las filas que ya no están en pantalla: la
+      // lista cambia al cambiar de pestaña, y un mapa que solo crece sería memoria que
+      // nadie limpia y nombres que el manejador puede usar para una fila que no existe.
+      // Se vacía DESPUÉS de decidir la lista y ANTES de pintar, porque es `fila()` quien
+      // lo rellena.
+      nombreDeFila.clear();
+
       body.innerHTML = `
         ${pestanas()}
         <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed px-1 mb-1">
@@ -103,7 +128,13 @@ export function renderRankings(
         ${lista.map((r, i) => fila(r, i, meId, tableroActivo)).join('')}
         ${nota(tableroActivo)}
       `;
+      // Las filas se cablean **una vez por carga**, no en cada pintado: el manejador busca
+      // el `data-ver` más cercano en cada clic, así que sobrevive a que le cambien el
+      // `innerHTML` por debajo. Si se cableara en cada `pintar()`, cada cambio de pestaña
+      // dejaría un manejador más encima del mismo `body`, y un clic abriría la tarjeta
+      // tantas veces como veces se ha cambiado de pestaña.
       cablearPestanas(body as HTMLElement, pintar);
+      cablearFilas(body as HTMLElement);
     };
 
     pintar();
@@ -132,6 +163,30 @@ function pestanas(): string {
   `;
 }
 
+/**
+ * TOCAR UNA FILA ABRE LA TARJETA DE ESE JUGADOR.
+ *
+ * **LA DELEGACIÓN VA EN `body`, QUE ES DONDE VIVEN LAS FILAS, Y NO EN `#app`** (R5):
+ * `renderRoute()` hace `app.onclick = null` en cada cambio de ruta, así que un
+ * manejador en `#app` se perdería; y uno puesto por fila serían cuarenta manejadores que
+ * se acumulan en cada repintado. Un solo manejador que busca el `data-ver` más cercano
+ * resuelve las dos cosas.
+ *
+ * **TU PROPIA FILA TAMBIÉN SE ABRE, Y ES LA MISMA TARJETA.** No lleva atajo a tu pantalla
+ * de perfil porque esa ya la tienes abierta, y abrir una hoja encima para enseñarte lo
+ * mismo sería un rodeo. Lo que **no** hace es contarse a ti mismo como visita: eso está
+ * dentro de `registrarVisita()`.
+ */
+function cablearFilas(body: HTMLElement): void {
+  body.addEventListener('click', (e) => {
+    const fila = (e.target as HTMLElement).closest('[data-ver]');
+    if (!fila) return;
+    const uid = fila.getAttribute('data-ver');
+    if (!uid) return;
+    abreTarjetaDe(uid, nombreDeFila.get(uid) ?? 'Operativo');
+  });
+}
+
 function cablearPestanas(body: HTMLElement, repintar: () => void) {
   body.querySelectorAll('[data-rank-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -144,6 +199,9 @@ function cablearPestanas(body: HTMLElement, repintar: () => void) {
 
 function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = 'definitivo'): string {
   const isMe = r.uid === meId;
+  // El nombre queda apuntado para el manejador del clic. Solo si hay uid: una fila sin
+  // uid es un dato roto y no hay a quién abrirle la tarjeta.
+  if (r.uid) nombreDeFila.set(r.uid, r.username ?? 'Operativo');
   // El marco y el banner viajan en el documento `rankings/{uid}` (planos) y,
   // por compatibilidad, dentro de `cosmetics`. Los planos mandan: son los que
   // escribe el guardado actual; `cosmetics` queda como lectura de reserva.
@@ -171,7 +229,8 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
   const banner = bannerId ? COSMETICS_BY_ID[bannerId] : undefined;
 
   return `
-    <div class="rank-row ${isMe ? 'is-me' : ''}">
+    <div class="rank-row ${isMe ? `is-me` : ``} ${r.uid ? `cursor-pointer hover:bg-white/5 transition` : `opacity-80`}"
+         data-ver="${esc(r.uid ?? '')}" title="Ver la tarjeta de ${esc(r.username ?? 'Operativo')}">
       ${banner && banner.id !== 'banner_none' ? `
         <span class="rank-banner" aria-hidden="true" style="${rellenoDeBanner(banner)}"></span>` : ''}
       <div class="rank-pos" data-tier="${i + 1 <= 3 ? i + 1 : ''}">${i + 1}</div>

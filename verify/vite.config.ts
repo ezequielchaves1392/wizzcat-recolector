@@ -46,6 +46,7 @@ export default defineConfig({
         guardadoCheck: resolve(here, 'guardadoCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
+        perfilCheck: resolve(here, 'perfilCheck.ts'),
         playthroughCheck: resolve(here, 'playthroughCheck.ts'),
         toastCheck: resolve(here, 'toastCheck.ts'),
         rouletteCheck: resolve(here, 'rouletteCheck.ts'),

@@ -20,6 +20,7 @@
 // ==========================================================================
 
 import { ic } from '../ui/icons';
+import { esc } from '../utils/esc';
 
 export function renderBloqueado(
   container: HTMLElement,
@@ -68,13 +69,13 @@ export function renderBloqueado(
                       flex flex-col gap-2">
             <span class="label-caps" style="color:#f87171">Motivo</span>
             <p class="text-[13px] font-sans leading-relaxed text-[var(--text-main)] break-words">
-              ${escapeTexto(texto)}
+              ${esc(texto)}
             </p>
           </div>
 
           ${fecha ? `
             <p class="text-[10px] font-mono text-[var(--text-muted)]">
-              Suspendido el ${escapeTexto(fecha)}
+              Suspendido el ${esc(fecha)}
             </p>
           ` : ''}
 
@@ -118,7 +119,7 @@ export function renderSesionOcupada(
   onReintentar: () => void
 ): void {
   const segundos = Math.max(1, Math.ceil(datos.alLiberarMs / 1000));
-  const nombre = escapeTexto(datos.nombre);
+  const nombre = esc(datos.nombre);
 
   container.innerHTML = `
     <div class="auth-scene w-screen h-dvh app-bg flex flex-col items-center justify-center p-4 font-sans overflow-hidden">
@@ -176,18 +177,6 @@ export function renderSesionOcupada(
   container.querySelector('#reintentar-sesion')?.addEventListener('click', onReintentar);
 }
 
-/**
- * Escapa el motivo.
- *
- * Lo escribe un administrador, no el jugador, pero sigue siendo texto que
- * viene de la base de datos y esta pantalla lo pinta con `innerHTML`. Un motivo
- * con etiquetas dentro se ejecutaría en el navegador de todos los que lo vean.
- */
-function escapeTexto(valor: unknown): string {
-  return String(valor ?? '').replace(/[&<>"']/g, (c) => {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string;
-  });
-}
 
 /**
  * PANTALLA DE "NO SE HA PODIDO CARGAR LA PARTIDA", Y POR QUÉ HACE FALTA.
@@ -268,15 +257,15 @@ export function renderErrorDeCarga(
     <div class="min-h-screen flex items-center justify-center p-6 bg-[var(--bg-app)]">
       <div class="card-glass border rounded-2xl p-6 max-w-sm w-full flex flex-col gap-4">
         <div class="label-caps text-rose-400">Sin conexión con la partida</div>
-        <div class="font-['Orbitron'] font-bold text-base leading-tight">${escapeTexto(titulo)}</div>
-        <div class="text-xs text-[var(--text-muted)] leading-relaxed">${escapeTexto(explicacion)}</div>
+        <div class="font-['Orbitron'] font-bold text-base leading-tight">${esc(titulo)}</div>
+        <div class="text-xs text-[var(--text-muted)] leading-relaxed">${esc(explicacion)}</div>
         <button data-reintentar
                 class="w-full py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs
                        rounded-xl hover:opacity-90 transition cursor-pointer">
           REINTENTAR
         </button>
         <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
-          ${escapeTexto(pie)}
+          ${esc(pie)}
         </div>
       </div>
     </div>

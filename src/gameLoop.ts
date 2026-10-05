@@ -4,6 +4,7 @@ import { db } from './firebase';
 import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
+import { publicarTarjeta } from './services/profileService';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
 import { cosmeticsAlcanzables } from './data/cosmetics';
@@ -3050,6 +3051,34 @@ function sePuedeGuardar(): boolean {
           },
           updatedAt: new Date()
         }, { merge: true });
+
+        // **Y LA TARJETA PÚBLICA, EN EL MISMO `if` PORQUE ES LA MISMA PREGUNTA.**
+        //
+        // Y van juntas, además, porque es lo que hace que la tarjeta **no cueste una
+        // escritura por guardado**: fuera de este `if` se publicaría en cada guardado y
+        // volvería a ser media partida de las escrituras del juego. El banco mide eso.
+        //
+        // Las dos se preguntan cada cinco minutos, y por eso van juntas: si fueran dos
+        // rhythms distintos habría dos temporizadores y dos sitios donde decidir "toca
+        // escribir esto", que es exactamente la forma de que uno se quede viejo.
+        //
+        // **NO SE COMPARA SU FIRMA CON LA DEL RANKING A PROPÓSITO.** La tarjeta enseña
+        // la colección, que cambia por muchas razones que no mueven el marcador: mejorar
+        // un recolector con cristales, vender un item, tocar un nodo del árbol. Si
+        // compartieran firma, mejorar un item escribiría las dos tarjetas cada vez —y con
+        // la mejora automática de recolectores que hay, "cada vez" son muchas—. Así que la
+        // tarjeta va a su ritmo, y como mucho está cinco minutos desfasada, que es lo que
+        // un perfil puede estar.
+        //
+        // **Va en su propio `try` porque falla distinto y duele distinto.** Que la tarjeta
+        // no se pueda publicar no es un problema de la partida —que ya está guardada tres
+        // líneas más arriba— ni del ranking, y no puede encender el aviso grande de "sin
+        // guardar".
+        try {
+          await publicarTarjeta(state, user.uid, displayName || 'Operativo');
+        } catch (perfilError) {
+          console.warn('No se ha podido publicar la tarjeta pública:', perfilError);
+        }
         }
       } catch (rankingError) {
         // Se avisa por consola y con un aviso propio, y NO se toca el indicador

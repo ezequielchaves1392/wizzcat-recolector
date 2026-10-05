@@ -10,6 +10,7 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
 import { renderBloqueado, renderSesionOcupada, renderErrorDeCarga } from './components/blocked';
+import { ponMiUid } from './ui/tarjetaAjena';
 import { conTiempoLimite } from './utils/timeout';
 import {
   anotarLatido, consultarSesion, idDeSesion, soltarSesion,
@@ -612,6 +613,13 @@ function mostrarFalloDeCarga(error: unknown) {
 const PLAZO_DE_ARRANQUE_MS = 25_000;
 
 async function initGame(user: any, username?: string) {
+  // **EL UID DE QUIÉN ESTÁ MIRANDO, Y POR QUÉ SE PONE AQUÍ Y NO EN EL RANKING.**
+  // El contador de visitas es lo único que necesita saber quién eres, y la regla de
+  // "no te cuentes a ti mismo" está en `registrarVisita()`. Que el uid esté en un solo
+  // sitio de módulo significa que **no puede quedarse viejo en dos*: si lo leyera el
+  // ranking de otra manera, un día una de las dos se quedaría sin poner y
+  // acabarías contándote a ti mismo sin que nadie lo notara.
+  ponMiUid(user?.uid ?? '');
   activeUser = user;
   activeGameInstance = await createGameLoop(user, (state: any, isAfk?: boolean) => {
     updateUI(state, isAfk ?? false);

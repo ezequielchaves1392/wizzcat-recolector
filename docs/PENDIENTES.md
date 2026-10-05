@@ -692,7 +692,7 @@ programar bien hasta que estén.**
 | # | Qué | Por qué bloquea |
 |---|---|---|
 | **1** | **La curva de probabilidad de forja por debajo del T20.** Propuesta: **60% / 68% / 75%** (tramos 1-9 / 10-19 / 20+). Hoy está al revés: 78% en T1 bajando a 33% en T10. | Es un **cambio de signo** en la curva, y es lo que da forma al tramo alto de la forja. Sin tu "sí" el forjado sigue siendo más difícil cuanto más alto, que es lo contrario de lo que pediste. |
-| **2** | **B8 · Ver el perfil de otro jugador.** ¿Se publica una **tarjeta pública** nueva, o se abre `users/{uid}` a lectura? | **Es privacidad, y no lo debe decidir un agente.** Recomiendo la tarjeta pública: lo no recomendable es abrir el documento privado, porque un incremental te enseña el gasto y el inventario de tu competencia. Bloquea F20 y F22. |
+| **2** | **B8 · Ver el perfil de otro jugador.** Hecho: tarjeta pública `perfiles/{uid}`, se abre tocando un nombre en el ranking, y con contador de visitas que no cuenta al dueño | **Es privacidad, y no lo debe decidir un agente.** Recomiendo la tarjeta pública: lo no recomendable es abrir el documento privado, porque un incremental te enseña el gasto y el inventario de tu competencia. Bloquea F20 y F22. |
 | **3** | **P4 · Jugar otra partida y decir hasta dónde llegas.** | `balanceCheck` comprueba que los números encajen entre sí, no que la partida dure lo que tiene que durar. Eso solo se mide jugando. |
 | **4** | **F19 · Dos cosas de los logros como items.** Qué pasa con el item si ya tienes el logro (¿se vende, se guarda, no se usa dos veces?), y si los logros **seguros** son tradeares o solo los de caja. | Cambia el modelo de logros entero. Es la última cosa del lote a propósito. |
 | **5** | **P5 · Las cajas ya no dan nanitas.** El premio pasó de ×14-22 del par a **25-40%**, porque era una máquina de imprimir. | Cerrar el bucle compra-venta era lo que pediste, y la única palanca que quedaba era la **fórmula** de las nanitas. Con menos nanitas de las cajas, la **forja pasa a ser el ingreso principal** y la partida puede hacerse más lenta. El sitio del ajuste es un número, y cualquier valor sigue teniendo la prueba de que no supera el par. |
@@ -1517,12 +1517,55 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 
 
 ### Lo que sigue esperando tu palabra
 
-- [ ] **B8 · Ver el perfil de otro jugador.** ¿Se publica una **tarjeta pública** nueva, o
-      se abre `users/{uid}` a lectura? **Es privacidad y no lo debe decidir un agente.**
-      Recomiendo la tarjeta: lo no recomendable es abrir el documento privado, porque un
-      incremental te enseña el gasto y el inventario de tu competencia. Bloquea F20 y F22.
-      _Lo demás de "Bloqueadas por tu respuesta" está resuelto; esta es la que queda._
-### La ficha del inventario, y el stat que enseña
+- [x] **B8 · Ver el perfil de otro jugador.** *Decidido por el jugador: sí, y con
+      contador de visitas.* Se había escrito que "es privacidad y no lo debe decidir un
+      agente"; esa decisión está tomada y lo que se hizo es lo que el backlog ya
+      recomendaba: **una tarjeta pública nueva, no abrir el documento privado.**
+      - **La tarjeta es `perfiles/{uid}`, un documento que el dueño publica a
+        propósito**, y no `users/{uid}` abierto a lectura. La diferencia no es de
+        estilo: `users/{uid}` es la partida entera, y publicarla enseña el gasto y el
+        inventario de tu competencia. Un incremental no se juega así.
+      - **Lo que NO se publica, y por qué:** el saldo de nanitas (es el dinero sin
+        gastar; el ranking ya publica el histórico, y con eso hay para compararse), los
+        cristales del almacén (el mismo dinero en item, y además dicen cuánto tiene
+        guardado sin gastarlo) y el detalle de en qué nodos se gastó cada núcleo.
+      - **Lo que sí:** recolectores, compañeros, pasivas pagadas agrupadas por categoría,
+        logros, título/marco/banner, y las cifras que se preguntan de cualquier partida —
+        producidas, clics, ascensiones, forjadas— más todas las que ya había. En
+        pantalla, el orden es el de las preguntas: quién es → qué ha hecho → qué tiene →
+        qué ha conseguido.
+      - **Los secretos no salen, y el total sí los cuenta.** Si el total fuera solo de los
+        publicados, se sabría que a alguien le faltan dos secretos sin llegar a saber
+        cuáles. Es el mismo cuidado que ya tenía el ranking, y por el mismo motivo.
+      - **El contador que se pidió, con las dos mitades del encargo:** el dueño nunca se
+        cuenta —ni al abrir su perfil ni al recargar— y **cada persona cuenta una vez**,
+        no una por cada vez que mira. Son dos cifras, `visitas` y `visitantes`, y por eso
+        son dos: una cuenta aperturas y la otra cuenta gente.
+      - **Las reglas de Firestore lo permiten en una sola línea y solo para el contador:**
+        `affectedKeys().hasOnly(['visitas', 'visitantes'])` con `uid != auth.uid`. O
+        sea que un visitante puede subir el contador de alguien y **nada más**: no toca su
+        colección, ni sus logros, ni la borra, ni su propia tarjeta.
+      - **La tarjeta se publica dentro del mismo `if` que el ranking, cada cinco
+        minutos.** Publicarla en cada guardado la convertía en media partida de las
+        escrituras del juego, que es justo lo que se quitó de en medio hace un commit. No
+        comparte firma con el ranking a propósito: la colección cambia por muchas razones
+        que no mueven el marcador, y con la mejora automática de recolectores que hay,
+        compartirla haría escribir las dos en cada mejora.
+      **Lo que necesita el jugador, y no lo hace el código:** publicar `firestore.rules`
+      en la consola de Firebase. La colección es nueva y todo lo que no esté declarado cae
+      en el `match /{document=**}` que cierra la puerta —**es lo mismo que pasó con el
+      latido de sesión**—. Hasta que se publiquen, abrir un perfil da "todavía no tiene
+      tarjeta pública", que es la respuesta correcta para un documento que no se puede
+      leer.
+      **Dos cosas que se encontraron de camino y que ya están arregladas:** una
+      `nanitasProducidas` que llegaba como cadena se veía **tal cual en la pantalla** —el
+      `coaccionaTarjeta()` repartía el documento entero sin tocar los números—, y las
+      clases arbitrarias de Tailwind `[&>span>svg]:w-8` **se veían como texto** en el
+      navegador al partir el atributo `class`. Las dos las cazó el banco y la segunda, mirando
+      la pantalla.
+      **Desbloquea F20 (avatar) y F22 (comparar partidas)**, que dependían de esta
+      respuesta.
+
 
 - [x] **El stat principal va en grande, con su etiqueta al lado y dentro de un borde.**
       Y es **el final**: base, potencial y mejora juntos. Antes la ficha enseñaba el daño

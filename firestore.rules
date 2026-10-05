@@ -38,6 +38,11 @@ rules_version = '2';
 //                        (es pública por definición), pero solo su dueño la
 //                        escribe: si no, un jugador podría ponerse himself en el
 //                        primer puesto.
+//  · `perfiles/{uid}`  — la tarjeta pública de un jugador: su colección, sus
+//                        números y sus logros. Cualquiera autenticado la lee y
+//                        solo su dueño la escribe. Una excepción muy estrecha
+//                        permite que cualquiera suba `visitas` y `visitantes` de
+//                        una tarjeta que no es suya, y nada más.
 //  · `admins/{uid}`    — quién puede usar la terminal. Solo un admin escribe
 //                        aquí, y solo un admin lo lee. Nadie más sabe ni
 //                        existe.
@@ -102,6 +107,42 @@ service cloud.firestore {
       // subirse a sí mismo al primer puesto con una sola llamada.
       allow create, update: if request.auth != null && request.auth.uid == uid;
       allow delete: if esAdmin(request.auth.uid);
+    }
+
+    // ----------------------- Tarjetas públicas ------------------------
+    //
+    //  La tarjeta pública de un jugador: lo que se enseña de su partida. Es una
+    //  colección NUEVA y no un campo de `users`, porque `users/{uid}` es la partida
+    //  entera y abrirla a lectura enseñaría el gasto y el inventario de tu competencia.
+    //
+    //  Lo que va dentro lo elige el dueño al publicarla, y lo que no aparece —el saldo de
+    //  nanitas, los cristales guardados— no es una casualidad: está en
+    //  `src/data/profile.ts`, que es donde vive la regla y donde el banco la comprueba.
+    match /perfiles/{uid} {
+      //  Cualquiera con sesión puede leerlos: es un perfil público de un juego. Sin
+      //  sesión no, porque la lista de jugadores no es un recurso de un sitio abierto.
+      allow get, list: if request.auth != null;
+
+      //  El dueño publica su tarjeta entera. Se escribe con `merge: true` y sin el
+      //  contador de visitas, así que publicar nunca pisa lo que escribieron los
+      //  visitantes.
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if esAdmin(request.auth.uid);
+
+      //  **Y CUALQUIERA PUEDE TOCAR SOLO EL CONTADOR, Y NUNCA EL SUYO.**
+      //
+      //  Es la línea que hace que "cuánta gente ha mirado tu perfil" no se convierta en
+      //  "cualquiera puede escribir en la tarjeta de cualquiera". `affectedKeys()` dice
+      //  qué claves cambian: si no son exactamente esas dos, la escritura se rechaza.
+      //
+      //  O sea que un visitante puede subir el contador y nada más. No puede tocar la
+      //  colección de recolectores, ni los logros, ni el nombre, ni borrarla. Y el
+      //  `request.auth.uid != uid` de en medio es lo que hace que mirar tu propio perfil
+      //  no te cuente a ti mismo, que es lo que se pidió.
+      allow update: if request.auth != null
+                    && request.auth.uid != uid
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['visitas', 'visitantes']);
     }
 
     // --------------------- Administradores ---------------------------

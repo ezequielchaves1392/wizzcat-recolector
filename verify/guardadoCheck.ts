@@ -388,6 +388,60 @@ async function main() {
     );
   }
 
+  // =========================================================================
+  //  5. La tarjeta pública NO pisa el contador, y va al ritmo del ranking
+  // =========================================================================
+  //
+  // **ESTE BLOQUE COMPRUEBA TAMBIÉN UNA COSA DEL AHORRO DE CUOTA.** La tarjeta se
+  //  publica dentro del mismo `if` que el ranking, o sea que **no cuesta una
+  //  escritura por guardado**: escribirla en cada guardado la convertiría en media
+  //  partida de las escrituras del juego, que es justo lo que el arreglo anterior se
+  //  quitó de en medio.
+  {
+    const perfil = 'perfiles/test';
+    const g = await boot(baseSave([], { nanites: 5_000, totalNanitesProducidas: 5_000 }));
+    const db = (globalThis as any).__MEM_DB__;
+
+    check(
+      'cuota: la tarjeta se publica al arrancar, o el perfil no existiria',
+      !!db[perfil],
+      Object.keys(db).join(',')
+    );
+    check(
+      'cuota: y su documento no lleva ni el saldo ni el inventario',
+      !('nanites' in (db[perfil] ?? {})) && !('warehouse' in (db[perfil] ?? {})),
+      Object.keys(db[perfil] ?? {}).join(',')
+    );
+
+    // **LO QUE SE COMPRUEBA ES QUIÉN ESCRIBE QUÉ, Y HAY QUE FORZAR LA PUBLICACIÓN.**
+    // El contador lo pone quien mira, así que aquí se escribe a mano como lo dejaría un
+    // visitante, y luego se fuerza una publicación nueva —subiendo el marcador, que es
+    // lo que de verdad dispara el `if`— para ver qué sobrevive.
+    db[perfil].visitas = 7;
+    db[perfil].visitantes = ['a', 'b'];
+
+    db.escrituras = 0;
+    db.filas = 0;
+    g.click();
+    await g.flush();
+    await new Promise((r) => setTimeout(r, 0));
+
+    check(
+      'cuota: publicar la tarjeta NO pone el contador a cero',
+      db[perfil].visitas === 7 && db[perfil].visitantes.length === 2,
+      `visitas=${db[perfil].visitas} lista=${JSON.stringify(db[perfil].visitantes)}`
+    );
+    check(
+      // Lo que se mira es `totalClicks`, y no el producido: el clic lo sube a 1 siempre,
+      // mientras que el producido depende de cuánto dé el clic en la partida de prueba.
+      // Un número que depende del daño del click es un número que puede fallar sin que
+      // nada esté roto.
+      'cuota: y sí actualiza lo suyo',
+      db[perfil].totalClicks === 1,
+      `clics=${db[perfil].totalClicks} producido=${db[perfil].nanitasProducidas}`
+    );
+  }
+
   resumen('el guardado: que el aviso diga la verdad');
 }
 

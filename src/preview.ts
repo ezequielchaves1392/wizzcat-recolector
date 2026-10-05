@@ -32,6 +32,7 @@ import { showPatchNotes } from './ui/patchNotes';
 import { renderProfilePage } from './ui/profilePage';
 import { renderPrestigePage } from './ui/prestigePage';
 import { renderRankings } from './components/rankings';
+import { muestraTarjetaDeEjemplo } from './previewTarjeta';
 import { TIER_SYSTEM } from './data/tiers';
 import { sellPrice } from './data/valuation';
 import { AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta } from './data/autoventa';
@@ -608,6 +609,16 @@ switch (vista) {
     break;
   case 'ranking':
     renderRankings(app, { uid: 'me' }, ir, MOCK);
+    break;
+  case 'tarjeta':
+    // La hoja de la tarjeta de otro jugador, con datos de ejemplo. Va en su propia vista
+    // porque **es una hoja encima de otra pantalla**, no una página: lo que hay que
+    // revisar es si tapa la pantalla de debajo y si el fondo se ve como debe.
+    app.innerHTML = renderLayoutHTML(MOCK, 'cyber-dark', 'base', {
+      onNavigate: noop, onLogout: noop,
+      onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
+    }, undefined, MOCK);
+    muestraTarjetaDeEjemplo();
     break;
   default:
     // El estado va porque la cabecera pinta la franja de recursos desde él. Sin esto,
