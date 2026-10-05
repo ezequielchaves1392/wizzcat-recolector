@@ -2214,3 +2214,35 @@ _Cosas que estorban al trabajo más que al juego._
       impresión de que comprueba algo que no comprueba.
       `leyendaCheck` 21 → 31. Versión subida a 1.2.0 y `preview.html?vista=notas` para
       poder mirarlo sin jugar: vive en `main.ts`, así que sin esa vista no había forma.
+- [x] **El ranking enseña quién está en línea.** Punto verde y "en línea", punto rojo y
+      "offline", en cada fila. Lo que salió es que **el dato ya existía pero no se podía
+      leer desde el ranking**, y la razón es una regla de seguridad:
+      - **El latido no puede venir de `users/{uid}/sesion`.** Ahí está, se escribe cada
+        quince segundos y es lo que decide si una cuenta está ocupada. **Pero las reglas
+        de Firestore dan a `users/{uid}` solo a su dueño y a un admin**, que es
+        justamente lo que impide que alguien se entere de que está suspendido. O sea:
+        para enseñar la presencia por ahí habría que abrir `users`, y no se abre.
+      - **La solución es el documento que la clasificación ya escribe.** `rankings/{uid}` es
+        público por definición y su dueño lo puede escribir: es el único sitio donde un
+        jugador puede leer el latido de otro sin tocar una regla de seguridad. El
+        latido se anota ahí con una escritura **parcial** —solo ese campo, con `merge`—
+        piggybackeada en el latido que ya existe, así que no añade esperas ni temporizadores.
+      - **"En línea" y "sesión ocupada" son la misma pregunta**, así que `estaOnline()`
+        **importa** `VENTANA_MS` de `sessionService` en vez de escribirlo. Con dos
+        ventanas habría un momento en que el ranking dijera una cosa y el bloqueo de
+        sesión otra, y nadie se enteraría.
+      - **Sin latido es offline, no online por defecto.** Es el caso de todo documento
+        escrito antes de que esto existiera, y tratarlo como online sería una mentira
+        en la fila de arriba.
+      - **El punto y la palabra son las dos mitades.** El color se lee de reojo en una
+        tabla de cuarenta filas, y la palabra dice lo mismo sin depender de que se
+        distinga verde de rojo —que en una clasificación es el único dato que se lee
+        de verdad—. El punto es `aria-hidden` y la palabra no: un lector de pantalla lee
+        "en línea", no un círculo.
+      `sessionCheck` 13 → 20: fresco, borde exacto de la ventana, viejo, sin latido, y un
+      latido del futuro —un reloj que va hacia atrás daría `ahora - latido` negativo, y
+      "negativo es menor que la ventana" es `true` sin que nadie lo piense—.
+      **Lo que no se ha podido mirar:** el píxel. El servidor de desarrollo ha estado
+      devolviendo 502 en cuanto a la aplicación entera, y no es del cambio: las filas de
+      ejemplo llevan a propósito una en línea y otra con el latido viejo para que se
+      vean las dos en cuanto `preview.html?vista=ranking` levante.

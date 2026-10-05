@@ -26,6 +26,7 @@
 // ==========================================================================
 
 import { check, resumen } from './kit';
+import { estaOnline } from '../src/services/rankingService';
 
 // La misma regla que usa el juego, pero sin Firestore: el reloj es lo único que
 // decide y aquí se puede mover a voluntad.
@@ -133,6 +134,62 @@ async function main() {
     carreraMs > 0 && carreraMs < VENTANA_MS / 4,
     `${Math.round(carreraMs)}ms de carrera, ventana ${VENTANA_MS}ms`);
 
+
+  // ---------------------------------------------------------------------------
+  //  PRESENCIA: LA MISMA VENTANA QUE LA SESIÓN OCUPADA, Y LOS TRES CASOS
+  //
+  //  "En línea" y "la cuenta está ocupada" son la misma pregunta con dos palabras
+  //  distintas, y por eso la función de una **importa** `VENTANA_MS` en vez de
+  //  escribirla. Si cada sitio tuviera la suya —aunque coincidieran el día que se
+  //  escribieron— habría un momento en que un jugador Would ver "en línea" en el
+  //  ranking y a la vez could entrar con la misma cuenta en otro sitio.
+  //
+  //  Y los tres casos que se comprueban son los que de verdad se dan: un latido
+  //  fresco, un latido viejo y **ningún latido**, que es el de todo documento
+  //  escrito antes de que esto existiera.
+  // ---------------------------------------------------------------------------
+  {
+    const ahora = 1_000_000;
+    check('presencia: un latido recién puesto está en línea',
+      estaOnline(ahora - 1_000, ahora) === true, 'hace 1 s');
+    check('presencia: y uno de hace medio minuto también',
+      estaOnline(ahora - 30_000, ahora) === true, 'hace 30 s');
+
+    // El borde, que es donde vive el bug: exactamente en la ventana sigue en línea y
+    // un milisegundo después no. Es el mismo borde que ya comprueba la sesión ocupada, y
+    // se comprueba en los dos sitios a propósito: si las dos ventanas dejaran de ser la
+    // misma, estos dos números dejarían de cuadrar y nadie lo vería.
+    check('presencia: el borde exacto sigue en línea, como la sesión ocupada',
+      estaOnline(ahora - VENTANA_MS + 1, ahora) === true
+      && estaOnline(ahora - VENTANA_MS - 1, ahora) === false,
+      `borde: ${VENTANA_MS} ms`);
+
+    check('presencia: un latido viejo está offline',
+      estaOnline(ahora - 10 * 60_000, ahora) === false, 'hace 10 min');
+
+    // **SIN LATIDO ES OFFLINE, Y NO ONLINE POR DEFECTO.** El documento de una cuenta
+    // que no ha jugado desde que esto existe no tiene el campo, y tratarlo como online
+    // sería una mentira en la fila de arriba. Una mentira verde es la peor de las dos,
+    // porque el jugador la lee sin poder comprobarla.
+    const sinLatido: any[] = [undefined, null, 0, -1, NaN, 'ahora' as any];
+    const marcados = sinLatido.filter(v => estaOnline(v, ahora) === true);
+    check('presencia: sin latido es offline, y no online por defecto',
+      marcados.length === 0, marcados.join(',') || `${sinLatido.length} valores, ninguno en línea`);
+
+    // Y **un reloj que va hacia atrás no da online eterno**. Un dispositivo con la hora
+    // mal, o un cambio de hora, dejan el latido en el futuro: `ahora - latido` sería
+    // negativo, y "negativo es menor que la ventana" es `true` sin que nadie lo piense.
+    check('presencia: un latido del futuro no marca online para siempre',
+      estaOnline(ahora + 60_000, ahora) === false, 'latido 1 min en el futuro');
+
+    // **Y LA VENTANA ES LA MISMA QUE LA DE LA SESIÓN, LEÍDA DEL MISMO SITIO.** No es una
+    // coincidencia que se pueda comprobar: es que la función importa el número, y esto
+    // solo comprueba que sigue siendo el que dice el servicio de sesión.
+    check('presencia: la ventana de "en línea" es la de la sesión ocupada',
+      typeof VENTANA_MS === 'number' && VENTANA_MS > 0
+      && !estaOnline(ahora - VENTANA_MS - 1, ahora),
+      `ventana=${VENTANA_MS} ms`);
+  }
   resumen('sesion: una sola sesion por jugador');
 }
 

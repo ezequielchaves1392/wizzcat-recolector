@@ -138,6 +138,27 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
  * Se escribe con `setDoc` sobre un subdocumento, así que no toca el documento
  * de la partida: si se escribiera en `users/{uid}` entero, un fallo al anotar el
  * latido podría pisar nanitas o inventario.
+ *
+ * ## Y ADEMÁS EN `rankings/{uid}`, PORQUE ES EL ÚNICO SITIO DONDE SE PUEDE LEER
+ *
+ * El latido de arriba va a `users/{uid}/sesion`, y **otro jugador no puede
+ * leerlo**: las reglas de Firestore dan a `users/{uid}` solo a su dueño y a un
+ * admin, que es exactamente lo que impide que alguien se entere de que está
+ * suspendido. Por eso el estado "en línea" del ranking no puede salir de ahí.
+ *
+ * La segunda escritura es **parcial** —solo el campo `latido`, con `merge`— y va
+ * al documento que la clasificación ya escribe de continuo. Tres razones por las
+ * que no es una decisión cara:
+ *
+ *   · **El ritmo ya existe.** Esto corre cada quince segundos porque el latido
+ *     de la sesión lo necesita; piggybackear una segunda escritura parcial en el
+ *     mismo tick no añade ninguna espera ni ningún temporizador nuevo.
+ *   · **Es un documento pequeño.** `merge: true` con una sola clave no reescribe
+ *     el resto, así que el documento de clasificación no crece.
+ *   · **Que falle no rompe nada.** Va en su propio `try`: si el ranking no se
+ *     puede anotar, el juego sigue jugando y la presencia sale stale. Al revés
+ *     —que la sesión no se pueda anotar— sí rompería algo, porque de eso depende
+ *     la ocupacion de la cuenta, y por eso cada uno lleva su `try`.
  */
 export async function anotarLatido(uid: string, miId: string): Promise<void> {
   try {
@@ -148,6 +169,11 @@ export async function anotarLatido(uid: string, miId: string): Promise<void> {
     );
   } catch (e) {
     console.warn('[sesion] No se ha podido anotar el latido.', e);
+  }
+  try {
+    await setDoc(doc(db, 'rankings', uid), { latido: Date.now() }, { merge: true });
+  } catch (e) {
+    console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
   }
 }
 

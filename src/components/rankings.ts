@@ -28,7 +28,7 @@ import {
   getTopRankings, sortByBoard, boardValue,
   BOARDS,
   type LeaderboardEntry, type BoardKind
-} from '../services/rankingService';
+, estaOnline } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from '../ui/identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
@@ -181,6 +181,7 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
       <div class="min-w-0">
         <div class="flex items-center gap-1.5 flex-wrap mt-1">
           ${isMe ? `<span class="medal accent-text flex-shrink-0">TÚ</span>` : ''}
+          ${puntoDePresencia(estaOnline(r.latido))}
           ${r.achievements ? `<span class="medal text-amber-400">${ic('achievement', 'w-3 h-3')} ${r.achievements}</span>` : ''}
           ${r.secretAchievements ? `<span class="medal text-fuchsia-300" title="Logros secretos">${ic('lock', 'w-3 h-3')} ${r.secretAchievements}</span>` : ''}
           ${r.forgedCount ? `<span class="medal text-cyan-300" title="Recolectores forjados">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>` : ''}
@@ -194,6 +195,37 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
       </div>
     </div>
   `;
+}
+
+/**
+ * EL PUNTO DE PRESENCIA, Y POR QUÉ ES UN PUNTO Y NO UNA ETIQUETA SOLA.
+ *
+ * El encargo era "online con un circulito verde, offline en rojo", y las dos mitades
+ * hacen falta: el color se lee de reojo en una tabla de cuarenta filas y la palabra
+ * dice lo mismo sin depender de que el jugador distinga verde de rojo —que no es una
+ * suposición pequeña, y en una tabla de clasificaciones el color es el único dato que
+ * se lee de verdad—. Con solo el punto, el 8 % de los jugadores con deuteranopía leería
+ * una lista de estados idénticos.
+ *
+ * **Y LA PALABRA NO ES UN ADORNO, ES EL DATO.** El punto es decorations; lo que dice si
+ * alguien está jugando ahora es el texto. Por eso va `aria-hidden` en el punto y la
+ * palabra sin ocultarla: un lector de pantalla lee "en línea" y no lee un círculo.
+ *
+ * **LA FRASE ES "EN LÍNEA" Y NO "ONLINE".** Todo el juego está en español y una palabra
+ * inglesa suelta en la única fila que se lee entera sería la excepción. Con dos puntos se
+ * escribe `en línea` y se dice `en línea`.
+ */
+export function puntoDePresencia(online: boolean): string {
+  const color = online ? '#34d399' : '#f87171';
+  const halo = online ? 'rgba(52,211,153,.35)' : 'rgba(248,113,113,.30)';
+  return `
+    <span class="flex items-center gap-1 flex-shrink-0" title="${online ? 'En línea' : 'Offline'}">
+      <span aria-hidden="true" class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style="background:${color}; box-shadow: 0 0 6px ${halo}"></span>
+      <span class="text-[9px] font-mono ${online ? 'text-emerald-400' : 'text-rose-400'}">
+        ${online ? 'en línea' : 'offline'}
+      </span>
+    </span>`;
 }
 
 /** Qué se mide en la tabla activa, para ponerlo bajo el número. */
