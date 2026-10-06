@@ -18,7 +18,7 @@
 // ==========================================================================
 
 import './style.css';
-import { CRATE_TYPES } from './data/store';
+import { CRATE_TYPES, RANURAS_BARRA, consumibleAsignable } from './data/store';
 import { CRISTAL_NOMBRE, CRISTAL_RAREZA } from './data/items';
 import './style.modules.css';
 import { renderLayoutHTML } from './ui/layout';
@@ -153,6 +153,15 @@ const MOCK: any = {
     { id: 'st1', name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: 7 },
     { id: 'nn1', name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 2 },
     { id: 'af1', name: 'Tarjeta AFK', type: 'consumable', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk', stackable: true, stackCount: 2 },
+    // La Click x2 está porque la barra de acceso rápido tiene una ranura puesta con ella, y
+    // sin el item esa ranura saldría con el nombre y un 0: exactamente el estado que hay que
+    // poder revisar, pero por el motivo equivocado.
+    { id: 'cx2', name: 'Tarjeta Click x2', type: 'consumable', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2', stackable: true, stackCount: 25 },
+    // Y la Click x3 por un motivo más fino: con solo AFK y x2 en el almacén, la ranura
+    // vacía del ejemplo abría el selector con **las tres opciones apagadas** —dos ya
+    // estaban en otras ranuras y la tercera no la tenías—, y el preview no deja revisar el
+    // caso que de verdad importa: elegir una y ver cerrarse la hoja.
+    { id: 'cx3', name: 'Tarjeta Click x3', type: 'consumable', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3', stackable: true, stackCount: 4 },
     // Cristales de mejora, y no por decoración: sin ellos el botón "Mejorar con
     // cristales" del almacén responde "No tienes cristales de mejora." y la
     // ruleta del sintonizador no se puede recorrer. El preview es la única
@@ -248,6 +257,15 @@ const AUTO_VENTA_PREVIEW = { ...AUTO_VENTA_POR_DEFECTO, tipos: { ...AUTO_VENTA_P
 
 /** Si el boton de apilar ya se ha pulsado en el preview. Ver `apilar()`. */
 let PILAS_APILADAS = false;
+
+/**
+ * Lo que hay puesto en la barra de acceso rápido del ejemplo.
+ *
+ * **UNA PUESTA, UNA VACÍA Y OTRA PUESTA, A PROPÓSITO.** Con las tres puestas solo se ve el
+ * botón que gasta, que es el estado que menos información da. Con una vacía se ve el hueco
+ * punteado, y sin él no se puede revisar ni el ancho del hueco ni que abra la hoja.
+ */
+const PREVIEW_BARRA: (string | null)[] = ['afk', null, 'clickX2'];
 
 const fakeGame: any = {
   getState: () => MOCK,
@@ -430,6 +448,65 @@ getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pendin
     if (plan.unidades <= 0) return { ok: false, usadas: 0, msg: plan.motivo };
     const usadas = Math.max(1, Math.min(units, plan.unidades));
     return { ok: true, usadas, msg: usadas === 1 ? 'aplicado' : usadas + ' aplicados' };
+  },
+
+  /**
+   * La barra de acceso rápido, con sus tres métodos, **y por qué están los tres**.
+   *
+   * El preview tiene su propio stub de juego y no llama a `updateUI()`, así que la barra
+   * se pinta contra `fakeGame` y **necesita los tres métodos que el producto tiene**. Sin
+   * ellos la barra sale vacía o con tres huecos muertos, y el banco visual aprueba una
+   * pantalla que el producto no puede usar: es la cuarta vez que el preview se queda corto
+   * por un método que falta, y siempre por el mismo motivo —no se mira lo que se pinta.
+   *
+   * El reparto del ejemplo pone **una ranura con AFK, una vacía y otra con Click x2**,
+   * porque son los tres estados que hay que poder revisar: el botón que gasta, el hueco
+   * punteado que abre el selector y el que muestra el número. Con las tres puestas solo se
+   * vería uno de ellos.
+   */
+  getBarraConsumibles: () => {
+    const reparto = [PREVIEW_BARRA[0], PREVIEW_BARRA[1], PREVIEW_BARRA[2]];
+    return reparto.map((buffId: string | null, ranura: number) => {
+      const ficha = consumibleAsignable(buffId);
+      const item: any = ficha
+        ? (MOCK.warehouse as any[]).find(
+            (x: any) => x.type === 'consumable' && x.buffId === ficha.buffId)
+        : null;
+      return {
+        ranura,
+        buffId: ficha ? ficha.buffId : null,
+        itemId: item ? item.id : null,
+        item,
+        nombre: ficha ? ficha.name : '',
+        detalles: ficha ? ficha.details : '',
+        unidades: item ? (item.stackable ? (item.stackCount || 1) : 1) : 0,
+        plan: item
+          ? fakeGame.planUseConsumable(item.id)
+          : { unidades: 0, max: 0, motivo: null },
+      };
+    });
+  },
+  asignarBarraConsumible: (ranura: number, buffId: string | null) => {
+    const i = Math.floor(Number(ranura));
+    if (!Number.isInteger(i) || i < 0 || i >= RANURAS_BARRA) {
+      return { ok: false, msg: 'Esa ranura no existe.' };
+    }
+    if (buffId === null) { PREVIEW_BARRA[i] = null; return { ok: true }; }
+    const ficha = consumibleAsignable(buffId);
+    if (!ficha) return { ok: false, msg: 'Ese consumible no se puede asignar aquí.' };
+    const otra = PREVIEW_BARRA.indexOf(ficha.buffId);
+    if (otra !== -1 && otra !== i) {
+      return { ok: false, msg: `${ficha.name} ya está en la ranura ${otra + 1}.` };
+    }
+    PREVIEW_BARRA[i] = ficha.buffId;
+    return { ok: true };
+  },
+  usarBarraConsumible: (ranura: number) => {
+    const h = fakeGame.getBarraConsumibles()[Math.floor(Number(ranura))];
+    if (!h) return { ok: false, msg: 'Esa ranura no existe.' };
+    if (!h.buffId) return { ok: false, msg: 'No hay nada asignado en esa ranura.' };
+    if (!h.itemId) return { ok: false, msg: `No tienes ninguna ${h.nombre} en el almacén.` };
+    return fakeGame.useConsumable(h.itemId);
   },
   planSellMany: (ids: string[]) => {
     const vendibles: any[] = [];

@@ -498,6 +498,56 @@ export function expansorPorBuff(buffId: string): ExpansorTier | undefined {
 }
 
 // ==========================================================================
+//  Barra de acceso rápido: qué consumibles pueden occupants las ranuras
+// ==========================================================================
+//
+//  **LO QUE VA EN LA BARRA LO DECIDE EL JUGADOR, Y LO QUE PUEDE ENTRAR ESTA
+//  LISTA.** Son dos cosas distintas y por eso viven en dos sitios: la lista es
+//  la regla del juego, y lo que el jugador pone en cada ranura es su guardado.
+//
+//  **Y POR QUÉ SOLO TRES, Y NO TODOS LOS CONSUMIBLES.** Al principio la barra
+//  rellenaba sola con lo más caro que hubiera, y el primer resultado fue ver una
+//  Piedra de Calibración en una ranura: es un consumible de **Forja**, y desde la
+//  base no hace nada. Peor: se podía gastar desde ahí algo cuyo único sitio es
+//  la Forja. La lista no es una lista de "los que se pueden usar", es la lista de
+//  los que **se pueden usar desde aquí**, y los tres expansores tampoco entran
+//  porque gastar una ranura del almacén sin querer es el peor sitio posible para
+//  ese botón.
+//
+//  Ahora la ranura la elige el jugador, así que el filtro deja de ser un problema
+//  de lo que se muestra y pasa a ser una pregunta de qué se puede asignar. Por eso
+//  esta lista es la **puerta**: un consumible que no esté aquí no puede llegar a
+//  una ranura ni aunque alguien lo escriba en el guardado.
+//
+//  Y sale de `CONSUMABLES` el nombre y la descripción, para que el texto del
+//  selector no se escriba dos veces (R2).
+export const RANURAS_BARRA = 3;
+
+/** Los `buffId` que se pueden asignar a una ranura de la barra, y solo ellos. */
+export const CONSUMIBLES_ASIGNABLES = ['afk', 'clickX2', 'clickX3'] as const;
+
+export type BuffAsignable = (typeof CONSUMIBLES_ASIGNABLES)[number];
+
+/**
+ * La ficha de un consumible asignable, por `buffId`.
+ *
+ * Devuelve `null` para cualquier cosa que no esté en la lista, y eso es
+ * deliberado: la función es la puerta, así que quien la use para pintar no tiene
+ * que comprobar la lista aparte.
+ */
+export function consumibleAsignable(buffId: string | null | undefined):
+  { buffId: string; name: string; details: string } | null {
+  if (!buffId) return null;
+  if (!(CONSUMIBLES_ASIGNABLES as readonly string[]).includes(buffId)) return null;
+  for (const def of Object.values(CONSUMABLES) as any[]) {
+    if (def.buffId === buffId) {
+      return { buffId, name: def.name, details: def.details };
+    }
+  }
+  return null;
+}
+
+// ==========================================================================
 //  Ranuras de compañero (F7 y F11)
 // ==========================================================================
 //

@@ -44,7 +44,8 @@ import {
   STORE_ITEMS, CRATE_TYPES, CRATE_TIERS, MAX_CRATE_TIER, costeDeCaja, COSTE_POR_TIER,
   CONSUMABLES, COLLECTOR_BASE_COSTS,
   COMPANION_SLOT_COSTS, RANURA_POR_CARTA, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP,
-  expansorPorBuff, type CrateType
+  expansorPorBuff, RANURAS_BARRA, CONSUMIBLES_ASIGNABLES, consumibleAsignable,
+  type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, sePuedeCancelar, type BuffKey } from './data/buffs';
 import {
@@ -283,6 +284,73 @@ function reconcileEquippedCollector(
     changed = true;
   }
   return { id, changed };
+}
+
+/**
+ * Lo que la barra de acceso rápido sabe de una ranura, ya resuelto.
+ *
+ * **ESTÁ ESCRITO FUERA Y CON NOMBRE POR UNA RAZÓN DE SINTAXIS, NO DE GUSTO.** Inline,
+ * `() => Array<{ ... }> => { ... }` no lo parsea TypeScript: al ver `<` después de `Array`
+ * lo toma como el operador menor que, se come el cuerpo y el error sale veinte líneas más
+ * abajo, en el `}` del tipo. Con paréntesis se arregla; con un nombre, además de
+ * arreglarse, el tipo se lee en la llamada y la vista sabe qué le dan sin adivinarlo.
+ */
+interface RanuraDeBarra {
+  /** 0, 1 o 2. El número que se le pasó al motor, no la posición en la rejilla. */
+  ranura: number;
+  /** El buff asignado, o `null` si la ranura está vacía o su buff ya no existe. */
+  buffId: string | null;
+  /** El item del almacén que esta ranura gastaría, o `null` si no hay ninguno. */
+  itemId: string | null;
+  /**
+   * El mismo item, entero.
+   *
+   * Va el objeto y no solo el id porque el diálogo de cantidad necesita el item: el
+   * nombre, la pila y el `stackable` están ahí dentro. Por eso van los dos y no uno.
+   */
+  item: any;
+  nombre: string;
+  detalles: string;
+  /** Cuántas unidades hay ahora mismo. 0 no es lo mismo que "no hay item". */
+  unidades: number;
+  plan: { unidades: number; max: number; motivo: string | null };
+}
+
+/**
+ * Deja la barra de acceso rápido con la forma que el resto del juego espera.
+ *
+ * **TRES REGLAS, Y LAS TRES IMPORTAN.** No es un `?? default` y no debería ser un
+ * `?? default`:
+ *
+ *  1. **Siempre tres huecos.** Un guardado con dos ranuras no es una partida vieja: es
+ *     un bug, y se vería como un slot que falta sin ninguna pista.
+ *  2. **Cada hueco es un buff que existe hoy.** `CONSUMIBLES_ASIGNABLES` es una lista
+ *     que puede crecer y también cambiar: un buff que se retira tiene que desaparecer
+ *     de las ranuras al cargar, no quedar apuntando a la nada.
+ *  3. **El mismo buff no está en dos ranuras.** Es la regla del juego, no un detalle de
+ *     la vista, así que se cumple aquí y no en el botón que asigna: si el motor la
+ *     aceptara, cualquier guardado manipulado traería dos ranuras iguales y la barra
+ *     sería una lista de tres con dos copias.
+ *
+ * Cuando una ranura se cae, la que tenía el mismo buff **también**: si no, al corregir
+ * un duplicado se dejaría un hueco libre al lado de otro igual, que es justo el estado
+ * que se quería evitar.
+ */
+function coaccionaBarraConsumibles(guardado: unknown): (string | null)[] {
+  const entrada = Array.isArray(guardado) ? guardado : [];
+  const vistos = new Set<string>();
+  const salida: (string | null)[] = [];
+  for (let ranura = 0; ranura < RANURAS_BARRA; ranura++) {
+    const bruto = entrada[ranura];
+    const buffId = typeof bruto === 'string' ? bruto : null;
+    if (buffId !== null && !consumibleAsignable(buffId)) { salida.push(null); continue; }
+    if (buffId !== null) {
+      if (vistos.has(buffId)) { salida.push(null); continue; }
+      vistos.add(buffId);
+    }
+    salida.push(buffId);
+  }
+  return salida;
 }
 
 // Deduce el buffId de un consumible guardado antes de que existiera el campo.
@@ -524,6 +592,18 @@ export async function createGameLoop(
     warehouseGaps: [] as string[],
     afkCards: 0, // Tarjetas AFK acumuladas (máx 3)
     afkExpiresAt: 0, // Tiempo de expiración del buff AFK (10 min por tarjeta)
+    /**
+     * Qué consumible hay en cada ranura de la barra de acceso rápido.
+     *
+     * **UN `buffId` O `null`, NUNCA UN ID DE ITEM.** Es la decisión que más condiciona
+     * todo lo demás, y se debe a una cosa: el almacén rehace ids: un item apilado se funde
+     * con otro y **cambia de id**, así que guardar el id sería guardar una dirección que
+     * el juego invalida por su cuenta. Guardando el buff, la ranura sigue apuntando a la
+     * Tarjeta AFK aunque el item que había debajo sea otro.
+     *
+     * Empieza vacía a propósito: las ranuras las llena el jugador, no el juego.
+     */
+    barraConsumibles: [null, null, null] as (string | null)[],
     // F31 · Diez niveles, todos a cero menos el T1, que es la caja de arranque.
     crates: { ...contadorDeCajasVacio(), 1: 2 },
     // El cristal ya no tiene contadores derivados: **es un número**, como las
@@ -1789,6 +1869,21 @@ function sePuedeGuardar(): boolean {
 
       state.afkCards = data.afkCards ?? 0;
       state.afkExpiresAt = data.afkExpiresAt ?? 0;
+      // --- Barra de acceso rápido ---
+      //
+      // **NADA DE ESTO ES IRREVERSIBLE, ASÍ QUE NO SUBE `SAVE_VERSION`.** Una ranura
+      // asignada se quita escribiendo `null` en ella, y un guardado viejo no trae el
+      // campo. Por eso se coacciona y no se migra (R8): una migración se paga con un
+      // número de versión y con un banco que lo compruebe, y aquí no hay nada que
+      // arreglar, solo un valor por defecto.
+      //
+      // **LO QUE NO SE PUEDE ES DEJARLO COMO VENGA.** Se reescribe por tres motivos, no
+      // por uno: la lista tiene que tener exactamente tres huecos (un guardado con dos
+      // ranuras es un bug que después se ve como un slot que falta); cada hueco tiene que
+      // ser un buff que exista, porque el filtro nuevo puede invalidar uno antiguo; y **no
+      // puede haber el mismo buff en dos ranuras**, que es la regla del juego y no un
+      // detalle de la vista.
+      state.barraConsumibles = coaccionaBarraConsumibles(data.barraConsumibles);
       // --- Prestige y cosméticos ---
       state.cores = data.cores ?? 0;
       state.totalCores = data.totalCores ?? 0;
@@ -1982,6 +2077,7 @@ function sePuedeGuardar(): boolean {
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
         afkExpiresAt: state.afkExpiresAt,
+        barraConsumibles: state.barraConsumibles,
         crates: state.crates,
         equippedCollectorId: state.equippedCollectorId,
         companions: state.companions,
@@ -2925,6 +3021,7 @@ function sePuedeGuardar(): boolean {
         maxCompanionSlots: state.maxCompanionSlots,
         afkCards: state.afkCards,
         afkExpiresAt: state.afkExpiresAt,
+        barraConsumibles: state.barraConsumibles,
         crates: state.crates,
         equippedCollectorId: state.equippedCollectorId,
         companions: state.companions,
@@ -4156,6 +4253,111 @@ const RITMO_GUARDADO_MS = 30_000;
         sold: plan.vendibles.length,
         bloqueados: plan.bloqueados
       };
+    },
+
+    /**
+     * Las tres ranuras de la barra, ya resueltas a lo que se puede ver y usar.
+     *
+     * **POR QUÉ SE RESUELVE AQUÍ Y NO EN LA VISTA.** Un `buffId` guardado no es un item:
+     * el almacén puede tener tres tarjetas AFK apiladas, ninguna, o un item cuyo id se rehizo
+     * al fusionarse. Si la vista buscara el item por su cuenta, cada sitio (la barra, el
+     * almacén, el diálogo) buscaría de una manera y dejarían de cuadrar. Aquí sale para los
+     * tres, con el plan del consumible incluido, así que el botón se apaga por la misma regla
+     * que el almacén y no por una cuenta hecha en la vista (R3).
+     *
+     * `itemId` viene para que gastar sea **la misma llamada** que desde el almacén: la barra
+     * no tiene un camino de uso propio, llama a `useConsumable()` con el id que le ha dado
+     * este mismo objeto. Un segundo camino de gasto acabaría cobrando distinto.
+     */
+    getBarraConsumibles: (): RanuraDeBarra[] => {
+      return Array.from({ length: RANURAS_BARRA }, (_, ranura) => {
+        const buffId = state.barraConsumibles[ranura] ?? null;
+        const ficha = consumibleAsignable(buffId);
+        // **EL ITEM CON MÁS PILA, Y POR QUÉ.** Un buff puede vivir en varios items del
+        // almacén —las cartas se apilan, pero un item no apilable llega suelto—, y la
+        // ranura tiene que gastar de uno solo. El de más pila es el que aguanta más
+        // pulsadas y el que menos veces cambia de id debajo del botón.
+        let item: any = null;
+        if (ficha) {
+          for (const w of state.warehouse) {
+            if (w.type !== 'consumable') continue;
+            // El `buffId` no está en el tipo del item, pero el motor lo escribe y lo lee
+            // en `planUseConsumable()`; se lee igual que allí, con la inferencia del
+            // nombre para las partidas viejas.
+            const b = (w as any).buffId ?? inferBuffIdFromName(w.name || '');
+            if (b !== ficha.buffId) continue;
+            if (!item || (w.stackCount || 1) > (item.stackCount || 1)) item = w;
+          }
+        }
+        const unidades = item ? (item.stackable ? (item.stackCount || 1) : 1) : 0;
+        return {
+          ranura,
+          buffId: ficha ? ficha.buffId : null,
+          itemId: item ? item.id : null,
+          item,
+          nombre: ficha ? ficha.name : '',
+          detalles: ficha ? ficha.details : '',
+          unidades,
+          plan: item ? estado.planUseConsumable(item.id) : { unidades: 0, max: 0, motivo: null },
+        };
+      });
+    },
+
+    /**
+     * Pone un consumible en una ranura, o la vacía con `null`.
+     *
+     * **EL MOTOR DICE QUE NO, Y NO EL BOTÓN.** Que la ranura sea válida, que el buff se
+     * pueda asignar y que no esté ya en otra ranura se comprueban aquí, porque son las
+     * tres reglas del juego. Un guardado manipulado podría traer dos ranuras iguales, y
+     * `coaccionaBarraConsumibles()` lo arregla al cargar; esto es lo que lo evita
+     * escribirlo dos veces desde el juego.
+     */
+    asignarBarraConsumible: (ranura: number, buffId: string | null): { ok: boolean; msg?: string } => {
+      const i = Math.floor(Number(ranura));
+      if (!Number.isInteger(i) || i < 0 || i >= RANURAS_BARRA) {
+        return { ok: false, msg: 'Esa ranura no existe.' };
+      }
+      if (buffId === null || buffId === undefined || buffId === '') {
+        state.barraConsumibles[i] = null;
+        saveToFirebase();
+        return { ok: true };
+      }
+      const ficha = consumibleAsignable(buffId);
+      if (!ficha) return { ok: false, msg: 'Ese consumible no se puede asignar aquí.' };
+      const otra = state.barraConsumibles.indexOf(ficha.buffId);
+      // **`otra === i` ES EL MISMO HUECO, Y ESO NO ES UN DUPLICADO.** Quitar de una
+      // ranura lo que ya tenía no es un conflicto; si no se distingue, volver a elegir lo
+      // mismo que ya está en el hueco se rechazaría a sí mismo.
+      if (otra !== -1 && otra !== i) {
+        return { ok: false, msg: `${ficha.name} ya está en la ranura ${otra + 1}.` };
+      }
+      state.barraConsumibles[i] = ficha.buffId;
+      saveToFirebase();
+      return { ok: true };
+    },
+
+    /**
+     * Gasta lo que hay en una ranura.
+     *
+     * **UN PUENTE, Y POR QUÉ NO ES UNA SEGUNDA FORMA DE GASTAR.** No calcula el efecto ni
+     * toca el almacén: busca el item que `getBarraConsumibles()` ya resolvió y llama a
+     * `useConsumable()`, que es el mismo camino que el almacén y el mismo que cobra. Si
+     * esto aplicara el buff por su cuenta, un cambio en el expansor o en el tope de las
+     * tarjetas arreglaría el almacén y dejaría la barra cobrando de más.
+     */
+    usarBarraConsumible: (ranura: number): { ok: boolean; msg?: string; usadas?: number } => {
+      const ranuras = estado.getBarraConsumibles();
+      const hueco = ranuras[Math.floor(Number(ranura))];
+      if (!hueco) return { ok: false, msg: 'Esa ranura no existe.' };
+      // **"NO HAY NADA ASIGNADO" Y "NO TE QUEDA NINGUNA" SON DOS COSAS, Y SE DICEN
+      // DISTINTAS.** Con un solo mensaje, quedarse sin tarjetas decía que no habías puesto
+      // nada: el jugador iba al selector a reconfigurar una ranura que estaba bien puesta,
+      // y el problema real —que no le quedan tarjetas— seguía sin resolverse.
+      if (!hueco.buffId) return { ok: false, msg: 'No hay nada asignado en esa ranura.' };
+      if (!hueco.itemId) {
+        return { ok: false, msg: `No tienes ninguna ${hueco.nombre} en el almacén.` };
+      }
+      return estado.useConsumable(hueco.itemId);
     },
 
 /**

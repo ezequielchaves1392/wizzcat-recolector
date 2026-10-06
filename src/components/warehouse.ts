@@ -29,7 +29,7 @@ import { showToast } from '../utils/toast';
 import { formatNumber } from '../utils/format';
 import { ic } from '../ui/icons';
 import { pageShell, mountInto, wireNav, sectionHead } from '../ui/pageShell';
-import { showConfirmModal } from '../utils/modal';
+import { showConfirmModal, htmlToNode } from '../utils/modal';
 import { showCrateRoulette } from './crateRoulette';
 import { showCrateSummary, maximoDeApertura } from './crateSummary';
 import { showSintonizacion } from './sintonizacion';
@@ -38,7 +38,10 @@ import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import { CRISTAL_NOMBRE } from '../data/items';
-import { MAX_CRATE_TIER, type CrateType } from '../data/store';
+import {
+  MAX_CRATE_TIER, RANURAS_BARRA, CONSUMIBLES_ASIGNABLES, consumibleAsignable,
+  type CrateType
+} from '../data/store';
 
 const TYPE_ICON: Record<string, any> = {
   collector: 'collector',
@@ -2150,94 +2153,269 @@ export function useConsumable(game: any, item: any, redraw: () => void) {
 }
 
 /**
- * CUANTOS CONSUMIBLES HAY, Y CUALES SON LOS TRES QUE ENTRAN EN LA BARRA.
+ * CUANTOS CONSUMIBLES HAY DE CADA BUFF ASIGNABLE.
  *
- * **LOS TRES PRIMEROS DEL ALMACÉN, Y NO UN ORDEN NUEVO.** El almacén ya sabe ordenar;
- * escribir aquí otra regla de orden es la forma de que las dos rejillas se separen un día y
- * el jugador vea dos almacenes. Se pide al almacén lo mismo que se le pide a su rejilla, con
- * el eje `value`, así que lo que sale son **los tres consumibles más caros**.
+ * **ESTO NO ES LA BARRA, Y QUE NO LO SEA ES JUSTO EL ARREGLO.** La barra se llenaba sola
+ * con `consumiblesDeAcceso()`, que elegía los tres más caros del almacén. Se quitó porque
+ * no era lo que se pidió y porque **elegir por el jugador es decidir por él**: la Piedra
+ * de Calibración llena una ranura y es un consumible de Forja, así que un botón que no
+ * hace nada aparece donde se espera que haga algo.
  *
- * Y eso es lo que entra, no "lo que más te interesa": el que puede ser de más valor es el
- * que más cuesta reponer, así que es el que más duele perder si se te acaba. El expansor va
- * por delante de la tarjeta porque una ranura perdida no vuelve, y el orden no se negocia
- * aquí para que la barra y la rejilla nunca se contradigan.
+ * Ahora las ranuras las pone el jugador y el motor las guarda, así que esta función ya no
+ * tiene nada que decidir. Lo que queda es una pregunta de inventario, y esa sí es
+ * del almacén: cuántos tienes de cada buff asignable.
  *
- * Y sale lo que sale: si no hay tres consumibles, hay tres huecos vacíos.
+ * **Y CUENTA UNIDADES, NO ITEMS.** Una tarjeta apilada son tres unidades y por eso suma
+ * `stackCount`; el selector de la ranura enseña "3", no "1". Contar filas daría un 1 en
+ * un botón que gasta tres, que es el bug del contador de AFK que ya salió una vez.
  */
-export function consumiblesDeAcceso(game: any, maxSlots = 3): any[] {
+export function unidadesDeBuff(game: any, buffId: string): number {
   const state = game.getState();
-  // **`'all'` PARA ORDENAR Y EL TIPO PARA FILTRAR.** No se cede el filtro al almacén:
-  // `matchesFilter()` solo admite cuatro valores —`all`, `otros`, `collector` y
-  // `companion`— y **cualquier otro cae al final de la función y no casa con nada**.
-  // No hay valor "consumible": no es un tipo de la rejilla, es un tipo de item. Se pide la
-  // lista completa ordenada por valor y se filtra por `type === 'consumable'`, que es la
-  // marca que usan el motor y la rejilla.
-  //
-  // El fallo era invisible: una barra con tres huecos vacíos y ningún error en pantalla, y
-  // la causa estaba a cuatro líneas de aquí, en un `'consumible'` que parecía la palabra
-  // correcta. Por eso el banco no repite el filtro escrito a mano: **pregunta a
-  // `matchesFilter()`**, que es donde vive el vocabulario.
-  const todos = visibleStacksFor(game, state, 'all', 'value')
-    .map((c: any) => c.item)
-    .filter((w: any) => w.type === 'consumable' && (w.stackCount ?? 1) > 0);
-  return todos.slice(0, maxSlots);
+  let total = 0;
+  for (const w of (state.warehouse || []) as any[]) {
+    if (w.type !== 'consumable') continue;
+    // **`buffId` Y NO EL NOMBRE.** Hay partidas viejas sin el campo y el motor lo infiere
+    // del nombre; aquí se cuenta solo lo que lo tiene escrito, que es donde está todo lo
+    // que la barra puede asignar. Un item sin `buffId` no se puede asignar a una ranura,
+    // así que tampoco tiene que contar.
+    if (w.buffId !== buffId) continue;
+    total += w.stackable ? (w.stackCount || 1) : 1;
+  }
+  return total;
+}
+
+/**
+ * HOJA PARA ELEGIR QUÉ VA EN UNA RANURA.
+ *
+ * **ES UNA HOJA, NO UN DESPLEGABLE, POR DEDO.** Elegir consumible es una decisión que no
+ * se toma con un dedo, y encima de tres huecos un desplegable acaba con media pantalla
+ * tapada. La hoja se abre sobre la base, se lee entera y se cierra.
+ *
+ * **LO QUE SE OFRECE ES LO QUE HAY, Y SE DICE POR QUÉ CADA COSA NO SE PUEDE.** Un hueco
+ * que ofrece una tarjeta que no tienes es un hueco que miente. Y uno que ya está en otra
+ * ranura sale con el motivo escrito, porque "no" a secas no enseña la regla (nada puede
+ * estar en dos ranuras): el motivo es lo que se recuerda.
+ *
+ * **EL MOTOR MANDA LA LISTA.** `getBarraConsumibles()` y `asignarBarraConsumible()` saben
+ * qué se puede asignar y qué está repetido. Aquí no se decide: se pinta y se llama. Por
+ * eso esta hoja no puede asignar nada que el juego no acepte.
+ */
+function hojaDeRanura(game: any, ranura: number, redraw: () => void): void {
+  const ranuras: any[] = game.getBarraConsumibles?.() ?? [];
+
+  // Cuántas unidades hay de cada buff. Va por el almacén y no por el guardado de la
+  // ranura, porque la ranura guarda QUÉ se usa, no CUÁNTO hay.
+  const unidadesDe = (buffId: string): number => {
+    const state = game.getState();
+    let total = 0;
+    for (const w of (state.warehouse || []) as any[]) {
+      if (w.type !== 'consumable') continue;
+      if ((w.buffId ?? null) !== buffId) continue;
+      total += w.stackable ? (w.stackCount || 1) : 1;
+    }
+    return total;
+  };
+
+  // En qué ranura está cada buff ahora mismo.
+  const ranuraDe = (buffId: string): number =>
+    ranuras.findIndex(h => h && h.buffId === buffId);
+
+  const filas = CONSUMIBLES_ASIGNABLES.map((buffId) => {
+    const ficha = consumibleAsignable(buffId);
+    if (!ficha) return '';
+    const n = unidadesDe(buffId);
+    const en = ranuraDe(buffId);
+    // `en === ranura` NO es un conflicto: es este mismo hueco. Distinguirlos evita que
+    // elegir lo que ya está puesto se rechace a sí mismo.
+    const enOtro = en !== -1 && en !== ranura;
+
+    const motivo = enOtro
+      ? 'Ya está en la ranura ' + (en + 1)
+      : n === 0
+        ? 'No tienes ninguna'
+        : 'Poner aquí';
+    const bloqueado = enOtro || n === 0;
+
+    return `
+      <button data-asignar="${buffId}"
+        class="w-full text-left px-3 py-2.5 rounded-lg border flex items-center gap-3
+               ${bloqueado ? 'opacity-45 cursor-not-allowed' : 'cursor-pointer transition active:scale-[0.99]'} '
+        style="background: color-mix(in srgb, var(--accent) 5%, transparent);
+               border-color: color-mix(in srgb, var(--accent) 25%, transparent)"
+        ${bloqueado ? 'disabled' : ''}>
+        <span class="min-w-0 flex-1">
+          <span class="block text-[12px] font-bold accent-text leading-tight truncate">
+            ${ficha.name}
+          </span>
+          <span class="block text-[10px] font-mono text-[var(--text-muted)] leading-snug mt-0.5">
+            ${ficha.details}
+          </span>
+        </span>
+        <span class="flex-shrink-0 text-right">
+          <span class="block text-[11px] font-mono font-bold tabular">${n}</span>
+          <span class="block text-[9px] font-mono text-[var(--text-muted)] leading-tight">${motivo}</span>
+        </span>
+      </button>`;
+  }).join('');
+
+  const yaPuesto = ranuras[ranura] && ranuras[ranura].buffId;
+  const vaciar = yaPuesto
+    ? '<button data-vaciar class="w-full px-3 py-2.5 rounded-lg border border-[var(--border-color)]' +
+      ' text-[11px] font-mono text-[var(--text-muted)] cursor-pointer transition active:scale-[0.99]">' +
+      'Dejar la ranura vacía</button>'
+    : '';
+
+  const hoja = htmlToNode(`
+    <div class="flex flex-col gap-2 text-left" style="max-width:24rem">
+      <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+        Cada ranura usa su consumible al pulsarla. Un consumible no puede estar en dos
+        ranuras a la vez, así que los que ya tienes puestos salen con el motivo.
+      </p>
+      ${filas}
+      ${vaciar}
+    </div>
+  `);
+
+  // **SIN BOTÓN DE CONFIRMAR.** Elegir en la hoja ES la acción; un "Confirmar" al lado,
+  // además de duplicar la elección, aparenta que hace falta para cerrarla.
+  const cerrar = showConfirmModal(hoja, () => { redraw(); }, {
+    sublabel: 'Ranura ' + (ranura + 1),
+    confirmDisabled: true,
+    cancelText: 'Cerrar'
+  });
+
+  // Los listeners van sobre el nodo que este diálogo acaba de crear, nunca sobre `#app`:
+  // el overlay vive fuera del árbol de la página (R5).
+  const root: any = hoja;
+  root.querySelectorAll?.('button[data-asignar]:not([disabled])').forEach((b: any) => {
+    b.addEventListener('click', () => {
+      const buffId = b.getAttribute('data-asignar');
+      if (!buffId) return;
+      const res = game.asignarBarraConsumible?.(ranura, buffId);
+      // Nunca se lanza al usuario (R4): el motor contesta y se enseña lo que dijo.
+      if (res && res.ok) {
+        cerrar();
+        redraw();
+      } else if (res && res.msg) {
+        showToast(res.msg, 'error');
+      }
+    });
+  });
+  root.querySelectorAll?.('button[data-vaciar]').forEach((b: any) => {
+    b.addEventListener('click', () => {
+      game.asignarBarraConsumible?.(ranura, null);
+      cerrar();
+      redraw();
+    });
+  });
 }
 
 /**
  * PINTAR LA BARRA, Y CABLEARLA.
  *
- * **EL MOTOR DICE SI SE PUEDE USAR, NO LA VISTA.** `planUseConsumable()` es el mismo que
- * llama `useConsumable()`, así que el hueco se apaga por la regla de verdad y no por una
- * cuenta hecha aquí (R3). Un hueco apagado con el motivo escrito: "ya está al tope" y "no
- * tienes" son cosas distintas y el jugador tiene que saber cuál.
+ * **AHORA LA LLENA EL JUGADOR, Y ESO CAMBIA TRES COSAS.** Ya no se elige por el valor:
+ * cada ranura tiene lo que el jugador le puso, así que hay un hueco vacío de verdad y un
+ * botón para llenarlo. Y ya no puede aparecer un consumible de Forja, porque el motor solo
+ * acepta los tres de `CONSUMIBLES_ASIGNABLES` y la coacción del guardado borra cualquier
+ * otra cosa que hubiera.
  *
- * **SE LLAMA EN CADA REPINTA Y NO AL MONTAR LA PÁGINA.** El contenido cambia con cada
- * guardado —gastas uno y desaparece— y una barra que solo se dibuja al entrar se queda
- * mintiendo hasta que recargas.
+ * **CADA RANURA ES TRES ACCIONES Y HAY QUE PODER SEGUIR LAS TRES.** El cuerpo usa, la ✕
+ * quita, y el hueco vacío abre el selector. Con una sola acción por ranura habría que
+ * elegir entre ellas, y hacen falta las tres: gastar sin poder quitar obliga a vaciar la
+ * ranura desde el guardado, y quitar sin poder abrir el selector obliga a ir al almacén.
+ *
+ * **LA ✕ NO ES UN `<button>`, Y ES POR EL HTML.** Un botón dentro de un botón es HTML
+ * inválido: el navegador cierra el de fuera y el clic acaba en el de dentro, así que
+ * quitar se gastaba el consumible. Es un `span` con rol de botón, en una esquina para no
+ * pulsarla sin querer, y con `stopPropagation` para que el clic no llegue a usar.
+ *
+ * **EL MOTOR DICE SI SE PUEDE USAR, NO LA VISTA.** El `plan` viene en la ranura y es el
+ * mismo que usa el almacén (R3). El motivo va en el `title`: "ya está al tope" y "no
+ * tienes" son cosas distintas.
  */
 export function pintarBarraDeConsumibles(game: any, redraw: () => void): void {
   const barra = document.getElementById('barra-consumibles');
   if (!barra) return;
-  const items = consumiblesDeAcceso(game);
+  const ranuras: any[] = game.getBarraConsumibles?.() ?? [];
 
-  barra.innerHTML = Array.from({ length: 3 }, (_, ranura) => {
-    const w = items[ranura];
-    if (!w) {
-      return `<div class="h-11 rounded-xl border border-dashed w-full
-        style="border-color: color-mix(in srgb, var(--text-main) 12%, transparent)"
-        aria-hidden="true"></div>`;
-    }
-    const plan = game.planUseConsumable?.(w.id) ?? { unidades: 0, max: 0, motivo: null };
-    const n = Number(w.stackCount) || 1;
-    const sirve = plan.unidades > 0;
-    return `
-      <button data-consumible="${w.id}"
-        class="h-11 rounded-xl border px-2 flex flex-col justify-center items-center w-full
-               cursor-pointer transition active:scale-95 ${sirve ? '' : 'opacity-45 cursor-not-allowed'}"
-        style="background: color-mix(in srgb, var(--accent) 5%, transparent);
-               border-color: color-mix(in srgb, var(--accent) 30%, transparent)"
-        ${sirve ? '' : 'disabled aria-disabled="true"'}
-        title="${sirve ? (w.details || w.name) : (plan.motivo || 'No se puede usar ahora')}">
-        <span class="w-full text-center text-[9px] font-mono text-[var(--text-muted)] leading-none truncate">
-          ${w.name}
-        </span>
-        <span class="text-[12px] font-mono font-bold accent-text leading-tight mt-0.5 tabular">
-          ${n}
-        </span>
+  barra.innerHTML = Array.from({ length: RANURAS_BARRA }, (_, i) => {
+    const h = ranuras[i];
+
+    // **HUECO VACÍO DE VERDAD: ABRE EL SELECTOR.** Un rectángulo punteado que no hace
+    // nada es un adorno; uno que abre la hoja es el sitio donde se decide qué consume
+    // esta barra.
+    if (!h || !h.buffId) {
+      return `<button data-abrir="${i}"
+        class="h-11 rounded-xl border border-dashed w-full cursor-pointer transition active:scale-95"
+        style="border-color: color-mix(in srgb, var(--text-main) 15%, transparent)"
+        title="Elegir qué consumible va aquí"
+        aria-label="Elegir qué consumible va en la ranura ${i + 1}">
+        <span class="text-[9px] font-mono text-[var(--text-muted)] leading-none">+ ranura ${i + 1}</span>
       </button>`;
+    }
+
+    // **SIN ITEM EL HUECO SIGUE OCUPADO, Y ESO ES OTRA COSA.** "No has puesto nada" y
+    // "has puesto esto y te has quedado sin" se arreglan distinto: el primero abriendo la
+    // hoja, el segundo gastando más. Por eso sale el nombre y un 0 en vez de un hueco
+    // vacío, que mentiría sobre lo que has configurado.
+    const plan = h.plan ?? { unidades: 0, max: 0, motivo: null };
+    const sinItem = !h.itemId;
+    const motivo = sinItem ? 'No tienes ninguna en el almacén.' : plan.motivo;
+    const sirve = !sinItem && plan.unidades > 0;
+
+    return `
+      <div class="relative h-11 w-full">
+        <button data-ranura="${i}"
+          class="h-11 w-full rounded-xl border px-2 flex flex-col justify-center items-center
+                 ${sirve ? 'cursor-pointer transition active:scale-95' : 'opacity-45 cursor-not-allowed'} '
+          style="background: color-mix(in srgb, var(--accent) 5%, transparent);
+                 border-color: color-mix(in srgb, var(--accent) 30%, transparent)"
+          ${sirve ? '' : 'disabled aria-disabled="true"'}
+          title="${motivo || h.detalles || h.nombre}">
+          <span class="w-full text-center px-3 text-[9px] font-mono text-[var(--text-muted)] leading-none truncate">
+            ${h.nombre}
+          </span>
+          <span class="text-[12px] font-mono font-bold accent-text leading-tight mt-0.5 tabular">
+            ${h.unidades}
+          </span>
+        </button>
+        <span data-quitar="${i}" role="button" tabindex="0"
+          class="absolute top-0.5 right-1 w-4 h-4 rounded-full flex items-center justify-center
+                 text-[11px] leading-none text-[var(--text-muted)] cursor-pointer
+                 hover:text-[var(--text-main)]"
+          title="Quitar de esta ranura"
+          aria-label="Quitar ${h.nombre} de la ranura ${i + 1}">×</span>
+      </div>`;
   }).join('');
 
-  barra.querySelectorAll('button[data-consumible]:not([disabled])').forEach(b => {
+  // --- Los tres manejadores, uno por acción, todos sobre la barra, que es el nodo que
+  // `renderLayoutHTML()` crea una vez y no se recrea en cada repintado. ---
+  barra.querySelectorAll('button[data-abrir]').forEach(b => {
     b.addEventListener('click', () => {
-      const id = b.getAttribute('data-consumible');
-      const item = items.find((x: any) => x.id === id);
-      if (!item) return;
+      hojaDeRanura(game, Number(b.getAttribute('data-abrir')), redraw);
+    });
+  });
+
+  barra.querySelectorAll('button[data-ranura]:not([disabled])').forEach(b => {
+    b.addEventListener('click', () => {
+      const ranura = Number(b.getAttribute('data-ranura'));
+      const h = ranuras[ranura];
+      if (!h || !h.item) return;
       // El diálogo de cantidad y el de un solo uso los pone `useConsumable()`, que es el
       // mismo camino que el almacén. **La barra no reimplementa el uso: lo llama.**
-      useConsumable(game, item, () => {
+      useConsumable(game, h.item, () => {
         redraw();
         pintarBarraDeConsumibles(game, redraw);
       });
+    });
+  });
+
+  barra.querySelectorAll('[data-quitar]').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      // Sin esto el clic también llega al botón de usar y se gasta el item.
+      ev.stopPropagation();
+      game.asignarBarraConsumible?.(Number(b.getAttribute('data-quitar')), null);
+      redraw();
     });
   });
 }

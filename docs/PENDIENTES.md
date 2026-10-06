@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2066**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2087**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -2532,3 +2532,32 @@ _Cosas que estorban al trabajo más que al juego._
 - Lo que **no** se debe hacer es dejar la barra con `absolute` o con margen negativo para que
   "entre": es tapar el desborde en vez de arreglarlo, y el siguiente elemento que se anada
   vuelve a salir.
+### La barra de consumibles: tres buffs para tres ranuras, y el tope sale solo
+
+- Se pueden asignar tres buffs (`afk`, `clickX2`, `clickX3`) a tres ranuras y nada puede
+  estar en dos ranuras. **Quiere decir que la barra se llena del todo o no se llena:**
+  o las tres ranuras tienen uno de los tres, o sobran huecos que no se pueden tapar.
+- Es lo que se pidió y es coherente —un mismo consumible en dos huecos gastaría el mismo
+  item desde dos sitios—, pero tiene una consecuencia que conviene tener presente: **no hay
+  estado intermedio que sirva para algo.** Si sale un cuarto buff asignable, se puede
+  repetir y tener dos ranuras con lo mismo (que es justo lo prohibido), o sube el número
+  de ranuras y se rompe la rejilla de tres. **Ninguna de las dos se decide sin decirlo.**
+- Lo que sí está resuelto: la lista es de `buffId`, no de item, así que añadir un
+  consumible nuevo es tocar `CONSUMIBLES_ASIGNABLES` y la puerta se abre sola para
+  selector, validación y coacción. No hay un segundo sitio donde estén escritos.
+
+### Sin comprobar en el navegador: que la hoja se cierre al elegir y la ✕ quite
+
+- `showConfirmModal()` ahora **devuelve su `close()`**, porque un diálogo con botones
+  propios en el contenido no lo cierra el `close()` de `confirmar()`: elegir un
+  consumible lo asignaba y dejaba la hoja encima, tapando la barra que acababas de
+  cambiar. El valor de vuelta es un modo nuevo solo para quien lo use.
+- Lo que **no** se pudo ver: que la hoja se cierre de verdad al pulsar una opción, ni que
+  la ✕ de la esquina quite el consumible. El banco visual se quedó sin poder medirlo
+  porque `preview.html` con `embedded=1` es una carrera con la medición y el iframe
+  desaparece entre llamadas. Las dos rutas están cubiertas por pruebas del motor, pero
+  **el efecto visual del cierre no**. Es lo primero que hay que mirar en una partida real.
+- De paso: **el servidor de desarrollo se wedgea.** Tras horas sirviendo el mismo módulo
+  con decenas de cambios, `preview.html` se quedó con `#app` vacío sin ningún error en
+  el log. Reiniciarlo lo arregló. Cuando el preview "no pinta", reiniciar el servidor
+  antes de culpar al código: se pierde mucho tiempo buscando un fallo que no existe.

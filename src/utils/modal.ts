@@ -124,7 +124,7 @@ export function showConfirmModal(
   message: string | Node,
   onConfirm: (units?: number) => void,
   options: ConfirmOptions = {}
-): void {
+): () => void {
   const {
     sublabel,
     confirmText = 'Confirmar',
@@ -355,4 +355,18 @@ export function showConfirmModal(
   if (input) input.focus();
   else if (confirmDisabled) cancelBtn.focus();
   else confirmBtn.focus();
+
+  /**
+   * Se devuelve `close` para poder cerrar el diálogo desde fuera.
+   *
+   * Hace falta desde el momento en que un diálogo lleva botones propios en su contenido:
+   * esos botones **no** son el de confirmar ni el de cancelar, así que al pulsarlos el
+   * `close()` de `confirmar()` no se llama y el diálogo se queda abierto debajo de la
+   * acción que acaba de hacer. Con la hoja de las ranuras de la barra eso pasaba: elegir
+   * un consumible lo asignaba y dejaba la hoja encima, tapando la barra que acababas de
+   * cambiar.
+   *
+   * Los diálogos que no lo usan, no lo usan: es un valor de vuelta, no un modo nuevo.
+   */
+  return close;
 }

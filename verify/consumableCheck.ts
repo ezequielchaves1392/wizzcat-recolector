@@ -24,10 +24,10 @@
 import { AFK_CARD_DURATION_MS } from '../src/gameLoop';
 import {
   EXPANSOR_TIERS, CONSUMABLES, RANURAS_POR_EXPANSOR, WAREHOUSE_BASE_CAP, WAREHOUSE_MAX_CAP,
-  techoDeExpansor
+  RANURAS_BARRA, techoDeExpansor
 } from '../src/data/store';
 import { totalConcedidoDe } from '../src/data/buffs';
-import { consumiblesDeAcceso, visibleStacksFor, matchesFilter } from '../src/components/warehouse';
+import { unidadesDeBuff, matchesFilter } from '../src/components/warehouse';
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
   collector, crate, consumable
@@ -887,39 +887,35 @@ async function main() {
       `antes=${s(g).buffs.passiveBoostExpiresAt} despues=${s(g2).buffs.passiveBoostExpiresAt}`);
   }
 
+// =========================================================================
+  //  BARRA DE ACCESO RÁPIDO: TRES RANURAS QUE ELLE EL JUGADOR
+  //
+  //  La barra NO elige. Eso es lo que se cambió, y la prueba que va primero es la que
+  //  lo demuestra: una partida nueva llega con las tres ranuras vacías aunque tenga
+  //  cuatro consumibles en el almacén. Antes se rellenaba sola con los tres más caros,
+  //  y el primer síntoma visible fue una Piedra de Calibración en un hueco, que es un
+  //  consumible de **Forja**: desde la base no hace nada. Elegir por el jugador es
+  //  decidir por él.
+  //
+  //  Sin elección automática, la lista de lo que se puede poner pasa a ser la regla del
+  //  juego y no un filtro de la vista: `CONSUMIBLES_ASIGNABLES` son tres, y lo que no
+  //  está ahí no llega a una ranura ni aunque alguien lo escriba en el guardado. Eso es
+  //  lo que comprueban las pruebas de Forja.
+  //
+  //  Y el guardado guarda un `buffId`, no un id de item, porque el almacén rehace ids al
+  //  apilar: guardado el id, la ranura apuntaría a un item que ya no existe.
   // =========================================================================
-  //  BARRA DE ACCESO RÁPIDO: LOS MISMOS TRES QUE ENTRAN EN LA REJILLA
-  //
-  //  La barra de la base no es una lista: son tres huecos fijos. Eso obliga a
-  //  decidir *qué* va en ellos, y la decisión fácil de escribir es "los que tenga" o
-  //  "los más usados". Aquí no cabe ninguna de las dos: sale del almacén, con su eje.
-  //
-  //  **Y POR QUÉ EL EJE ES `value` Y NO OTRO.** La barra no es un almacén pequeño, es
-  //  una ventana sobre el mismo almacén. Si la barra ordenara por otra cosa, el jugador
-  //  vería un consumible arriba y en la rejilla en otra posición, sin ninguna razón que
-  //  pueda leer. Con `value` los dos sitios cuentan la misma historia: primero lo más caro.
-  //  Y lo caro es lo que más duele reponer, que es el que conviene tener a mano.
-  //
-  //  **Y TRES, NO UN HUECO POR CONSUMIBLE.** Con un hueco por consumible, gastar uno
-  //  desaparece una casilla y las otras se desplazan: el dedo que iba a la tercera acaba
-  //  en la segunda. Estas pruebas son la forma de que eso no ashore al añadir un
-  //  consumible nuevo.
-  //
-  //  **EL BUG QUE ESTA SECCIÓN ATRAPÓ PRIMERO, Y POR QUÉ HACE FALTA LA PRUEBA DEL
-  //  VOCABULARIO.**
-  //
-  //  La barra se escribio primero con `visibleStacksFor(..., 'consumible', ...)`, y
-  //  `matchesFilter()` no tiene ese valor: sus cuatro son `all`, `otros`, `collector` y
-  //  `companion`. Lo que hace un valor que no es ninguno es **caer al final de la función y
-  //  devolver `filtro === 'all'`, o sea falso**. Cero items, cero error, una barra con tres
-  //  huecos vacíos y ninguna pista de por qué.
-  //
-  //  O sea: un filtro mal escrito **no se rompe, se vacía**, y es el peor modo de fallo que
-  //  hay porque no hay nada que mirar. La prueba siguiente fija el vocabulario con la misma
-  //  función que lo aplica: si alguien vuelve a escribir un valor de oído, esta falla antes
-  //  de que la barra salga vacía en la partida de alguien.
-  // =========================================================================
+
   {
+    // **EL BUG DEL FILTRO INVENTADO, QUE SIGUE SIENDO UN BUG POSIBLE.**
+    //
+    // La barra se escribió con `visibleStacksFor(..., 'consumible', ...)` y
+    // `matchesFilter()` no tiene ese valor: los suyos son `all`, `otros`, `collector` y
+    // `companion`. Un valor que no es ninguno cae al final de la función y devuelve
+    // `filtro === 'all'`, o sea **falso y sin error**: tres huecos vacíos y ninguna pista.
+    //
+    // Se contrasta con la misma función que aplica el filtro, para que escribir un valor
+    // de oído falle aquí en vez de vaciar la barra en la partida de alguien.
     const unItem = consumable('voc', 'afk', 1, { name: 'Uno' });
     check('filtro: el vocabulario de matchesFilter es estos cuatro, y solo estos',
       ['all', 'otros', 'collector', 'companion']
@@ -927,81 +923,224 @@ async function main() {
       'casan=' + ['all', 'otros', 'collector', 'companion']
         .filter((f: string) => matchesFilter(unItem, f)).join(','));
     check('filtro: y un valor inventado no casa con nada, en vez de dar error',
-      matchesFilter(unItem, 'consumible') === false
+      matchesFilter(unItem, 'consumable') === false
         && matchesFilter(unItem, 'todos') === false,
       'consumible=' + matchesFilter(unItem, 'consumible')
         + ' todos=' + matchesFilter(unItem, 'todos'));
   }
 
   {
+    // **UNA PARTIDA NUEVA EMPIEZA CON LAS TRES RANURAS VACÍAS.** Aunque tenga cuatro
+    // consumibles, ninguno entra solo. Esta es la prueba del cambio de fondo: si alguien
+    // vuelve a rellenar la barra por su cuenta, esta falla.
     const g = await boot(baseSave([
-      consumable('bar-a', 'passiveBoost', 2, { name: 'A', sellPrice: 100 }),
-      consumable('bar-b', 'afk', 1, { name: 'B', sellPrice: 900 }),
-      consumable('bar-c', 'clickBoost', 5, { name: 'C', sellPrice: 500 }),
-      consumable('bar-d', 'passiveBoost', 1, { name: 'D', sellPrice: 10_000 }),
-      collector('bar-e', { name: 'Un recolector, que no es un consumible' })
+      consumable('n-a', 'afk', 3, { name: 'AFK' }),
+      consumable('n-b', 'clickX2', 1, { name: 'X2' }),
+      consumable('n-c', 'clickX3', 1, { name: 'X3' }),
+      consumable('n-d', 'clickX2', 1, { name: 'X2 otra' })
     ]));
-    const tres = consumiblesDeAcceso(g);
-
-    check('barra: sale uno por ranura, no uno por consumible que tengas',
-      tres.length === 3,
-      'traidos=' + tres.length + ' de 4 consumibles');
-
-    check('barra: van los tres mas caros, con el mismo eje que la rejilla',
-      tres.map((w: any) => w.id).join(',') === 'bar-d,bar-b,bar-c',
-      'orden=' + tres.map((w: any) => w.id).join(','));
-
-    check('barra: y sale lo MISMO que el principio de la rejilla del almacen',
-      tres.map((w: any) => w.id).join(',')
-        === visibleStacksFor(g, s(g), 'all', 'value')
-          .map((c: any) => c.item)
-          .filter((w: any) => w.type === 'consumable')
-          .slice(0, 3).map((w: any) => w.id).join(','),
-      'barra=' + tres.map((w: any) => w.id).join(','));
-
-    check('barra: un recolector no ocupa una ranura aunque valga mas que todos',
-      !tres.some((w: any) => w.id === 'bar-e'),
-      'ids=' + tres.map((w: any) => w.id).join(','));
-
-    check('barra: y trae el item entero, con su pila, no un numero suelto',
-      tres[0].id === 'bar-d' && tres[0].stackCount === 1,
-      'pila=' + String(tres[0].stackCount));
+    const ranuras = g.getBarraConsumibles();
+    check('barra: una partida nueva llega con las TRES ranuras vacias',
+      ranuras.length === 3 && ranuras.every(h => h.buffId === null && h.itemId === null),
+      'buffs=' + ranuras.map((h: any) => String(h.buffId)).join(','));
+    check('barra: y con tres huecos fijos, ni uno mas ni uno menos',
+      ranuras.length === RANURAS_BARRA,
+      'ranuras=' + ranuras.length);
+    check('barra: no hay item resuelto en un hueco vacio, que es lo que se gasta',
+      ranuras.every(h => h.itemId === null),
+      'ids=' + ranuras.map((h: any) => String(h.itemId)).join(','));
   }
-  {
-    // **CON MENOS DE TRES, SALEN LOS QUE HAY.** La barra dibuja siempre tres huecos, pero
-    // el reparto de huecos a items lo hace esta función. Si devolviera huecos de mentira,
-    // el jugador vería tres cosas pulsables y solo una existiría.
-    const g = await boot(baseSave([
-      consumable('poco-a', 'afk', 1, { name: 'A', sellPrice: 100 }),
-      consumable('poco-b', 'passiveBoost', 1, { name: 'B', sellPrice: 900 })
-    ]));
-    check('barra: con dos consumibles salen dos, y no se inventa un tercero',
-      consumiblesDeAcceso(g).length === 2,
-      'salidos=' + consumiblesDeAcceso(g).length);
 
-    const g0 = await boot(baseSave([collector('nada', { name: 'Nada que usar' })]));
-    check('barra: sin ningun consumible sale vacia, que es lo unico honesto',
-      consumiblesDeAcceso(g0).length === 0,
-      'salidos=' + consumiblesDeAcceso(g0).length);
-  }
   {
-    // **UNA PILA A CERO NO OCUPA HUECO.** El almacén guarda `stackCount: 0` cuando gastas
-    // el último, y el filtro de la rejilla lo esconde. La barra usa el mismo filtro, pero
-    // se comprueba aparte: si un item a cero llegara a un hueco, el botón aparecería con
-    // un "0" debajo y al pulsarlo no pasaría nada.
+    // **ASIGNAR, Y LO QUE PUEDE Y LO QUE NO.**
     const g = await boot(baseSave([
-      consumable('cero-a', 'afk', 1, { name: 'Agotada', sellPrice: 100 }),
-      consumable('cero-b', 'passiveBoost', 1, { name: 'Viva', sellPrice: 900 })
+      consumable('a-a', 'afk', 2, { name: 'AFK' }),
+      consumable('a-b', 'clickX2', 1, { name: 'X2' }),
+      consumable('a-c', 'clickX3', 1, { name: 'X3' })
     ]));
-    // Se gasta el primero entero.
-    g.useConsumable('cero-a');
+    const ok = g.asignarBarraConsumible(0, 'afk');
+    check('barra: se puede asignar un consumible',
+      ok.ok === true, ok.msg ?? '');
+    check('barra: y el hueco guarda el BUFF, no el id del item',
+      s(g).barraConsumibles[0] === 'afk',
+      'guardado=' + String(s(g).barraConsumibles[0]));
+    check('barra: y getBarra lo resuelve al item del almacen',
+      g.getBarraConsumibles()[0].itemId === 'a-a',
+      'itemId=' + String(g.getBarraConsumibles()[0].itemId));
+
+    // **EL MISMO EN DOS RANURAS, Y POR QUÉ ES UNA REGLA DEL MOTOR.** El botón tachado
+    // es la primera línea de defensa, pero el motor es la que vale: un guardado
+    // manipulado podría traer dos ranuras iguales y la barra sería una lista de tres
+    // con dos copias.
+    const dup = g.asignarBarraConsumible(1, 'afk');
+    check('barra: el mismo consumible NO puede estar en dos ranuras',
+      dup.ok === false,
+      'msg=' + (dup.msg ?? '(aceptado, que es el fallo)'));
+    check('barra: y la ranura que se intentaba queda como estaba',
+      s(g).barraConsumibles[1] === null,
+      'ranura2=' + String(s(g).barraConsumibles[1]));
+
+    // **VOLVER A PONER LO QUE YA ESTÁ EN ESE MISMO HUECO NO ES UN CONFLICTO.** Es una
+    // no-op legal. Si no se distingue, elegir lo que ya tienes puesto se rechazaría a sí
+    // mismo con "ya está en la ranura 1" estando en la ranura 1.
+    const mismo = g.asignarBarraConsumible(0, 'afk');
+    check('barra: volver a elegir lo que ya tiene ESE hueco no es un conflicto',
+      mismo.ok === true, mismo.msg ?? '');
+
+    check('barra: un consumible de Forja no se puede asignar',
+      g.asignarBarraConsumible(2, 'calibrationStone').ok === false
+        && g.asignarBarraConsumible(2, 'stabilityNano').ok === false,
+      'piedra=' + g.asignarBarraConsumible(2, 'calibrationStone').ok
+        + ' nano=' + g.asignarBarraConsumible(2, 'stabilityNano').ok);
+    check('barra: ni un expansor, ni un buff inventado, ni una ranura que no existe',
+      g.asignarBarraConsumible(2, 'expansorT1').ok === false
+        && g.asignarBarraConsumible(2, 'noExiste').ok === false
+        && g.asignarBarraConsumible(7, 'afk').ok === false
+        && g.asignarBarraConsumible(-1, 'afk').ok === false,
+      'exp=' + g.asignarBarraConsumible(2, 'expansorT1').ok
+        + ' ranura7=' + g.asignarBarraConsumible(7, 'afk').ok);
+
+    check('barra: vaciar un hueco es siempre legal',
+      g.asignarBarraConsumible(0, null).ok === true
+        && s(g).barraConsumibles[0] === null,
+      'ranura1=' + String(s(g).barraConsumibles[0]));
+    check('barra: y vaciar un hueco vacio no da error',
+      g.asignarBarraConsumible(0, null).ok === true,
+      '');
+  }
+
+  {
+    // **GASTAR DESDE LA BARRA GASTA DE VERDAD, Y POR EL MISMO CAMINO.**
+    //
+    // La barra llama a `useConsumable()` con el item que le dio el motor. Si tuviera su
+    // propia forma de gastar, un cambio en el tope de las tarjetas arreglaría el almacén
+    // y dejaría la barra cobrando de más: es el mismo cobro en los dos sitios o no lo es
+    // en ninguno.
+    const g = await boot(baseSave([consumable('u-a', 'clickX3', 2, { name: 'X3' })]));
+    g.asignarBarraConsumible(0, 'clickX3');
+    const antes = unidadesDeBuff(g, 'clickX3');
+    const res = g.usarBarraConsumible(0);
+    const despues = unidadesDeBuff(g, 'clickX3');
+    check('barra: gastar desde la barra quita una unidad',
+      res.ok === true && despues === antes - 1,
+      'antes=' + antes + ' despues=' + despues + ' msg=' + (res.msg ?? ''));
+    check('barra: y el item del almacen ha bajado de verdad',
+      (s(g).warehouse.find((w: any) => w.id === 'u-a')?.stackCount ?? 0) === antes - 1,
+      'pila=' + String(s(g).warehouse.find((w: any) => w.id === 'u-a')?.stackCount));
+    check('barra: y el buff esta puesto',
+      (s(g).buffs as any).clickX3ExpiresAt > Date.now(),
+      'expira=' + String((s(g).buffs as any).clickX3ExpiresAt));
+
+    // **UN HUECO VACÍO NO GASTA NADA Y LO DICE, EN VEZ DE CALLAR.**
+    const vacio = g.usarBarraConsumible(2);
+    check('barra: un hueco vacio no gasta y devuelve el motivo',
+      vacio.ok === false && typeof vacio.msg === 'string' && vacio.msg.length > 0,
+      'msg=' + (vacio.msg ?? '(sin mensaje)'));
+
+    // **QUEDARSE SIN EL ITEM NO DESHACE LA ASIGNACIÓN.** La ranura guardada es lo que
+    // el jugador eligió; que ahora no tenga con qué gastarse es otra cosa, y si la ranura
+    // se borrara sola el selector volvería a quedar vacío sin que nadie lo decidiera.
+    g.useConsumable('u-a', 1);
     const g2 = await reload();
-    const pilaAgotada = s(g2).warehouse.find((w: any) => w.id === 'cero-a');
-    const enBarra = consumiblesDeAcceso(g2).map((w: any) => w.id);
-    check('barra: la pila a cero no ocupa ranura',
-      !enBarra.includes('cero-a') && enBarra.includes('cero-b'),
-      'agotada=' + (pilaAgotada ? 'pila ' + String(pilaAgotada.stackCount) : 'se fue del almacen')
-        + ' ids=' + enBarra.join(','));
+    const trasAgotar = g2.getBarraConsumibles()[0];
+    check('barra: sin unidades el hueco sigue ocupado y con el nombre a la vista',
+      trasAgotar.buffId === 'clickX3' && trasAgotar.unidades === 0 && trasAgotar.nombre.length > 0,
+      'buffId=' + String(trasAgotar.buffId) + ' unidades=' + trasAgotar.unidades);
+    // **EL MENSAJE DICE LA VERDAD, Y NO CONFUNDE LAS DOS SITUACIONES.** La ranura sigue
+    // puesta: lo que se acabó son las tarjetas. Decir "no hay nada asignado" aquí mandaba
+    // al selector a reconfigurar algo que estaba bien.
+    const sinUnidades = g2.usarBarraConsumible(0);
+    check('barra: y no se puede gastar lo que no hay',
+      sinUnidades.ok === false,
+      'msg=' + (sinUnidades.msg ?? ''));
+    check('barra: y el motivo habla de las unidades, no de la asignacion',
+      (sinUnidades.msg ?? '').includes('No tienes ninguna')
+        && !(sinUnidades.msg ?? '').includes('nada asignado'),
+      'msg=' + (sinUnidades.msg ?? ''));
+  }
+
+  {
+    // **LO QUE GUARDA, Y LO QUE NO SE GUARDA.**
+    //
+    // Tres ranuras y tres buffs guardados, y tras recargar siguen los tres: si esto no se
+    // comprueba, la barra parece funcionar mientras se juega y se olvida al abrir la
+    // página al día siguiente (R9).
+    const g = await boot(baseSave([
+      consumable('s-a', 'afk', 1, { name: 'AFK' }),
+      consumable('s-b', 'clickX2', 1, { name: 'X2' }),
+      consumable('s-c', 'clickX3', 1, { name: 'X3' })
+    ]));
+    g.asignarBarraConsumible(0, 'afk');
+    g.asignarBarraConsumible(1, 'clickX2');
+    g.asignarBarraConsumible(2, 'clickX3');
+    const g2 = await reload();
+    check('barra: las tres ranuras sobreviven a la recarga',
+      JSON.stringify(s(g2).barraConsumibles) === JSON.stringify(['afk', 'clickX2', 'clickX3']),
+      'guardado=' + JSON.stringify(s(g2).barraConsumibles));
+    check('barra: y siguen resolviendo a su item',
+      g2.getBarraConsumibles().map((h: any) => h.itemId).join(',') === 's-a,s-b,s-c',
+      'ids=' + g2.getBarraConsumibles().map((h: any) => h.itemId).join(','));
+  }
+
+  {
+    // **LA COACCIÓN, Y CADA UNA DE SUS TRES REGLAS.**
+    //
+    // Nada de esto es irreversible así que no sube `SAVE_VERSION`: una ranura se quita
+    // escribiendo `null`. Pero un guardado puede venir con cualquier cosa, y cada regla
+    // que no se compruebe aquí aparece un día como un hueco que falta o como dos ranuras
+    // con lo mismo.
+    const guardado = await boot(baseSave([], {
+      barraConsumibles: ['afk', 'afk', 'clickX2']
+    }));
+    check('coaccion: el mismo buff en dos ranuras no sobrevive a la carga',
+      JSON.stringify(s(guardado).barraConsumibles) === JSON.stringify(['afk', null, 'clickX2']),
+      'quedo=' + JSON.stringify(s(guardado).barraConsumibles));
+
+    const deForja = await boot(baseSave([], {
+      barraConsumibles: ['calibrationStone', 'stabilityNano', 'afk']
+    }));
+    check('coaccion: un buff que ya no se puede asignar se cae',
+      JSON.stringify(s(deForja).barraConsumibles) === JSON.stringify([null, null, 'afk']),
+      'quedo=' + JSON.stringify(s(deForja).barraConsumibles));
+
+    // **UNA LISTA QUE NO ES UNA LISTA.** No es un caso raro: un guardado con el campo mal
+    // es exactamente lo que pasa si alguien lo importa o si una versión vieja lo escribió
+    // de otra forma.
+    const raro = await boot(baseSave([], { barraConsumibles: 'afk' } as any));
+    check('coaccion: si el campo no es una lista, sale una lista de tres huecos vacios',
+      JSON.stringify(s(raro).barraConsumibles) === JSON.stringify([null, null, null]),
+      'quedo=' + JSON.stringify(s(raro).barraConsumibles));
+
+    const corto = await boot(baseSave([], { barraConsumibles: ['afk'] }));
+    check('coaccion: si faltan huecos, se rellenan, y no se inventa contenido',
+      JSON.stringify(s(corto).barraConsumibles) === JSON.stringify(['afk', null, null]),
+      'quedo=' + JSON.stringify(s(corto).barraConsumibles));
+
+    // **UNA PARTIDA VIEJA NO TIENE EL CAMPO.** Y sale vacía, que es lo único honesto:
+    // rellenar ranuras por el juego es lo que se acaba de quitar.
+    const vieja = await boot(baseSave([]));
+    check('coaccion: una partida sin el campo sale con las tres vacias',
+      JSON.stringify(s(vieja).barraConsumibles) === JSON.stringify([null, null, null]),
+      'quedo=' + JSON.stringify(s(vieja).barraConsumibles));
+  }
+
+  {
+    // **UN MISMO BUFF PUEDE VIVIR EN VARIOS ITEMS, Y LA RANURA GASTA DEL MÁS GRUESO.**
+    //
+    // Las tarjetas se apilan, pero un item no apilable llega suelto, así que un mismo
+    // buff puede vivir en varios items. Gastar del más grande es el que aguanta más
+    // pulsadas y el que menos veces cambia de id debajo del botón.
+    const g = await boot(baseSave([
+      consumable('p-pequena', 'afk', 1, { name: 'AFK', stackable: false }),
+      consumable('p-grande', 'afk', 5, { name: 'AFK' })
+    ]));
+    g.asignarBarraConsumible(0, 'afk');
+    check('barra: con el buff repartido en dos items, la ranura gasta del mas grande',
+      g.getBarraConsumibles()[0].itemId === 'p-grande',
+      'itemId=' + String(g.getBarraConsumibles()[0].itemId));
+    check('barra: y cuenta unidades de los dos, no de uno',
+      unidadesDeBuff(g, 'afk') === 6,
+      'unidades=' + unidadesDeBuff(g, 'afk'));
   }
 
   resumen('consumibles');

@@ -90,7 +90,7 @@ se escribió íntegramente para advertir de esta situación.
 
 ```bash
 npm run build     # tsc && vite build
-npm run verify    # 32 bancos = 2066 pruebas. El total es estable y comprobable: da 2066 las dos veces seguidas. Antes no lo era, porque una prueba de playthroughCheck estaba dentro de un if que dependia del dado; ahora el dado va fijado con conRoll.
+npm run verify    # 32 bancos = 2087 pruebas. El total es estable y comprobable: da 2087 las dos veces seguidas. Antes no lo era, porque una prueba de playthroughCheck estaba dentro de un if que dependia del dado; ahora el dado va fijado con conRoll.
 npm run rules     # publica firestore.rules. La primera vez pide `npx firebase login`
 ```
 
