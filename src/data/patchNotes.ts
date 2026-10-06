@@ -57,6 +57,23 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.4.0',
+    fecha: '6 de octubre de 2026',
+    titulo: 'La forja en serie',
+    lineas: [
+      'La forja tiene un boton nuevo: forja de una sentada todo lo que tengas del tier, de dos en dos y siempre por potencial, de mayor a menor.',
+      'Con cuatro materiales del mismo tier salen dos tiradas. Con un numero impar, el que sobra se queda en el almacen.',
+      'Los resultados salen en una lista, uno por tirada, con lo que se gasto en piedras y nanoparticulas arriba del todo.',
+      'El boton pide confirmacion y dice cuantos materiales entran, cuantas tiradas salen y cuanto se va a gastar.',
+      'Las piedras ya no tienen un tope que corte antes de tiempo: se gastan las que hagan falta para llegar al maximo de probabilidad, y en los tiers altos antes no se podia llegar.',
+      'En la forja en serie las piedras se ponen solas, sin que elijas cuantas, y se ajustan a cada pareja por sus afijos.',
+      'El equipado no se puede fusionar nunca, ni a mano ni en serie.',
+      'ElCompanero del historial ya enseña su potencial y su nivel, y brilla como los demas cuando le toca.',
+      'Arreglado: el avatar y el movil en el ranking, y el alto de las paginas, que en pantallas cortas cortaban el contenido por arriba.',
+      'En la forja de a uno puedes seguir bajando las piedras a mano, y avisa cuando no te llegan en vez de dejar el boton en silencio.'
+    ]
+  },
+  {
     version: '1.3.0',
     fecha: '6 de octubre de 2026',
     titulo: 'Brillos, escuadrón y acceso rápido',

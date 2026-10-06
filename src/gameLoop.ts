@@ -1,3 +1,4 @@
+      // recuperar. La serie se resuelve entera y se guarda una vez al final.
 import { showToast } from './utils/toast';
 import { formatNumber } from './utils/format';
 import { db } from './firebase';
@@ -2482,15 +2483,83 @@ function sePuedeGuardar(): boolean {
    * nanopartículas por una fusión que no ocurrió. La vista ya no manda
    * duplicados, pero la API no puede fiarse de la vista (R1).
    */
+  /**
+   * LOS IDS QUE NO SE PUEDEN FUSIONAR POR ESTAR EQUIPADOS, Y POR QUÉ ESTA LISTA TIENE
+   * DOS FORMAS.
+   *
+   * Lo equipado no se puede consumir: perderlo sería un castigo doble, porque el jugador
+   * ya lo está usando y además lo pierde. Pero **cada tipo marca el equipado en un sitio
+   * distinto**: el recolector con la marca `equipped` dentro de su ficha del almacén, y el
+   * compañero con la lista de activos del motor, que es lo único que hay para él.
+   *
+   * **ESTO ESTÁ EN UNA FUNCIÓN PORQUE HABA DOS COPIAS Y NO COINCIDÍAN.** La forja manual
+   * filtraba por `w.equipped` y el auto-forge que se añadió después miraba
+   * `state.equippedCollectorId`: dos formas de preguntar lo mismo. Un recolector marcado
+   * `equipped` sin ese id, o al revés, entraba en el auto-forge, la tirada fallaba
+   * **después de haber gastado la anterior**, y el jugador veía materiales desaparecer sin
+   * motivo. Con una sola función las dos rutas preguntan igual por construcción.
+   * motivo. Con una sola funcion las dos rutas preguntan igual por construccion.
+   * las dos rutas preguntan igual por construcción.
+   */
+  function idsEquipados(tipoForge: 'collector' | 'companion'): string[] {
+    return tipoForge === 'collector'
+      ? state.warehouse.filter((w: any) => w.equipped).map((w: any) => w.id)
+      : (state.activeCompanions || []);
+  }
+
+  /**
+   * LOS MATERIALES DE UN TIER ORDENADOS POR POTENCIAL, DE MAYOR A MENOR.
+   *
+   * **NO SE ESCRIBE EL ORDEN EN DOS SITIOS PORQUE EL ORDEN ES LA REGLA, NO UN DETALLE.**
+   * El potencial es lo que decide la calidad de lo que sale —sale de la media de los dos
+   * materiales—, así que qué dos se emparejan cambia el resultado. Un mismo conjunto de
+   * materiales ordenado al revés da un resultado peor, no uno igual: los dos mejores se
+   * consumen entre ellos y cada uno se lleva al otro por delante.
+   *
+   * **POR QUÉ PASSA POR `potencialNormalizado()` Y NO LEE `w.potential` DIRECTO.** Un item
+   * viejo puede no tener el potencial guardado —se deduce del daño—, y si el orden leyera
+   * el campo en crudo, esos items darían `undefined`. Y `undefined` en cualquier
+   * comparación es `false`, o sea que se quedan **al final**: justo los items de cuyo
+   * potencial no se sabe, que son los que másysteryo de perder, se gastarían los últimos.
+   *
+   * El desempate por id es para que el orden sea **estable**: dos items con el mismo
+   * potencial podrían salir en cualquier orden entre llamadas, y el botón previsualiza
+   * los pares antes de cobrar. Si el reparto cambiara entre la vista previa y el cobro, el
+   * jugador vería una lista y se le gastarían otra.
+   */
+  function ordenarPorPotencial(items: any[]): any[] {
+    return [...items].sort((a, b) => {
+      const pa = potencialNormalizado(a.potential);
+      const pb = potencialNormalizado(b.potential);
+      if (pb !== pa) return pb - pa;
+      return String(a.id).localeCompare(String(b.id));
+    });
+  }
+
+  /**
+   * CUÁNTAS PIEDRAS DE CALIBRACIÓN QUEDAN EN EL ALMACÉN.
+   *
+   * **POR QUÉ ESTÁ EN UNA FUNCIÓN Y NO EN UNA LÍNEA SUELTA.** El auto-forge la necesita y
+   * `previewPiedrasNecesarias()` también, y las dos tenían la cuenta escrita: buscar el
+   * item, mirar `stackCount`, y si no está el cero. Con dos copias, el día que las
+   * piedras cambien de forma —que van a cambiar, porque la tienda las vende en un
+   * `stackCount` y los compilados en otro— una se arregla y la otra no, y el fallo sale
+   * solo en el botón grande.
+   */
+  function stonesDisponibles(): number {
+    const stones = state.warehouse.find(
+      (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
+    );
+    return stones ? (stones.stackCount || 1) : 0;
+  }
+
   function materialesDeForja(
     materialIds: string[],
     tipo: 'collector' | 'companion'
   ): { materials?: any[]; tier?: number; error?: string } {
     const nombre = tipo === 'collector' ? 'recolectores' : 'compañeros';
     const uno = tipo === 'collector' ? 'recolector' : 'compañero';
-    const equippedIds: string[] = tipo === 'collector'
-      ? state.warehouse.filter((w: any) => w.equipped).map((w: any) => w.id)
-      : (state.activeCompanions || []);
+    const equippedIds: string[] = idsEquipados(tipo);
 
     if (materialIds.length !== MATERIALES_POR_FUSION) {
       return { error: `Selecciona exactamente ${MATERIALES_POR_FUSION} ${nombre}.` };
@@ -5684,6 +5753,181 @@ const RITMO_GUARDADO_MS = 30_000;
      * con que el árbol de pasivas cambiara un dígito de `craftLuck` para que el botón
      * prometiese siete y el motor cobrara seis, o al revés: **se paga por lo que el
      * botón no dijo**.
+     *
+     * Y devuelve `suficientes` a propósito: ofrecer "usar 7" sin tener siete es peor que
+     * no ofrecer nada, porque el jugador apretaría y se quedaría sin materiales.
+     */
+    /**
+    /**
+     * CUÁNTOS MATERIALES ENTRAN, EN QUÉ PARES Y CUÁNTOS SOBRAN.
+     *
+     * **ESTE ES EL REPARTO, NO UNA COPIA DEL REPARTO.** Devuelve los ids ya emparejados,
+     * en el orden exacto en que `autoForge()` los va a gastar. De aquí salen el número que
+     * enseña el botón y las comprobaciones del banco, y las dos cosas salen del mismo
+     * sitio: si el botón recalculara cuántos caben por su cuenta, podría prometer cinco
+     * tiradas y el motor hacer cuatro por un material que entró después, y eso no se ve
+     * porque el número quedaría *cerca* de la verdad.
+     *
+     * **Y POR QUÉ EL ORDEN ES POR POTENCIAL Y NO POR CUALQUIERA.** El potencial sale de
+     * la media de los dos materiales, así que qué dos se emparejan decide la calidad de lo
+     * que sale. Ordenando de mayor a menor, el mejor material del tier se gasta en la
+     * primera tirada en vez de quedarse esperando a que el jugador lo aprovechara mejor; al
+     * revés, los dos mejores se consumen entre ellos y cada uno se lleva por delante al
+     * otro. El mismo conjunto de materiales da un resultado peor solo por cómo se agrupó.
+     */
+    autoForgePreview: (tipoForge: 'collector' | 'companion', tier: number) => {
+      const nombre = tipoForge === 'collector' ? 'recolectores' : 'compañeros';
+      const equipIds = new Set<string>(idsEquipados(tipoForge));
+      const delTier = (state.warehouse as any[])
+        .filter((w: any) => w.type === tipoForge && (w.tier || 1) === tier)
+        .filter((w: any) => !equipIds.has(w.id));
+      const ordenados = ordenarPorPotencial(delTier);
+
+      const pares: string[][] = [];
+      for (let i = 0; i + MATERIALES_POR_FUSION <= ordenados.length; i += MATERIALES_POR_FUSION) {
+        pares.push(ordenados.slice(i, i + MATERIALES_POR_FUSION).map((m: any) => m.id));
+      }
+
+      // **LAS PIEDRAS DE CADA PAR, CALCULADAS CON SUS PROPIOS AFIJOS.** Cada pareja
+      // tiene afijos distintos, y los afijos bajan el número de piedras, así que el
+      // total de la serie no es un número: es la suma de un número por tirada. Se
+      // resuelve aquí y no en el modal para que lo que promete el botón sea lo que
+      // cobra `autoForge()`.
+      const porId = new Map<string, any>(delTier.map((m: any) => [m.id, m]));
+      const stones = pares.map(par =>
+        Math.min(
+          piedrasParaObjetivo(
+            tier,
+            state.bonus.craftLuck,
+            tipoForge === 'collector'
+              ? par.reduce((a: number, id: string) =>
+                  a + ((porId.get(id)?.affixes?.length || 0) * 0.02), 0)
+              : 0,
+            0
+          ),
+          stonesDisponibles()
+        )
+      );
+
+      return {
+        pares,
+        stones,
+        stonesTotal: stones.reduce((a: number, n: number) => a + n, 0),
+        disponibles: ordenados.length,
+        tiradas: pares.length,
+        // **EL SOBRANTE SE CUENTA, NO SE TIRA.** Con un número impar el último material se
+        // queda en el almacén, y el botón lo dice antes de cobrar: un jugador que ve
+        // "se fusionaron 6 de 9" sin saber qué pasó con el séptimo va a pensar que el
+        // juego se lo comió.
+        sobrantes: ordenados.length - pares.length * MATERIALES_POR_FUSION,
+        // **EL MÍNIMO PARA PODER FORJAR ES UNA PAR, NO UN MATERIAL.** El motor exige
+        // `MATERIALES_POR_FUSION` distintos, así que un botón que se activara con uno solo
+        // sería un botón que al pulsarse devuelve error.
+        puede: pares.length > 0,
+        msg: pares.length === 0
+          ? `Necesitas al menos ${MATERIALES_POR_FUSION} ${nombre} sin equipar del tier ${tier}, y tienes ${ordenados.length}.`
+          : `${pares.length} ${pares.length === 1 ? 'tirada' : 'tiradas'}`
+      };
+    },
+
+    /**
+     * FORJA EN SERIE: TODO LO QUE HAYA EN EL TIER, DE DOS EN DOS Y POR POTENCIAL.
+     *
+     * ## POR QUÉ CADA TIRADA LLAMA A LA FORJA DE A UNO
+     *
+     * `forgeCollector()` o `forgeCompanion()`, las mismas de la forja manual. **No hay una
+     * tercera forma de forjar**, y esa es la garantía de que un par ordenado por el botón y
+     * el mismo par elegido a mano den el mismo resultado con el mismo cobro. Si el
+     * auto-forge tuviera su propio dado, sería un segundo yunque con reglas parecidas, y
+     * cualquier diferencia entre ellos sería un bug que no se puede ver en el código.
+     *
+     * ## LA SERIE SE COBRA ENTERA, SIN PAUSA INTERMEDIA
+     *
+     * Con veinte materiales salen diez tiradas, y cada una descuenta sus piedras y su
+     * nanopartícula: pulsar el botón gasta todo eso de golpe, sin preguntar. Un corte entre
+     * tiradas exigiría salir del motor y volver a entrar, con el guardado a medias y el
+     * almacén ya descontado —un estado que no se puede recuperar si algo falla a mitad—.
+     * La serie se resuelve entera y se guarda una vez al final: o sale bien entero o no
+     * cambia nada.
+     */
+    autoForge: (tipoForge: 'collector' | 'companion', tier: number, stonesUsed: number | 'auto' = 'auto', nanoUsed = 0) => {
+      handleUserActivity();
+      const uno = tipoForge === 'collector' ? 'recolector' : 'compañero';
+
+      // **EL REPARTO SE PIDE A LA VISTA PREVIA, NO SE RECALCULA.** Es lo que la diferencia
+      // entre un botón que anuncia lo que va a pasar y uno que anuncia lo que pasó: aquí y
+      // en `autoForgePreview()` hay una sola cuenta, y por eso no pueden separarse ni
+      // aunque alguien añada un filtro nuevo en un sitio y se olvide del otro.
+      const plan = estado.autoForgePreview(tipoForge, tier);
+      if (!plan.puede) {
+        return { success: false, msg: plan.msg, resultados: [] };
+      }
+
+      const resultados: any[] = [];
+      // **LAS PIEDRAS SE RESUELVEN DENTRO, TIRADA A TIRADA, Y SE ACUMULAN.** El total
+      // sale al final para que la pantalla pueda decir cuanto se gasto de verdad.
+      let stonesTotal = 0;
+      let nanoTotal = 0;
+
+      for (let i = 0; i < plan.pares.length; i++) {
+        const ids = plan.pares[i];
+        // **`any` A PROPÓSITO, Y POR QUÉ.** `forgeCollector()` y `forgeCompanion()` devuelven
+        // uniones distintas —una lleva `collector`, la otra `companion`— y TypeScript no
+        // estrecha la unión a partir del `tipoForge` porque los dos llamadores están en la
+        // misma ternaria. Anotarlo obligaría a repetir el caso para no ganar nada: **aquí
+        // solo se lee uno u otro nombre, y el que no es vale `undefined`.**
+        // **LAS PIEDRAS DE ESTA TIRADA SALEN DEL PREVIEW, NO SE CALCULAN OTRA VEZ.**
+        // `plan.stones[i]` viene de `piedrasParaObjetivo()` con los afijos **de este
+        // par**, que es lo único que puede bajarlas. Recalcularlo aquí sería poner una
+        // segunda copia de la cuenta en el mismo motor, y el modal —que lee el
+        // preview— podría prometer un total mientras el motor cobra otro.
+        const piedrasDeEstePar = plan.stones[i];
+
+        const r: any = tipoForge === 'collector'
+          ? estado.forgeCollector(ids, piedrasDeEstePar, nanoUsed)
+          : estado.forgeCompanion(ids, piedrasDeEstePar, nanoUsed);
+
+        stonesTotal += piedrasDeEstePar;
+        nanoTotal += nanoUsed;
+
+        resultados.push({
+          exito: !!r.success,
+          nombre: (r.collector || r.companion)?.name ?? null,
+          item: r.collector ?? r.companion ?? null,
+          msg: r.msg ?? '',
+          cristales: r.crystals ?? 0,
+          chance: r.chance ?? 0
+        });
+      }
+
+      const hechos = resultados.filter(r => r.exito).length;
+      saveToFirebase();
+      return {
+        success: true,
+        // **LOS RESULTADOS VAN UNO A UNO, QUE ES LO QUE SE ENSEÑA.** Igual que al abrir
+        // cajas: una lista, no un total. El jugador quiere ver *qué* salió de cada par.
+        resultados,
+        hechos,
+        fallos: resultados.length - hechos,
+        sobrantes: plan.sobrantes,
+        // **LO GASTADO, QUE ES LO QUE LA PANTALLA ENSEÑA DESPUÉS.** No lo que se
+        // pidió: lo que se cobró de verdad, que puede ser menos si no había stones.
+        stonesTotal,
+        nanoTotal,
+        msg: `${hechos} de ${resultados.length} ${resultados.length === 1 ? uno : uno + 's'} forjados.`
+      };
+    },
+
+
+    /**
+     * CUÁNTAS PIEDRAS HACEN FALTA PARA LLEGAR AL 95 %, Y SI LAS TIENES.
+     *
+     * **LO PIDE EL MOTOR Y NO LA VISTA, PORQUE EL NÚMERO ACABA EN UN COBRO.** El botón
+     * "gastar las necesarias" tiene que prometer exactamente lo que
+     * `gastaConsumiblesDeForja()` va a coger, y esa función es del motor. Si la cuenta la
+     * hiciera la pantalla, bastaría con que el árbol de pasivas cambiara un dígito de
+     * `craftLuck` para que el botón prometiese siete y el motor cobrara seis: **se paga
+     * por lo que el botón no dijo**.
      *
      * Y devuelve `suficientes` a propósito: ofrecer "usar 7" sin tener siete es peor que
      * no ofrecer nada, porque el jugador apretaría y se quedaría sin materiales.

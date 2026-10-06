@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **34 bancos, 2159**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **34 bancos, 2179**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -2690,24 +2690,55 @@ _Cosas que estorban al trabajo más que al juego._
   cosmetico, pero hay que verlos sobre los catorce fondos antes, porque un color que se lee
   sobre el Abismo no se lee sobre la Torrente.
 
-### Forja: hecho el 95 % de las piedras, faltan las otras dos cosas
+### Forja: las tres cosas del jugador, hechas
 
-- Hecho: `piedrasParaObjetivo()` en `data/crafting.ts` y el boton "gastar las necesarias". El motivo de
-  fondo era que **el tope de cinco piedras impedia llegar al 95 %**: cinco son un 60 % y la base del T10
-  es 0,33, o sea 0,93. El tope estaba puesto delante del objetivo.
-- **SIN EMPEZAR, y las dos cosas que quedan de la forja:**
-  1. **Forjar todos los de un tier.** Mezclando por tier, de dos en dos, y siempre los de mayor
-     potencial. Es lo grande porque toca la seleccion de materiales, que hoy es enteramente
-     del jugador y que consulta el resto de la pagina. La pregunta de diseno que hay que
-     decidir antes: **el jugador deja de elegir los materiales** en ese boton, asi que hace
-     falta una nota que diga que se mistura por potencial y por que, o parece que el juego le
-     gasta las cosas por su cuenta.
-  2. **Usar consumibles hasta que se gasten.** Es distinto del 95 %: aqui se decide *cuantas*
-     piedras gastar en una tirada; lo otro es repetir el uso hasta agotar la pila. Con la
-     nanoparticula hoy solo se puede gastar una por fusion, asi que hay que decidir si
-     repetirla apila afijos garantizados o si solo gasta sin efecto —y eso cambia el valor
-     del objeto en oro.
-- Y una nota de metodo que salio de este commit: **una prueba escrita en el tier equivocado
-  da verde sin comprobar nada.** La de la nanoparticula media en el T9, donde cinco piedras ya
-  topan el 0,95 y la nano no puede bajar el numero porque ya es el minimo util. En el T10, donde
-  si importa, baja de seis a cinco. Elegir el caso donde la regla se ve es parte de la prueba.
+Las tres peticiones de una tacada sobre la forja:
+
+- **Hecho: las piedras llegan al 95 %.** `piedrasParaObjetivo()` en `data/crafting.ts` y el boton
+  "gastar las necesarias". El motivo de fondo era que **el tope de cinco piedras impedia llegar al
+  95 %**: cinco son un 60 % y la base del T10 es 0,33, o sea 0,93. El tope estaba puesto delante
+  del objetivo, y el jugador pagaba cinco por una tirada que ya sabia que no iba a llegar.
+- **Hecho: forjarlo todo del tier.** `autoForgePreview()` y `autoForge()`. Reparte los materiales
+  del tier por potencial descendente y forja cada pareja; con cuatro en el T1 salen dos tiradas.
+  Los resultados salen en una lista, como al abrir cajas, con lo gastado arriba.
+- **Hecho: los consumibles se usan solos, hasta el tope.** En el boton de serie no hay escolha de
+  piedras: el motor gasta por par las que hagan falta para llegar al 95 %, con los afijos de **ese**
+  par. La pregunta que quedaba abierta —si la nanoparticula se puede repetir y apila afijos— resulto
+  no hacer falta: en el auto-forge se usa una por tirada, que es lo que la regla ya hacia, y
+  `ui.nano` sigue siendo el interruptor de a uno.
+
+Tres cosas que salieron haciendo esto y que no estaban previstas:
+
+- **El motor era el que tenia que decidir las piedras, no la vista.** Cada par tiene afijos distintos
+  y los afijos bajan el numero de piedras. Una cuenta unica para toda la serie habria gastado de mas
+  en las parejas sin afijos, asi que `autoForgePreview()` devuelve `stones[]` y `autoForge()` gasta
+  `plan.stones[i]`. La comprobacion que lo ata es "el preview promete el mismo gasto que el cobro":
+  si difieren en uno, en cinco tiradas el jugador ha pagado cinco piedras que no le dijeron.
+- **El equipado se filtraba de dos formas distintas y no casaban.** La forja manual miraba la marca
+  `w.equipped` del almacen; el auto-forge miraba un id suelto del estado. Un recolector con la puesta
+  y sin el id se colaba en el reparto, y la tirada reventaba **despues** de haber gastado la anterior.
+  Ahora los dos pasan por `idsEquipados()`.
+- **La forja manual y el auto-forge no tienen un segundo dado.** Cada tirada de la serie llama a
+  `forgeCollector()` o `forgeCompanion()`. Un par ordenado por el boton y el mismo par elegido a mano
+  dan el mismo resultado con el mismo cobro, y eso no se decide por comentario: se decide porque no
+  hay dos caminos.
+
+Y la nota de metodo, que es la que mas caro sale de las tres:
+
+- **UN BANCO QUE FABRICA DATOS IMPOSIBLES NO FALLA: FALLA MINTIENDO.** Los items se montaban con
+  `collector('p1', 1, { potential: 1, damage: 20 })`, y la migracion `migraPotenciales()` deriva el
+  potencial **del daño**, porque potencial y daño son dos vistas de lo mismo. Al cargar, el motor
+  corrigio los cuatro items a potencial 5, los cuatro quedaron empatados y el reparto salio por id.
+  El banco daba verde sobre una afirmacion falsa y el diagnostico apuntaba al motor. Ya habia pasado
+  con la rareza del compañero de ejemplo, que hacia que los bancos de ingreso midieran el
+  multiplicador. Los datos los pone ahora `recDePotencial()`, que usa `danioDeRango()` —la misma
+  funcion del motor— para que un banco no pueda crear un item que la migracion vaya a corregir.
+- Y la de la prueba escrita en el tier equivocado: la de la nanoparticula media en el T9, donde cinco
+  piedras ya topan el 0,95 y la nano no puede bajar el numero porque ya es el minimo util. En el T10,
+  donde si importa, baja de seis a cinco.
+
+**Lo que no se ha podido comprobar: nada en pantalla.** El navegador sigue pasando por un proxy que
+devuelve 502 con el servidor de desarrollo en marcha, asi que el boton, la lista de resultados y el
+modal de confirmacion estan escritos y tipados, pero nadie los ha visto. Lo que si se ha comprobado
+por codigo es que el numero que promete el modal sale del motor y es el que se cobra.
+

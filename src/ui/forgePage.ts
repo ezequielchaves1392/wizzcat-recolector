@@ -578,6 +578,53 @@ function nivelDe(w: any): number {
         El nuevo sale con el potencial promedio de los dos.
         Los ${MATERIALES_POR_FUSION} se consumen, aciertes o falles.
       </p>
+
+      <!--
+        EL BOTÓN DE FORJARLO TODO, Y POR QUÉ DICE CUÁNTOS ANTES DE HACER NADA.
+
+        Es la otra mitad de la forja: la de arriba hace **una** fusión con lo que el
+        jugador elige, y esta hace **todas** las del tier. Estaba pedido como "forjar
+        todos los de un tier", así que el botón habla del tier y no de "todos": en el
+        T4 con doce materiales, "todos" no significaría nada.
+
+        **LOS NÚMEROS SON DEL MOTOR Y NO UN CÁLCULO DE AQUÍ.** Cuántas tiradas salen,
+        cuántos materiales entran y cuántos sobran los dice autoForgePreview(), que es
+        la misma función que reparte por dentro. Si esta pantalla contara los
+        recolectores del tier por su cuenta, el botón podría decir tres y la serie
+        hacer dos, y el jugador no vería por qué.
+
+        **Y CUANDO NO SE PUEDE, NO SE MUERE EN SILENCIO.** Con un solo material sin
+        equipar sale el motivo, porque un botón gris sin explicación es el mismo fallo
+        que el "se necesitan 2" que ya se corrigió: el jugador ve algo apagado y tiene
+        que adivinar la regla.
+
+        **LA LÍNEA PEQUEÑA DICE QUE SE MEZCLA POR POTENCIAL, Y POR QUÉ IMPORTA.** En este
+        botón el jugador deja de elegir qué dos se fusionan, que es justo lo que hacía
+        bien la forja manual. Sin una frase que diga que el orden es por potencial
+        descendente, parece que el juego gasta las cosas por su cuenta. Con la frase, es
+        una decisión: el mejor se gasta el primero porque es el que más rinde.
+      -->
+      ${(() => {
+        const plan = game.autoForgePreview?.(ui.tipo, ui.tier) ?? null;
+        if (!plan || !plan.puede) {
+          return `<p class="text-[9px] text-[var(--text-muted)] text-center mt-3 leading-relaxed">
+                    ${plan?.msg ?? ''}
+                  </p>`;
+        }
+        const sobra = plan.sobrantes > 0
+          ? ` · sobra ${plan.sobrantes}`
+          : '';
+        return `<button data-act="auto-forge" ${plan.puede ? '' : 'disabled'}
+                  class="w-full mt-3 px-3 rounded-xl btn-ghost font-mono text-[11px] font-bold
+                         tracking-wide cursor-pointer transition active:scale-[0.99]"
+                  style="min-height:44px"
+                  title="Reparte los ${plan.disponibles} ${N.uno}s del tier ${ui.tier} por potencial descendente y forja cada pareja">
+                  FORJAR LOS ${plan.disponibles} DEL T${ui.tier} — ${plan.tiradas} ${plan.tiradas === 1 ? 'TIRADA' : 'TIRADAS'}${sobra}
+                </button>
+                <p class="text-[9px] text-[var(--text-muted)] text-center mt-1.5 leading-relaxed">
+                  Se mezclan por potencial, de mayor a menor${sobra ? ', y los que sobren se quedan' : ''}.
+                </p>`;
+      })()}
     </section>
 
     <section class="card-glass rounded-2xl p-3 md:p-4">
@@ -913,9 +960,107 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
         confirmForge(container, game, redraw);
         break;
       }
+      case 'auto-forge': {
+        confirmAutoForge(container, game, redraw);
+        break;
+      }
     }
   });
 }
+
+/**
+ * CONFIRMAR EL AUTO-FORGE, Y POR QUÉ PIDE CONFIRMACIÓN CUANDO LA DE A UNO TAMBIÉN.
+ *
+ * Este botón gasta N materiales de golpe, sin preguntar. Una fusión gasta dos. **La
+ * diferencia de riesgo es de tamaño, no de clase**, y el jugador tiene que ver el uno y
+ * el otro antes de que ninguno gaste: si el botón grande fuera directo y el pequeño
+ * pidiera confirmación, la pantalla estaría enseñando que tirar más es más seguro.
+ *
+ * El texto dice **qué va a pasar y qué no**: cuántos entran, cuántas tiradas salen, si
+ * sobran materiales y cuánto se gasta en consumibles. Lo que no dice es cuántos van a
+ * acertar, porque eso no lo sabe nadie antes de tirar —y ponerlo sería mentir con una
+ * cifra que el jugador no puede verificar—.
+ */
+function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void) {
+  const plan = game.autoForgePreview?.(ui.tipo, ui.tier);
+  if (!plan || !plan.puede) {
+    showToast(plan?.msg ?? 'No hay materiales suficientes en este tier.', 'info');
+    return;
+  }
+
+  const N = NOMBRES[ui.tipo];
+
+  const partes = [
+    `Se forjarán los ${plan.disponibles} ${N.muchos} del tier ${ui.tier},`,
+    `de dos en dos y por potencial: ${plan.tiradas} ${plan.tiradas === 1 ? 'tirada' : 'tiradas'}.`
+  ];
+  if (plan.sobrantes > 0) {
+    partes.push(`Sobrarán ${plan.sobrantes}, que se quedan en el almacén.`);
+  }
+  // **EL TOTAL DE PIEDRAS ES EL DEL PREVIEW, NO UNA CUENTA DE AQUÍ.** Cada par gasta un
+  // número distinto según los afijos que tenga, y la suma la hace el motor. Calcularlo
+  // aquí con un afix luck de cero daría el número **más alto** de los posibles —el de una
+  // pareja sin afijos—, o sea que el modal prometería más de lo que va a cobrar.
+  if ((plan.stonesTotal ?? 0) > 0) {
+    partes.push(`Gastarás ${plan.stonesTotal} piedras en total, lo que haga falta para el 95 % en cada tirada.`);
+  } else {
+    partes.push('No gastas piedras: no tienes o no hacen falta.');
+  }
+  if (ui.nano) {
+    partes.push(`Se usará una nanopartícula en cada tirada.`);
+  }
+
+  showConfirmModal(
+    partes.join(' '),
+    () => runAutoForge(game, redraw),
+    {
+      sublabel: 'Cada tirada consume sus materiales acierte o falle',
+      confirmText: `Forjar ${plan.tiradas}`,
+      danger: false
+    }
+  );
+}
+
+/**
+ * Ejecuta la serie y enseña la lista de resultados.
+ *
+ * **AQUÍ NO HAY RULETA, Y ES A CONSCIENTE.** La ruleta es decorativa y está pensada
+ * para una tirada: con diez, el jugador vería el mismo gif diez veces seguidas, o
+ * peor, uno solo mientras el almacén baja sin que se entienda qué ha pasado. En una
+ * serie lo que informa es la lista de lo que salió de cada par.
+ *
+ * **Y LAS PIEDRAS NO SE PIDEN DESDE AQUÍ.** Que el motor calcule cuántas hacen falta
+ * para llegar al 95 % no es una comodidad: es que **cada par tiene sus propios afijos**
+ * y son los afijos los que bajan el número de piedras. La vista no puede saberlo sin
+ * repasar el almacén otra vez, y si lo hiciera con los materiales de toda la serie
+ * gastaría de más en las parejas que salieran sin afijos. Se le pide "automático" y
+ * el motor lo resuelve par a par.
+ *
+ * **LA SELECCIÓN MANUAL SE VACÍA.** En este botón el jugador no eligió nada, así que
+ * lo que se limpia es la lista de la forja de a uno: si no, quedaría con ids que ya
+ * no existen y la siguiente fusión daría error de material no encontrado.
+ */
+function runAutoForge(game: any, redraw: () => void) {
+  sfx.hammer();
+  // El segundo argumento es "automático": las piedras las pone el motor.
+  const r = game.autoForge(ui.tipo, ui.tier, 'auto', ui.nano ? 1 : 0);
+
+  if (!r.success) {
+    sfx.forgeFail();
+    showToast(r.msg ?? 'No se pudo forjar', 'error');
+    redraw();
+    return;
+  }
+
+  if (r.hechos > 0) sfx.forgeSuccess();
+  else sfx.forgeFail();
+
+  ui.selected = [];
+
+  showAutoForgeResults(r, redraw);
+  redraw();
+}
+
 
 function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
   const state = game.getState();
@@ -947,6 +1092,83 @@ function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
       danger: chance < 0.45
     }
   );
+}
+
+/**
+ * LA LISTA DE LO QUE SALIÓ DE CADA PAR, Y POR QUÉ ES UNA LISTA Y NO UN TOTAL.
+ *
+ * **LO PIDO EXPRESAMENTE: "UNA LISTA COMO CUANDO ABRO LAS CAJAS".** Un "4 de 6 forjados"
+ * no dice qué salió de la pareja que mejor salió, y con una tirada de fondo el jugador
+ * se queda sin poder comparar los pares entre sí, que es justo para lo que ordena por
+ * potencial: para poder ver que el mejor material del tier se gastó el primero.
+ *
+ * **LOS FALLOS TAMBIÉN APARECEN, Y POR QUÉ.** Una serie de diez tiradas en la que cuatro
+ * fallan es una serie normal, y enseñar solo las seis buenas daría una impresión de que
+ * todo salió bien. El fallo se pinta en su fila con el motivo que devuelve el motor, que
+ * es texto que el jugador ya puede actuar: si dice que no había materiales, el jugador
+ * entiende que el almacén se vació.
+ *
+ * **LO GASTADO VA ARRIBA, ANTES DE LA LISTA.** Es lo único que cambia lo que va a hacer
+ * después —si le quedan piedras o se las ha gastado todas—, y va arriba porque es la
+ * pregunta que se hace uno al cerrar la pantalla.
+ */
+function showAutoForgeResults(r: any, onClose: () => void) {
+  const cont = document.createElement('div');
+  cont.innerHTML = `
+    <div class="fixed inset-0 z-[200] grid place-items-end sm:place-items-center
+                bg-black/70 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+      <div class="card-glass rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md
+                  p-4 max-h-[85vh] overflow-y-auto" data-forge-cerrar>
+        <div class="flex items-baseline justify-between gap-2 mb-1">
+          <span class="label-caps accent-text">Forja en serie</span>
+          <span class="font-mono text-[10px] text-[var(--text-muted)]">T${ui.tier}</span>
+        </div>
+        <div class="font-['Orbitron'] font-bold text-lg leading-tight">
+          ${r.hechos} de ${r.resultados.length} ${r.hechos === 1 ? 'acertada' : 'acertadas'}
+        </div>
+
+        <div class="rounded-xl border border-[var(--border-color)] px-3 py-2 mt-3 mb-1">
+          <div class="flex items-baseline gap-3">
+            <span class="text-[10px] font-mono text-[var(--text-muted)] w-[86px] flex-shrink-0">Piedras</span>
+            <span class="text-[11px] font-mono text-[var(--text-main)]">${r.stonesTotal ?? 0}</span>
+          </div>
+          <div class="flex items-baseline gap-3">
+            <span class="text-[10px] font-mono text-[var(--text-muted)] w-[86px] flex-shrink-0">Nanopartículas</span>
+            <span class="text-[11px] font-mono text-[var(--text-main)]">${r.nanoTotal ?? 0}</span>
+          </div>
+          ${r.sobrantes > 0 ? `
+          <div class="flex items-baseline gap-3">
+            <span class="text-[10px] font-mono text-[var(--text-muted)] w-[86px] flex-shrink-0">Sin forjar</span>
+            <span class="text-[11px] font-mono accent-text">${r.sobrantes} en el almacén</span>
+          </div>` : ''}
+        </div>
+
+        <div class="rounded-xl border border-[var(--border-color)] divide-y divide-[var(--border-color)] mt-2">
+          ${r.resultados.map((x: any, i: number) => `
+            <div class="flex items-center gap-2.5 px-3 py-2">
+              <span class="text-[10px] font-mono text-[var(--text-muted)] w-[22px] flex-shrink-0">${i + 1}</span>
+              <span class="w-7 h-7 rounded-lg grid place-items-center flex-shrink-0 border
+                           ${x.exito ? rarityClass(x.item?.rarity ?? '') + ' accent-bg text-slate-950'
+                                     : 'border-rose-500/40 text-rose-400'}">
+                <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(x.exito ? 'sparkle' : 'close')}</span>
+              </span>
+              <span class="text-[11px] font-mono min-w-0 flex-1
+                           ${x.exito ? 'text-[var(--text-main)]' : 'text-rose-400'} break-words">
+                ${x.exito ? x.nombre : x.msg || 'La fusión falló'}
+              </span>
+            </div>`).join('')}
+        </div>
+
+        <button class="w-full py-2.5 mt-3 accent-bg text-slate-950 font-['Orbitron'] font-bold
+                       text-xs rounded-xl hover:opacity-90 transition cursor-pointer">
+          CONTINUAR
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(cont);
+  const cerrar = () => { cont.remove(); onClose(); };
+  cont.querySelector('[data-forge-cerrar]')?.addEventListener('click', cerrar);
 }
 
 /**

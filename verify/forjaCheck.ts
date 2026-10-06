@@ -1,3 +1,24 @@
+
+// =========================================================================
+//  LOS DATOS DEL BANCO, Y POR QUÉ EL DAÑO LO PONE EL MOTOR
+//
+//  **ESTO ES LO QUE HIZO FALLAR LA PRIMERA VEZ ESTE BANCO.** Los items se
+//  fabricaban con `collector('p1', 1, { potential: 1, damage: 20 })`: potencial 1
+//  con un daño que en el T1 es de un potencial 5. La migración
+//  `migraPotenciales()` deriva el potencial **del daño**, porque potencial y daño
+//  son dos vistas de lo mismo y el daño manda. Al cargar, el motor corrigió los
+//  cuatro items a potencial 5, los cuatro quedaron empatados y el reparto salió
+//  por id en vez de por potencial.
+//
+//  El banco daba verde con una afirmación falsa: el motor no estaba ordenando
+//  mal, estaba ordenando bien datos que el propio banco había escrito mal.
+//
+//  **EL DAÑO LO PONE `danioDeRango()`, LA MISMA FUNCIÓN QUE USA EL MOTOR.** Así un
+//  banco no puede fabricar un item que la migración vaya a reescribir, y si
+//  algún día cambia la relación entre potencial y daño, los bancos cambian con
+//  ella en vez de quedarse midiendo una regla que ya no existe.
+// =========================================================================
+
 // ==========================================================================
 //  LA FORJA
 //
@@ -51,6 +72,39 @@ const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
 const opts = (extra: any = {}) => ({
   craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, ...extra
 });
+
+/**
+ * LOS DATOS DEL BANCO, Y POR QUÉ EL DAÑO LO PONE EL MOTOR
+ *
+ * **ESTO ES LO QUE HIZO FALLAR LA PRIMERA VEZ ESTE BANCO.** Los items se
+ * fabricaban con `collector('p1', 1, { potential: 1, damage: 20 })`: un potencial
+ * 1 con un daño que en el T1 es de un potencial 5. La migración
+ * `migraPotenciales()` deriva el potencial **del daño**, porque potencial y daño son
+ * dos vistas de lo mismo y el daño manda. Al cargar, el motor corrigió los cuatro
+ * items a potencial 5, los cuatro quedaron empatados y el reparto salió por id en
+ * vez de por potencial.
+ *
+ * El banco daba verde sobre una afirmación falsa. **No era el motor el que no
+ * ordenaba bien: era el banco, que fabricaba datos que el motor iba a reescribir.**
+ *
+ * **EL DAÑO LO PONE `danioDeRango()`, LA MISMA FUNCIÓN QUE USA EL MOTOR.** Así un
+ * banco no puede crear un item que la migración vaya a corregir, y si algún día
+ * cambia la relación entre potencial y daño, los bancos cambian con ella en vez de
+ * quedarse midiendo una regla que ya no existe.
+ *
+ * **Y POR QUÉ ESTO ES UNA REGLA DE LOS BANCOS, NO UN DETALLE DE ESTE.** Ya ha
+ * pasado dos veces en este repositorio: una vez con la rareza del compañero de
+ * ejemplo, que hacía que los bancos de ingreso midieran el multiplicador en vez del
+ * ingreso, y ahora con el potencial. **Un banco que fabrica datos imposibles no
+ * falla: falla mintiendo**, y falla en la dirección que hace que la regla parezca
+ * correcta.
+ */
+function recDePotencial(id: string, tier: number, potencial: number) {
+  return collector(id, tier, {
+    potential: potencial,
+    damage: danioDeRango(tier, potencial)
+  });
+}
 
 async function main() {
   // -------------------------------------------------------------------------
@@ -740,6 +794,226 @@ const falloCon = async () => {
   check('consuelo: el acierto NO da cristales de consuelo, que solo compensan el fallo',
     unidades === 0, `unidades=${unidades}`);
 }
+// =========================================================================
+//  4. EL AUTO-FORGE: REPARTO POR POTENCIAL, EL SOBRANTE Y QUE NO SE GASTE
+//     LO EQUIPADO
+//
+//  Aquí no se comprueba que el botón exista. Se comprueba lo que el jugador no
+//  puede ver: **qué dos materiales se emparejan**, porque es lo único que
+//  decide la calidad de lo que sale y no hay forma de verlo en la partida.
+// =========================================================================
+{
+  /**
+   * Cuatro del T1 con potenciales en desorden: 1, 5, 2 y 4.
+   *
+   * **LOS DAÑOS LOS PONE `recDePotencial()`, NO A MANO.** La migración
+   * `migraPotenciales()` deriva el potencial del daño, así que un item con
+   * potencial 1 y daño de un 5 se corrige al cargar y el banco acaba midiendo
+   * cuatro potenciales iguales. Parecía que el motor no estaba ordenando mal.
+   */
+  const cuatro = () => [
+    recDePotencial('p1', 1, 1),
+    recDePotencial('p5', 1, 5),
+    recDePotencial('p2', 1, 2),
+    recDePotencial('p4', 1, 4)
+  ];
+
+  // ---- DIAGNOSTICO TEMPORAL ----
+  // --- EL REPARTO ES POR POTENCIAL DESCENDENTE ----------------------------
+  // **NO ES ORDEN AL AZAR Y TAMPOCO POR ID.** Con 1, 5, 2 y 4 el reparto
+  // correcto es (5, 4) y (2, 1): los dos mejores se gastan juntos. Si el
+  // orden fuera por id saldría (p1, p2) y (p4, p5), que es justo lo contrario:
+  // el ★1 se gastaría en la primera tirada.
+  const g1 = await boot(baseSave(cuatro(), { warehouseCapacity: 40 }));
+  const plan1 = g1.autoForgePreview('collector', 1);
+  check('autoforge: reparte por potencial, no por id',
+    JSON.stringify(plan1.pares) === JSON.stringify([['p5', 'p4'], ['p2', 'p1']]),
+    'pares=' + JSON.stringify(plan1.pares));
+
+  // **Y CUATRO MATERIALES SON DOS TIRADAS, NO CUATRO.** Este es el caso que
+  // Straiton pidió: cuatro recolectores en el T1 tienen que salir en dos
+  // fusiones, no en una ni en cuatro.
+  check('autoforge: cuatro materiales del tier son dos tiradas',
+    plan1.tiradas === 2 && plan1.disponibles === 4,
+    `tiradas=${plan1.tiradas} disponibles=${plan1.disponibles}`);
+
+  // --- EL IMPAR SE QUEDA, Y SE DICE CUÁNTO -------------------------------
+  const g2 = await boot(baseSave([...cuatro(), recDePotencial('p3', 1, 3)],
+    { warehouseCapacity: 40 }));
+  const plan2 = g2.autoForgePreview('collector', 1);
+  check('autoforge: con cinco salen dos tiradas y sobra uno, y lo dice',
+    plan2.tiradas === 2 && plan2.sobrantes === 1,
+    `tiradas=${plan2.tiradas} sobrantes=${plan2.sobrantes}`);
+
+  // **EL SOBRANTE NO SE TIRA, Y ES EL DE MENOR POTENCIAL, QUE ES MÁS JUSTO QUE CUALQUIERA.**
+  //
+  // Se esperaba que sobrara el del medio, `p3`, y sobra `p1`: con cinco materiales y
+  // pares de dos, el que se queda es el último de la lista ordenada, que es el más
+  // flojo. Es lo que tiene que pasar, porque el jugador pierde lo que peor le
+  // serviría y guarda lo mejor para la siguiente ronda.
+  //
+  // La primera versión de esta comprobación contaba los recolectores del almacén y
+  // esperaba uno. Contaba tres, y no porque el sobrante se perdiera: quedaban **el
+  // sobrante más los dos que acaban de salir de la forja**. Por eso va por id
+  // concreto: si `p1` sigue ahí, el sobrante no se tiró, diga lo que diga el recuento.
+  const r2 = conRoll(0.001, () => g2.autoForge('collector', 1));
+  const idsQueQuedan = wh(g2).map((w: any) => w.id);
+  check('autoforge: el sobrante se queda en el almacen y es el de menor potencial',
+    idsQueQuedan.includes('p1') && r2.sobrantes === 1,
+    `p1 sigue=${idsQueQuedan.includes('p1')} sobrantes=${r2.sobrantes}`);
+
+  // **Y SE GASTARON LOS CUATRO DE MAYOR POTENCIAL, QUE ES LO QUE SE MEDÍA ARRIBA.**
+  // Con potenciales 1, 5, 2, 4 y 3, los gastados son el 5, el 4, el 3 y el 2. Si se
+  // hubieran gastado `p1` y `p2` primero, los mejores del tier habrían esperado al
+  // final y ordenar por potencial no habría servido de nada.
+  const originals = wh(g2).filter((w: any) => ['p1','p2','p3','p4','p5'].includes(w.id));
+  check('autoforge: se gastan los de mayor potencial y se queda el peor',
+    originals.length === 1 && originals[0].id === 'p1',
+    'de los cinco siguen=' + originals.map((w: any) => w.id).join(',') || 'ninguno');
+
+  // --- CON UNO SOLO NO SE PUEDE, Y SE DICE POR QUÉ -----------------------
+  const g3 = await boot(baseSave([recDePotencial('solo', 1, 3)],
+    { warehouseCapacity: 40 }));
+  const plan3 = g3.autoForgePreview('collector', 1);
+  check('autoforge: con un solo material no se puede forjar, y lo dice',
+    plan3.puede === false && plan3.tiradas === 0 && /2/.test(plan3.msg),
+    `puede=${plan3.puede} msg="${plan3.msg}"`);
+
+  // --- LO EQUIPADO NO ENTRA, Y CON LA MISMA REGLA QUE LA FORJA MANUAL ----
+  // **ESTE CASO VALÍA LA MITAD DEL TRABAJO.** El equipado del recolector se
+  // marca con la bandera `equipped` dentro del almacén, no con un id suelto en
+  // el estado. Una primera versión del auto-forge miraba el id suelto, así que
+  // un recolector con la puesta y sin el id se colaba en el reparto: la tirada
+  // reventaba **después** de haber gastado la anterior.
+  const g4 = await boot(baseSave([
+    ...cuatro(),
+    { ...recDePotencial('puesto', 1, 5), equipped: true }
+  ], { warehouseCapacity: 40 }));
+  const plan4 = g4.autoForgePreview('collector', 1);
+  check('autoforge: el equipado no entra en el reparto',
+    !plan4.pares.some((par: string[]) => par.includes('puesto')),
+    'pares=' + JSON.stringify(plan4.pares));
+
+  // **Y CON UN EQUIPADO DE POTENCIAL MAXIMO, EL REPARTO SIGUE SIENDO EL MISMO.**
+  // Si el filtro se aplicara después de ordenar, el ★5 puesto se contaría como
+  // el primero y el reparto real bajaría un puesto: el mismo botón daría dos
+  // listas distintas según se mirase antes o después.
+  check('autoforge: y el reparto de los otros no se mueve por el equipado',
+    JSON.stringify(plan4.pares) === JSON.stringify([['p5', 'p4'], ['p2', 'p1']]),
+    'pares=' + JSON.stringify(plan4.pares));
+
+  // --- LA TIRADA REAL COBRA LO QUE DIJO LA VISTA PREVIA ------------------
+  // **ESTA ES LA COMPROBACIÓN QUE IMPORTA.** Se fija el dado a 0.001, que
+  // siempre acierta, para que la tirada dependa solo del reparto y del cobro.
+  const g5 = await boot(baseSave(cuatro(), { warehouseCapacity: 40, crystals: 0 }));
+  const plan5 = g5.autoForgePreview('collector', 1);
+  const r5 = conRoll(0.001, () => g5.autoForge('collector', 1));
+  check('autoforge: hace tantas tiradas como dijo la vista previa',
+    r5.resultados.length === plan5.tiradas,
+    `hechas=${r5.resultados.length} previstas=${plan5.tiradas}`);
+
+  check('autoforge: y con el dado fijado acierta todas',
+    r5.hechos === plan5.tiradas && r5.fallos === 0,
+    `hechos=${r5.hechos} fallos=${r5.fallos}`);
+
+  // **Y EL ALMACÉN BAJA EN EL NÚMERO DE MATERIALES QUE DIJO, NO EN OTRO.**
+  check('autoforge: el almacen se queda sin los materiales gastados',
+    wh(g5).filter((w: any) => w.type === 'collector').length === 2,
+    `quedan=${wh(g5).filter((w: any) => w.type === 'collector').length}`);
+
+  // --- LOS RESULTADOS VAN UNO A UNO, CON SU NOMBRE -----------------------
+  // Sin nombre no hay lista: el jugador vería "2 de 2 forjados" y no sabría
+  // qué salió de cada par, que es justo lo que pasó con las cajas y se corrigió
+  // porque una caja que no enseña su contenido no se puede contar.
+  check('autoforge: cada resultado trae su nombre y su item',
+    r5.resultados.every((r: any) => r.exito && r.nombre && r.item),
+    'nombres=' + r5.resultados.map((r: any) => r.nombre ?? 'null').join(', '));
+
+  // --- OTRO TIER, Y OTRO TIPO -------------------------------------------
+  // La función no puede tener un atajo por tier ni por tipo: un error que
+  // solo sale con compañeros es un error igual de real que uno que solo sale en
+  // el T7.
+  const g6 = await boot(baseSave([
+    companion('c1', 2, { potential: 1 }),
+    companion('c5', 2, { potential: 5 }),
+    companion('c3', 2, { potential: 3 })
+  ], { warehouseCapacity: 40 }));
+  const plan6 = g6.autoForgePreview('companion', 2);
+  check('autoforge: tambien funciona con compañeros y reparte igual',
+    JSON.stringify(plan6.pares) === JSON.stringify([['c5', 'c3']]) && plan6.sobrantes === 1,
+    'pares=' + JSON.stringify(plan6.pares) + ' sobrantes=' + plan6.sobrantes);
+
+  const g7 = await boot(baseSave(cuatro(), { warehouseCapacity: 40 }));
+  const plan7 = g7.autoForgePreview('collector', 3);
+  check('autoforge: otro tier sale vacio, no mezcla con el T1',
+    plan7.disponibles === 0 && plan7.puede === false,
+    `disponibles=${plan7.disponibles}`);
+}
+
+  // --- LAS PIEDRAS AUTOMÁTICAS, Y POR QUÉ EL PREVIEW Y EL COBRO TIENEN
+  //     QUE DAR EL MISMO NÚMERO --------------------------------------------
+  // **ESTO ES LA REGLA DE R3 APLICADA A UNA SERIE.** El modal lee el preview
+  // y el cobro hace otra pasada: si difieren en uno, en una serie de cinco
+  // tiradas el jugador ha pagado cinco piedras que no le dijeron. Por eso el
+  // auto-forge gasta `plan.stones[i]` y no recalcula.
+  {
+    // Cuatro del T9: sin piedras, base de 0,43 y hacen falta cinco por tirada.
+    const g8 = await boot(baseSave([
+      recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
+      recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2)
+    ], { warehouseCapacity: 40 }));
+    const plan8 = g8.autoForgePreview('collector', 9);
+
+    check('autoforge: sin piedras, el preview dice cero y no inventa gasto',
+      plan8.stonesTotal === 0 && plan8.stones.every((n: number) => n === 0),
+      `total=${plan8.stonesTotal} porTirada=${JSON.stringify(plan8.stones)}`);
+
+    // Con piedras de sobra, la suma por par debe ser el total, y no un número
+    // redondo inventado: cinco por tirada son diez en dos tiradas.
+    const g9 = await boot(baseSave([
+      recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
+      recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2),
+      consumable('piedras', 'calibrationStone', 40)
+    ], { warehouseCapacity: 40 }));
+    const plan9 = g9.autoForgePreview('collector', 9);
+    check('autoforge: el total de piedras es la suma de las de cada par',
+      plan9.stonesTotal === plan9.stones.reduce((a: number, n: number) => a + n, 0),
+      `total=${plan9.stonesTotal} porTirada=${JSON.stringify(plan9.stones)}`);
+
+    // **Y LO QUE DICE EL PREVIEW ES LO QUE SE COBRA.** Esta es la comprobación
+    // que de verdad importa: se tira la serie y se mira lo que se gastó.
+    const gastadas = () => wh(g9)
+      .filter((w: any) => w.buffId === 'calibrationStone')
+      .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    const antes = gastadas();
+    const r9 = conRoll(0.001, () => g9.autoForge('collector', 9, 'auto'));
+    const gastadasDeVerdad = antes - gastadas();
+
+    check('autoforge: el preview promete el mismo gasto que el cobro',
+      r9.stonesTotal === plan9.stonesTotal && gastadasDeVerdad === plan9.stonesTotal,
+      `prometidas=${plan9.stonesTotal} cobradas=${gastadasDeVerdad} devueltas=${r9.stonesTotal}`);
+
+    check('autoforge: y cada par gasta hasta el 95 por ciento',
+      plan9.stones.every((n: number) => n === 0 || successChance(9, 0, n, 0) >= 0.95),
+      'porTirada=' + JSON.stringify(plan9.stones));
+
+    // **SI NO HAY PIEDRAS SUFICIENTES, GASTA LAS QUE HAY Y SIGUE FORJANDO.**
+    // Devolver un error dejaría al jugador sin poder usar un botón que sí
+    // funciona: la forja no depende de las piedras, solo su probabilidad.
+    const g10 = await boot(baseSave([
+      recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
+      consumable('piedras', 'calibrationStone', 2)
+    ], { warehouseCapacity: 40 }));
+    const plan10 = g10.autoForgePreview('collector', 9);
+    check('autoforge: con pocas piedras gasta las que hay y no se niega',
+      plan10.stonesTotal === 2,
+      `total=${plan10.stonesTotal} porTirada=${JSON.stringify(plan10.stones)}`);
+
+    const r10 = conRoll(0.001, () => g10.autoForge('collector', 9, 'auto'));
+    check('autoforge: y la serie se completa igualmente sin piedras',
+      r10.success === true && r10.resultados.length === 1,
+      `success=${r10.success} resultados=${r10.resultados.length}`);
+  }
   resumen('la forja: dos del mismo tier, potencial medio y afijos por linaje');
 }
 

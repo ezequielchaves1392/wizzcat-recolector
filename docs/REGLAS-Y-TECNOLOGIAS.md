@@ -735,7 +735,7 @@ docs/                           Este directorio.
    `docs/huecos-almacen.md` se escribió precisamente para advertir de ello.
    Revisa `LastWriteTime` de los ficheros antes de asumir que un fichero está quieto.
 5. **`npm run build` y `npm run verify`** para tener la línea base antes de
-   tocar nada. Los **34 bancos** dan **2159 pruebas**, todas en verde.
+   tocar nada. Los **34 bancos** dan **2179 pruebas**, todas en verde.
 
    Y el total **ya no varía**: `playthroughCheck` tenía un `check()` dentro de un `if`
    que dependía de qué botín salió de la caja, así que esa prueba solo existía cuando el
