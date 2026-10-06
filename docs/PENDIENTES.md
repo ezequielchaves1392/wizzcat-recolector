@@ -2473,3 +2473,21 @@ _Cosas que estorban al trabajo más que al juego._
       a la vez la acaban. Si el juego va a tener más de una persona a la vez de forma
       normal, la solución de verdad es el **plan Blaze**, que cobra solo lo que se pasa
       del límite diario y tiene un aviso antes de cobrar.
+      **Y tres cosas más que pidió el jugador al verla, todas por lo mismo:** la ficha
+      tenía datos que no servían.
+      - **"Aparte del recolector equipado, que muestre los compañeros equipados."**
+        La colección era una lista sin distinguir lo que llevas puesto, y de veinte
+        recolectores el que decide cómo juega es uno. Ahora el recolector equipado y los
+        compañeros activos llevan la marca **PUESTO**, y además **salen primero**:
+        esconderlos en medio de la lista es tener que buscarlos. Y el subtítulo cuenta —
+        "6 · 1 puesto"— para no tener que contarlos a mano.
+      - **"Y no olvidar las visitas que tiene a su perfil."** El contador sigue ahí, pero
+        **en una ficha a medias se quita**, y no por descuido: no hay documento del que
+        sacarlo, y un "todavía no te ha mirado nadie" en una ficha que no existe afirma
+        algo que nadie sabe. Cuando la tarjeta existe, la cuenta está, y la primera línea
+        de la ficha es suya.
+      - **LosGoals salían como ids crudos** (`first_click`, `first_forge`) y **la fecha
+        como un número del juego** ("actualizado 1.750 T"). Los dos seTransparent:
+        el nombre sale del catálogo, saltando los ids que ya no existen en él, y la fecha
+        dice "hace tres días" en vez de un número de nanitas.
+

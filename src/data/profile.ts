@@ -68,6 +68,8 @@ export interface RecolectorPublico {
   maxLevel: number;
   potential: number;
   rarity: string;
+  /** Si es el recolector que este jugador tiene equipado ahora mismo. */
+  equipado?: boolean;
 }
 
 export interface CompanionPublico {
@@ -76,6 +78,8 @@ export interface CompanionPublico {
   tier: number;
   power: number;
   rarity: string;
+  /** Si este compañero está en la lista de activos. */
+  equipado?: boolean;
 }
 
 export interface NodoPublico {
@@ -119,6 +123,18 @@ export interface TarjetaPublica {
   /** Uids distintos que han mirado esta tarjeta. */
   visitantes: string[];
   updatedAt: number;
+
+  /**
+   * Si la ficha se construyó con TODO o solo con lo que el ranking ya sabía.
+   *
+   * **Opcional y sin valor por defecto a propósito.** Una tarjeta real no lo lleva
+   * (o lo lleva a `true`), y la que sale del ranking lleva `false`. La pantalla lo usa
+   * para **decir que la colección no está publicada** en vez de pintar secciones vacías,
+   * que es lo que hace que una ficha a medias no parezca una ficha sin contenido.
+   */
+  completa?: boolean;
+  /** Por qué no hay tarjeta, cuando no la hay. Solo en la ficha a medias. */
+  motivo?: 'no-existe' | 'error';
 }
 
 /** Un documento que no se ha escrito nunca. Se pinta como "nunca ha jugado". */
@@ -141,6 +157,13 @@ export const TARJETA_VACIA: TarjetaPublica = {
  * "undefined" en la cara del jugador que está mirando.
  */
 export function tarjetaDesdeEstado(state: any, userId: string, username: string): TarjetaPublica {
+
+  // Los compañeros activos se calculan **una vez** y no por cada compañero: la lista
+  // puede ser de cuatro o cinco, y preguntar a `state.activeCompanions` dentro del
+  // `map` es la forma de recorrer el mismo array para cada elemento sin obtener nada.
+  const activos = new Set<string>(
+    Array.isArray(state?.activeCompanions) ? state.activeCompanions : []
+  );
   const almacen: any[] = Array.isArray(state?.warehouse) ? state.warehouse : [];
 
   const recolectores = ordenados(
@@ -149,7 +172,8 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         id: String(w.id ?? ''),
         name: String(w.name ?? 'Recolector'),
         tier: num(w.tier), level: num(w.level), maxLevel: num(w.maxLevel),
-        potential: num(w.potential), rarity: String(w.rarity ?? '')
+        potential: num(w.potential), rarity: String(w.rarity ?? ''),
+        equipado: w.id === state?.equippedCollectorId
       }))
   ).slice(0, TOPE_RECOLECTORES);
 
@@ -164,6 +188,7 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         // estado del dueño que la tarjeta no tiene. Recalcularlo aquí inventaría un
         // número, y un número inventado en una tarjeta pública es peor que noándolo.
         power: num(w.power),
+        equipado: activos.has(w.id),
         rarity: String(w.rarity ?? '')
       }))
   ).slice(0, TOPE_COMPANEROS);
@@ -295,13 +320,24 @@ const NUMERICAS = [
 
 const num = (v: any): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-/** El mejor primero: tier, luego nivel, luego potencial. */
-function ordenados<T extends { tier: number; level?: number; power?: number; potential?: number }>(lista: T[]): T[] {
+/**
+ * El orden de la lista, y por qué lo equipado va primero.
+ *
+ * **LO PUESTO, PRIMERO.** Un jugador tiene veinte recolectores y uno equipado: el que
+ * decide cómo juega es el equipado, y esconderlo en medio de la lista es tener que
+ * buscarlo. Que salga primero es información, no decoración. Y detrás, lo de siempre —
+ * tier, nivel, poder— para que el resto siga siendo el mejor primero.
+ */
+function ordenados<T extends {
+  tier: number; equipado?: boolean; level?: number; power?: number; potential?: number
+}>(lista: T[]): T[] {
   return lista.slice().sort((a, b) =>
-    (b.tier - a.tier)
+    Number(!!b.equipado) - Number(!!a.equipado)
+    || (b.tier - a.tier)
     || ((b.level ?? 0) - (a.level ?? 0))
     || ((b.power ?? 0) - (a.power ?? 0))
-    || ((b.potential ?? 0) - (a.potential ?? 0)));
+    || ((b.potential ?? 0) - (a.potential ?? 0))
+  );
 }
 
 /** Un número grande como texto, para las etiquetas de la tarjeta. */

@@ -191,6 +191,59 @@ async function main() {
     );
   }
 
+  // =========================================================================
+  //  6. Lo que lleva PUESTO, que es lo que un jugador tiene al llegar
+  // =========================================================================
+  //
+  // **LA COLECCIÓN SIN LO PUESTO NO DICE CÓMO JUEGA.** De veinte recolectores, el que
+  //  decide cómo juega es uno, y si la lista lo pone en el medio el jugador tiene que
+  //  buscarlo. Por eso la marca es obligatoria y por eso va **primero**:
+  {
+    const estado = {
+      warehouse: [
+        collector('c1', 9, { equipped: false }),
+        collector('c2', 3, {}),
+        companion('k1', 5, {}),
+        companion('k2', 2, {})
+      ],
+      equippedCollectorId: 'c2',
+      activeCompanions: ['k1']
+    };
+    const t = tarjetaDesdeEstado(estado, 'u1', 'X');
+    check(
+      'perfil: el recolector equipado sale en la tarjeta',
+      t.recolectores.some(r => r.id === 'c2' && r.equipado === true),
+      JSON.stringify(t.recolectores.map(r => `${r.id}:${r.equipado}`))
+    );
+    check(
+      'perfil: y sale PRIMERO, porque es el que decide cómo juega',
+      t.recolectores[0].id === 'c2',
+      'el primero es ' + t.recolectores[0].id
+    );
+    check(
+      'perfil: los compañeros activos también, y en el mismo orden',
+      t.companeros[0].id === 'k1' && t.companeros[0].equipado === true
+        && t.companeros[1].equipado !== true,
+      JSON.stringify(t.companeros.map(c => `${c.id}:${c.equipado}`))
+    );
+    check(
+      'perfil: y el que no está puesto no lleva la marca',
+      t.recolectores.every(r => (r.equipado === true) === (r.id === 'c2')),
+      JSON.stringify(t.recolectores.map(r => `${r.id}:${r.equipado}`))
+    );
+  }
+
+  // Y que una partida sin puestos no rompe nada: es el caso de un jugador que entra y
+  // no ha equipado nada todavía.
+  {
+    const t = tarjetaDesdeEstado({ warehouse: [collector('c9', 1, {})] }, 'u1', 'X');
+    check(
+      'perfil: sin puestos, la lista se queda como estaba',
+      t.recolectores.length === 1 && t.recolectores[0].equipado !== true,
+      `equipado=${t.recolectores[0].equipado}`
+    );
+  }
+
   resumen('la tarjeta pública de otro jugador');
 }
 

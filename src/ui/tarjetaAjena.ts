@@ -34,14 +34,32 @@ import { esc } from '../utils/esc';
 import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from './identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
+import { ACHIEVEMENTS } from '../achievements';
 import { TREE_CATEGORY_META } from '../data/tree';
 import { rarityClass } from '../components/crateLoot';
 import { leerTarjeta, registrarVisita } from '../services/profileService';
+import { tarjetaDesdeRanking, type DatosDeRanking } from '../data/perfilParcial';
 import { type TarjetaPublica } from '../data/profile';
 import { sfx } from '../utils/audio';
 
 /** El uid del jugador que está mirando, para no contarse a sí mismo. */
 let miUid = '';
+
+/**
+ * El nombre de cada logro, por id.
+ *
+ * **POR QUÉ HAY QUE BUSCARLO Y POR QUÉ NO SE PINTAN LOS IDS.** La tarjeta lleva ids
+ * porque es lo que sabe el documento, y un id en una lista sin nombres es una lista de
+ * `first_click` que el jugador tiene que ir a buscar. El nombre sale del catálogo, que ya
+ * está en memoria.
+ *
+ * **Y UN ID QUE NO ESTÁ EN EL CATÁLOGO SE SALTA, NO SE MUESTRA.** La tarjeta es un
+ * documento de la nube: puede traer ids de una versión anterior del juego, o de uno
+ * eliminado. Pintarlo sería enseñar una fila sin nombre, que es peor que no pintarla.
+ */
+const LOGRO_POR_ID: Record<string, string> = Object.fromEntries(
+  ACHIEVEMENTS.map(a => [a.id, a.title])
+);
 export function ponMiUid(uid: string): void { miUid = uid || ''; }
 
 /**
@@ -67,7 +85,9 @@ export function ponMiUid(uid: string): void { miUid = uid || ''; }
 export function abreTarjetaDe(
   uid: string,
   nombre: string,
-  deEjemplo?: TarjetaPublica
+  deEjemplo?: TarjetaPublica,
+  /** Lo que el ranking ya sabe de este jugador, si lo sabe. */
+  delRanking?: DatosDeRanking
 ): void {
   if (!uid) return;
   const overlay = document.createElement('div');
@@ -109,7 +129,7 @@ export function abreTarjetaDe(
   overlay.querySelector('[data-cerrar]')?.addEventListener('click', cerrar);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) cerrar(); });
 
-  void carga(uid, nombre, cuerpo, overlay, deEjemplo);
+  void carga(uid, nombre, cuerpo, overlay, deEjemplo, delRanking);
 }
 
 async function carga(
@@ -117,33 +137,47 @@ async function carga(
   nombre: string,
   cuerpo: HTMLElement,
   overlay: HTMLElement,
-  deEjemplo?: TarjetaPublica
+  deEjemplo?: TarjetaPublica,
+  delRanking?: DatosDeRanking
 ): Promise<void> {
   // Con la tarjeta del preview no hay ni red ni espera: se pinta directamente.
-  const tarjeta = deEjemplo ?? (await leerTarjeta(uid));
+  // Con la tarjeta del preview no hay ni red ni espera: se pinta directamente.
+  if (deEjemplo) {
+    sfx.nav();
+    cuerpo.innerHTML = cuerpoDeTarjeta(deEjemplo);
+    overlay.scrollTop = 0;
+    return;
+  }
 
-  if (!tarjeta) {
-    // **NADA DE ESTO ES UN ERROR DE PANTALLA, ES UNA RESPUESTA.** Y el texto lo dice,
-    // porque hay dos motivos muy distintos: que el jugador no haya publicado tarjeta
-    // todavía, o que no se pueda leer. Enseñar "no se ha podido cargar" para el segundo
-    // sería mentir: sí se ha podido, lo que no hay es nada.
-    cuerpo.innerHTML = `
-      <div class="flex flex-col items-center gap-3 py-8 text-center">
-        <span class="text-[var(--text-muted)]">${ic('user', 'w-8 h-8')}</span>
-        <div class="text-xs text-[var(--text-muted)] leading-relaxed">
-          ${esc(nombre)} todavía no tiene tarjeta pública.<br>
-          Aparece en cuanto su juego guarde una vez.
-        </div>
-      </div>`;
+  const lectura = await leerTarjeta(uid);
+
+  if (!lectura.ok) {
+    // **LO QUE SÍ SABEMOS SE ENSEÑA, Y POR QUÉ.** El ranking ya tiene de este jugador
+    // lo que el juego publica de todos: cuánto ha producido, sus clics, sus logros, sus
+    // núcleos, su título y su banner. **Eso es una ficha, aunque sea la mitad.** Pintar un
+    // hueco cuando al lado tenemos media partida del jugador es tirar datos que ya
+    // tenemos, y el jugador lo lee como "este jugador no ha jugado" cuando en realidad
+    // sí, y lo que no ha publicado es su colección.
+    //
+    // **Y LOS DOS MOTIVOS SE DICEN DISTINTOS**, porque obligan a hacer cosas distintas:
+    // con las reglas sin publicar no hay nada que hacer hasta que las publiques, y en
+    // cuanto a su próxima guardado aparecerá entero. Con un corte de red, reintentar.
+    if (delRanking) {
+      sfx.nav();
+      cuerpo.innerHTML = cuerpoDeTarjeta(tarjetaDesdeRanking(delRanking, uid, nombre, lectura.motivo));
+      overlay.scrollTop = 0;
+      return;
+    }
+    cuerpo.innerHTML = pantallaDeVacio(nombre, lectura.motivo);
     return;
   }
 
   // El contador va **después** de pintar, para que abrir un perfil no espere a una
   // escritura. Y solo si no es el tuyo: eso ya está dentro de la función.
-  if (!deEjemplo) window.setTimeout(() => { void registrarVisita(uid, miUid); }, 400);
+  window.setTimeout(() => { void registrarVisita(uid, miUid); }, 400);
 
   sfx.nav();
-  cuerpo.innerHTML = cuerpoDeTarjeta(tarjeta);
+  cuerpo.innerHTML = cuerpoDeTarjeta(lectura.tarjeta);
   overlay.scrollTop = 0;
 }
 
@@ -154,6 +188,7 @@ function cuerpoDeTarjeta(t: TarjetaPublica): string {
 
   return `
     ${bannerDeTarjeta(t, banner)}
+    ${t.completa === false ? avisoDeFichaParcial(String(t.motivo ?? 'no-existe')) : ''}
 
     ${cifrasDeTarjeta(t)}
 
@@ -204,12 +239,19 @@ function bannerDeTarjeta(t: TarjetaPublica, banner: any): string {
  * contexto, y no en una rejilla de dieciocifras que nadie lee entera.
  */
 function cifrasDeTarjeta(t: TarjetaPublica): string {
+  // **EN UNA FICHA A MEDIAS SOLO SE ENSEÑAN LAS CIFRAS QUE EL RANKING SABE.** Las otras
+  // no son cero: son desconocidas. Poner un 0 donde no se sabe es afirmar algo falso
+  // —"ha ascended 0 veces"— y en una pantalla comparativa esa es exactamente la clase
+  // de mentira que hace que la comparación no sirva.
+  const parcial = t.completa === false;
   const cifras: [string, number, string][] = [
     ['Nanitas producidas', t.nanitasProducidas, 'text-amber-400'],
-    ['Clics', t.totalClicks, 'text-cyan-400'],
-    ['Ascensiones', t.resets, 'text-emerald-400'],
-    ['Forjadas', t.forjadas, 'text-rose-400']
+    ['Clics', t.totalClicks, 'text-cyan-400']
   ];
+  if (!parcial) {
+    cifras.push(['Ascensiones', t.resets, 'text-emerald-400']);
+  }
+  cifras.push(['Forjadas', t.forjadas, 'text-rose-400']);
   return `
     <div class="grid grid-cols-2 gap-2">
       ${cifras.map(([etiqueta, valor, tono]) => `
@@ -229,14 +271,16 @@ function cifrasDeTarjeta(t: TarjetaPublica): string {
 
 /** Los bloques de la colección, y el "y N más" cuando la tarjeta se ha recortado. */
 function bloqueDeRecolectores(t: TarjetaPublica): string {
+  if (t.completa === false) return '';
   if (t.recolectores.length === 0) return vacio('collector', 'Sin recolectores todavía');
   const maxTier = t.recolectores[0].tier;
   const mostrados = t.recolectores.length;
   return `
-    ${subtitulo('Recolectores', `${mostrados}${maxTier ? ` · mejor T${maxTier}` : ''}`)}
+    ${subtitulo('Recolectores', `${mostrados}${equipadosDe(t.recolectores)}${maxTier ? ` · mejor T${maxTier}` : ''}`)}
     <div class="flex flex-col gap-1">
       ${t.recolectores.map(r => `
         <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)]">
+          ${marcaDeEquipado(r.equipado)}
           <span class="text-[11px] font-mono font-bold w-9 flex-shrink-0">T${r.tier}</span>
           <span class="text-[11px] min-w-0 flex-1 truncate ${rarityClass(r.rarity)}">${esc(r.name)}</span>
           <span class="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">
@@ -250,10 +294,11 @@ function bloqueDeRecolectores(t: TarjetaPublica): string {
 function bloqueDeCompaneros(t: TarjetaPublica): string {
   if (t.companeros.length === 0) return '';
   return `
-    ${subtitulo('Compañeros', String(t.companeros.length))}
+    ${subtitulo('Compañeros', `${t.companeros.length}${equipadosDe(t.companeros)}`)}
     <div class="flex flex-col gap-1">
       ${t.companeros.map(c => `
         <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)]">
+          ${marcaDeEquipado(c.equipado)}
           <span class="text-[11px] font-mono font-bold w-9 flex-shrink-0">T${c.tier}</span>
           <span class="text-[11px] min-w-0 flex-1 truncate ${rarityClass(c.rarity)}">${esc(c.name)}</span>
           ${c.power ? `<span class="text-[10px] font-mono text-cyan-300 flex-shrink-0">+${formatNumber(c.power)}/s</span>` : ''}
@@ -271,6 +316,7 @@ function bloqueDeCompaneros(t: TarjetaPublica): string {
  * repartido sus núcleos, que es su dato.
  */
 function bloqueDeNodos(t: TarjetaPublica): string {
+  if (t.completa === false) return '';
   if (t.nodosComprados === 0) return vacio('tree', 'Sin nodos comprados');
   const porCategoria = new Map<string, { nombres: string[]; niveles: number }>();
   for (const n of t.nodos) {
@@ -308,22 +354,28 @@ function bloqueDeNodos(t: TarjetaPublica): string {
  * alguien le faltan dos secretos sin llegar a saber cuáles.
  */
 function bloqueDeLogros(t: TarjetaPublica): string {
-  if (t.logros.length === 0) return vacio('achievement', 'Sin logros publicados');
+  if (t.completa === false) return '';
+  const conNombre = t.logros
+    .map(id => ({ id, titulo: LOGRO_POR_ID[id] }))
+    .filter(x => !!x.titulo);
+  if (conNombre.length === 0) return vacio('achievement', 'Sin logros publicados');
   return `
     <div class="flex flex-wrap gap-1.5">
-      ${t.logros.map(id => {
-        // Un id que no exista en el catálogo no es un error: la tarjeta es un documento
-        // de la nube y puede traer ids de una versión anterior del juego. Se salta.
-        return `
-        <span class="medal text-amber-400" title="${esc(id)}">
-          ${ic('achievement', 'w-3 h-3')} ${esc(id)}
-        </span>`;
-      }).join('')}
+      ${conNombre.map(x => `
+        <span class="medal text-amber-400 gap-1" title="${esc(x.titulo)}">
+          ${ic('achievement', 'w-3 h-3')} ${esc(x.titulo)}
+        </span>`).join('')}
     </div>`;
 }
 
 /** El pie: el contador de visitas y cuándo se publicó. */
 function pieDeTarjeta(t: TarjetaPublica): string {
+  // **EN UNA FICHA A MEDIAS NO HAY CONTADOR NI FECHA, Y NO SE PONEN A CERO.** No los
+  // sabemos: no hay documento del que sacarlos. Un "sin fecha" colgado al lado de
+  // "todavía no te ha mirado nadie" parece un dato y es un hueco.
+  if (t.completa === false) {
+    return `<div class="pt-1 border-t border-[var(--border-color)]"></div>`;
+  }
   const visitas = t.visitantes.length;
   const texto = visitas === 0
     ? 'Todavía no te ha mirado nadie'
@@ -336,7 +388,7 @@ function pieDeTarjeta(t: TarjetaPublica): string {
         ${ic('user', 'w-3 h-3 inline align-[-2px]')} ${texto}
       </span>
       <span class="text-[10px] font-mono text-[var(--text-muted)]">
-        ${t.updatedAt ? `actualizado ${formatNumber(t.updatedAt)}` : 'sin fecha'}
+        ${t.updatedAt ? fechaDeTarjeta(t.updatedAt) : 'sin fecha'}
       </span>
     </div>`;
 }
@@ -344,6 +396,99 @@ function pieDeTarjeta(t: TarjetaPublica): string {
 // --------------------------------------------------------------------------
 //  Piezas
 // --------------------------------------------------------------------------
+
+/**
+ * EL AVISO DE "ESTA ES LA MITAD", Y POR QUÉ NO ES UN ERROR.
+ *
+ * La ficha se ha construido con lo que el ranking ya sabía, así que hay una cosa que
+ * el jugador tiene que entender: **que no es que este jugador no tenga nada, es que no
+ * ha publicado la colección.** Sin este aviso, una ficha con cuatro cifras y sin
+ * recolectores parece una ficha de alguien que no juega, y el jugador se lleva una
+ * conclusión falsa de la persona que está mirando.
+ *
+ * Y el texto del motivo **cambia con el motivo**, porque lo que hay que hacer cambia:
+ * con las reglas sin publicar, aparece entero en su próximo guardado; con un corte de
+ * red, lo que hay que rehacer es la conexión.
+ */
+function avisoDeFichaParcial(motivo: string): string {
+  const texto = motivo === 'error'
+    ? 'No se ha podido leer su ficha de la nube, así que solo se enseña lo que el ranking'
+      + ' ya sabe de él. Su colección aparecerá en cuanto vuelva la conexión.'
+    : 'Esta es la mitad de su ficha: lo que el juego publica de todo el mundo. Su'
+      + ' colección —recolectores, compañeros y pasivas— aparece en cuanto su juego guarde'
+      + ' otra vez.';
+  return `
+    <div class="rounded-xl border border-dashed border-[var(--border-color)] p-3
+                flex items-start gap-2">
+      <span class="text-amber-400 mt-0.5">${ic('eye')}</span>
+      <span class="text-[11px] text-[var(--text-muted)] leading-relaxed">${texto}</span>
+    </div>`;
+}
+
+/**
+ * LO QUE SE VE CUANDO NO HAY TARJETA **Y TAMPOCO FILA DE RANKING**.
+ *
+ * O sea: alguien a quien no está en la clasificación y no publica nada. Dos motivos,
+ * dos textos, y ninguno dice "error" cuando el juego está bien.
+ */
+function pantallaDeVacio(nombre: string, motivo: string): string {
+  const titulo = motivo === 'error'
+    ? 'No se ha podido leer esa ficha'
+    : 'Todavía no hay ficha pública';
+  const texto = motivo === 'error'
+    ? 'Puede ser un corte de conexión o que las reglas de la base de datos no estén'
+      + ' publicadas. Si es lo segundo, el perfil aparecerá en cuanto su juego guarde.'
+    : 'En cuanto su juego guarde una vez, aquí habrá su ficha con su colección y sus'
+      + ' números.';
+  return `
+    <div class="flex flex-col items-center gap-3 py-8 text-center">
+      <span class="text-[var(--text-muted)]">${ic('user', 'w-8 h-8')}</span>
+      <div class="text-xs text-[var(--text-main)]">${esc(nombre)} — ${titulo}</div>
+      <div class="text-xs text-[var(--text-muted)] leading-relaxed">${texto}</div>
+    </div>`;
+}
+
+
+/**
+ * LA MARCA DE "PUESTO", Y POR QUÉ ES UNA PALABRA Y NO UN ICONO.
+ *
+ * Un icono se lee como decoración y una palabra no. Aquí lo que se dice es "este es el que
+ * tienes puesto", y eso es **una diferencia entre dos objetos de la misma lista** —que es
+ * información, no adorno—. Con un icono el jugador tiene que adivinar qué significa y
+ * cuáles de los cinco hay en esa pantalla.
+ *
+ * Y sale en la fila **y en el subtítulo**, con la cuenta: "6 · 1 puesto" es mejor que
+ * tener que contar a mano cuántos hay marcados.
+ */
+function marcaDeEquipado(equipado?: boolean): string {
+  if (!equipado) return '';
+  return `<span class="text-[9px] font-mono uppercase tracking-wider accent-bg
+                 text-slate-950 rounded px-1 py-0.5 flex-shrink-0">PUESTO</span>`;
+}
+
+/** El "(1 puesto)" del subtítulo, o nada si no hay ninguno. */
+function equipadosDe<T extends { equipado?: boolean }>(lista: T[]): string {
+  const n = lista.filter(x => x.equipado).length;
+  return n === 0 ? '' : ` · ${n} puesto${n > 1 ? 's' : ''}`;
+}
+
+
+/**
+ * LA FECHA DE LA FICHA, Y POR QUÉ NO SALE UN NÚMERO DEL JUEGO.
+ *
+ * Estaba con `formatNumber()`, que es el formato de las cifras del juego: "1.750 T" es
+ * un millón y medio de nanitas, y puesto junto a un contador de visitas parece un dato de
+ * juego donde lo que se quiere decir es "hace dos días". Aquí se dice lo segundo.
+ */
+function fechaDeTarjeta(cuando: number): string {
+  if (!cuando) return 'sin fecha';
+  const dias = Math.floor((Date.now() - cuando) / 86_400_000);
+  if (dias <= 0) return 'actualizado hoy';
+  if (dias === 1) return 'actualizado ayer';
+  if (dias < 30) return `actualizado hace ${dias} días`;
+  return 'actualizado hace más de un mes';
+}
+
 
 function seccion(titulo: string, icono: IconName, bloques: string[]): string {
   const conAlgo = bloques.filter(b => b.trim().length > 0);

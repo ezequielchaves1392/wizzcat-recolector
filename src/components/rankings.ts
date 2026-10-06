@@ -33,6 +33,7 @@ import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from '../ui/identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
 import { abreTarjetaDe } from '../ui/tarjetaAjena';
+import type { DatosDeRanking } from '../data/perfilParcial';
 import { esc } from '../utils/esc';
 
 /**
@@ -56,6 +57,16 @@ let tableroActivo: BoardKind = 'definitivo';
  * filas que ya no están y el mapa crecería sin que nada lo limpiese.
  */
 const nombreDeFila = new Map<string, string>();
+
+/**
+ * Lo que el ranking sabe de cada fila, por uid, para la ficha de perfil.
+ *
+ * **ES OTRO MAPA Y NO UN `data-` PORQUE EL DATO ES UN NÚMERO, Y LOS NÚMEROS EN ATRIBUTOS
+ * SON CADENAS.** `score` arrives a `getAttribute` como texto y hay que volver a
+ * convertirlo, con el riesgo de que se convierta mal. Además, el mapa se rellena
+ * mientras se pinta la fila, que es el mismo sitio donde ya se guarda el nombre.
+ */
+const datosDeFila = new Map<string, DatosDeRanking>();
 
 
 export function renderRankings(
@@ -119,6 +130,7 @@ export function renderRankings(
       // Se vacía DESPUÉS de decidir la lista y ANTES de pintar, porque es `fila()` quien
       // lo rellena.
       nombreDeFila.clear();
+      datosDeFila.clear();
 
       body.innerHTML = `
         ${pestanas()}
@@ -183,7 +195,7 @@ function cablearFilas(body: HTMLElement): void {
     if (!fila) return;
     const uid = fila.getAttribute('data-ver');
     if (!uid) return;
-    abreTarjetaDe(uid, nombreDeFila.get(uid) ?? 'Operativo');
+    abreTarjetaDe(uid, nombreDeFila.get(uid) ?? 'Operativo', undefined, datosDeFila.get(uid));
   });
 }
 
@@ -207,6 +219,23 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
   // escribe el guardado actual; `cosmetics` queda como lectura de reserva.
   const frameId = r.frame ?? r.cosmetics?.frame;
   const bannerId = r.banner ?? r.cosmetics?.banner;
+
+  // El resto de lo que la fila ya sabe. **CAMPOS ESCRITOS UNO A UNO**, igual que el
+  // tipo: si esto aceptara la fila entera, añadir un campo a la clasificación
+  // publicaría un dato nuevo sin que nadie lo decidiera.
+  if (r.uid) datosDeFila.set(r.uid, {
+    uid: r.uid,
+    username: r.username ?? 'Operativo',
+    score: r.score ?? 0,
+    totalClicks: r.totalClicks ?? 0,
+    achievements: r.achievements ?? 0,
+    secretAchievements: r.secretAchievements ?? 0,
+    forgedCount: r.forgedCount ?? 0,
+    cores: r.cores ?? 0,
+    title: r.title,
+    frame: frameId,
+    banner: bannerId
+  });
   const valor = boardValue(r, kind);
   const unidades = unidadesDe(kind);
 

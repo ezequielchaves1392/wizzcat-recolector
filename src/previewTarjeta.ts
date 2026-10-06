@@ -31,7 +31,7 @@ const TARJETA_DE_EJEMPLO = {
   cajasAbiertas: 1402,
   forjadas: 87,
   recolectores: [
-    { id: 'a', name: 'Espuela de Confín', tier: 9, level: 14, maxLevel: 29, potential: 5, rarity: 'Divino' },
+    { id: 'a', name: 'Espuela de Confín', tier: 9, level: 14, maxLevel: 29, potential: 5, rarity: 'Divino', equipado: true },
     { id: 'b', name: 'Coloso de Batalla', tier: 8, level: 22, maxLevel: 29, potential: 4, rarity: 'Legendario' },
     { id: 'c', name: 'Reloj de Arena Roto', tier: 8, level: 9, maxLevel: 29, potential: 3, rarity: 'Legendario' },
     { id: 'd', name: 'Yunque de Rifar', tier: 7, level: 27, maxLevel: 29, potential: 5, rarity: 'Épico' },
@@ -39,8 +39,8 @@ const TARJETA_DE_EJEMPLO = {
     { id: 'f', name: 'Chispa menor', tier: 1, level: 0, maxLevel: 9, potential: 1, rarity: 'Común' }
   ],
   companeros: [
-    { id: 'p', name: 'Vigía', tier: 6, power: 42, rarity: 'Legendario' },
-    { id: 'q', name: 'Bruto', tier: 4, power: 18, rarity: 'Épico' }
+    { id: 'p', name: 'Vigía', tier: 6, power: 42, rarity: 'Legendario', equipado: true },
+    { id: 'q', name: 'Bruto', tier: 4, power: 18, rarity: 'Épico', equipado: true }
   ],
   nodosComprados: 7,
   nodosTotales: 24,
@@ -51,7 +51,7 @@ const TARJETA_DE_EJEMPLO = {
     { id: 'scrapyard', name: 'Chatarrería', nivel: 7, maxLevel: 10, categoria: 'economia' },
     { id: 'forge_luck', name: 'Instinto de Forja', nivel: 6, maxLevel: 10, categoria: 'crafteo' }
   ],
-  logros: ['first_click', 'first_crate', 'first_forge', 'ten_ascensions', 'full_tier5'],
+  logros: ['first_click', 'collector_10', 'first_forge', 'ascendant', 'jackpot', 'tycoon'],
   totalLogros: 34,
   cosmetics: { title: 'Forjador de Influjos', frame: 'frame_neon', banner: 'banner_pulse' },
   visitas: 12,

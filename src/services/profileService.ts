@@ -57,14 +57,33 @@ export function refDeTarjeta(uid: string) {
  * `null`. Un perfil que no se puede leer tiene que parecer "no hay nada", no "está
  * vacío": son dos cosas distintas y el jugador las distingue enseguida.
  */
-export async function leerTarjeta(uid: string): Promise<TarjetaPublica | null> {
+/**
+ * POR QUÉ `leerTarjeta` DEVUELVE UN MOTIVO Y NO UN `NULL`.
+ *
+ * Antes devolvía `null` para las dos cosas que pueden pasar, y son distintas:
+ *
+ *  · **`no-existe`**: el documento no está. El jugador no ha publicado tarjeta.
+ *    La pantalla puede enseñar **lo que el ranking ya sabe de él** y decir que su
+ *    colección no está publicada.
+ *  · **`error`**: no se ha podido leer. Las reglas sin publicar, la cuota agotada, un
+ *    corte de red. Aquí no hay nada que enseñar y hay que decirlo, porque el jugador
+ *    tiene que distinguir "este jugador no enseña nada" de "el juego está roto".
+ *
+ * Con un `null` para los dos, un jugador con las reglas sin Teach publica se veía
+ * exactamente igual que uno que no ha jugado nunca, y el primero es un problema mío.
+ */
+export type LecturaDeTarjeta =
+  | { ok: true; tarjeta: TarjetaPublica }
+  | { ok: false; motivo: 'no-existe' | 'error' };
+
+export async function leerTarjeta(uid: string): Promise<LecturaDeTarjeta> {
   try {
     const snap = await getDoc(refDeTarjeta(uid));
-    if (!snap.exists()) return null;
-    return coaccionaTarjeta(snap.data(), uid);
+    if (!snap.exists()) return { ok: false, motivo: 'no-existe' };
+    return { ok: true, tarjeta: coaccionaTarjeta(snap.data(), uid) };
   } catch (e) {
     console.warn('[perfil] No se ha podido leer la tarjeta.', e);
-    return null;
+    return { ok: false, motivo: 'error' };
   }
 }
 
@@ -116,8 +135,13 @@ export async function registrarVisita(perfilUid: string, visitanteUid: string): 
 
   // La tarjeta **ya está leída** cuando se pinta, que es quien llama, así que volver a
   // leerla para no perder la cuenta no cuesta una red de más.
-  const tarjeta = await leerTarjeta(perfilUid);
-  if (!tarjeta) return;
+  const lectura = await leerTarjeta(perfilUid);
+  // **SI NO HAY TARJETA NO SE ESCRIBE NADA.** Escribir crearía un documento con solo el
+  // contador, que es lo peor que puede hacer esta función: un perfil vacío con visitas
+  // contadas que parece un perfil de verdad. Mirar a alguien que no publica tarjeta no es
+  // una visita a su perfil, porque su perfil no existe.
+  if (!lectura.ok) return;
+  const tarjeta = lectura.tarjeta;
 
   // **UNA PERSONA CUENTA UNA VEZ.** Mirar el mismo perfil tres veces es una visita, no
   // tres: el contador que interesa es "cuánta gente ha mirado", no "cuántas veces se ha
