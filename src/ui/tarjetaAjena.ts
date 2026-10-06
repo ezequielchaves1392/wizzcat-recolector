@@ -292,6 +292,13 @@ function cifrasDeTarjeta(t: TarjetaPublica): string {
     cifras.push(['Ascensiones', t.resets, 'text-emerald-400']);
   }
   cifras.push(['Forjadas', t.forjadas, 'text-rose-400']);
+  // **LAS VISITAS SUBEN A CIFRA GRANDE, Y POR QUÉ.** Eran una línea de texto de 10 px en el
+  // pie, debajo de todo, al lado de la fecha. Es el único dato de la ficha que describe a
+  // la OTRA persona mirándola y no al dueño: es el número que hace que entrar valga algo, y
+  // estaba en el sitio donde no se ve. Arriba, con las otras cifras, se lee.
+  if (!parcial) {
+    cifras.push(['Visitas', Number(t.visitas) || 0, 'text-cyan-300']);
+  }
   // **LAS CIFRAS SE ABREN A CUATRO COLUMNAS EN PANTALLA ANCHA.** A dos, en una caja de 420 px,
   // cada cifra sale estrecha y la más larga —"Nanitas producidas"— se parte. En el escritorio
   // caben todas en una fila y de un vistazo, que es lo que se viene a mirar.
@@ -325,7 +332,7 @@ function bloqueDeRecolectores(t: TarjetaPublica): string {
       ${t.recolectores.map(r => `
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">
           ${fichaDeRecolector(r, {
-            etiqueta: 'Daño',
+            etiqueta: 'Recolección por click',
             valor: Number(r.damage) > 0 ? `+${formatNumber(Number(r.damage))}` : '--',
             title: 'Daño por clic, con el potencial ya aplicado'
           })}
@@ -421,7 +428,11 @@ function pieDeTarjeta(t: TarjetaPublica): string {
   if (t.completa === false) {
     return `<div class="pt-1 border-t border-[var(--border-color)]"></div>`;
   }
-  const visitas = t.visitantes.length;
+  // **EL NÚMERO VIENE DEL CONTADOR, NO DE LA LISTA.** Antes salía de
+// `t.visitantes.length`, y esa lista es la de visitantes **únicos** con un tope de 50: a
+// partir del 51 el pie se quedaba en "Te han mirado 50 personas" para siempre, que
+// es un contador que deja de contar. El contador es `t.visitas`, que es lo que crece.
+const visitas = Number(t.visitas) || 0;
   const texto = visitas === 0
     ? 'Todavía no te ha mirado nadie'
     : visitas === 1
