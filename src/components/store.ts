@@ -87,7 +87,7 @@ const CATEGORIES: Category[] = [
   // lista: la categoría ya no puede nombrarlos porque no existen, y
   // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
   // `undefined` al pintar.
-  { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card', 'clickX3Card'] },
+  { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card'] },
   { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
   // Los expansores que se venden salen de `EXPANSOR_TIERS`, no de una lista escrita.
   // Con diez expansores y cuatro a la venta, escribirlos aquí era otro sitio donde
@@ -315,18 +315,27 @@ function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; 
   // acordarse de los tres sitios; con la tabla es una fila.
   const ranura = RANURA_POR_CARTA[itemKey];
   if (ranura && effSlots >= ranura.da) return { disabled: true, reason: 'Comprado' };
-  // F27 · Si el tipo ya no sirve para tu capacidad, la tarjeta lo dice antes de
-  // cobrar: el rechazo lo hará `useConsumable` al usarlo, y pagar por algo que
-  // no se puede usar es el bug que R3 prohíbe. El techo sale de la tabla.
+  // **UN EXPANSOR AL MÁXIMO SE COMPRA IGUAL, Y LO QUE NO SE PUEDE ES USARLO.**
+  //
+  // Antes la tarjeta se apagaba con "Pide T{n+1}" y el expansor se salía del catálogo sin
+  // explicación: el jugador veía una cosa que no podía comprar y no había forma de saber si
+  // era un tope, un error o que le faltaba algo.
+  //
+  // Ahora **se compra siempre** —el techo lo rechaza `useConsumable` al usarlo, que es donde
+  // está el número de verdad— y **el botón sigue enseñando el precio**, como los demás. El
+  // aviso de que no va a hacer nada va en la descripción de la tarjeta, no en el botón: el
+  // botón es el precio, y taparlo para poner una frase larga es peor que no avisar.
   const expansor = EXPANSOR_TIERS.find(t => `expansorT${t.tier}` === itemKey);
-  if (expansor && state.warehouseCapacity >= expansor.maxCap) {
-    return { disabled: true, reason: `Pide T${expansor.tier + 1}` };
-  }
+  void expansor;
   // "¿Cabe esta compra?" lo contesta el game loop, que es quien cobra. Preguntar
   // aquí solo por el fullness del almacén apagaba el botón de una caja que sí
   // cabía en la pila de cajas que ya había, y al revés: dejaba encendido lo
   // que `buyStoreItem` iba a rechazar. Una ranura es una pila, no una unidad.
   if (game.canBuyStoreItem?.(itemKey) === false) return { disabled: true, reason: 'Almacén lleno' };
+  // **EL BOTÓN NO LLEVA NADA DE ESTO.** Lleva el precio, como los demás, y el motivo de que
+  // un expansor al máximo no haga nada va en la descripción de arriba. Ponerlo en el botón
+  // —que es donde está el precio— es taparle el precio al jugador para darle una frase que
+  // ya tiene justo encima.
   return { disabled: false, reason: null };
 }
 
@@ -360,7 +369,18 @@ export function renderStoreTab(
     let note = '';
     const expansorNota = EXPANSOR_TIERS.find(t => `expansorT${t.tier}` === itemKey);
     if (expansorNota) {
-      note = `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
+      // **Y SI YA NO HACE FALTA, SE DICE AQUÍ Y NO EN EL BOTÓN.** El botón lleva el precio y
+      // sigue encendido —se compra siempre—, así que el aviso va en la descripción, que es
+      // donde se lee antes de decidir. Ponerlo en el botón es taparle el precio.
+      const tope = state.warehouseCapacity >= expansorNota.maxCap;
+      // **TEXTO PLANO, SIN NADA DE MARCA.** Aquí no se pone `**`: esta nota se pinta con
+      // textContent y un asterisco sale tal cual, que es lo que pasaba — se leía "**Ya no hace
+      // nada**" con los dos asteriscos dentro—. Las negritas de verdad usan <strong>.
+      note = tope
+        ? `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}. `
+          + `Ya no hace nada: se puede comprar, pero para que sirva habría que ampliar `
+          + `hasta el Expansor T${expansorNota.tier + 1}, y hasta entonces no se usa.`
+        : `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
     } else if (itemKey === 'afkCard') {
       note = `${Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000)} min cada una · acumulable ×3`;
     } else if (itemKey === 'upgradeCrystal') {

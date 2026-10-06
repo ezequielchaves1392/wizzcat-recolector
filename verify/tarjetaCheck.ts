@@ -49,20 +49,29 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
-  //  2. LAS TRES TARJETAS SIGUEN ESTANDO.
+  //  2. LAS TARJETAS SIGUEN EXISTIENDO, Y LA DE x3 SOLO DE CAJA.
   //
   //     Quitar buffs y quitar tarjetas es distinto, y lo que se pidió es lo
   //     segundo: las tarjetas se acumulan, se pueden cancelar desde el HUD y
   //     duran lo justo. Este bloque está para que nadie lea "salir los buffs
   //     pasivos" como "vaciar la categoría".
+  //
+  //     **LA DE x3 HA SALIDO DE LA TIENDA Y SIGUE SIENDO UN CONSUMIBLE.** No es que se
+  //     haya borrado: se compra mal —cuesta tres veces más que la de x2 y dura lo mismo—,
+  //     así que su única vía es la caja. Sigue en `CONSUMABLES` porque `useConsumable` la
+  //     acepta, y por eso la tarjeta que la da la puede usar el jugador.
   // -----------------------------------------------------------------------
   {
-    for (const id of ['afkCard', 'clickX2Card', 'clickX3Card']) {
+    for (const id of ['afkCard', 'clickX2Card']) {
       check(`tarjetas: ${id} sigue en la tienda`,
         (STORE_ITEMS as any)[id] !== undefined, id);
+    }
+    for (const id of ['afkCard', 'clickX2Card', 'clickX3Card']) {
       check(`tarjetas: ${id} sigue siendo un consumible`,
         (CONSUMABLES as any)[id] !== undefined, id);
     }
+    check('tarjetas: la de x3 no se vende, solo sale de caja',
+      (STORE_ITEMS as any)['clickX3Card'] === undefined, 'clickX3Card fuera');
   }
 
   // -----------------------------------------------------------------------

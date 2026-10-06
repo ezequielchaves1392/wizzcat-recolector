@@ -632,7 +632,17 @@ export const STORE_ITEMS = {
   // motivo de por qué están mal y las tarjetas están bien está en `CONSUMABLES`.
   afkCard: { cost: 10000, label: 'Tarjeta AFK Básica (10 min, acumulable x3)' },
   clickX2Card: { cost: 5000, durationMs: 30000, label: 'Tarjeta Click x2 (30s)' },
-  clickX3Card: { cost: 15000, durationMs: 30000, label: 'Tarjeta Click x3 (30s)' },
+  // **LA TARJETA DE x3 NO SE VENDE, Y ESTO ES DECISIÓN DEL DUEÑO, NO UN OLVIDO.**
+  //
+  // Antes estaba aquí con su precio, al lado de la de x2. Se ha sacado del catálogo a
+  // propósito: la de x3 vale tres veces más que la de x2 y dura lo mismo —medio minuto—, así
+  // que comprarla es siempre la mala compra y la tienda estaba vendiendo un error con un
+  // botón. Sigue saliendo de cajas, con poca probabilidad, y `useConsumable` la acepta igual
+  // si llega al almacén por ahí.
+  //
+  // **NO ES "COMPRAR Y GUARDAR PARA DESPUÉS".** Una tarjeta es un consumible que se usa
+  // entendiendo el estado que hay en ese momento; comprar una para dentro de tres horas es
+  // comprar algo cuyo valor no sabes.
   // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
   // una decisión, no algo que se compre en masa y se gaste sin pensar.
   calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },

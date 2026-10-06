@@ -1113,6 +1113,39 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     }
   });
 
+  if (tier >= 3) {
+    // **LA TARJETA DE CLICK x3, Y POR QUÉ AQUÍ Y CON PESO 2.**
+    //
+    // Ha estado en la tienda y solo en la tienda. Se ha sacado de allí —cuesta tres veces
+    // más que la de x2 y dura lo mismo, así que comprarla era siempre la mala compra— y su
+    // única vía es la caja. **Es lo que el dueño pidió y también lo que encaja:** un
+    // consumible que se compra se usa en un momento que el jugador elige, y una tarjeta de
+    // medio minuto comprada para "guardarla" vale lo que valga cuando se use.
+    //
+    // **PESO 2, Y POR QUÉ TAN POCO.** Compite contra un recolector de 58 y un compañero de
+    // 62, así que sale de vez en cuando, no de cada tres cajas. Es un golpe de suerte, no una
+    // fuente con la que contar. Y sale **a partir de la T3**: en la T1 y la T2 no hay ningún
+    // arma de valor contra la que competir y un "sucesor" al que encadenarse, así que
+    // meterla ahí solo haría que la caja peor diese más.
+    tabla.push({
+      id: 'clickX3Card', weight: 2,
+      pesoComo: rareza,
+      build: () => {
+        const def = CONSUMABLES.clickX3Card;
+        return {
+          kind: 'consumable', amount: 1, name: def.name, label: def.name, details: def.details,
+          rarity: def.rarity, icon: 'bolt',
+          item: {
+            id: `clickx3_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            name: def.name, type: 'consumable', details: def.details, rarity: def.rarity,
+            buffId: def.buffId, stackable: true, stackCount: 1,
+            sellPrice: 2500, sellPriceTope: tope
+          }
+        };
+      }
+    });
+  }
+
   if (!esUltima) {
     // LA CAJA SIGUIENTE. Esta entrada es la cadena de F31 entera: sin ella, la
     // T2 no llega a la T3 y el jugador se queda en la T10 sin poder. Y no sale de
