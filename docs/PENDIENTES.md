@@ -1273,14 +1273,15 @@ versiones.**
       tenía 104 en vez de 160. **La prueba pasaba por suerte según cuánto tardara el bucle.**
       Ahora vuelca y espera antes de recargar. _Salió porque subí el daño del Blaser de
       partida de 5 a 8: no la rompió G4, la destapó G4.
-- [ ] **Cada arranque programa un guardado que no hacía falta** _(salió de lo anterior)_.
-      `if (user && hayPendientes(uid)) setTimeout(saveToFirebase, 1200)` se comprueba
-      **después** del guardado de carga, y ese guardado acaba de anotar la cola. Así que
-      la condición **es cierta siempre**: cada carga de página dispara una escritura a
-      Firestore 1,2 s después de abrir, para guardar lo mismo que ya está guardado. No
-      rompe nada —es idempotente— pero es tráfico de sobra, y **es lo que se coló en el
-      bucle de clicks**. La condición parece querer decir "quedó algo de la sesión
-      anterior"; hay que mirarla antes de tocar `naniteQueue`.
+- [x] **Cada arranque programa un guardado que no hacía falta** _(salió de lo anterior)_.
+      La pregunta se hace **antes de cargar**, en `habiaColaAlArrancar`, y el `setTimeout`
+      usa ese valor ya copiado. Antes se comprobaba `hayPendientes(uid)` junto al
+      `setTimeout`, o sea después del guardado de carga, que ya había anotado su propia
+      entrada: la condición **era cierta siempre** y cada carga de página disparaba una
+      escritura a Firestore 1,2 s después de abrir para guardar lo que ya estaba guardado.
+      No rompía nada —es idempotente— pero era tráfico de sobra, y era lo que se colaba en
+      el bucle de clicks. **La casilla se quedó abierta porque el arreglo ya estaba y nadie
+      volvió a esta lista.**
 
 ### G4 · Balance · ESTA MIGRACIÓN SUBE EL DAÑO DE LAS PARTIDAS VIEJAS
 
@@ -1406,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **30 bancos, 1865**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2053**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
