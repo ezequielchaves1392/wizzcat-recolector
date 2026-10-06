@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2087**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **33 bancos, 2114**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -2561,3 +2561,38 @@ _Cosas que estorban al trabajo más que al juego._
   con decenas de cambios, `preview.html` se quedó con `#app` vacío sin ningún error en
   el log. Reiniciarlo lo arregló. Cuando el preview "no pinta", reiniciar el servidor
   antes de culpar al código: se pierde mucho tiempo buscando un fallo que no existe.
+### La mitad del brillo que falta: pintar el efecto en las tres pantallas
+
+- **Hecho: el numero.** `src/data/brillo.ts` calcula un entero del 0 al 4 a partir del
+  potencial, del nivel y del tope que pone la rareza, con `tieneEfectoPropio()` para el
+  efecto propio y `etiquetaDeBrillo()` para el texto. 27 pruebas en `brilloCheck`, que es
+  el banco 33. Es dato puro, sin una clase de Tailwind: la vista decide el aspecto.
+- **Pendiente: el efecto.** Tres sitios, y los tres tienen que salir del mismo numero:
+  el icono del almacen, la descripcion en la base y la tarjeta del ranking. Nada de esto
+  esta escrito todavia.
+- **Lo que hay que decidir antes de escribirlo, y son tres cosas:**
+  - Que aspecto tiene cada escalon. Con CSS puro son cuatro anillos concéntricos con
+    distinta intensidad y un pulso; con una imagen, cuatro sprites. Los sprites se ven
+    mejor y cuestan un fichero por escalon mas las medidas para el movil.
+  - Si el brillo se ve **tambien sin tocar nada**, o solo como adorno de fondo detras del
+    icono. Lo segundo es mas discreto y no compite con el texto de la celda, que es lo
+    que mas falta hace en una rejilla de 390.
+  - Si el efecto propio es solo un escalon mas o algo reconocible de verdad —una sola
+    partícula, un destello— porque si es "un poco mas de brillo" el tope no se nota y el
+    jugador no lo persigue.
+
+### Un fallo que solo apareció porque el banco miraba lo que no era un item
+
+- `techoDeNivel()` devolvía el techo del recolector para **todo lo que no fuera compañero**,
+  así que un material de forja con un `level` de 99 (lo que deja un guardado viejo)
+  quedaba por encima del techo y se llevaba los dos puntos. **Un material podia llevar el
+  efecto propio.**
+- Lo corrigió el banco, no el ojo: la prueba de "un material no lleva nunca el efecto
+  propio" falló con un 4 en la mano, y el arreglo es de una línea (`return 0` para lo que
+  no es recolector ni compañero). **Lo que no tiene nivel no puede estar al tope de
+  él**, que es la frase que hay que dejar escrita para el siguiente.
+- **Y un aviso sobre el banco de reglas puras.** Las pruebas del nivel y del potencial
+  mideban con un Raro, que topa en 2: con el tope puesto, medir el nivel no se ve nada y
+  la prueba daba verde **con la regla rota**. Ahora usan un Divino, y el comentario explica
+  por qué. Un tope de rareza en medio de la regla es una tapadera, y se descubre solo
+  cuando alguien escribe la prueba y se pregunta por qué no se mueve.

@@ -23,6 +23,7 @@ for (const banco of [
   'filterCheck',
   'stackCheck',
   'potencialCheck',
+  'brilloCheck',
   'loteCheck',
   'consumableCheck',
   'stateCheck',
