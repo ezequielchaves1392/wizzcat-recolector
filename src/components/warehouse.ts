@@ -96,6 +96,7 @@ const FILTROS = [
   { id: 'all', label: 'Todo' },
   { id: 'collector', label: 'Recolectores' },
   { id: 'companion', label: 'Compañeros' },
+  { id: 'crate', label: 'Cajas' },
   { id: 'otros', label: 'Otros' }
 ];
 
@@ -1868,8 +1869,19 @@ export function matchesSearch(w: any, terminos: string[]): boolean {
 
 /** ¿El item pasa el filtro activo de la rejilla *y* la búsqueda activa? */
 export function matchesFilter(w: any, filtro: string): boolean {
-  if (filtro === 'otros' && !['collector', 'companion'].includes(w.type)) return true;
-  if (filtro === 'collector' || filtro === 'companion') return w.type === filtro;
+  // **`otros` ES "TODO LO QUE NO SON LAS DOS COSAS GRANDES", NO "LO QUE SOBRA".** Con el
+  // filtro de cajas fuera, cajas, llaves, cristales y consumibles caen los cinco aquí, y
+  // un jugador buscando las cajas para abrirlas tenía que abrirlas todas una a una para
+  // reconocerlas. Con `crate` añadido a la lista de las dos cosas grandes, `otros` se
+  // queda con llaves, cristales y consumibles, que es lo que se leía como "lo demás".
+  //
+  // **LA LISTA DE LAS DOS ESTÁ ESCRITA AQUÍ Y EN `FILTROS`, Y TIENE QUE SEGUIR SIENDO LA
+  // MISMA.** Es la clase de pareja que se separa: si `matchesFilter()` gana un filtro y
+  // `FILTROS` no lo enseña, el botón existe y no hace nada; y al revés sale un botón que
+  // filtra por algo que no está en la regla. El banco de filtros fija las dos mitades.
+  const GRANDES = ['collector', 'companion', 'crate'];
+  if (filtro === 'otros' && !GRANDES.includes(w.type)) return true;
+  if (filtro === 'collector' || filtro === 'companion' || filtro === 'crate') return w.type === filtro;
   return filtro === 'all';
 }
 

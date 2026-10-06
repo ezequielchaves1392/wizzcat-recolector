@@ -406,6 +406,30 @@ export function settingsSheetHTML(): string {
             </span>
           </span>
         </label>
+        <!--
+          VER LAS NOTAS AHORA, Y POR QUÉ ESTÁ DEBAJO DE SU PROPIA CASILLA.
+
+          La casilla de arriba apaga el cartel **al entrar**. Sin este botón, apagar las
+          notas era una puerta de un solo sentido: no volvían a verse nunca, ni aunque
+          quisieras leerlas. Y con el cartel puesto solo se leen una vez por versión, que
+          es justo lo contrario de cuando se buscan.
+
+          El botón no pide permiso ni a la preferencia ni a la lista de vistas: quien lo
+          pulsa quiere leerlas, y ahí no hay nada que decidir. **Va debajo de la casilla
+          y no antes** porque la casilla explica el cartel y el botón es su alternativa:
+          leerlos de uno en dos.
+        -->
+        <button data-ver-notas
+                class="min-h-[44px] rounded-lg btn-ghost px-3 flex items-center gap-2
+                       cursor-pointer transition active:scale-[0.99] w-full">
+          <span class="[&>span>svg]:w-4 [&>span>svg]:h-4 flex-shrink-0">${ic('scroll')}</span>
+          <span class="text-left min-w-0">
+            <span class="block text-[12px] font-bold text-[var(--text-main)]">Ver las notas</span>
+            <span class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5 leading-relaxed">
+              Las de todas las versiones, ahora mismo.
+            </span>
+          </span>
+        </button>
 
         <div>
           <div class="label-caps mb-2">Tema visual</div>

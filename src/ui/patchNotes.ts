@@ -48,6 +48,28 @@ export function debeMostrarNotas(): { mostrar: boolean; motivo: string } {
 export function showPatchNotes(): boolean {
   if (!debeMostrarNotas().mostrar) return false;
   setNotasVistas(VERSION);
+  return montarNotas();
+}
+
+/**
+ * Las notas, siempre, sin preguntar nada.
+ *
+ * **ESTO ES SEPARADO DE `showPatchNotes()` A PROPÓSITO, Y LA SEPARACIÓN TIENE SENTIDO.**
+ * El cartel al entrar tiene tres condiciones —hay nota, la preferencia está puesta y no se
+ * ha visto todavía— y está bien que las tenga: si no, sale en cada recarga.
+ *
+ * El botón de Ajustes es otra cosa: es el jugador **preguntando**. Si al botón le colgaran
+ * las tres condiciones,passaría una de dos cosas: aparecería "Notas de parche" y no
+ * haría nada si ya las habías visto, que es justo cuando se va a buscarlas; o habría que
+ * quitarle el gate al cartel y entonces reaparece en cada recarga. **Ninguna de las dos
+ * es un botón.**
+ *
+ * Y tampoco marca la versión como vista: quien las lee a pedido ya las ha visto, y quien
+ * las había saltado porque no le interesan no debe encontrárselas marcadas solo por
+ * haber abierto el botón una vez.
+ */
+export function montarNotas(): boolean {
+  if (!notaDeEstaVersion()) return false;
 
   const overlay = document.createElement('div');
   overlay.className = 'fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-4 app-bg';

@@ -105,7 +105,7 @@ export function renderPanel(
 
           <div class="flex items-baseline justify-between gap-2 mt-1.5 pt-1.5
                       border-t border-[var(--border-color)]">
-            <span class="text-[9px] font-mono accent-text font-bold">Daño por click</span>
+            <span class="text-[9px] font-mono accent-text font-bold">Total por click</span>
             <span class="text-[10px] font-mono font-bold tabular accent-text">
               +${formatNumber(partes.total)}
             </span>
@@ -113,28 +113,33 @@ export function renderPanel(
         </div>
       ` : "";
 
-      // **LAS DOS PARTES, DEL MISMO TAMAÑO.** Se probó primero con la segunda más pequeña y más
-      // apagada, pensando que "lo que da mi recolector" y "lo que da mi partida" no son la
-      // misma cifra, y es al revés: **la segunda parte es parte del daño que pega el clic**.
-      // Achicarlaroduce el número más grande de la pantalla a cambio de una distinción que
-      // la lista de abajo ya explica mejor, con los dos grupos separados y etiquetados.
+      // **UN SOLO NÚMERO GRANDE, Y EL DESGLOSE AL POSARSE.**
       //
-      // Lo que sí separa las dos es el **signo**: "+942 +889" se lee como una suma, y es
-      // lo que hace el jugador cuando quiere las dos por separado —cambiar de arma o bajar
-      // un buff— las lee restando. El signo del medio va atenuado para que se entienda que
-      // separa y no suma; las cifras van las dos en accent-text y en el mismo cuerpo.
+      // Antes eran dos cifras en la misma línea, "+306 +13", con el signo del medio
+      // atenuado. Se pidió un número grande, y la razón de ser de esa forma era que el
+      // jugador lee "+306 +13" restando, que es lo que hace cuando quiere saber cuánto
+      // es de su recolector y cuánto de los buffs. **Eso no se pierde: se va al
+      // `title`.** El desglose completo sigue estando debajo, en "De dónde sale el daño",
+      // con los dos grupos separados y etiquetados — o sea que la cuenta estaba escrita
+      // dos veces en la misma pantalla.
+      const danoTotal = intrinseco + deLaPartida;
+      const desgloseEnElTitle = deLaPartida > 0
+        ? `Del recolector +${formatNumber(intrinseco)}, más las bonificaciones de la partida +${formatNumber(deLaPartida)}.`
+        : 'Lo que da el recolector. No hay ninguna bonificación de partida puesta.';
       const danoHTML = `
-        <div class="flex items-baseline justify-end leading-none"
-             title="Lo que da el recolector, más las bonificaciones de la partida">
+        <div class="flex items-baseline justify-end leading-none">
           <span class="font-['Orbitron'] font-bold text-2xl md:text-3xl"
-                style="color: var(--accent)">+${formatNumber(intrinseco)}${deLaPartida > 0
-        ? `<span class="opacity-55 px-0.5">+</span>${formatNumber(deLaPartida)}`
-        : ''}</span>
+                style="color: var(--accent)">+${formatNumber(danoTotal)}</span>
         </div>`;
       collectorContainer.innerHTML = fichaDeRecolector(equippedItem, {
-        etiqueta: 'Daño',
+        // **"DAÑO" ERA LA ETIQUETA QUE NO ENCAJABA CON NADA.** En la ficha de un
+        // recolector, "Daño" era la palabra del interno del juego: en pantalla lo que
+        // pega el clic son nanitas, y la misma pantalla llama "Ingreso por click" al
+        // número del HUD. Dos nombres para lo mismo, y el que no cuadraba era el de la
+        // ficha, que es la que se lee.
+        etiqueta: 'Recolección por click',
         valor: danoHTML,
-        title: 'Lo que da el recolector, más las bonificaciones de la partida'
+        title: desgloseEnElTitle
       }) + bonosHTML;
     } else {
       collectorContainer.innerHTML = `

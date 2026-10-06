@@ -57,17 +57,31 @@ async function main() {
       celdas(g, 'collector').join(',') === 'r1,r2', celdas(g, 'collector').join(','));
     check('filtro Companeros: solo companeros',
       celdas(g, 'companion').join(',') === 'm1', celdas(g, 'companion').join(','));
-    check('filtro Otros: ni recolectores ni companeros',
-      celdas(g, 'otros').join(',') === 'c1,u1,u2', celdas(g, 'otros').join(','));
+    check('filtro Cajas: solo cajas',
+      celdas(g, 'crate').join(',') === 'c1', celdas(g, 'crate').join(','));
 
-    // Los filtros se PARTEN la rejilla: nada puede estar en dos y nada se
-    // puede perder. Si se pierde un item al filtrar, el jugador cree que ha
-    // desaparecido del juego.
-    const otros = new Set(celdas(g, 'collector').concat(celdas(g, 'companion')));
+    // **"OTROS" ES LO QUE NO SON LAS TRES COSAS GRANDES, Y ANTES ERA LO QUE NO ERAN
+    // DOS.** Al añadir el filtro de cajas, `otros` dejó de sacar las cajas y se quedó con
+    // llaves, cristales y consumibles. Esta prueba lo dice en voz alta porque es
+    // exactamente el punto que se puede separar sin que nadie lo note: un filtro que
+    // cambia de contenido sin que cambie su nombre.
+    check('filtro Otros: ni recolectores, ni companeros, ni cajas',
+      celdas(g, 'otros').join(',') === 'u1,u2', celdas(g, 'otros').join(','));
+
+    // **Y LOS CUATRO FILTROS SE PARTEN LA REJILLA.** Nada puede estar en dos y nada se
+    // puede perder: si se pierde un item al filtrar, el jugador cree que ha desaparecido
+    // del juego. Antes esta cuenta estaba mal escrita —sumaba solo dos de los tres
+    // filtros— y daba verde con `cajas` sin filtro.
+    const grandes = new Set(
+      celdas(g, 'collector').concat(celdas(g, 'companion'), celdas(g, 'crate')));
     const todo = new Set(celdas(g, 'all'));
-    check('filtro: Recolectores + Companeros + Otros = Todo',
-      otros.size + celdas(g, 'otros').length === todo.size,
-      `partes=${otros.size + celdas(g, 'otros').length} todo=${todo.size}`);
+    check('filtro: Recolectores + Companeros + Cajas + Otros = Todo',
+      grandes.size + celdas(g, 'otros').length === todo.size,
+      `partes=${grandes.size + celdas(g, 'otros').length} todo=${todo.size}`);
+
+    check('filtro: y ninguna celda sale en dos filtros a la vez',
+      [...grandes].every(id => !celdas(g, 'otros').includes(id)),
+      'solape=' + [...grandes].filter(id => celdas(g, 'otros').includes(id)).join(','));
   }
   {
     // Un tipo desconocido en un guardado viejo: tiene que ser visible en

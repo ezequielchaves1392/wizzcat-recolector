@@ -2640,3 +2640,13 @@ _Cosas que estorban al trabajo más que al juego._
   tiene. Ahora se comprueba a igual potencial, que es lo único que se puede prometer, y se
   dejo escrito por que no se promete mas.
 
+
+### Tanda del jugador: cuatro cosas sin comprobar en pantalla
+
+- Hecho: la etiqueta "Daño" pasa a "Recolección por click", el numero grande de la ficha es uno solo con
+  el desglose en el title, fuera la linea de details del recolector, boton de notas de parche en
+  Ajustes, visitas que suma aperturas y filtro de Cajas en el almacen.
+- **Solo el filtro se ha podido medir.** En el preview los cinco botones salen y los cuatro se
+  reparten la rejilla exacta: Todo 21, Recolectores 9, Companeros 5, Cajas 1, Otros 6, y la suma
+  cuadra con el todo. Lo demas no: la ficha con el numero grande, el texto fuera y el boton de las
+  notas **hay que mirarlos en una partida de verdad**.

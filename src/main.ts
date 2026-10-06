@@ -1,7 +1,7 @@
 import { renderBuffHud, resetBuffHud, buffLabel } from './ui/buffHud';
 import { setSkipRoulette } from './roulettePrefs';
 import { setPatchNotes } from './patchNotesPrefs';
-import { showPatchNotes } from './ui/patchNotes';
+import { showPatchNotes, montarNotas } from './ui/patchNotes';
 import { renderPanel } from './ui/playerPanel';
 import { formatNumber } from './utils/format';
 import './style.css';
@@ -810,6 +810,22 @@ function instalaDelegacionDeAjustes() {
       e.preventDefault();
       sfx.nav();
       document.querySelector('[data-ajustes]')?.classList.remove('hidden');
+      return;
+    }
+
+    // **VER LAS NOTAS, POR DELEGACIÓN COMO TODO LO DEMÁS DE LA HOJA.** El nodo se
+    // busca aquí y no se guarda, por el mismo motivo que el de más arriba: la hoja se
+    // reconstruye en cada vista y una referencia apuntaría al nodo viejo.
+    //
+    // **SE ABRE POR ENCIMA DE LA HOJA, Y NO SE CIERRA ESTA.** Las notas son un cartel
+    // con z-70 y la hoja de ajustes z-80, así que si se dejara la hoja abierta el cartel
+    // saldría debajo y no se vería nada. Cerrarla primero es lo que hace que el botón
+    // funcione desde las siete pantallas en vez de solo desde la primera.
+    if (target.closest('[data-ver-notas]')) {
+      e.preventDefault();
+      sfx.nav();
+      document.querySelector('[data-ajustes]')?.classList.add('hidden');
+      montarNotas();
       return;
     }
 

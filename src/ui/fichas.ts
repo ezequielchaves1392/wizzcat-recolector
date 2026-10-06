@@ -132,10 +132,22 @@ export function fichaDeRecolector(
             no empuja nada y se lee cuando alguien la busca.
           -->
         </div>
-        ${w.details ? `
-          <div class="text-[10px] font-mono text-[var(--text-muted)] mt-1 truncate">
-            ${w.details}
-          </div>` : ''}
+        <!--
+          details NO SE PONE EN LA FICHA DEL RECOLECTOR, Y POR QUÉ.
+
+          Para un recolector, details es siempre la misma frase: "Recolector por click:
+          +340", con la base y el potencial ya metidos. Al lado del número grande de la
+          derecha, que es ese mismo total, era **la misma cifra escrita dos veces con dos
+          nombres distintos**, y la de la izquierda era además la que más se prestaba a
+          confundir: parece el daño que pega el clic y no lo es —es el número del
+         Warehouse, sin buffs—.
+
+          Para un compañero details sí vale ("Deja el recolector con un afijo
+          garantizado"), así que la línea no se borra de la función: **solo se quita donde
+          no aporta**, que es aquí. La regla que lo acompaña es la de siempre: si un día un
+          recolector trae una descripción que no sea un número, vuelve a salir, porque
+          entonces la línea estará diciendo algo.
+        -->
         ${affixes.length ? `
           <div class="flex items-center gap-1 flex-wrap mt-1">
             ${affixes.map(id => {

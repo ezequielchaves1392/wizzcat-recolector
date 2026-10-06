@@ -192,19 +192,47 @@ async function main() {
       'escrituras=' + db().escrituras
     );
 
+    // **LAS DOS CIFRAS CUENTAN COSAS DISTINTAS, Y ESTA ES LA PARTE QUE CAMBIÓ.**
+    //
+    // Antes un solo filtro decidía las dos: si ya estabas en la lista, no se contaba
+    // nada. Así que `visitas` y `visitantes` eran el mismo número con dos nombres, y
+    // `visitas` no contaba aperturas sino primeras visitas. Mirar el mismo perfil cuatro
+    // veces valía por una, que es justo lo que se pidió corregir.
     await registrarVisita('otro', 'a');
     check(
-      'perfil: quien ya estaba en la lista no vuelve a contar',
-      db()['perfiles/otro'].visitas === 3,
+      'perfil: volver a entrar SI suma una visita, porque son aperturas',
+      db()['perfiles/otro'].visitas === 4,
+      'visitas=' + db()['perfiles/otro'].visitas
+    );
+    check(
+      'perfil: pero la persona no se añade dos veces a la lista',
+      db()['perfiles/otro'].visitantes.length === 1
+        && db()['perfiles/otro'].visitantes[0] === 'a',
+      'lista=' + JSON.stringify(db()['perfiles/otro'].visitantes)
+    );
+
+    await registrarVisita('otro', 'a');
+    check(
+      'perfil: y entrar otra vez sigue sumando, que es lo que se pedia',
+      db()['perfiles/otro'].visitas === 5,
       'visitas=' + db()['perfiles/otro'].visitas
     );
 
     await registrarVisita('otro', 'nueva');
     check(
-      'perfil: una persona nueva sí cuenta, y cuenta como persona',
-      db()['perfiles/otro'].visitas === 4
+      'perfil: una persona nueva suma visita y entra en la lista',
+      db()['perfiles/otro'].visitas === 6
         && db()['perfiles/otro'].visitantes.includes('nueva'),
       `visitas=${db()['perfiles/otro'].visitas} lista=${JSON.stringify(db()['perfiles/otro'].visitantes)}`
+    );
+
+    // **Y LAS DOS CIFRAS TIENEN QUE PODER SER DISTINTAS.** Si volvieran a ser lo mismo,
+    // una de las dos está mintiendo: aquí visitas sube a 6 y la lista solo tiene 2.
+    check(
+      'perfil: visitas y visitantes ya no son el mismo numero',
+      db()['perfiles/otro'].visitas === 6
+        && db()['perfiles/otro'].visitantes.length === 2,
+      `visitas=${db()['perfiles/otro'].visitas} lista=${db()['perfiles/otro'].visitantes.length}`
     );
 
     // Una tarjeta que no existe: mirar un perfil vacío no inventa nada.

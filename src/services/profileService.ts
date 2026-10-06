@@ -141,11 +141,17 @@ export async function publicarTarjeta(state: any, uid: string, username: string)
  *
  * ## LO QUE PIDE EL JUGADOR Y LO QUE HACE ESTA FUNCIÓN
  *
- * *"Un contador de la gente que entra a ver el perfil, que no sea yo mismo."* Son dos
- * cosas y aquí están las dos: **el dueño nunca se cuenta**, ni al abrir su propio
- * perfil ni al recargar la página, porque para eso ya tiene su pantalla; y **cada
- * persona cuenta una vez**, no una por cada vez que mira. Por eso hay dos cifras y no
- * una: `visitas` son aperturas y `visitantes` son personas distintas.
+ * *"Un contador de la gente que entra a ver el perfil, que no sea yo mismo."* El dueño
+ * nunca se cuenta, ni al abrir su propio perfil ni al recargar la página, porque para
+ * eso ya tiene su pantalla.
+ *
+ * Y las dos cifras que se publican cuentan cosas distintas, que es lo que se tardó en
+ * entender: **`visitas` suma aperturas** —cada vez que alguien entra, aunque sea la
+ * segunda vez que—, y **`visitantes` son personas distintas**, que es una lista con tope
+ * para que el documento no crezca sin límite. Durante un tiempo las dos eran el mismo
+ * número con dos nombres, porque un solo filtro decidía las dos: si ya estabas en la
+ * lista, no se contaba nada. Abrir el mismo perfil cuatro veces valía por una, y una
+ * cifra que dice "aperturas" no puede hacer eso.
  *
  * ## POR QUÉ LEEMOS Y ESCRIBIMOS EN VEZ DE USAR `increment()`
  *
@@ -176,13 +182,22 @@ export async function registrarVisita(perfilUid: string, visitanteUid: string): 
   if (!lectura.ok) return;
   const tarjeta = lectura.tarjeta;
 
-  // **UNA PERSONA CUENTA UNA VEZ.** Mirar el mismo perfil tres veces es una visita, no
-  // tres: el contador que interesa es "cuánta gente ha mirado", no "cuántas veces se ha
-  // abierto una pantalla".
+  // **LAS DOS CIFRAS CUENTAN COSAS DISTINTAS, Y AHORA CADA UNA CUENTA LO SUYO.**
+  //
+  // Antes había un solo filtro: si ya estabas en la lista, no se contaba nada. Con eso
+  // `visitas` y `visitantes` eran **el mismo número con dos nombres**, y el nombre
+  // mentía: abrir el mismo perfil cuatro veces valía por una. Es lo que se pidió corregir:
+  // `visitas` son aperturas, así que suman cada vez; `visitantes` son personas distintas,
+  // así que la lista sigue creciendo solo con gente nueva.
+  //
+  // **Y POR QUÉ LA LISTA NO SE TOCA EN CADA VISITA.** Es lo que evita que el documento
+  // crezca sin límite: una persona que vuelve veinte veces no añade veinte líneas, solo
+  // una vez. Por eso las dos cifras salen de aquí y no hay dos funciones.
   const yaVisto = tarjeta.visitantes.includes(visitanteUid);
-  if (yaVisto) return;
+  const visitantes = yaVisto
+    ? tarjeta.visitantes
+    : [...tarjeta.visitantes, visitanteUid].slice(-TOPE_VISITANTES);
 
-  const visitantes = [...tarjeta.visitantes, visitanteUid].slice(-TOPE_VISITANTES);
   try {
     await setDoc(refDeTarjeta(perfilUid), {
       visitas: tarjeta.visitas + 1,
