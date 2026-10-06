@@ -521,6 +521,50 @@ async function main() {
     }
   }
 
+  // =========================================================================
+  //  LA REGLA DEL FALLO QUE SE CONTRADECÍA A SÍ MISMO, Y EL AUTOMÁTICO DEL COMPAÑERO
+  // =========================================================================
+  //
+  // **LO QUE SE VEÍA EN PANTALLA:** un cartel con **FALLO** en grande, la línea "Nivel 7
+  //  · sin cambio" y, debajo, el mensaje del motor diciendo "¡Mejora exitosa! Portador del
+  //  Trueno ascendió al nivel 8". Las dos cosas ciertas y contradictorias en la misma
+  //  tarjeta, y la grande es la que miente.
+  //
+  //  **LA CAUSA: LEER EL NIVEL POR SEGUNDA VEZ, Y EL MOTOR REESCRIBE EL OBJETO.** El
+  //  motor sube el nivel con `state.warehouse = state.warehouse.map(...)`, o sea con
+  //  objetos nuevos. La hoja guardaba una referencia al item de ANTES de la llamada, así
+  //  que al volver a leerla seguía diciendo 7. La ruleta comparaba 7 con 7 y concluía que no
+  //  había subido, mientras el motor subía de verdad.
+  {
+    const subio = tuningRoll({ success: true, rolled: true, level: 8, msg: 'x' }, 7, 7);
+    check(
+      'ruleta: el motor dice que subio y no se pinta FALLO aunque las cifras no cuadren',
+      subio.success === true,
+      `success=${subio.success} ${subio.levelBefore}->${subio.levelAfter}`
+    );
+    check(
+      'ruleta: y el nivel que se ensena es una subida, no un numero que no existe',
+      subio.levelAfter > subio.levelBefore,
+      `${subio.levelBefore}->${subio.levelAfter}`
+    );
+  }
+  {
+    // Y el caso normal, que es el que se acaba de arreglar: el nivel de despues sale del
+    // propio motor, no de releer el item.
+    const bien = tuningRoll({ success: true, rolled: true, level: 8, msg: 'x' }, 7, 8);
+    check(
+      'ruleta: cuando el motor da el numero bueno, se pinta la flecha 7 -> 8',
+      bien.success === true && bien.levelBefore === 7 && bien.levelAfter === 8,
+      `${bien.levelBefore}->${bien.levelAfter}`
+    );
+    const fallo = tuningRoll({ success: false, rolled: true, level: 7, msg: 'x' }, 7, 7);
+    check(
+      'ruleta: un fallo de verdad sigue siendo fallo y no inventa una subida',
+      fallo.success === false && fallo.levelAfter === 7,
+      `success=${fallo.success} ${fallo.levelBefore}->${fallo.levelAfter}`
+    );
+  }
+
   resumen('giro de la ruleta');
 }
 

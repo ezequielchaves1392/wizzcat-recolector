@@ -4462,7 +4462,7 @@ const RITMO_GUARDADO_MS = 30_000;
      * **LO ÚNICO QUE NO SE COPIA ES LA FIRMA:** el recolector sube el *equipado*
      * porque solo hay uno; el compañero lo elige el jugador, así que el id llega.
      */
-    upgradeCompanion: (compId: string) => {
+    upgradeCompanion: (compId: string, opciones?: { sinGuardar?: boolean; sinRepintar?: boolean }) => {
       handleUserActivity();
 
       const comp = (state.companions as any[]).find((c: any) => c.id === compId);
@@ -4522,8 +4522,8 @@ const RITMO_GUARDADO_MS = 30_000;
           w.id === compId ? { ...w, level: nuevo, maxLevel: tope } : w);
         recalculatePassiveIncome();
         checkAchievements();
-        onUpdate(state, isAfk);
-        saveToFirebase();
+        if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+        if (!opciones?.sinGuardar) saveToFirebase();
         return {
           success: true,
           rolled: true,
@@ -4533,8 +4533,8 @@ const RITMO_GUARDADO_MS = 30_000;
       }
 
       // Fallo: **el nivel no retrocede**, y el cristal ya está gastado.
-      onUpdate(state, isAfk);
-      saveToFirebase();
+        if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+        if (!opciones?.sinGuardar) saveToFirebase();
       return {
         success: false,
         rolled: true,
@@ -4726,6 +4726,53 @@ const RITMO_GUARDADO_MS = 30_000;
           : `${resumen}. Se ha llegado al tope de ${MAX_INTENTOS_AUTOMATICOS} intentos seguidos.`
       };
     },
+    /**
+     * F49 · SINTONIZAR HASTA QUE SE ACIERTEN LOS CRISTALES, TAMBIEN PARA COMPAÑEROS.
+     *
+     * **LO QUE FALTABA, Y POR QUÉ ERA UN AGUJERO Y NO UNA DECISIÓN.** El automático se
+     * escribió para el recolector y su botón se ocultaba para el compañero con un
+     * comentario que lo decía: "cuando el automático de compañero exista, este mismo sitio
+     * lo acomodará para los dos". O sea que estaba anunciado, no decidido. Mientras tanto el
+     * compañero solo se podía subir de uno en uno, con lo que un compañero de nivel 20
+     * costaba veinte pulsadas y veinte pantallas de ruleta.
+     *
+     * **ES EL MISMO BUCLE Y LLAMA AL MISMO MÉTODO DE UNO**, por el mismo motivo que el del
+     * recolector: misma probabilidad por nivel, mismo precio por nivel y un único sitio
+     * donde cambie la regla. Si mañana baja la probabilidad, los dos caminos bajan juntos.
+     *
+     * **Y `sinGuardar`/`sinRepintar` TAMBIÉN, O NO.** El guardado por intento son decenas
+     * de escrituras sobre el mismo documento y decenas de repintados para acabar en el mismo
+     * sitio: aquí ocurren una vez, al final.
+     */
+    upgradeCompanionHastaAgotar: (compId: string) => {
+      let intentos = 0;
+      let aciertos = 0;
+      let fallos = 0;
+      let nivel = 0;
+      let motivo = '';
+
+      while (intentos < MAX_INTENTOS_AUTOMATICOS) {
+        const r = estado.upgradeCompanion(compId, { sinGuardar: true, sinRepintar: true });
+        // `rolled: false` es "no se ha podido intentar" —sin saldo o en el techo—, y es lo
+        // único que para el bucle. Un fallo sí cuenta como intento y vuelve a tirar.
+        if (!r.rolled) { motivo = r.msg ?? ''; break; }
+        intentos++;
+        if (r.success) aciertos++; else fallos++;
+        nivel = r.level ?? nivel;
+      }
+
+      saveToFirebase();
+
+      const resumen = `${intentos} intentos · ${aciertos} aciertos y ${fallos} fallos · nivel ${nivel}`;
+      const agotado = intentos < MAX_INTENTOS_AUTOMATICOS;
+      return {
+        intentos, aciertos, fallos, level: nivel, agotado,
+        msg: agotado
+          ? `${resumen}. ${motivo}`
+          : `${resumen}. Se ha llegado al tope de ${MAX_INTENTOS_AUTOMATICOS} intentos seguidos.`
+      };
+    },
+
     // F27 · `expandWarehouse()` (+5 por 500, tope 50) y `unlockCompanionSlot()`
     // (tope 5) estaban aquí sin que ninguna vista los llamara: eran un tercer
     // y cuarto camino de ampliación con reglas distintas —y el tope 5

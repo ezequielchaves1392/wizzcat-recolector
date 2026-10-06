@@ -96,7 +96,7 @@ export interface TuningRoll {
  * evita las dos cosas.
  */
 export function tuningRoll(
-  res: { success?: boolean; rolled?: boolean; msg?: string },
+  res: { success?: boolean; rolled?: boolean; msg?: string; level?: number },
   levelBefore: number,
   levelAfter: number
 ): TuningRoll {
@@ -106,15 +106,24 @@ export function tuningRoll(
   // jugador. Es el mismo criterio que R11 con los saves.
   const rolled = res.rolled === true;
   const subio = rolled && res.success === true && levelAfter > levelBefore;
+  // **Y SI EL MOTOR DICE QUE SUBIÓ PERO LOS NÚMEROS NO, NO SE PINTA "FALLO".** El cartel
+  // lleva un `msg` que viene del motor, así que en ese caso se leería "FALLO · sin cambio"
+  // encima de "¡Mejora exitosa!". Dos verdades contradictorias en la misma tarjeta, y la que
+  // miente es la grande. Cuando el motor afirma que subió, la cifra que se enseña es la
+  // que da: una subida de un nivel por la vía corta se ve como una subida.
+  const suboSegunElMotor = rolled && res.success === true;
+  const nivelFinal = suboSegunElMotor
+    ? Math.max(levelAfter, levelBefore + 1)
+    : levelBefore;
   return {
     rolled,
-    success: subio,
+    success: suboSegunElMotor,
     levelBefore,
     // En un fallo, el nivel con el que se queda es el de antes. Se pone
     // explícito y no se copia `levelAfter` porque el motor, en un fallo, no
     // toca el campo: leerlo daría el mismo número por casualidad, y el día que
     // el motor cambiara esa parte la ruleta mentiría sin que nada se encendiera.
-    levelAfter: subio ? levelAfter : levelBefore,
+    levelAfter: nivelFinal,
     msg: res.msg || ''
   };
 }

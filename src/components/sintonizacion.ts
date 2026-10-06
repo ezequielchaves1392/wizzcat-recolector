@@ -319,17 +319,18 @@ export function showSintonizacion(
         cristales, y eso es una decisión mayor que gastar uno. Ponerlos en paralelo
         invitaría a leerlos como dos opciones del mismo peso.
 
-        Y **solo para recolectores**: upgradeCompanion() no tiene modo automático, y un
-        botón que se dividiera entre los dos —"¿quieres automático?"— para después
-        decirte que no, es peor que no ofrecerlo. Cuando el automático de compañero exista,
-        este mismo sitio lo acomodará para los dos.
+        Y **ahora también para los compañeros**: upgradeCompanionHastaAgotar() es el mismo
+        bucle llamando al mismo método de uno. El botón estaba oculto para ellos con un
+        comentario que decía "cuando exista el automático de compañero, este mismo sitio
+        lo acomodará para los dos": estaba anunciado, no decidido. Ahora lo decide el motor
+        y el botón aparece para los dos sin cambiar de sitio.
 
         **EL SALTO DE NIVEL NO SE DICE EN EL BOTÓN**, se dice en el aviso que devuelve el
         motor: es el motor quien sabe cuántos intentos hubo y cuántos aciertos, y un botón
         que estima dice "subirá hasta el 20" estaría prometiendo un resultado que depende
         de un dado.
       -->
-      ${!esCompanero ? `
+      ${`
         <button data-sintonizar-todo ${alcanza ? '' : 'disabled style="opacity:.45"'}
                 class="w-full rounded-xl border px-3 py-2.5 flex items-center gap-2.5 text-left
                        ${alcanza ? 'cursor-pointer transition active:scale-[0.99] hover:border-[var(--accent)]' : ''}
@@ -345,7 +346,7 @@ export function showSintonizacion(
             </span>
           </span>
         </button>
-      ` : ''}
+      `}
 
       <p class="text-[10px] font-mono text-[var(--text-muted)] mt-3 leading-relaxed">
         ${notaDeCoste(tierItem)} La
@@ -382,7 +383,25 @@ export function showSintonizacion(
         : (game.upgradeCollector?.(equipo.id) ?? game.upgradeEquippedCollector());
       // `tuningRoll()` decide qué niveles enseña la ruleta, y el porqué de que
       // el de antes se lea ANTES de la llamada está en su JSDoc.
-      const roll = tuningRoll(res, nivelAntes, equipo.level || 0);
+      // **EL NIVEL DE DESPUÉS VIENE DE `res.level`, NO DE VOLVER A LEER `equipo`.**
+      //
+      // El motor sube el nivel **reescribiendo el array**: `state.warehouse = state.warehouse.map(...)`
+      // con un objeto nuevo para el item mejorado. `equipo` es la referencia al objeto de
+      // ANTES de esa llamada, así que después sigue diciendo el nivel viejo. La ruleta
+      // comparaba 7 con 7, sacaba que no había subido y pintaba **FALLO · sin cambio** encima
+      // de un mensaje que decía "¡Mejora exitosa! ascendió al nivel 8". Las dos cosas
+      // ciertas y contradictorias, en la misma tarjeta.
+      //
+      // No es solo de los compañeros: el camino del recolector releía la misma referencia y
+      // tenía el fallo igual. La diferencia es que el del recolector se ha pulsado menos.
+      //
+      // Y el motor **ya devuelve el nivel**, así que el dato bueno estaba ahí todo el rato y
+      // no se estaba usando. `res.level` no puede quedarse viejo: sale de la misma operación
+      // que lo cambió.
+      const levelDespues = Number.isFinite(Number(res.level))
+        ? Number(res.level)
+        : nivelAntes;
+      const roll = tuningRoll(res, nivelAntes, levelDespues);
       // Y SI EL MOTOR NO TIRÓ EL DADO, NO HAY RULETA. Un rechazo —no hay saldo, ya
       // está en el techo, no hay item— no es un fallo de la tirada: no se ha gastado
       // nada y no ha pasado nada. Girar igualmente sería una ruleta mintiendo.
@@ -431,9 +450,11 @@ export function showSintonizacion(
       // comparación no diría nada. Es lo que permite distinguir "subió" de "gastó y
       // falló", que es la única cosa que el sonido necesita saber.
       const antesDeAuto = equipo.level || 0;
-      const res = (game as any).upgradeCollectorHastaAgotar?.(equipo.id);
+      const res = esCompanero
+        ? (game as any).upgradeCompanionHastaAgotar?.(equipo.id)
+        : (game as any).upgradeCollectorHastaAgotar?.(equipo.id);
       if (!res) {
-        showToast('Este recolector no se puede sintonizar en automático.', 'error');
+        showToast('Este item no se puede sintonizar en automático.', 'error');
         return;
       }
       if (res.intentos === 0) {
