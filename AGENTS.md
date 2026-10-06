@@ -104,6 +104,24 @@ botón de borrar la base de datos.
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
 un `try/catch` que lo dice, y el banco exporta `main()` ya invocada.
 
+**Las notas de parche se actualizan en cada commit, y es una regla, no una
+costumbre.** El 6 de octubre apareció un cartel con fecha del 4 porque nadie se
+dio cuenta de que había dos días de cambios sin escribir. Se añade aquí para que no
+dependa de acordarse:
+
+| Qué | Dónde |
+|---|---|
+| Subir la versión | `package.json` |
+| Añadir la entrada **al principio** de `NOTAS` | `src/data/patchNotes.ts` |
+
+Las dos cosas o ninguna: `leyendaCheck` comprueba que la primera nota sea la de la
+versión de `package.json`, así que una nota sin subida de versión **no se ve nunca**
+y una subida sin nota es un parche invisible. El banco ya avisa de las dos.
+
+Y lo que se escribe es **lo que se ve, no cómo está hecho**: sin nombres de
+fichero, sin funciones y sin cifras internas. Un jugador que vuelve después de unos
+días necesita saber qué cambió, no por qué.
+
 ---
 
 ## Las 10 reglas que más se rompen

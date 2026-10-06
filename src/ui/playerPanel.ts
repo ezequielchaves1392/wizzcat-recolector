@@ -6,7 +6,7 @@ import { valuationConCifras } from '../data/valuation';
 // un jugador enseña los mismos recolectores y compañeros, y para que se vean como aquí
 // hay que que las dos pinten con la misma función: si cada una tuviera su markup, un día
 // cambiaría el color de una rareza en una y no en la otra.
-import { fichaDeRecolector, casillaDeCompanero, slug } from './fichas';
+import { fichaDeRecolector, casillaDeCompanero, slug, aplicarPestana } from './fichas';
 
 /**
  * Panel del jugador: recolector equipado y slots de companeros.
@@ -26,6 +26,16 @@ export function renderPanel(
 
   damagePartsDe?: () => { base: number; intrinseco: number; partida: number; total: number; filas: any[] }
 ) {
+  // --- La pestaña que está abierta ---
+  //
+  // **ESTADO DE MÓDULO Y NO UNA VARIABLE LOCAL (R6).** `renderPanel()` se llama en cada
+  // repintado —cada segundo, con los Companeros produciendo— y si la pestaña viviera en
+  // una variable local volvería a la primera en cada guardado. El jugador que estaba
+  // mirando el escuadrón se encontraría de vuelta en el recolector un segundo después, y
+  // con la rejilla de compañeros a media pantalla sería el peor sitio para perder la
+  // pestaña.
+  aplicarPestana();
+
   // --- Recolector equipado ---
   const equippedItem = state.equippedCollectorId
     ? state.warehouse.find((w: any) => w.id === state.equippedCollectorId)
@@ -84,7 +94,16 @@ export function renderPanel(
                     background: color-mix(in srgb, var(--accent) 5%, transparent)">
           <div class="label-caps mb-1.5 flex items-center gap-1.5">
             <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 opacity-70">${ic("bolt")}</span>
-            De dónde sale el daño
+            <!--
+              "DETALLE", Y NO "DE DÓNDE SALE EL DAÑO".
+
+              El rótulo viejo era largo y además **ya no encajaba**: al cambiar el número
+              grande a "Recolección por click", este bloque pasó a explicar de dónde sale
+              la *recolección*, no el daño. Un rótulo que nombra una magnitud que la
+              pantalla ya no enseña es un rótulo que hay que cambiar cada vez que cambia
+              la magnitud. "Detalle" no promete la unidad y no se queda viejo.
+            -->
+            Detalle
           </div>
           <ul class="space-y-1">
             <li class="flex items-baseline justify-between gap-2">

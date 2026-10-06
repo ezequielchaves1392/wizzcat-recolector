@@ -26,6 +26,7 @@ import { wirePreviewAudio } from './previewAudio';
 import { renderPanel } from './ui/playerPanel';
 import { renderBuffHudForPreview } from './ui/buffHud';
 import { renderWarehouseTab, pintarBarraDeConsumibles } from './components/warehouse';
+import { cambiaDePestana } from './ui/fichas';
 import { renderStoreTab } from './components/store';
 import { renderForgePage } from './ui/forgePage';
 import { showPatchNotes } from './ui/patchNotes';
@@ -811,6 +812,19 @@ switch (vista) {
 // faltaba en el mock —el banco visual aprobando cosas que el producto no hace— y se
 // repite porque las dos veces estaba en el sitio que se daba por supuesto.
 wirePreviewAudio(app);
+
+// **LAS PESTAÑAS DE LA COLUMNA DERECHA, EN EL PREVIEW TAMBIÉN.**
+//
+// El manejador del producto vive en `main.ts`, que el preview **no carga**: tiene su
+// propio render. Sin esta línea las pestañas se ven y no hacen nada, y el banco visual
+// aprueba una pantalla que el producto sí puede usar pero que aquí no se puede revisar.
+// Es la misma clase de fallo que el de los interruptores de arriba, y por el mismo
+// motivo: cableado donde se daba por supuesto en vez de donde se monta.
+document.addEventListener('click', (ev) => {
+  const destino = (ev.target as HTMLElement | null)?.closest('[data-pestana]');
+  if (!destino) return;
+  cambiaDePestana(destino.getAttribute('data-pestana') as string);
+});
 
 // Navegación entre vistas del preview: permite recorrer todas sin volver a la
 // barra de direcciones. No existe en el juego real.

@@ -52,6 +52,57 @@ export interface RecolectorPintable {
 }
 
 /**
+ * Qué pestaña de la columna está abierta.
+ *
+ * **NO SE GUARDA, A PROPÓSITO.** Es de lo poco que no merece persistencia: el jugador
+ * abre el escuadrón, mira y vuelve a la base; si mañana vuelve a entrar al juego, empezar
+ * en "Recolector" es lo razonable. Guardarlo en el almacenamiento local sería un ajuste
+ * más que explicar y un dato que puede quedarse viejo sin que nadie lo note.
+ */
+let pestanaActual: 'recolector' | 'escuadron' = 'recolector';
+
+/** Los dos nombres de pestaña, escritos una sola vez. */
+export const PESTANAS = ['recolector', 'escuadron'] as const;
+export type Pestana = (typeof PESTANAS)[number];
+
+/** Cambia de pestaña. Lo llama el manejador por delegación de `main.ts`. */
+export function cambiaDePestana(destino: string): boolean {
+  if (!(PESTANAS as readonly string[]).includes(destino)) return false;
+  pestanaActual = destino as Pestana;
+  aplicarPestana();
+  return true;
+}
+
+/**
+ * Pinta la pestaña activa.
+ *
+ * **LOS DOS PANELES SE PIN TAN SIEMPRE, Y LO QUE CAMBIA ES QUE SE VEN.** El recolector
+ * y el escuadón no dejan de existir al cambiar de pestaña: el número grande del
+ * recolector se sigueorefrescando en cada repintado, y el ingreso del escuadón también.
+ * Si el panel oculto no se pintara, al volver a él habría un hueco vacío hasta el
+ * siguiente guardado — y ese hueco sería justo lo que el jugador quiere mirar.
+ *
+ * El botón activo se pinta con el color de acento y el inactivo se apaga, en vez de
+ * mover un borde: el mismo criterio que usa el nav, para que los dos se lean igual.
+ */
+export function aplicarPestana(): void {
+  for (const nombre of PESTANAS) {
+    const panel = document.getElementById('panel-' + nombre);
+    if (panel) panel.classList.toggle('hidden', nombre !== pestanaActual);
+    const boton = document.querySelector('[data-pestana="' + nombre + '"]') as HTMLElement | null;
+    if (!boton) continue;
+    const activo = nombre === pestanaActual;
+    boton.setAttribute('aria-selected', String(activo));
+    boton.setAttribute('tabindex', activo ? '0' : '-1');
+    boton.classList.toggle('accent-text', activo);
+    boton.style.color = activo ? 'var(--accent)' : '';
+    boton.style.background = activo
+      ? 'color-mix(in srgb, var(--accent) 16%, transparent)'
+      : '';
+  }
+}
+
+/**
  * LA FICHA DEL RECOLECTOR, con el aspecto del panel del inicio.
  *
  * `columnaDerecha` es lo que va donde en el inicio va el daño: **quien mira un perfil

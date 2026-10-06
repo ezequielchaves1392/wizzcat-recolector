@@ -57,6 +57,22 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.3.0',
+    fecha: '6 de octubre de 2026',
+    titulo: 'Brillos, escuadrón y acceso rápido',
+    lineas: [
+      'Los recolectores y los compañeros más afortunados brillan: cuanto más potencial y más nivel, más halo, y en el máximo llevan un destello propio.',
+      'El brillo se ve en el almacén, en la ficha del inicio y en la tarjeta del ranking, y siempre con el color de su rareza.',
+      'En la ficha del recolector hay un solo número grande, y al posar el ratón salen las dos partes que lo componen.',
+      'El recolector y el escuadrón son ahora dos pestañas en la columna derecha, para no tener que hacer scroll.',
+      'Hay tres huecos de acceso rápido en la base para los consumibles: eliges tú qué va en cada uno y puedes quitarlo cuando quieras.',
+      'Los compañeros ya pagan su rareza y su potencial: un compañero Divino rinde bastante más que uno Común de la misma carta.',
+      'En el almacén hay filtro de Cajas, y "Otros" se queda con llaves, cristales y consumibles.',
+      'Las notas de parche se pueden ver a demanda desde Ajustes, no solo al entrar.',
+      'El contador de visitas del perfil cuenta ahora cada vez que alguien entra, no solo la primera.'
+    ]
+  },
+  {
     version: '1.2.0',
     fecha: '4 de octubre de 2026',
     titulo: 'Cosmetics, logros y lotes',

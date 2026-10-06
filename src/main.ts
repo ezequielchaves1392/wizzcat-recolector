@@ -3,6 +3,7 @@ import { setSkipRoulette } from './roulettePrefs';
 import { setPatchNotes } from './patchNotesPrefs';
 import { showPatchNotes, montarNotas } from './ui/patchNotes';
 import { renderPanel } from './ui/playerPanel';
+import { cambiaDePestana } from './ui/fichas';
 import { formatNumber } from './utils/format';
 import './style.css';
 import './style.modules.css';
@@ -810,6 +811,19 @@ function instalaDelegacionDeAjustes() {
       e.preventDefault();
       sfx.nav();
       document.querySelector('[data-ajustes]')?.classList.remove('hidden');
+      return;
+    }
+
+    // **LAS PESTAÑAS DE LA COLUMNA DERECHA, POR DELEGACIÓN COMO TODO LO DEMÁS.**
+    //
+    // El nodo se busca por `closest()` en cada clic y no se guarda: la columna se
+    // reconstruye en cada vista y una referencia apuntaría al nodo viejo, que es el
+    // mismo motivo que los botones de tema que hay tres pantallas más abajo.
+    const pestana = target.closest('[data-pestana]') as HTMLElement | null;
+    if (pestana) {
+      e.preventDefault();
+      const destino = pestana.getAttribute('data-pestana') as string;
+      if (cambiaDePestana(destino)) sfx.nav();
       return;
     }
 

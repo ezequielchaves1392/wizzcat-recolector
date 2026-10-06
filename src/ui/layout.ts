@@ -287,11 +287,48 @@ export function renderLayoutHTML(
               repetía lo que el nav ya dice al resaltar "Base", en una esquina distinta, lo
               que la convertía en el segundo sitio donde se lee lo mismo.
             -->
+            <!--
+              LAS DOS PESTAÑAS, Y POR QUÉ ESTÁN DEBAJO DEL TÍTULO Y NO EN SU LUGAR.
+
+              Recolector y escuadrón estaban apilados en la misma columna y en un móvil
+              había que hacer scroll para pasar de uno al otro. Con la ficha del recolector
+              !
+
+              más el detalle y la rejilla de compañeros, la columna se hacía más larga que
+              la pantalla, y lo que estaba arriba —la ficha, con el número grande— era
+              justamente lo que se empujeaba fuera.
+
+              El título se queda en "Escuadrón" porque es el nombre de la columna, no el de
+              una de las dos mitades: poner "Recolector" arriba y "Escuadrón" como pestaña
+              sería el mismo nombre en dos sitios con dos significados.
+
+              Y las dos pestañas viven en un tablist de verdad, con aria-selected y
+              teclado: no son dos botones decorativos.
+            -->
+            <div role="tablist" aria-label="Qué ver"
+                 class="flex gap-1 mt-2 p-0.5 rounded-lg self-start"
+                 style="background: color-mix(in srgb, var(--text-main) 6%, transparent)">
+              <button data-pestana="recolector" role="tab"
+                      class="h-7 px-2.5 rounded-md text-[11px] font-mono cursor-pointer
+                             transition-colors flex items-center gap-1.5"
+                      aria-controls="panel-recolector">
+                <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('collector')}</span>
+                Recolector
+              </button>
+              <button data-pestana="escuadron" role="tab"
+                      class="h-7 px-2.5 rounded-md text-[11px] font-mono cursor-pointer
+                             transition-colors flex items-center gap-1.5"
+                      aria-controls="panel-escuadron">
+                <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('companion')}</span>
+                Escuadrón
+              </button>
+            </div>
           </div>
 
-          <div class="flex flex-col gap-2.5 md:gap-3 overflow-y-auto overscroll-contain
+          <!-- Recolector equipado -->
+          <div id="panel-recolector" role="tabpanel" aria-labelledby="pestana-recolector"
+               class="flex flex-col gap-2.5 md:gap-3 overflow-y-auto overscroll-contain
                       p-3 md:p-4 flex-grow min-h-0 -webkit-overflow-scrolling:touch">
-            <!-- Recolector equipado -->
             <div class="app-bg border rounded-xl p-3 md:p-4 flex-shrink-0"
                  style="border-color: color-mix(in srgb, var(--accent) 45%, transparent);
                         background: linear-gradient(to bottom right,
@@ -302,8 +339,12 @@ export function renderLayoutHTML(
               </div>
               <div id="equipped-collector-container"></div>
             </div>
+          </div>
 
-            <!-- Compañeros -->
+          <!-- Compañeros -->
+          <div id="panel-escuadron" role="tabpanel" aria-labelledby="pestana-escuadron"
+               class="hidden flex flex-col gap-2.5 md:gap-3 overflow-y-auto overscroll-contain
+                      p-3 md:p-4 flex-grow min-h-0 -webkit-overflow-scrolling:touch">
             <div class="app-bg border rounded-xl p-3 md:p-4 flex-shrink-0"
                  style="border-color: color-mix(in srgb, var(--accent) 30%, transparent);
                         background: linear-gradient(to bottom right,
