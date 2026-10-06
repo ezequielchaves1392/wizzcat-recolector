@@ -32,7 +32,7 @@
 import { ic, type IconName } from './icons';
 import { esc } from '../utils/esc';
 import { formatNumber } from '../utils/format';
-import { miniIdentity, rellenoDeBanner } from './identity';
+import { avatarStack, rellenoDeBanner, titleStyleFor } from './identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
 import { ACHIEVEMENTS } from '../achievements';
 // **LAS MISMAS FICHAS QUE PINTA LA PANTALLA DE INICIO.** No una versión parecida: las
@@ -224,17 +224,49 @@ function bannerDeTarjeta(t: TarjetaPublica, banner: any): string {
       ${banner ? `<span class="absolute inset-0" aria-hidden="true" style="${rellenoDeBanner(banner)}"></span>` : ''}
       <div class="relative flex items-center gap-3 p-3"
            style="background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg-app) 85%, transparent))">
-        ${miniIdentity(t.username, {
-          title: t.cosmetics.title,
-          frame: t.cosmetics.frame,
-          banner: t.cosmetics.banner
-        })}
+        ${avatarStack(
+          (t.username || '?').trim().slice(0, 2).toUpperCase(),
+          { frame: t.cosmetics.frame, banner: t.cosmetics.banner },
+          'w-10 h-10',
+          'text-[13px]'
+        )}
         <div class="min-w-0">
           <div class="font-['Orbitron'] font-bold text-sm truncate">${esc(t.username)}</div>
-          ${t.cosmetics.title ? `<div class="text-[11px] font-mono accent-text truncate">${esc(t.cosmetics.title)}</div>` : ''}
+          ${tituloDeTarjeta(t)}
         </div>
       </div>
     </div>`;
+}
+
+/**
+ * EL TÍTULO, TRADUCIDO, Y POR QUÉ ESTA FUNCIÓN EXISTE.
+ *
+ * **ANTES SALÍA EL ID CRUDO, DEBAJO DEL NOMBRE BUENO.** La cabecera usaba
+ * `miniIdentity()`, que ya traduce el título desde el catálogo y lo pinta con su color y su
+ * fuente, y luego añadía su propia línea con `t.cosmetics.title`. O sea que el mismo dato
+ * salía dos veces: "Recluta" y `title_recruited`, uno al lado del otro.
+ *
+ * **Y EL NOMBRE TAMBIÉN SALÍA DOS VECES**, porque `miniIdentity` pinta el nombre dentro de su
+ * columna y la cabecera repetía `t.username` al lado. En la captura se leía "Blanqui
+ * Blanqui".
+ *
+ * La causa es que la cabecera quiere una composición que la fila del ranking no quiere: aquí
+ * el nombre va grande y el título debajo, y allí van los dos en una columna estrecha. Por eso
+ * la cabecera usa `avatarStack()` —que solo es el avatar con su marco— y compone el nombre y
+ * el título por su cuenta, en vez de pedirle a `miniIdentity` una cosa que no es la suya.
+ *
+ * **EL TÍTULO POR DEFECTO NO SE ENSEÑA.** Es "Sin título", y al lado del nombre es ruido:
+ * no dice nada de la persona. Es la misma regla que ya aplica `miniIdentity` en la cabecera,
+ * escrita otra vez porque aquí no se está usando `miniIdentity`.
+ *
+ * **Y SI EL ID NO ESTÁ EN EL CATÁLOGO, NO SE PINTA NADA.** Un título desconocido es un dato
+ * que no se puede leer; enseñarlo en crudo es peor que no enseñarlo, que es justo lo que
+ * pasaba.
+ */
+function tituloDeTarjeta(t: TarjetaPublica): string {
+  const titulo = t.cosmetics.title ? COSMETICS_BY_ID[t.cosmetics.title] : undefined;
+  if (!titulo || titulo.id === 'title_default') return '';
+  return `<div class="title-display text-[11px] truncate" style="${titleStyleFor(titulo)}">${esc(titulo.name)}</div>`;
 }
 
 /**

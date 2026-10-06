@@ -50,7 +50,12 @@ const TARJETA_DE_EJEMPLO = {
   ],
   logros: ['first_click', 'collector_10', 'first_forge', 'ascendant', 'jackpot', 'tycoon'],
   totalLogros: 34,
-  cosmetics: { title: 'Forjador de Influjos', frame: 'frame_neon', banner: 'banner_pulse' },
+  // **EL TÍTULO VA POR ID, NO POR NOMBRE.** El juego guarda el identificador del cosmético
+  // (`title_recruited`), que es lo que va en el documento y lo que llega desde el ranking.
+  // Aquí se ponía el nombre, así que la vista previa no ejercitaba nada: la traducción
+  // devolvía vacío y el título desaparecía en lugar de salir mal. Con un id de verdad se ve
+  // el nombre con su color y su fuente, que es lo que hay que mirar.
+  cosmetics: { title: 'title_recruited', frame: 'frame_neon', banner: 'banner_pulse' },
   visitas: 12,
   visitantes: ['a', 'b', 'c', 'd', 'e'],
   updatedAt: 1750000000000
