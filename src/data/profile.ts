@@ -155,7 +155,8 @@ export interface TarjetaPublica {
    */
   completa?: boolean;
   /** Por qué no hay tarjeta, cuando no la hay. Solo en la ficha a medias. */
-  motivo?: 'no-existe' | 'error';
+  /** Por qué esta tarjeta no es la entera. Ver `MotivoDeAusencia`. */
+  motivo?: 'no-existe' | 'permiso' | 'error';
 }
 
 /** Un documento que no se ha escrito nunca. Se pinta como "nunca ha jugado". */

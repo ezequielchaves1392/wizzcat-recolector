@@ -25,6 +25,8 @@ async function main() {
   //  el módulo al bundle compartido.
   const { tarjetaDesdeEstado, documentoDeTarjeta, coaccionaTarjeta, CLAVES_DE_TARJETA, TARJETA_VACIA, TOPE_RECOLECTORES } = await import('../src/data/profile');
   const { SECRET_ACHIEVEMENTS } = await import('../src/data/achievements');
+  // La ficha a medias también se importa en caliente, por el mismo motivo que las de arriba.
+  const { tarjetaDesdeRanking } = await import('../src/data/perfilParcial');
 
   // =========================================================================
   //  1. Lo que NO se publica
@@ -274,6 +276,53 @@ async function main() {
       'perfil: sin nada equipado, la ficha lo dice y no inventa',
       tSinNada.recolectores.length === 0 && tSinNada.companeros.length === 0,
       `${tSinNada.recolectores.length}/${tSinNada.companeros.length}`
+    );
+  }
+
+  // =========================================================================
+  //  7. El permiso denegado NO es lo mismo que un fallo de lectura
+  // =========================================================================
+  //
+  //  **UN ERROR QUE MANDA A LA FUENTE EQUIVOCADA NO ES UN MENSAJE MAL ESCRITO.**
+  //  El aviso de la ficha a medias decia, para cualquier fallo de lectura, que la
+  //  coleccion "aparecera en cuanto vuelva la conexion". Con un permiso denegado eso
+  //  es falso: la conexion esta bien, y apagar y encender el wifi no lo arregla. Lo que
+  //  hay es las reglas de la base de datos sin publicar. El jugador no puede hacer nada
+  //  con ese aviso y ademas se le hace creer que es un problema suyo de red.
+  //
+  //  Por eso el permiso es un motivo PROPIO y no una variante de `error`: lo que hay que
+  //  hacer es distinto, y por eso el texto tiene que ser distinto.
+    {
+    const conPermiso = tarjetaDesdeRanking(
+      { username: 'Blanqui', totalNanitesProduced: 10, totalClicks: 5, ascensions: 1,
+        forjas: 2, nucleosTotales: 3, totalLogros: 4 },
+      'u1',
+      'Blanqui',
+      'permiso'
+    );
+    check(
+      'perfil: el permiso llega hasta la tarjeta como motivo propio',
+      conPermiso.completa === false && conPermiso.motivo === 'permiso',
+      `completa=${conPermiso.completa} motivo=${conPermiso.motivo}`
+    );
+    check(
+      'perfil: y sigue sin inventar lo que no sabe',
+      conPermiso.recolectores.length === 0 && conPermiso.companeros.length === 0
+        && !conPermiso.visitas,
+      `${conPermiso.recolectores.length}/${conPermiso.companeros.length}`
+    );
+  }
+  {
+    const conError = tarjetaDesdeRanking(
+      { username: 'X', totalNanitesProduced: 1 },
+      'u1',
+      'X',
+      'error'
+    );
+    check(
+      'perfil: un fallo de red sigue siendo su propio motivo, y no el del permiso',
+      conError.motivo === 'error' && conError.motivo !== 'permiso',
+      conError.motivo
     );
   }
 

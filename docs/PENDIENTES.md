@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2053**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2056**, todas en verde._
 
 ### El sistema que se ha quitado entero
 

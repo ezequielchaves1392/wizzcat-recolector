@@ -74,7 +74,26 @@ export function refDeTarjeta(uid: string) {
  */
 export type LecturaDeTarjeta =
   | { ok: true; tarjeta: TarjetaPublica }
-  | { ok: false; motivo: 'no-existe' | 'error' };
+  | { ok: false; motivo: 'no-existe' | 'permiso' | 'error' };
+
+/**
+ * ¿Es esto un permiso denegado?
+ *
+ * **POR QUÉ HAY QUE DISTINGUIRLO DEL RESTO DE ERRORES, Y POR QUÉ ES UN MOTIVO PROPIO.**
+ *
+ * El aviso de la ficha a medias decía "aparecerá en cuanto vuelva la conexión" para
+ * cualquier fallo de lectura. Con un permiso denegado eso es **falso**: la conexión está
+ * perfectamente y la ficha no va a volver nunca por el camino que está diciendo el aviso. El
+ * jugador apaga y enciende el wifi tres veces y el aviso sigue ahí, y lo que tiene que hacer
+ * es publicar las reglas de Firestore, que no es ninguna de las dos cosas.
+ *
+ * Un error que manda al jugador a la fuente equivocada no es un mensaje poco bueno: es
+ * trabajo perdido. El fallo de permisos tiene su propia línea de aviso, y dice qué hacer.
+ */
+function esPermisoDenegado(e: unknown): boolean {
+  const err = e as { code?: string; message?: string };
+  return err?.code === 'permission-denied' || /insufficient permissions/i.test(String(err?.message ?? ''));
+}
 
 export async function leerTarjeta(uid: string): Promise<LecturaDeTarjeta> {
   try {
@@ -83,7 +102,7 @@ export async function leerTarjeta(uid: string): Promise<LecturaDeTarjeta> {
     return { ok: true, tarjeta: coaccionaTarjeta(snap.data(), uid) };
   } catch (e) {
     console.warn('[perfil] No se ha podido leer la tarjeta.', e);
-    return { ok: false, motivo: 'error' };
+    return { ok: false, motivo: esPermisoDenegado(e) ? 'permiso' : 'error' };
   }
 }
 

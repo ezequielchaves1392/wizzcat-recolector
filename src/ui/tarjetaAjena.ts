@@ -452,12 +452,26 @@ function pieDeTarjeta(t: TarjetaPublica): string {
  * red, lo que hay que rehacer es la conexión.
  */
 function avisoDeFichaParcial(motivo: string): string {
-  const texto = motivo === 'error'
-    ? 'No se ha podido leer su ficha de la nube, así que solo se enseña lo que el ranking'
-      + ' ya sabe de él. Su colección aparecerá en cuanto vuelva la conexión.'
-    : 'Esta es la mitad de su ficha: lo que el juego publica de todo el mundo. Su'
-      + ' colección —recolectores, compañeros y pasivas— aparece en cuanto su juego guarde'
-      + ' otra vez.';
+  // **TRES MOTIVOS Y TRES TEXTOS, Y EL TERCERO ES NUEVO.**
+  //
+  // `error` y `permiso` salían antes como lo mismo, y el texto era uno solo: "aparecerá en
+  // cuanto vuelva la conexión". Con un permiso denegado eso es **falso y manda a la fuente
+  // equivocada**: la conexión está bien y no hay nada que reconectar. Lo que hay es que las
+  // reglas de Firestore sin publicar, y eso no lo arregla apagar el wifi.
+  //
+  // El jugador que lo ve no puede hacer nada con el aviso, y encima se le hace creer que es
+  // un problema suyo de red. Un mensaje que dice una cosa que no es verdad no es un mensaje
+  // mal escrito: es tiempo perdido y una idea falsa sobre lo que está pasando.
+  const texto = motivo === 'permiso'
+    ? 'Su ficha existe pero este juego no tiene permiso para leerla. Es un problema de las'
+      + ' reglas de la base de datos, no de su conexión: por eso no se arregla reconectando.'
+      + ' Su colección aparecerá cuando se publiquen.'
+    : motivo === 'error'
+      ? 'No se ha podido leer su ficha de la nube, así que solo se enseña lo que el ranking'
+        + ' ya sabe de él. Su colección aparecerá en cuanto vuelva la conexión.'
+      : 'Esta es la mitad de su ficha: lo que el juego publica de todo el mundo. Su'
+        + ' colección —recolectores, compañeros y pasivas— aparece en cuanto su juego guarde'
+        + ' otra vez.';
   return `
     <div class="rounded-xl border border-dashed border-[var(--border-color)] p-3
                 flex items-start gap-2">
@@ -473,14 +487,19 @@ function avisoDeFichaParcial(motivo: string): string {
  * dos textos, y ninguno dice "error" cuando el juego está bien.
  */
 function pantallaDeVacio(nombre: string, motivo: string): string {
-  const titulo = motivo === 'error'
+  const titulo = motivo === 'error' || motivo === 'permiso'
     ? 'No se ha podido leer esa ficha'
     : 'Todavía no hay ficha pública';
-  const texto = motivo === 'error'
-    ? 'Puede ser un corte de conexión o que las reglas de la base de datos no estén'
-      + ' publicadas. Si es lo segundo, el perfil aparecerá en cuanto su juego guarde.'
-    : 'En cuanto su juego guarde una vez, aquí habrá su ficha con su colección y sus'
-      + ' números.';
+  // El permiso tiene su propio texto, y por lo mismo que en `avisoDeFichaParcial`: un corte
+  // de conexión se arregla reconectando, y un permiso denegado no.
+  const texto = motivo === 'permiso'
+    ? 'Este juego no tiene permiso para leer las fichas. No es un problema de conexión:'
+      + ' las reglas de la base de datos sin publicar.'
+    : motivo === 'error'
+      ? 'Puede ser un corte de conexión o que las reglas de la base de datos no estén'
+        + ' publicadas. Si es lo segundo, el perfil aparecerá en cuanto su juego guarde.'
+      : 'En cuanto su juego guarde una vez, aquí habrá su ficha con su colección y sus'
+        + ' números.';
   return `
     <div class="flex flex-col items-center gap-3 py-8 text-center">
       <span class="text-[var(--text-muted)]">${ic('user', 'w-8 h-8')}</span>

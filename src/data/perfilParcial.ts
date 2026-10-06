@@ -60,7 +60,15 @@ export interface DatosDeRanking {
 }
 
 /** Por qué no hay tarjeta. Cambia lo que se le dice al jugador. */
-export type MotivoDeAusencia = 'no-existe' | 'error';
+/**
+ * Por qué no hay ficha entera.
+ *
+ * **`permiso` es un motivo propio y no una variante de `error`** porque lo que hay que hacer
+ * es distinto: un `error` se arregla reconectando y un permiso denegado no. Si los dos
+ * compartieran texto, el jugador con las reglas sin publicar leería "aparecerá en cuanto
+ * vuelva la conexión" y no volvería nunca por ahí.
+ */
+export type MotivoDeAusencia = 'no-existe' | 'permiso' | 'error';
 
 /**
  * Construye la ficha con lo poco que hay.
