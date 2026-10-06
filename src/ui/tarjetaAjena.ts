@@ -35,6 +35,10 @@ import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from './identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
 import { ACHIEVEMENTS } from '../achievements';
+// **LAS MISMAS FICHAS QUE PINTA LA PANTALLA DE INICIO.** No una versión parecida: las
+// mismas funciones. La ficha pública enseña recolectores y compañeros como los ves en
+// tu casa, y eso solo se sostiene si las dos pantallas llaman al mismo código.
+import { fichaDeRecolector, casillaDeCompanero } from './fichas';
 import { TREE_CATEGORY_META } from '../data/tree';
 import { rarityClass } from '../components/crateLoot';
 import { leerTarjeta, registrarVisita } from '../services/profileService';
@@ -184,21 +188,24 @@ async function carga(
 /** El cuerpo entero de la tarjeta. */
 function cuerpoDeTarjeta(t: TarjetaPublica): string {
   const banner = t.cosmetics.banner ? COSMETICS_BY_ID[t.cosmetics.banner] : undefined;
-  const total = Math.max(1, t.recolectores.length + (t.recolectores.length < 24 ? 0 : 0));
+
+  // **UNA SOLA SECCIÓN, "LO QUE TIENE PUESTO".** Antes eran dos —recolectores y
+  // compañeros— con el mismo nombre, y el mismo nombre en los dos es una señal de que la
+  // separación no aportaba nada: es una persona con un recolector y tres compañeros.
+  const puesto = [
+    t.completa === false ? '' : bloqueDeRecolectores(t),
+    t.completa === false ? '' : bloqueDeCompaneros(t),
+    t.completa === false ? '' : bloqueDeLogros(t)
+  ];
 
   return `
     ${bannerDeTarjeta(t, banner)}
+
     ${t.completa === false ? avisoDeFichaParcial(String(t.motivo ?? 'no-existe')) : ''}
 
     ${cifrasDeTarjeta(t)}
 
-    ${seccion('Colección', 'collector', [
-      bloqueDeRecolectores(t),
-      bloqueDeCompaneros(t),
-      bloqueDeNodos(t)
-    ])}
-
-    ${seccion('Logros', 'achievement', [bloqueDeLogros(t)])}
+    ${seccion('Lo que tiene puesto', 'core', puesto)}
 
     ${pieDeTarjeta(t)}
   `;
@@ -271,38 +278,39 @@ function cifrasDeTarjeta(t: TarjetaPublica): string {
 
 /** Los bloques de la colección, y el "y N más" cuando la tarjeta se ha recortado. */
 function bloqueDeRecolectores(t: TarjetaPublica): string {
+  // EN UNA FICHA A MEDIAS NO SE PINTA: no es que no tenga, es que no lo ha publicado.
   if (t.completa === false) return '';
-  if (t.recolectores.length === 0) return vacio('collector', 'Sin recolectores todavía');
+  if (t.recolectores.length === 0) return vacio('collector', 'No tiene ningún recolector equipado');
   const maxTier = t.recolectores[0].tier;
   const mostrados = t.recolectores.length;
   return `
-    ${subtitulo('Recolectores', `${mostrados}${equipadosDe(t.recolectores)}${maxTier ? ` · mejor T${maxTier}` : ''}`)}
-    <div class="flex flex-col gap-1">
+    ${subtitulo('Recolector', '')}
+    <div class="flex flex-col gap-2">
       ${t.recolectores.map(r => `
-        <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)]">
-          ${marcaDeEquipado(r.equipado)}
-          <span class="text-[11px] font-mono font-bold w-9 flex-shrink-0">T${r.tier}</span>
-          <span class="text-[11px] min-w-0 flex-1 truncate ${rarityClass(r.rarity)}">${esc(r.name)}</span>
-          <span class="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">
-            nv ${r.level}${r.maxLevel ? `/${r.maxLevel}` : ''}
-          </span>
-          ${r.potential ? `<span class="text-[10px] font-mono text-fuchsia-300 flex-shrink-0" title="Potencial">P${r.potential}</span>` : ''}
+        <div class="rounded-xl border border-[var(--border-color)] p-2.5">
+          ${fichaDeRecolector(r, {
+            etiqueta: 'Potencial',
+            valor: r.potential ? `P${r.potential}` : '--',
+            title: 'Las estrellas con las que salió; suben su techo de nivel'
+          })}
         </div>`).join('')}
     </div>`;
 }
 
 function bloqueDeCompaneros(t: TarjetaPublica): string {
+  if (t.completa === false) return '';
   if (t.companeros.length === 0) return '';
   return `
-    ${subtitulo('Compañeros', `${t.companeros.length}${equipadosDe(t.companeros)}`)}
-    <div class="flex flex-col gap-1">
+    ${subtitulo('Compañeros', '')}
+    <div class="grid grid-cols-3 gap-2">
       ${t.companeros.map(c => `
-        <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)]">
-          ${marcaDeEquipado(c.equipado)}
-          <span class="text-[11px] font-mono font-bold w-9 flex-shrink-0">T${c.tier}</span>
-          <span class="text-[11px] min-w-0 flex-1 truncate ${rarityClass(c.rarity)}">${esc(c.name)}</span>
-          ${c.power ? `<span class="text-[10px] font-mono text-cyan-300 flex-shrink-0">+${formatNumber(c.power)}/s</span>` : ''}
+        <div class="relative">
+          ${casillaDeCompanero(c)}
         </div>`).join('')}
+    </div>
+    <div class="text-[9px] font-mono text-[var(--text-muted)] leading-relaxed">
+      La cifra es el valor del compañero sin los multiplicadores de su partida, que no
+      se pueden conocer desde fuera.
     </div>`;
 }
 
@@ -360,6 +368,7 @@ function bloqueDeLogros(t: TarjetaPublica): string {
     .filter(x => !!x.titulo);
   if (conNombre.length === 0) return vacio('achievement', 'Sin logros publicados');
   return `
+    ${subtitulo('Logros', '')}
     <div class="flex flex-wrap gap-1.5">
       ${conNombre.map(x => `
         <span class="medal text-amber-400 gap-1" title="${esc(x.titulo)}">
@@ -460,16 +469,19 @@ function pantallaDeVacio(nombre: string, motivo: string): string {
  * Y sale en la fila **y en el subtítulo**, con la cuenta: "6 · 1 puesto" es mejor que
  * tener que contar a mano cuántos hay marcados.
  */
-function marcaDeEquipado(equipado?: boolean): string {
-  if (!equipado) return '';
-  return `<span class="text-[9px] font-mono uppercase tracking-wider accent-bg
-                 text-slate-950 rounded px-1 py-0.5 flex-shrink-0">PUESTO</span>`;
-}
 
 /** El "(1 puesto)" del subtítulo, o nada si no hay ninguno. */
-function equipadosDe<T extends { equipado?: boolean }>(lista: T[]): string {
+/**
+ * El subtítulo de cada bloque: qué tiene puesto y cuántos.
+ *
+ * **UNA SOLA PALABRA, "PUESTO", EN LOS DOS.** Decir "colección" en un sitio y "puesto"
+ * en el otro haría que el lector se preguntara si lo que falta es algo que tiene o algo
+ * que no enseña.
+ */
+function equipadosDe<T extends { equipado?: boolean }>(lista: T[], sustantivo: string): string {
   const n = lista.filter(x => x.equipado).length;
-  return n === 0 ? '' : ` · ${n} puesto${n > 1 ? 's' : ''}`;
+  if (n === 0) return 'nada';
+  return `${n} ${sustantivo}${n > 1 ? 's' : ''}`;
 }
 
 

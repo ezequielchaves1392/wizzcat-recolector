@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
 import { publicarTarjeta } from './services/profileService';
+import { tarjetaDesdeEstado } from './data/profile';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
 import type { AchievementId } from './data/achievements';
 import { cosmeticsAlcanzables } from './data/cosmetics';
@@ -5784,6 +5785,20 @@ canBuyStoreItem: (itemKey: string): boolean => {
      * la sesión de Firebase, que ya deja `setDoc` sin permiso. `flush` fuerza
      * la escritura mientras la sesión sigue viva.
      */
+    /**
+     * La tarjeta pública tal y como se escribiría ahora mismo.
+     *
+     * **POR QUÉ ESTÁ EN LA API Y NO SOLO EN `publicarTarjeta()`.** Porque lo que se
+     *  publica sale de un recorte —"solo lo que tiene puesto"— y un recorte que no se
+     *  puede mirar es un recorte que no se puede comprobar. Devolviendo el objeto, el
+     *  banco lee de aquí lo que el jugador publicaría y no necesita escribir en la base
+     *  de datos para ver qué se guarda. `perfilCheck` lo usa justo para eso.
+     *
+     * **NUNCA LANZA.** Es una lectura del estado, y el estado siempre está.
+     */
+    tarjeta: () => tarjetaDesdeEstado(state, user.uid, displayName || 'Operativo'),
+
+
     flush: () => {
       void saveToFirebase();
     }

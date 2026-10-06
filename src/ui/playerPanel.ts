@@ -2,6 +2,11 @@ import { ic } from './icons';
 import { formatNumber } from '../utils/format';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe } from '../data/crafting';
 import { valuationConCifras } from '../data/valuation';
+// **LAS FICHAS ESTÁN EN SU FICHERO PORQUE LAS USA OTRA PANTALLA.** La ficha pública de
+// un jugador enseña los mismos recolectores y compañeros, y para que se vean como aquí
+// hay que que las dos pinten con la misma función: si cada una tuviera su markup, un día
+// cambiaría el color de una rareza en una y no en la otra.
+import { fichaDeRecolector, casillaDeCompanero, slug } from './fichas';
 
 /**
  * Panel del jugador: recolector equipado y slots de companeros.
@@ -126,66 +131,11 @@ export function renderPanel(
         ? `<span class="opacity-55 px-0.5">+</span>${formatNumber(deLaPartida)}`
         : ''}</span>
         </div>`;
-      collectorContainer.innerHTML = `
-        <div class="flex items-center gap-3">
-<div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-               style="background: color-mix(in srgb, var(--accent) 12%, transparent);
-                      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
-            <span class="[&>span>svg]:w-5 [&>span>svg]:h-5 accent-text">${ic('collector')}</span>
-          </div>
-
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-['Orbitron'] font-bold text-[13px] md:text-sm
-                           text-[var(--text-main)] truncate">${equippedItem.name}</span>
-              <span class="label-caps px-1.5 py-0.5 rounded"
-                    style="background: color-mix(in srgb, var(--accent) 14%, transparent);
-                           color: var(--accent)">T${tier}</span>
-            </div>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="text-[10px] font-mono rarity-${slug(rarity)}">${rarity}</span>
-              ${`<span class="text-[9px] text-amber-400">· ${estrellasDe(equippedItem.potential)}</span>`}
-            </div>
-            ${affixes.length ? `
-              <div class="flex items-center gap-1 flex-wrap mt-1">
-                ${affixes.map(id => {
-                  const a = AFFIX_BY_ID[id];
-                  return a
-                    ? `<span class="text-[9px] font-mono px-1 py-[1px] rounded border rarity-${slug(a.rarity)}"
-                              style="border-color: currentColor" title="${a.description}">${a.name}</span>`
-                    : '';
-                }).join('')}
-              </div>
-            ` : ''}
-            ${equippedItem.forgedBy ? `
-              <div class="text-[9px] font-mono text-[var(--text-muted)] mt-1 truncate">
-                Forjada por <span class="accent-text">${equippedItem.forgedBy}</span>
-              </div>
-            ` : ''}
-            <!-- Barra de nivel: comunica progreso de un vistazo -->
-            <div class="flex items-center gap-2 mt-2">
-              <div class="flex-1 h-1 rounded-full overflow-hidden"
-                   style="background: color-mix(in srgb, var(--text-main) 10%, transparent)">
-                <div class="h-full rounded-full transition-[width] duration-500 ease-out"
-                     style="width: ${Math.min(100, (level / maxLevel) * 100)}%;
-                            background: var(--accent)"></div>
-              </div>
-              <span class="text-[9px] font-mono text-[var(--text-muted)] tabular flex-shrink-0">
-                Nv ${level}/${maxLevel}
-              </span>
-            </div>
-          </div>
-
-          <div class="text-right flex-shrink-0">
-            <div class="label-caps leading-none">Daño</div>
-            <div class="font-['Orbitron'] font-bold text-base md:text-lg
-                        leading-tight tabular mt-0.5"
-                 style="color: var(--accent)">${danoHTML}</div>
-          </div>
-        </div>
-
-        ${bonosHTML}
-      `;
+      collectorContainer.innerHTML = fichaDeRecolector(equippedItem, {
+        etiqueta: 'Daño',
+        valor: danoHTML,
+        title: 'Lo que da el recolector, más las bonificaciones de la partida'
+      }) + bonosHTML;
     } else {
       collectorContainer.innerHTML = `
         <div class="text-center py-5">
@@ -226,47 +176,16 @@ export function renderPanel(
     for (let i = 0; i < maxSlots; i++) {
       const comp = active[i];
       if (comp) {
-        const isMult = comp.type === 'multiplier';
-        const rarity = comp.rarity || 'Común';
-// La escalera de rareza es de cuatro peldaños y se queda ahí: `Sobrecargado`
-        // era el quinto y se ha ido con el resto de la mecánica. El brillo se
-        // decide con la rareza del item, no con una marca aparte.
-        const sweep = ['Épico', 'Legendario', 'Mítico', 'Divino'].includes(rarity);
-        // POR QUÉ PIDE LA CIFRA AL MOTOR Y NO USA `comp.power`. `power` es el
-        // valor desnudo del compañero: lo que entra en la cuenta es ese número
-        // después de `passiveMultiplier`, de los logros, del árbol y del buff x2.
-        // Con un multiplicador de 1,5 la ficha decía "+3 /s" y el contador subía
-        // 4,5 — el panel enseñando un número que no se cobraba nunca (R3).
+        // POR QUÉ PIDE LA CIFRA AL MOTOR Y NO USA `comp.power`. `power` es el valor
+        // desnudo del compañero: lo que entra en la cuenta es ese número después de
+        // `passiveMultiplier`, de los logros, del árbol y del buff x2. Con un
+        // multiplicador de 1,5 la ficha decía "+3 /s" y el contador subía 4,5.
         //
-        // El reparto es proporcional y la suma de todas las fichas da
-        // exactamente `state.passiveIncome`, así que los números de aquí y el
-        // bloque que entra cada segundo son la misma cifra contada dos veces.
+        // **Y LA FICHA DE `fichas.ts` PIDE ESE `aporta`**, así que el número que se ve
+        // aquí y el que se cobra son el mismo. La ficha pública del perfil enseña el
+        // `power` desnudo porque no puede saber el multiplicador del árbol de otro.
         const aporta = ingresoDe?.(comp.id);
-        const valor = isMult
-          ? `×${(1 + comp.power).toFixed(2).replace(/\.?0+$/, '')}`
-          : `+${formatNumber(aporta ?? comp.power)}/s`;
-        const label = isMult ? 'MULT' : 'INGRESO';
-
-        html += `
-          <div class="rounded-xl p-2.5 text-center border relative overflow-hidden
-                      ${sweep ? 'rare-sweep' : ''}"
-               style="background: var(--bg-app);
-                      border-color: color-mix(in srgb, var(--accent) 35%, transparent)">
-            <div class="flex justify-center mb-1.5">
-              <span class="[&>span>svg]:w-5 [&>span>svg]:h-5"
-                    style="color: var(--accent)">${ic(isMult ? 'sparkle' : 'companion')}</span>
-            </div>
-            <div class="text-[10px] font-mono text-[var(--text-main)] truncate leading-tight
-                        font-semibold">${comp.name}</div>
-            <div class="text-[9px] font-mono rarity-${slug(rarity)} mt-0.5 truncate">${rarity}</div>
-            <div class="mt-1.5 pt-1.5 border-t"
-                 style="border-color: color-mix(in srgb, var(--accent) 20%, transparent)">
-              <div class="label-caps" style="font-size:8px">${label}</div>
-              <div class="text-[11px] font-mono font-bold tabular mt-0.5"
-                   style="color: var(--accent)">${valor}</div>
-            </div>
-          </div>
-        `;
+        html += casillaDeCompanero(comp, aporta);
       } else {
         html += `
           <div class="rounded-xl p-2.5 text-center border border-dashed opacity-45
@@ -281,9 +200,3 @@ export function renderPanel(
     companionsContainer.innerHTML = html;
   }
 }
-
-/** 'Divino' -> 'divino' para las clases .rarity-* del CSS */
-function slug(rarity: string): string {
-  return rarity.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-

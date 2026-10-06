@@ -12,15 +12,20 @@
 //  el dueño no se cuente.
 
 import { check, resumen, boot, baseSave, collector, companion } from './kit';
-import {
-  tarjetaDesdeEstado, documentoDeTarjeta, coaccionaTarjeta,
-  CLAVES_DE_TARJETA, TARJETA_VACIA, TOPE_RECOLECTORES
-} from '../src/data/profile';
-import { SECRET_ACHIEVEMENTS } from '../src/data/achievements';
 
 const db = () => (globalThis as any).__MEM_DB__;
 
 async function main() {
+  // **LA REGLA SE IMPORTA DENTRO, NO ARRIBA DEL TODO, Y POR QUÉ.** `data/profile.ts`
+  // arrastra el árbol y los logros, y el motor llega a ella por `services/profileService`.
+  // Un import estático aquí metía ese módulo en el grafo del banco de forma estática y el
+  //  **bundle de los 32 bancos juntos** lo inicializaba en otro orden: `playthroughCheck`
+  //  arrancaba, recargaba y encontraba el recolector sin equipar. El banco que importa la
+  //  regla en caliente no cambia nada de lo que hay que comprobar y sí deja de arrastrar
+  //  el módulo al bundle compartido.
+  const { tarjetaDesdeEstado, documentoDeTarjeta, coaccionaTarjeta, CLAVES_DE_TARJETA, TARJETA_VACIA, TOPE_RECOLECTORES } = await import('../src/data/profile');
+  const { SECRET_ACHIEVEMENTS } = await import('../src/data/achievements');
+
   // =========================================================================
   //  1. Lo que NO se publica
   // =========================================================================
@@ -65,39 +70,58 @@ async function main() {
   }
 
   // =========================================================================
-  //  2. Lo que sí, y con su recorte
   // =========================================================================
+  //  2. El recorte: lo que se publica es lo que tiene puesto
+  // =========================================================================
+  //
+  // **LA PREGUNTA ÚTIL YA NO ES "CUÁNTOS CABEN" SINO "ENTRA EL EQUIPADO".** Antes el
+  //  recorte era un número y salían los mejores por tier, así que la prueba era que el
+  //  primero fuera el de más tier. Ahora el recorte es el equipado, y el caso que
+  //  importa es el contrario: **que entre aunque sea el peor de la lista**, porque si se
+  //  colara el mismo criterio de antes, un jugador con un T9 guardado y un T3 en la
+  //  mano publicaría el T9 y la ficha mentiría sobre cómo juega.
   {
     const muchos = Array.from({ length: 60 }, (_, i) =>
-      collector('c' + i, (i % 5) + 1, { level: i % 7 }));
-    const t = tarjetaDesdeEstado({ warehouse: muchos }, 'u1', 'X');
-    check('perfil: los recolectores se recortan al tope',
-      t.recolectores.length === TOPE_RECOLECTORES,
-      `${t.recolectores.length} de ${muchos.length}`);
-    check('perfil: y se quedan los mejores, que son los de más tier',
-      t.recolectores[0].tier === 5,
-      'mejor tier=' + t.recolectores[0].tier);
-    check('perfil: el recorte NO dice cuál de los dos es',
-      // Los ids del recorte son los de tier 5 primero: no vale comprobar que estén
-      // "los últimos", porque el orden depende del sort. Lo que importa es que el
-      // conjunto sea el de mayor tier.
-      t.recolectores.every(r => r.tier === 5)
-      || t.recolectores.filter(r => r.tier === 5).length > 0,
-      'mixto, y esta comprobacion solo mira que haya de tier 5');
+      collector('c' + i, (i % 9) + 1, {}));
+    muchos.push(collector('elEquipado', 1, {}));
+    const t = tarjetaDesdeEstado({
+      warehouse: muchos,
+      equippedCollectorId: 'elEquipado'
+    }, 'u1', 'X');
+    check(
+      'perfil: el equipado entra aunque sea el de MENOS tier',
+      t.recolectores.length === 1 && t.recolectores[0].id === 'elEquipado'
+        && t.recolectores[0].tier === 1,
+      JSON.stringify(t.recolectores.map(r => `${r.id}:T${r.tier}`))
+    );
+    check(
+      'perfil: y de sesenta en el almacen solo sale uno',
+      t.recolectores.length === 1,
+      `${t.recolectores.length} de ${muchos.length}`
+    );
   }
   {
     const t = tarjetaDesdeEstado({
       nodeLevels: { core_sink: 3, core_edge: 2, sin_comprar: 0 }
     }, 'u1', 'X');
-    check('perfil: los nodos pagados se cuentan por niveles comprados',
-      t.nivelesDeArbol === 5, 'niveles=' + t.nivelesDeArbol);
-    check('perfil: y un nodo sin niveles no cuenta como comprado',
-      t.nodos.every(n => n.nivel > 0), JSON.stringify(t.nodos.map(n => n.id)));
-    check('perfil: los nombres de los nodos vienen del catálogo, no del documento',
-      t.nodos.some(n => n.nivel === 3), JSON.stringify(t.nodos.map(n => n.nivel)));
+    check(
+      'perfil: los nodos pagados se cuentan por niveles comprados',
+      t.nivelesDeArbol === 5,
+      `niveles=${t.nivelesDeArbol}`
+    );
+    check(
+      'perfil: y un nodo sin niveles no cuenta como comprado',
+      t.nodos.every(n => n.nivel > 0),
+      JSON.stringify(t.nodos.map(n => n.id))
+    );
+    check(
+      'perfil: los nombres de los nodos vienen del catalogo, no del documento',
+      t.nodos.some(n => n.nivel === 3),
+      JSON.stringify(t.nodos.map(n => n.nivel))
+    );
   }
 
-  // =========================================================================
+
   //  3. Los secretos no salen, y el total no los delata
   // =========================================================================
   {
@@ -192,55 +216,64 @@ async function main() {
   }
 
   // =========================================================================
-  //  6. Lo que lleva PUESTO, que es lo que un jugador tiene al llegar
+  // =========================================================================
+  // =========================================================================
+  //  6. En la tarjeta va SOLO lo que tiene puesto
   // =========================================================================
   //
-  // **LA COLECCIÓN SIN LO PUESTO NO DICE CÓMO JUEGA.** De veinte recolectores, el que
-  //  decide cómo juega es uno, y si la lista lo pone en el medio el jugador tiene que
-  //  buscarlo. Por eso la marca es obligatoria y por eso va **primero**:
+  // **ESTO USA EL MOTOR DE VERDAD, Y POR QUÉ ES LA PRUEBA QUE CUENTA.** El recorte —
+  //  "solo lo que tiene puesto"— ocurre dentro de `tarjetaDesdeEstado()`, que es donde se
+  //  decide, y esa función la llama el guardado con el estado real. Un banco que
+  //  escribiera un estado a mano estaría probando un objeto que el juego nunca construye,
+  //  y el día que el recorte cambie el banco seguiría en verde.
   {
-    const estado = {
-      warehouse: [
-        collector('c1', 9, { equipped: false }),
-        collector('c2', 3, {}),
-        companion('k1', 5, {}),
-        companion('k2', 2, {})
-      ],
-      equippedCollectorId: 'c2',
-      activeCompanions: ['k1']
-    };
-    const t = tarjetaDesdeEstado(estado, 'u1', 'X');
-    check(
-      'perfil: el recolector equipado sale en la tarjeta',
-      t.recolectores.some(r => r.id === 'c2' && r.equipado === true),
-      JSON.stringify(t.recolectores.map(r => `${r.id}:${r.equipado}`))
-    );
-    check(
-      'perfil: y sale PRIMERO, porque es el que decide cómo juega',
-      t.recolectores[0].id === 'c2',
-      'el primero es ' + t.recolectores[0].id
-    );
-    check(
-      'perfil: los compañeros activos también, y en el mismo orden',
-      t.companeros[0].id === 'k1' && t.companeros[0].equipado === true
-        && t.companeros[1].equipado !== true,
-      JSON.stringify(t.companeros.map(c => `${c.id}:${c.equipado}`))
-    );
-    check(
-      'perfil: y el que no está puesto no lleva la marca',
-      t.recolectores.every(r => (r.equipado === true) === (r.id === 'c2')),
-      JSON.stringify(t.recolectores.map(r => `${r.id}:${r.equipado}`))
-    );
-  }
+    // Dos recolectores y dos compañeros, **uno de cada en activo y otro guardado**.
+    const g = await boot(baseSave([
+      collector('guardado', 9, {}),
+      collector('puesto', 3, { level: 7, potential: 4, rarity: 'Épico', forgedBy: 'Alguien',
+        affixes: ['aff_crit'] })
+    ], { companions: [companion('kGuardado', 6), companion('kPuesto', 5)] }));
+    g.equipCollector('puesto');
+    g.equipCompanion('kPuesto');
 
-  // Y que una partida sin puestos no rompe nada: es el caso de un jugador que entra y
-  // no ha equipado nada todavía.
-  {
-    const t = tarjetaDesdeEstado({ warehouse: [collector('c9', 1, {})] }, 'u1', 'X');
+    const t = g.tarjeta();
     check(
-      'perfil: sin puestos, la lista se queda como estaba',
-      t.recolectores.length === 1 && t.recolectores[0].equipado !== true,
-      `equipado=${t.recolectores[0].equipado}`
+      'perfil: solo se publica el recolector equipado, no el que esta guardado',
+      t.recolectores.length === 1 && t.recolectores[0].id === 'puesto',
+      JSON.stringify(t.recolectores.map(r => r.id))
+    );
+    check(
+      'perfil: el guardado de T9 no aparece, que es el que mas comandos',
+      !t.recolectores.some(r => r.id === 'guardado'),
+      JSON.stringify(t.recolectores.map(r => `${r.id}:T${r.tier}`))
+    );
+    check(
+      'perfil: y de los companeros, solo el activo',
+      t.companeros.length === 1 && t.companeros[0].id === 'kPuesto'
+        && t.companeros[0].equipado === true,
+      JSON.stringify(t.companeros.map(c => c.id))
+    );
+
+    // Y lo que se lleva el item entero, que es lo que hace falta para la ficha completa:
+    // descripcion, afijos y quien lo forjo.
+    const r = t.recolectores[0];
+    check(
+      'perfil: el item publica su descripcion, sus afijos y quien lo forjo',
+      typeof r.details === 'string' && r.details.length > 0 && /\d/.test(r.details)
+        && r.affixes.length === 1 && r.affixes[0] === 'aff_crit',
+      JSON.stringify({ d: r.details, f: r.forgedBy, a: r.affixes })
+    );
+
+    // Y el caso de un jugador que no tiene nada puesto: la ficha sale vacia, y eso es un
+    // dato, no un fallo.
+    // **AQUÍ NO HACE FALTA EL MOTOR.** Que la tarjeta salga vacía sin nada equipado es una
+    // regla de `tarjetaDesdeEstado`, y el motor ya está probando arriba lo que sí necesita:
+    // que el recorte se aplique al estado que el juego construye de verdad.
+    const tSinNada = tarjetaDesdeEstado({}, 'u1', 'X');
+    check(
+      'perfil: sin nada equipado, la ficha lo dice y no inventa',
+      tSinNada.recolectores.length === 0 && tSinNada.companeros.length === 0,
+      `${tSinNada.recolectores.length}/${tSinNada.companeros.length}`
     );
   }
 

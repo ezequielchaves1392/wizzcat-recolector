@@ -191,8 +191,31 @@ function limpiarCola() {
   }
 }
 
-/** Arranca una partida nueva (documento inexistente). */
+/**
+ * Arranca una partida nueva: el documento de `users/test` no existe.
+ *
+ * **ESTA FUNCIÓN HACIA MENOS QUE `boot()`, Y POR ESO ESTABA ROTA.**
+ *
+ * `boot()` limpia la cola y **espera dos turnos antes de montar el documento**, por un
+ * motivo escrito allí: los bucles de pruebas anteriores siguen vivos, y sin esa espera un
+ * guardado en vuelo de una partida que ya no existe escribe encima del documento nuevo.
+ * Aquí no se hacía ninguna de las dos cosas.
+ *
+ * **LO QUE PASÓ, Y POR QUÉ SALIÓ EN OTRO BANCO.** `perfilCheck` añadió una partida montada
+ * a mano para probar el recorte de la tarjeta pública, y su bucle se quedó vivo.
+ * `playthroughCheck`, que va justo detrás y mide la partida entera de un jugador nuevo,
+ * empezó a narrar sin recolector equipado y con el ingreso pasivo a cero: tres pruebas de
+ * "nacimiento" que no tienen nada que ver con la tarjeta de perfil. La regla de nacimiento
+ * parecía rota y lo único roto era el banco de al lado.
+ *
+ * **Y ESPERAR EN EL BANCO QUE ENSUCIA NO SIRVE.** El banco que lo deja sucio es este y el
+ * que lo sufre es el siguiente, así que la espera tiene que estar aquí, donde se monta el
+ * documento.
+ */
 export async function bootNew() {
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  limpiarCola();
   globalThis.__MEM_DB__ = {};
   return anotarJuego(await createGameLoop(USER, () => {}));
 }

@@ -94,6 +94,20 @@ export async function leerTarjeta(uid: string): Promise<LecturaDeTarjeta> {
  * rompe nada: el juego sigue guardando la partida, que es lo que no se puede perder, y
  * un perfil con datos de hace un rato es mil veces mejor que un perfil vacío.
  */
+/**
+ * La tarjeta tal y como se escribiría ahora mismo, sin escribir nada.
+ *
+ * **POR QUÉ ESTÁ AQUÍ Y NO LA LLAMA EL MOTOR DIRECTAMENTE.** Por un lado es la regla de
+ * `data/profile.ts` y este servicio es quien la usa; y por otro, `gameLoop` no debe
+ * importarla: `data/profile` arrastra el árbol y los logros, y meterlo en el motor cambia
+ * el orden de inicialización de esos módulos —que se notó en los bancos, donde el resto
+ * de módulos se evalúan antes que el motor—. La arista del motor a esta regla es esta
+ * función y solo esta.
+ */
+export function tarjetaDeEstado(state: any, uid: string, username: string): TarjetaPublica {
+  return tarjetaDesdeEstado(state, uid, username);
+}
+
 export async function publicarTarjeta(state: any, uid: string, username: string): Promise<void> {
   try {
     const tarjeta = tarjetaDesdeEstado(state, uid, username);

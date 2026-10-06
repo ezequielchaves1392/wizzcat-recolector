@@ -31,16 +31,13 @@ const TARJETA_DE_EJEMPLO = {
   cajasAbiertas: 1402,
   forjadas: 87,
   recolectores: [
-    { id: 'a', name: 'Espuela de Confín', tier: 9, level: 14, maxLevel: 29, potential: 5, rarity: 'Divino', equipado: true },
-    { id: 'b', name: 'Coloso de Batalla', tier: 8, level: 22, maxLevel: 29, potential: 4, rarity: 'Legendario' },
-    { id: 'c', name: 'Reloj de Arena Roto', tier: 8, level: 9, maxLevel: 29, potential: 3, rarity: 'Legendario' },
-    { id: 'd', name: 'Yunque de Rifar', tier: 7, level: 27, maxLevel: 29, potential: 5, rarity: 'Épico' },
-    { id: 'e', name: 'Sonda de Vacío', tier: 7, level: 3, maxLevel: 29, potential: 2, rarity: 'Épico' },
-    { id: 'f', name: 'Chispa menor', tier: 1, level: 0, maxLevel: 9, potential: 1, rarity: 'Común' }
+    // **SOLO EL EQUIPADO**, que es lo que se publica. El resto sigue en su almacén.
+    { id: 'a', name: 'Espuela de Confín', tier: 9, level: 14, maxLevel: 29, potential: 5, rarity: 'Divino', equipado: true,
+      affixes: ['aff_crit', 'aff_luck'], forgedBy: 'CyberKnight', details: 'Daño base: +340' }
   ],
   companeros: [
-    { id: 'p', name: 'Vigía', tier: 6, power: 42, rarity: 'Legendario', equipado: true },
-    { id: 'q', name: 'Bruto', tier: 4, power: 18, rarity: 'Épico', equipado: true }
+    { id: 'p', name: 'Vigía', tier: 6, power: 42, rarity: 'Legendario', equipado: true, tipo: 'companion' },
+    { id: 'q', name: 'Bruto', tier: 4, power: 18, rarity: 'Épico', equipado: true, tipo: 'companion' }
   ],
   nodosComprados: 7,
   nodosTotales: 24,

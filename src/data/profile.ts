@@ -47,8 +47,27 @@ import { formatNumber } from '../utils/format';
 //  Los topes de la tarjeta
 // --------------------------------------------------------------------------
 
-/** Cuántos recolectores se publican, de los que tenga. */
-export const TOPE_RECOLECTORES = 24;
+/** Tope de seguridad de la lista de recolectores.normally solo hay uno equipado. */
+/**
+ * LO QUE VA EN LA TARJETA: SOLO LO QUE EL JUGADOR TIENE PUESTO.
+ *
+ * ## POR QUÉ SOLO LO EQUIPADO Y NO LA COLECCIÓN ENTERA
+ *
+ * Porque la ficha pública se abrió para ver **cómo juega alguien**, y eso lo dice lo que
+ * tiene puesto: su recolector y sus compañeros activos. La lista de los veinte
+ * recolectores que tiene guardados no dice cómo juega, dice cuántas horas ha jugado —y en
+ * un incremental, enseñar el inventario completo a tu competencia es justo lo que no se
+ * quería—.
+ *
+ * Y sale más corto y más legible: una ficha con cuatro líneas se lee de un vistazo y una
+ * con veinte se pasa por alto, que es peor que no tenerla.
+ *
+ * **NO ES QUE NO TENGAMOS MÁS DATOS: es que no se publican.** El recorte es aquí, antes
+ * de escribir, y no en la pantalla. Filtrar al pintar significaría mantener en el
+ * documento datos que nadie va a ver.
+ */
+/** Tope de seguridad: solo hay un recolector equipado, pero la lista no depende de eso. */
+export const TOPE_RECOLECTORES = 4;
 /** Cuántos compañeros se publican. */
 export const TOPE_COMPANEROS = 16;
 /** Cuántas categorías del árbol se detallan. */
@@ -80,6 +99,8 @@ export interface CompanionPublico {
   rarity: string;
   /** Si este compañero está en la lista de activos. */
   equipado?: boolean;
+  /** 'companion' o 'multiplier': un multiplicador enseña ×1,5 y no ingreso. */
+  tipo: string;
 }
 
 export interface NodoPublico {
@@ -166,19 +187,28 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
   );
   const almacen: any[] = Array.isArray(state?.warehouse) ? state.warehouse : [];
 
+  // **SOLO EL EQUIPADO.** `state.equippedCollectorId` es el que el jugador tiene puesta la
+  // mano; los demás filtrados son los que tiene en el almacén y no dice nada de cómo
+  // juega.
   const recolectores = ordenados(
-    almacen.filter(w => w?.type === 'collector')
+    almacen.filter(w => w?.type === 'collector' && w.id === state?.equippedCollectorId)
       .map(w => ({
         id: String(w.id ?? ''),
         name: String(w.name ?? 'Recolector'),
         tier: num(w.tier), level: num(w.level), maxLevel: num(w.maxLevel),
         potential: num(w.potential), rarity: String(w.rarity ?? ''),
-        equipado: w.id === state?.equippedCollectorId
+        equipado: true,
+        affixes: Array.isArray(w.affixes) ? w.affixes.map(String) : [],
+        forgedBy: String(w.forgedBy ?? ''),
+        details: String(w.details ?? '')
       }))
   ).slice(0, TOPE_RECOLECTORES);
 
+  // **SOLO LOS ACTIVOS**, por el mismo motivo que arriba, y porque la rejilla del inicio
+  // enseña los activos y las ranuras vacías: la ficha pública enseña las que están
+  // ocupadas.
   const companeros = ordenados(
-    almacen.filter(w => w?.type === 'companion')
+    almacen.filter(w => w?.type === 'companion' && activos.has(w.id))
       .map(w => ({
         id: String(w.id ?? ''),
         name: String(w.name ?? 'Compañero'),
@@ -188,8 +218,9 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         // estado del dueño que la tarjeta no tiene. Recalcularlo aquí inventaría un
         // número, y un número inventado en una tarjeta pública es peor que noándolo.
         power: num(w.power),
-        equipado: activos.has(w.id),
-        rarity: String(w.rarity ?? '')
+        equipado: true,
+        rarity: String(w.rarity ?? ''),
+        tipo: String(w.type ?? 'companion')
       }))
   ).slice(0, TOPE_COMPANEROS);
 

@@ -2475,19 +2475,46 @@ _Cosas que estorban al trabajo más que al juego._
       del límite diario y tiene un aviso antes de cobrar.
       **Y tres cosas más que pidió el jugador al verla, todas por lo mismo:** la ficha
       tenía datos que no servían.
-      - **"Aparte del recolector equipado, que muestre los compañeros equipados."**
-        La colección era una lista sin distinguir lo que llevas puesto, y de veinte
-        recolectores el que decide cómo juega es uno. Ahora el recolector equipado y los
-        compañeros activos llevan la marca **PUESTO**, y además **salen primero**:
-        esconderlos en medio de la lista es tener que buscarlos. Y el subtítulo cuenta —
-        "6 · 1 puesto"— para no tener que contarlos a mano.
+      - **"Solo tiene que verse lo equipado."** Y fue mejor que la versión anterior. La
+        colección entera quedaba publicada, y lo puesto se distinguía con una etiqueta
+        **PUESTO** y salía ordenado primero: tres apaños para enseñar una idea que se
+        resuelve de otra forma. **Ahora el recorte está antes de escribir**: el documento
+        `perfiles/{uid}` lleva solo el recolector equipado y los compañeros activos, así que
+        la marca **ya no hace falta** —todo lo que sale está puesto— y la ficha se lee de un
+        vistazo. También sale menos: en un incremental, enseñar el inventario entero a tu
+        competencia es justo lo que no se quería.
       - **"Y no olvidar las visitas que tiene a su perfil."** El contador sigue ahí, pero
         **en una ficha a medias se quita**, y no por descuido: no hay documento del que
         sacarlo, y un "todavía no te ha mirado nadie" en una ficha que no existe afirma
         algo que nadie sabe. Cuando la tarjeta existe, la cuenta está, y la primera línea
         de la ficha es suya.
-      - **LosGoals salían como ids crudos** (`first_click`, `first_forge`) y **la fecha
-        como un número del juego** ("actualizado 1.750 T"). Los dos seTransparent:
+      - **Los logros salían como ids crudos** (`first_click`, `first_forge`) y **la fecha
+        como un número del juego** ("actualizado 1.750 T"). Los dos se transparentan:
         el nombre sale del catálogo, saltando los ids que ya no existen en él, y la fecha
         dice "hace tres días" en vez de un número de nanitas.
+
+## Lo que se descubrió haciendo la ficha, y no estaba en ninguna lista
+
+- **`bootNew()` no esperaba los dos turnos que sí espera `boot()`, y por eso estaba roto.**
+  Esto no lo pidió nadie y no se ve en el juego: es un fallo del **banco de pruebas** que
+  `perfilCheck` destapó al arrancar una partida montada a mano. `boot()` limpia la cola y
+  espera dos turnos **antes de montar el documento**, porque los bucles de pruebas
+  anteriores siguen vivos y guardan al recibir su propio evento; sin esa espera, un guardado
+  en vuelo escribe encima del documento recién montado. `bootNew()` no hacía ninguna de las
+  dos cosas. **No se veía porque ningún banco montaba una partida nueva sin esperar**, y en
+  cuanto uno lo hizo, `playthroughCheck` empezó a narrar sin recolector equipado y con
+  el ingreso pasivo a cero: tres pruebas de "nacimiento" rotas por un banco que no las toca.
+  Un fallo del banco disfrazado de fallo del juego, que es la confusión más cara que hay.
+- **Un recorte que no se puede mirar es un recorte que no se puede comprobar.** Por eso el
+  recorte de la tarjeta se lee a través de la API del motor (`tarjeta()`) y no
+  reimplementado en el banco: si el banco escribiera el estado a mano, estaría probando un
+  objeto que el juego nunca construye, y el día que el recorte cambie el banco seguiría en
+  verde.
+- **El motor tiene banderas de guardado a nivel de módulo, y eso son de todas las partidas
+  del proceso.** En el navegador hay una sola partida, así que no se nota; en los bancos hay
+  treinta y dos seguidas. Se intentó arreglar por ahí y se volvió atrás: la bandera nueva
+  apagaba el guardado de la partida siguiente y rompía bancos que dependían del
+  `setTimeout(saveToFirebase, 1200)` del arranque. **Apuntado aquí, no arreglado**, porque
+  arreglarlo de verdad es tocar el arranque del motor, y eso merece su propio commit con su
+  propio banco.
 
