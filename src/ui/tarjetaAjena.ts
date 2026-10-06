@@ -98,7 +98,8 @@ export function abreTarjetaDe(
   overlay.className = 'fixed inset-0 z-[70] flex items-start justify-center';
   overlay.style.cssText = 'background: rgb(0 0 0 / 0.72); backdrop-filter: blur(6px); padding: 3vh 1rem;';
   overlay.innerHTML = `
-    <div class="tarjeta-hoja card-glass-elevated border rounded-2xl w-full max-w-lg flex flex-col
+    <div class="tarjeta-hoja card-glass-elevated border rounded-2xl w-full max-w-lg
+                md:max-w-3xl lg:max-w-5xl flex flex-col
                 max-h-[88vh] overflow-hidden animate-rise-in" role="dialog" aria-modal="true"
                 aria-label="Perfil de ${esc(nombre)}">
       <div class="flex items-center gap-3 p-4 border-b border-[var(--border-color)]">
@@ -291,8 +292,11 @@ function cifrasDeTarjeta(t: TarjetaPublica): string {
     cifras.push(['Ascensiones', t.resets, 'text-emerald-400']);
   }
   cifras.push(['Forjadas', t.forjadas, 'text-rose-400']);
+  // **LAS CIFRAS SE ABREN A CUATRO COLUMNAS EN PANTALLA ANCHA.** A dos, en una caja de 420 px,
+  // cada cifra sale estrecha y la más larga —"Nanitas producidas"— se parte. En el escritorio
+  // caben todas en una fila y de un vistazo, que es lo que se viene a mirar.
   return `
-    <div class="grid grid-cols-2 gap-2">
+    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
       ${cifras.map(([etiqueta, valor, tono]) => `
         <div class="rounded-xl border border-[var(--border-color)] px-3 py-2">
           <div class="text-[10px] font-mono text-[var(--text-muted)]">${etiqueta}</div>
@@ -561,8 +565,31 @@ function seccion(titulo: string, icono: IconName, bloques: string[]): string {
       <div class="label-caps accent-text flex items-center gap-1.5">
         <span class="inline-flex">${ic(icono)}</span> ${titulo}
       </div>
-      ${conAlgo.join('')}
+      ${cuerpoDeSeccion(conAlgo)}
     </div>`;
+}
+
+/**
+ * LOS BLOQUES DE LA SECCIÓN, EN COLUMNA O EN REJILLA SEGÚN EL ANCHO.
+ *
+ * **EN UNA PANTALLA ANCHA NO TIENE SENTIDO UNA TARJETA DE 420 px CON SCROLL.** En el
+ * escritorio la ficha se abría como una tira estrecha y había que bajar para ver el último
+ * compañero: la información estaba, pero no se veía de golpe, que es justo lo que se viene a
+ * mirar un perfil.
+ *
+ * **A PARTIR DE `lg` LOS TRES BLOQUES VAN EN DOS COLUMNAS, Y EN `xl` EN TRES.** Los compañeros
+ * son cuadrados pequeños y el recolector es una tarjeta ancha: en dos columnas cada uno va a
+ * su ancho natural y ninguno queda estrangulado.
+ *
+ * Y el ancho de la hoja sube en el mismo escalón (`md:max-w-3xl lg:max-w-5xl`): una rejilla
+ * de tres columnas dentro de una caja de 420 px no son tres columnas, son tres columnas
+ * estrechas. Las dos cosas van juntas o no sirven de nada.
+ */
+function cuerpoDeSeccion(bloques: string[]): string {
+  if (bloques.length < 2) return bloques.join('');
+  return `<div class="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3 xl:gap-4">
+    ${bloques.join('')}
+  </div>`;
 }
 
 function subtitulo(titulo: string, meta: string): string {
