@@ -3340,6 +3340,51 @@ function sePuedeGuardar(): boolean {
     return document.visibilityState === 'visible' && document.hasFocus();
   }
 
+  /**
+   * ¿ESTÁ EL JUEGO PAUSADO AHORA MISMO? LA PREGUNTA ESTÁ EN UN SITIO SOLO.
+   *
+   * ## POR QUÉ UNA FUNCIÓN Y NO TRES RESPUESTAS
+   *
+   * La pregunta "el jugador no está mirando, ¿cobro o no?" la contestaban tres sitios
+   * distintos, y solo uno sabía lo de la tarjeta:
+   *
+   * · El tick, con `isEffectivelyAfk`, que sí miraba `afkExpiresAt`.
+   * · `handlePresenceChange()`, que **mata el intervalo** al ocultar la pestaña y no
+   *   miraba la tarjeta: con una puesta, el jugador se iba y no le pagaba nada.
+   * · La vista (`main.ts`), que pintaba el cartel con `isAfk && !hasPassiveBuff` y
+   *   **tampoco miraba la tarjeta**: decía "en pausa" con el saldo subiendo.
+   *
+   * Tres copias de una pregunta, dos equivocadas, y el síntoma era que la tarjeta AFK
+   * no hacia nada visible, que es lo que reportó el jugador, mientras el motor
+   * seguía pagando. Con una sola función, las tres rutas preguntan igual por
+   * construcción, que es la única forma de que no vuelvan a separarse.
+   *
+   * ## QUÉ ES UNA TARJETA AFK
+   *
+   * **El permiso explícito y pagado del jugador para que el juego siga contando
+   * mientras no está mirando.** El propio `tarjetaCheck` lo dice: las tarjetas pagan el
+   * tiempo que el jugador pasa mirando hacia otro lado. O sea que el tiempo con la
+   * pestaña oculta **también** es tiempo ausente, y por eso el intervalo no se para
+   * mientras la tarjeta siga viva.
+   *
+   * Y `passiveBoostExpiresAt` entra por lo mismo: es el otro buff que mantiene el
+   * juego vivo sin que el jugador mire.
+   *
+   * ## Y HASTA QUE SE ACABE
+   *
+   * Ni un segundo más. Cuando `Date.now()` pasa la caducidad, esta función vuelve a
+   * decir que sí, el tick se corta en su siguiente vuelta y el cartel vuelve a salir. No
+   * hay ningún estado que quedarse pegado: todo sale de dos marcas de tiempo del
+   * estado, así que recargar la partida a mitad de la tarjeta no la alarga ni la
+   * acorta.
+   */
+  function estaPausado(): boolean {
+    if (!isAfk) return false;
+    const ahora = Date.now();
+    // Una tarjeta viva, sea la de AFK o la de ingreso pasivo, quita la pausa.
+    return !(ahora < state.afkExpiresAt || ahora < state.buffs.passiveBoostExpiresAt);
+  }
+
 /**
  * SIN INGRESO PASIVO CUANDO EL JUGADOR NO ESTÁ MIRANDO.
  *
@@ -3384,15 +3429,49 @@ function sePuedeGuardar(): boolean {
 
   const handlePresenceChange = () => {
     if (!isPlayerPresent()) {
+      // **CON UNA TARJETA VIVA NO SE PARA EL INTERVALO, Y POR QUÉ.**
+      //
+      // Aquí está el bug de fondo de la tarjeta AFK. Al ocultar la pestaña o perder el
+      // foco se hacía `clearInterval(gameInterval)`: sin bucle no hay nada que multiplique,
+      // así que con la tarjeta puesta el jugador se iba de verdad y no le pagaba nada. El
+      // motor lo tenía bien —`isEffectivelyAfk` ya miraba `afkExpiresAt`— pero nunca
+      // llegaba a opinar, porque el intervalo ya estaba parado.
+      //
+      // Y la tarjeta es exactamente el permiso para esto: el jugador la ha comprado y
+      // ha dicho "cuenta mientras no estoy". Sin ella, ocultar la pestaña corta el
+      // ingreso como siempre, que es la regla de no cobrar sin mirar.
+      //
+      // La pregunta la hace `estaPausado()`, que es la misma que usan el tick y la
+      // vista: mientras la tarjeta siga viva, esto no pausa nada y el jugador puede
+      // cambiar de pestaña, minimizar o mirar a otro lado sin que el contador se pare.
+      if (!estaPausado()) {
+        // Hay tarjeta AFK o passiveBoost activa: el juego NO se pausa.
+        // Marcamos isAfk para que la vista sepa que el jugador no está mirando,
+        // pero NO cortamos el intervalo ni mostramos cartel de pausa.
+        if (awayAt === 0) {
+          awayAt = performance.now();
+        }
+        isAfk = true;
+        // El intervalo sigue vivo: no se toca `gameInterval`.
+        // Repintamos para que la vista sepa que ya no hay "jugador presente"
+        // pero sin cartel de pausa (segundo arg = false).
+        onUpdate(state, false);
+        return;
+      }
+
+      // **SIN TARJETA: el juego sí se pausa.**
+      // `isAfk` se queda a propósito: la vista lo usa para saber que el jugador no
+      // está mirando, y `estaPausado()` es la que decide si eso corta el cobro. Poner
+      // `isAfk = false` aquí haría que al volver no se supiera que había habido
+      // ausencia, que es lo que dispara la espera del primer click al regresar.
       if (awayAt === 0) {
         awayAt = performance.now();
         isAfk = true;
-        // Sin tick no hay income pasivo: el juego está "detenido" mientras no se mira
+        // Sin tick no hay ingreso pasivo: el juego está detenido mientras no se mira
         if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
         // Un último render para que la interfaz muestre la pausa
         onUpdate(state, true);
       }
-      return;
     }
 
     // El jugador volvió a la pantalla
@@ -3636,9 +3715,20 @@ const RITMO_GUARDADO_MS = 30_000;
       // Watchdog: si el jugador dejó de estar presente sin que llegara el evento
       // (minimizar desde el SO, bloqueo de pantalla, etc.), esta comprobación
       // para el tick antes de que accrue nada.
-      if (!isPlayerPresent()) {
+      //
+      // **PERO: si hay tarjeta AFK o passiveBoost activa, el juego NO se pausa.**
+      // El watchdog debe respetar `estaPausado()` igual que el tick principal.
+      // Si no hay pausa efectiva, seguimos cobrando aunque el jugador no esté presente.
+      if (!isPlayerPresent() && estaPausado()) {
         handlePresenceChange();
         return;
+      }
+      if (!isPlayerPresent() && !estaPausado()) {
+        // Hay tarjeta AFK: el jugador no está presente pero el juego sigue vivo.
+        // Marcamos isAfk para la vista, pero NO cortamos el tick.
+        if (awayAt === 0) awayAt = performance.now();
+        isAfk = true;
+        // No hacemos return: continuamos al cobro de pasivo abajo.
       }
 
       // B9 · EL AFK SE PONE SOLO, AQUI, Y NO EN EL MANEJADOR DE PRESENCIA.
