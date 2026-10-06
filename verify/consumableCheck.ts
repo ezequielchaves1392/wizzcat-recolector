@@ -29,6 +29,9 @@ import {
 import { totalConcedidoDe } from '../src/data/buffs';
 import { unidadesDeBuff, matchesFilter } from '../src/components/warehouse';
 import {
+  successChance, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION
+} from '../src/data/crafting';
+import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
   collector, crate, consumable, RAREZA_NEUTRA
 } from './kit';
@@ -1146,6 +1149,82 @@ async function main() {
     check('barra: y cuenta unidades de los dos, no de uno',
       unidadesDeBuff(g, 'afk') === 6,
       'unidades=' + unidadesDeBuff(g, 'afk'));
+  }
+
+// =========================================================================
+  //  3. LAS PIEDRAS HASTA EL 95 %, Y POR QUÉ EL TOPE VIEJO NO LLEGABA
+  //
+  //  El tope eran cinco piedras y cada una da un 12 %. Cinco son exactamente un
+  //  60 %, y la base del T10 es 0,33: se quedaba en **0,93**. El tope no era una
+  //  protección, era un muro puesto delante del objetivo — el jugador con cinco
+  //  piedras en la mano pagaba cinco por una tirada que sabía que no iba a llegar.
+  // =========================================================================
+  {
+    // **Y CON CINCO, LOS TIERS ALTOS NO LLEGAN.** Es la comprobación de la causa, y
+    // es la que fija por qué el tope se cambió en lugar de añadir un botón.
+    const sinPiedras = (tier: number) => successChance(tier, 0, 0, 0);
+    const conCinco = (tier: number) => successChance(tier, 0, 5, 0);
+    const noLlegan = [8, 9, 10].filter(t => conCinco(t) < 0.95);
+    check('forja: con cinco piedras los tiers altos se quedan corto del 95',
+      noLlegan.length > 0,
+      'cortos=' + noLlegan.map(t => 'T' + t + '=' + conCinco(t).toFixed(2)).join(' ')
+        + ' | base T10=' + sinPiedras(10).toFixed(2));
+
+    // **EL NÚMERO QUE DICE EL BOTÓN ES EL QUE LLEGA, EN TODOS LOS TIERS.**
+    for (const tier of [1, 3, 5, 7, 8, 9, 10]) {
+      const n = piedrasParaObjetivo(tier, 0, 0);
+      const conN = successChance(tier, 0, n, 0);
+      const conUnaMenos = successChance(tier, 0, Math.max(0, n - 1), 0);
+      check('forja: T' + tier + ' — las necesarias llegan al 95 % y una menos no',
+        conN >= 0.95 && (n === 0 || conUnaMenos < 0.95),
+        `n=${n} conN=${conN.toFixed(2)} conUnaMenos=${conUnaMenos.toFixed(2)}`);
+    }
+
+    // **CON LAS PASIVAS DEL ÁRBOL, HAY TIERNES DONDE NO HACE FALTA NINGUNA.**
+    // Con la base del T1 en 0,78, el árbol puede empujarla por encima de 0,95 y entonces
+    // ofrecer "gastar 2" sería cobrar por nada, que es lo que el jugador no perdona en
+    // una ruleta.
+    const sinNada = piedrasParaObjetivo(1, 0, 0);
+    const conSuerte = piedrasParaObjetivo(1, 0.30, 0);
+    check('forja: si ya se llega sin gastar, dice cero en vez de inventar piedras',
+      sinNada > 0 && conSuerte === 0,
+      `sinSuerte=${sinNada} conSuerte=${conSuerte}`);
+
+    // **LOS AFIJOS CUENTAN, Y EL BOTÓN NO PUEDE IGNORARLOS.** Cada afijo de un material
+    // da un 2 %, así que dos materiales con afijos bajan el número de piedras. Si el
+    // botón no los contara, prometería más de lo necesario —que se puede permitir— o
+    // menos, que no: cobrar de más.
+    const sinAfijos = piedrasParaObjetivo(9, 0, 0);
+    const conAfijos = piedrasParaObjetivo(9, 0, 0.10);
+    check('forja: los afijos de los materiales bajan las piedras necesarias',
+      conAfijos < sinAfijos,
+      `sin=${sinAfijos} con=${conAfijos}`);
+
+    // **LA NANO SUME Y SE CUENTA UNA VEZ, COMO ANTES.**
+    //
+    // Se mide en el T10 y no en el T9 a propósito: en el T9, sin afijos, ya hacen
+    // falta cinco piedras y la probabilidad se topa en 0,95 igual —añadir la nano no
+    // baja el número porque el número ya era el mínimo útil—. Medir ahí daría verde
+    // aunque la nano no contara para nada.
+    const nanoSin = piedrasParaObjetivo(10, 0, 0);
+    const nanoCon = piedrasParaObjetivo(10, 0, 0, 1);
+    check('forja: y la nanopartícula reduce lo que hace falta, una sola vez',
+      nanoCon < nanoSin,
+      `conNano=${nanoCon} sin=${nanoSin}`);
+
+    // **EL NÚMERO NUNCA ES NEGATIVO NI MAYOR QUE EL TOPE.**
+    const todos = [1, 5, 10].flatMap(t =>
+      [0, 0.1, 0.5, 1].map(luck =>
+        piedrasParaObjetivo(t, luck, 0)));
+    check('forja: el numero sale siempre entre 0 y el tope',
+      todos.every(n => Number.isInteger(n) && n >= 0 && n <= MAX_PIEDRAS_POR_FUSION),
+      'min=' + Math.min(...todos) + ' max=' + Math.max(...todos));
+
+    // **Y EL TOPE SIGUE EXISTIENDO.** Si alguien lo quita, `piedrasParaObjetivo` daría
+    // números grandes y "gastar 30" saldría como un botón normal.
+    check('forja: y hay tope, porque sin el el boton ofrece gastarlo todo',
+      MAX_PIEDRAS_POR_FUSION > 0 && MAX_PIEDRAS_POR_FUSION < 100,
+      'tope=' + MAX_PIEDRAS_POR_FUSION);
   }
 
   resumen('consumibles');

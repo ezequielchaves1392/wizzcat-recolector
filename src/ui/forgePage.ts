@@ -29,7 +29,7 @@
 import { ic } from './icons';
 import { getSkipRoulette } from '../roulettePrefs';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -249,7 +249,13 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
 
   const stonesItem = ((state.warehouse as any[]) || []).find(w => w.buffId === 'calibrationStone');
   const stoneCount = stonesItem?.stackCount || 0;
-  const maxStones = Math.min(5, stoneCount);
+  // **EL TOPE DE PIEDRAS NO ES UN 5 ESCRITO AQUÍ.** Estaba `Math.min(5, stoneCount)` en la
+  // vista y `Math.min(5, ...)` en el motor, y el segundo era el que mandaba: con el 5 el
+  // T10 se quedaba en 0,93 y el jugador pagaba cinco piedras por una tirada que sabía
+  // que no iba a llegar. Ahora el tope sale de `MAX_PIEDRAS_POR_FUSION`, que es el mismo
+  // número que usa la cuenta de "las necesarias", así que el interruptor no puede
+  // ofrecer más de lo que el motor cobra.
+  const maxStones = Math.min(MAX_PIEDRAS_POR_FUSION, stoneCount);
   if (ui.stones > maxStones) ui.stones = maxStones;
 
   const nanoItem = ((state.warehouse as any[]) || []).find(w => w.buffId === 'stabilityNano');
@@ -272,6 +278,17 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     ? successChance(matTier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0)
     : 0;
   const ready = elegidos.length === MATERIALES_POR_FUSION;
+
+  // **LO QUE HACE FALTA PARA LLEGAR AL 95 %, Y LO PIDE EL MOTOR.**
+  //
+  // El número depende de tres cosas —el tier, el árbol y los afijos de los materiales
+  // elegidos—, y el cobro ocurre en `gastaConsumiblesDeForja()`. Si la cuenta la hiciera
+  // esta pantalla, el botón prometería un número y el motor cobraría otro, que es el peor
+  // sitio posible para una diferencia de uno. Se le pasa el `affixLuck` que **esta misma
+  // pantalla ya calculaba** para no meter una segunda copia de esa cuenta.
+  const piedrasNecesarias = ready && matTier
+    ? game.previewPiedrasNecesarias?.(matTier, ui.nano ? 1 : 0, affixLuck) ?? null
+    : null;
   // F51 · CUÁNTOS AFIJOS APORTAN TUS MATERIALES. Lo único de la regla que depende de
   // ti, y lo único que se puede decir **antes** de tirar el dado.
   //
@@ -482,8 +499,48 @@ function nivelDe(w: any): number {
                </span>`
             : `<button class="ml-1 px-2.5 h-9 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
                       data-act="stones" data-n="0">Quitar</button>`}
-          ${ui.stones > 0 ? `<span class="ml-auto text-[10px] font-mono accent-text">+${ui.stones * 12}%</span>` : ''}
+          ${ui.stones > 0 ? `<span class="ml-auto text-[10px] font-mono accent-text">+${ui.stones * PIEDRA_APORTA * 100}%</span>` : ''}
         </div>
+
+        <!--
+          "GASTAR LAS NECESARIAS", Y POR QUÉ EL NÚMERO LO DICE EL MOTOR.
+
+          Antes las piedras eran cinco botones y poco más: quien quería subir la
+          probabilidad tenía que contar de dos en dos cuántas le hacían falta y pulsar
+          hasta acertar. Con el tope viejo de cinco eso no acababa nunca, porque en los
+          tiers altos **cinco piedras se quedan en el 93 %**: el tope estaba puesto justo
+          delante del objetivo.
+
+          **EL BOTÓN SE APAGA CUANDO NO LLEGA, Y LO DICE.** Si no hay piedras suficientes no
+          se ofrece un "gastar 7" que al pulsarlo devolvería un error: se enseña cuántas
+          faltan. Un botón que promete un cobro y luego se niega es peor que un número.
+
+          **Y EL POR QUÉ DE QUE ESTÉ DEBAJO DE LOS NÚMEROS:** los botones 1..N eligen
+          cuántas; este elige por ti. Que venga después de ellos es lo que dice "si has
+          elegido otra cosa, esto es tu alternativa", y no al revés.
+        -->
+        ${(() => {
+          const p = piedrasNecesarias;
+          if (!p) return '';
+          if (p.necesarias === 0) {
+            return `<p class="text-[10px] font-mono text-emerald-400/90 mt-1.5">
+                      Ya llegas al 95 % sin gastar ninguna piedra.
+                    </p>`;
+          }
+          if (!p.suficientes) {
+            return `<p class="text-[10px] font-mono text-amber-400/90 mt-1.5 leading-relaxed">
+                      Para el 95 % harían falta ${p.necesarias} y tienes ${p.disponibles}.
+                    </p>`;
+          }
+          return `<button data-act="stones-auto" data-n="${p.necesarias}"
+                    class="w-full mt-2 px-2.5 h-9 rounded-lg btn-ghost text-[11px] font-mono
+                           cursor-pointer transition active:scale-[0.99] flex items-center
+                           justify-center gap-2"
+                    title="Gasta exactamente las ${p.necesarias} piedras que hacen falta para llegar al 95 % de probabilidad">
+                    <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('bolt')}</span>
+                    Gastar las ${p.necesarias} necesarias para el 95 %
+                  </button>`;
+        })()}
 
         <!-- Nanopartícula: interruptor, porque solo se puede gastar una -->
         <div class="mt-2 pt-2 border-t border-[var(--border-color)] flex items-center gap-2.5">
@@ -823,6 +880,18 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
         // Ajuste exacto en vez de alternar uno a uno: bajar de 5 a 2 con un
         // toggle sería cinco toques.
         ui.stones = n === 0 ? 0 : (ui.stones === n ? 0 : n);
+        redraw();
+        break;
+      }
+      case 'stones-auto': {
+        // **EL NÚMERO VIENE EN EL BOTÓN, Y VINO DEL MOTOR.** No se recalcula aquí: el
+        // botón lo pintó con lo que dijo `previewPiedrasNecesarias()`, y volver a calcularlo
+        // en el clic es exactamente la copia que separa el número del cobro. El `data-n` lo
+        // escribió el motor y se usa tal cual.
+        const objetivo = Math.max(0, Math.floor(Number(btn.dataset.n) || 0));
+        if (objetivo === 0) return;
+        sfx.nav();
+        ui.stones = objetivo;
         redraw();
         break;
       }

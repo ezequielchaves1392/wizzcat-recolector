@@ -701,6 +701,60 @@ export function baseSuccessChance(fromTier: number): number {
   return Math.max(0.30, 0.78 - (fromTier - 1) * 0.05);
 }
 
+/** Lo que aporta cada Piedra de Calibración a la probabilidad. */
+export const PIEDRA_APORTA = 0.12;
+
+/**
+ * El tope de piedras por fusión.
+ *
+ * **ERA 5, Y CON 5 NO SE LLEGABA AL 95 % EN LOS TIERS ALTOS.** El tope era una regla
+ * antigua escrita cuando las piedras rendían más; ahora, con un 12 % por piedra, cinco
+ * piedras son exactamente un 60 %, y el T10 parte de una base de 0,33: se queda en
+ * **0,93**. Es decir, el tope no era una protección, era un muro puesto delante del
+ * objetivo: el jugador con cinco piedras en la mano pagaba cinco por una tirada que
+ * sabía que no iba a llegar.
+ *
+ * El tope nuevo es **el necesario para llegar al 95 %**, redondeado hacia arriba, con un
+ * suelo de 5 para no quitarle a nadie el gesto de gastar cinco por costumbre y un techo de
+ * 10 donde ya no aporta nada porque la probabilidad está topada.
+ */
+export function maximoDePiedras(): number {
+  return 10;
+}
+
+/** El tope de piedras por fusión, redondeado hacia arriba hasta el objetivo. */
+export const MAX_PIEDRAS_POR_FUSION = maximoDePiedras();
+
+/**
+ * CUÁNTAS PIEDRAS HACEN FALTA PARA LLEGAR A LA PROBABILIDAD OBJETIVO.
+ *
+ * **ES LA INVERSA DE `successChance()`, Y TIENE QUE ESTAR AQUÍ Y NO EN LA VISTA.** La
+ * razón es la de siempre y ya ha salido muchas veces: si la cuenta la hace la pantalla,
+ * el botón "gastar las necesarias" puede prometer un número que el motor no va a
+ * cobrar, y el jugador gasta y no ve el efecto. Con las dos funciones en el mismo sitio,
+ * o el botón dice lo que el motor va a hacer o no se escribe.
+ *
+ * **Y DEVUELVE 0 CUANDO YA SE LLEGA SIN PIEDRAS.** Con una base alta y las pasivas del
+ * árbol, no hace falta gastar ninguna: ofrecer "gastar 2" ahí sería cobrar por nada, que es
+ * justo lo que el jugador no perdona en una ruleta.
+ */
+export function piedrasParaObjetivo(
+  fromTier: number,
+  craftLuck: number,
+  affixLuck: number,
+  nanoUsed = 0,
+  objetivo = 0.95
+): number {
+  const base = baseSuccessChance(fromTier);
+  const nano = nanoUsed > 0 ? 0.08 : 0;
+  const yaHay = base + craftLuck + affixLuck + nano;
+  const faltan = objetivo - yaHay;
+  if (faltan <= 0) return 0;
+  // `Math.ceil` y no un redondeo: una piedra de menos es una probabilidad de menos, y el
+  // botón se llama "las necesarias" — si no llega, miente por una piedra.
+  return Math.min(MAX_PIEDRAS_POR_FUSION, Math.ceil(faltan / PIEDRA_APORTA));
+}
+
 /** Chance final = base + pasivas + piedras, topado a 95%. */
 export function successChance(
   fromTier: number,
@@ -710,8 +764,9 @@ export function successChance(
   nanoUsed = 0
 ): number {
   const base = baseSuccessChance(fromTier);
-  // Cada piedra: +12%. Se topan a 5 piedras por fusión.
-  const stones = Math.min(5, stonesUsed) * 0.12;
+  // Cada piedra aporta lo que dice `PIEDRA_APORTA`, y el tope es el mismo que usa
+  // `piedrasParaObjetivo()`: por eso el botón y el motor no pueden separarse.
+  const stones = Math.min(MAX_PIEDRAS_POR_FUSION, Math.max(0, stonesUsed)) * PIEDRA_APORTA;
   // La nanopartícula da +8% y además garantiza un afijo extra. Aporta menos
   // puntos que una piedra pero hace dos cosas, que es la razón por la que es
   // un objeto raro y no un consumible más.

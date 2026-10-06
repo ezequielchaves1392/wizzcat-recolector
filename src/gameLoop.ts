@@ -17,7 +17,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -2538,8 +2538,14 @@ function sePuedeGuardar(): boolean {
     stonesUsed: number,
     nanoUsed: number
   ): { stones?: number; nano?: number; error?: string } {
-    const stones = Math.max(0, Math.min(5, stonesUsed));
-    const nano = nanoUsed > 0 ? 1 : 0;
+    // **EL TOPE DE PIEDRAS LO PONE `MAX_PIEDRAS_POR_FUSION`, NO EL NÚMERO ESCRITO AQUÍ.**
+    // Estaba el 5 repetido en dos sitios —aquí y en `successChance()`— y el de la
+    // probabilidad era el que mandaba de verdad: escribir un 5 aquí solo recortaba la
+    // llamada, no el efecto. Con el 5, el T10 se quedaba en 0,93 y las cinco piedras se
+    // gastaban para nada. Ahora el tope viene del mismo sitio que la cuenta de "las
+    // necesarias", así que el botón y el motor no pueden separarse.
+    const stones = Math.max(0, Math.min(MAX_PIEDRAS_POR_FUSION, Math.floor(stonesUsed || 0)));
+    const nano = Math.max(0, Math.floor(nanoUsed || 0));
 
     // Se declara sin valor y se rellena solo si toca gastar: una ficha puede no
     // existir y eso no es un error si no se pidió ninguna.
@@ -5669,6 +5675,54 @@ const RITMO_GUARDADO_MS = 30_000;
      * `stonesUsed` es cuántas Piedras de Calibración se consumen: cada una
      * sube 12 puntos la probabilidad, hasta 5.
      */
+    /**
+     * CUÁNTAS PIEDRAS HACEN FALTA PARA LLEGAR AL 95 %, Y SI LAS TIENES.
+     *
+     * **LO PIDE EL MOTOR Y NO LA VISTA, PORQUE EL NÚMERO ACABA EN UN COBRO.** El botón
+     * "gastar las necesarias" tiene que prometer exactamente lo que `gastaConsumiblesDeForja()`
+     * va a coger, y esa función es del motor. Si la cuenta la hiciera la pantalla, bastaría
+     * con que el árbol de pasivas cambiara un dígito de `craftLuck` para que el botón
+     * prometiese siete y el motor cobrara seis, o al revés: **se paga por lo que el
+     * botón no dijo**.
+     *
+     * Y devuelve `suficientes` a propósito: ofrecer "usar 7" sin tener siete es peor que
+     * no ofrecer nada, porque el jugador apretaría y se quedaría sin materiales.
+     */
+    previewPiedrasNecesarias: (tier: number, nanoUsed = 0, affixLuck = 0) => {
+      const stones = state.warehouse.find(
+        (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
+      );
+      const disponibles = stones ? (stones.stackCount || 1) : 0;
+      // **EL `affixLuck` LO PASA QUIEN LLAMA, Y POR QUÉ NO SE CALCULA AQUÍ.**
+      //
+      // El afix luck **depende de los materiales elegidos** —cada afijo suma un 2 %—, así
+      // que esta función no puede deducirlo: necesita la selección. Y esa suma la hace la
+      // vista, que es un problema de R2 que ya existía antes de este botón y que aquí no
+      // se arregla: se pasa el número que la vista ya tenía, **para no meter una segunda
+      // copia de la cuenta** que es lo que separa un botón de un cobro.
+      //
+      // Lo que sí se hace aquí es todo lo que **no** depende de la selección: cuántas
+      // piedras hay en el almacén, cuánto aporta el árbol y si llegan. Que antes el tope
+      // estuviera escrito a mano en dos sitios y ahora salga de `piedrasParaObjetivo()`.
+      const necesarias = piedrasParaObjetivo(
+        tier,
+        state.bonus.craftLuck,
+        affixLuck,
+        nanoUsed
+      );
+      const alcanzable = Math.min(necesarias, disponibles);
+      return {
+        necesarias,
+        disponibles,
+        // `false` cuando no hay piedra en el almacén o no llega: el botón se apaga y
+        // **lo dice**, en vez de quedarse mudo esperando que se pulse.
+        suficientes: necesarias > 0 && disponibles >= necesarias,
+        // Lo que se puede gastar de verdad, que es la parte que el botón usa para no
+        // prometer más de lo que hay.
+        alcanzable
+      };
+    },
+
     forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
       handleUserActivity();
 

@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **34 bancos, 2133**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **34 bancos, 2159**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -2689,3 +2689,25 @@ _Cosas que estorban al trabajo más que al juego._
   propio color en vez del claro fijo. Se puede hacer con una sombra detras y un color por
   cosmetico, pero hay que verlos sobre los catorce fondos antes, porque un color que se lee
   sobre el Abismo no se lee sobre la Torrente.
+
+### Forja: hecho el 95 % de las piedras, faltan las otras dos cosas
+
+- Hecho: `piedrasParaObjetivo()` en `data/crafting.ts` y el boton "gastar las necesarias". El motivo de
+  fondo era que **el tope de cinco piedras impedia llegar al 95 %**: cinco son un 60 % y la base del T10
+  es 0,33, o sea 0,93. El tope estaba puesto delante del objetivo.
+- **SIN EMPEZAR, y las dos cosas que quedan de la forja:**
+  1. **Forjar todos los de un tier.** Mezclando por tier, de dos en dos, y siempre los de mayor
+     potencial. Es lo grande porque toca la seleccion de materiales, que hoy es enteramente
+     del jugador y que consulta el resto de la pagina. La pregunta de diseno que hay que
+     decidir antes: **el jugador deja de elegir los materiales** en ese boton, asi que hace
+     falta una nota que diga que se mistura por potencial y por que, o parece que el juego le
+     gasta las cosas por su cuenta.
+  2. **Usar consumibles hasta que se gasten.** Es distinto del 95 %: aqui se decide *cuantas*
+     piedras gastar en una tirada; lo otro es repetir el uso hasta agotar la pila. Con la
+     nanoparticula hoy solo se puede gastar una por fusion, asi que hay que decidir si
+     repetirla apila afijos garantizados o si solo gasta sin efecto —y eso cambia el valor
+     del objeto en oro.
+- Y una nota de metodo que salio de este commit: **una prueba escrita en el tier equivocado
+  da verde sin comprobar nada.** La de la nanoparticula media en el T9, donde cinco piedras ya
+  topan el 0,95 y la nano no puede bajar el numero porque ya es el minimo util. En el T10, donde
+  si importa, baja de seis a cinco. Elegir el caso donde la regla se ve es parte de la prueba.
