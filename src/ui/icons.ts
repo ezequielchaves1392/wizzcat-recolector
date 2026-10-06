@@ -85,6 +85,9 @@ export const ICONS = {
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6" fill="currentColor"/>'),
   warning: svg('<path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>'),
   sparkle: svg('<path d="M12 3v5M12 16v5M3 12h5M16 12h5"/><path d="M6.5 6.5 9 9M15 15l2.5 2.5M17.5 6.5 15 9M9 15l-2.5 2.5"/>'),
+  grid: svg('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+  monitor: svg('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
+  star: svg('<path d="m12 2 3 6.5 7 .8-5.2 4.7 1.5 6.9L12 17.3 5.7 21l1.5-7L2 9.3l7-.8L12 2Z"/>'),
   // Audio. `sound` es el altavoz (efectos) y `music` la nota (pista): los
   // dos interruptores de la cabecera necesitan icons que se distingan de un
   // vistazo en movil, donde no cabe la etiqueta de texto.

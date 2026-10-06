@@ -57,6 +57,19 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.5.0',
+    fecha: '6 de octubre de 2026',
+    titulo: 'Banners con carácter y el AFK que de verdad funciona',
+    lineas: [
+      'Cada banner trae ahora su propio borde, su forma y el color de su icono: cambiar de banner cambia el marco y la figura de dentro.',
+      'Los marcos dejan de ser todos circulos: cada uno tiene la forma que promete su nombre.',
+      'El banner rellena todo el fondo del avatar, no un halo alrededor, y su borde va sobre el fondo sin taparlo.',
+      'Arreglado: con una tarjeta AFK puesta puedes cambiar de pestaña o de ventana y el juego sigue produciendo, sin cartel de pausa.',
+      'El tiempo de la tarjeta corre igual aunque no estes mirando, y sigue parando exactamente cuando se acaba.',
+      'Sin tarjeta, cambiar de pestaña sigue deteniendo la produccion como antes.'
+    ]
+  },
+  {
     version: '1.4.0',
     fecha: '6 de octubre de 2026',
     titulo: 'La forja en serie',

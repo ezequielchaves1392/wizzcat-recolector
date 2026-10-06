@@ -100,7 +100,7 @@ export function avatarStack(
         <span class="avatar-fondo">
           <span class="avatar-frame w-full h-full" style="${bannerStyle(banner)}"></span>
         </span>` : ''}
-      <span class="avatar-core w-[78%] h-[78%] ${glyphClass}">
+      <span class="avatar-core w-[78%] h-[78%] ${glyphClass}" ${banner?.iconColor ? `style="color:${banner.iconColor}"` : ''}>
         <span class="[&>span>svg]:w-full [&>span>svg]:h-full">${ic(icono.icono)}</span>
       </span>
       ${hayMarco ? `
@@ -115,26 +115,30 @@ export function avatarStack(
  * El `scale` y la opacidad no están en el catálogo y **no deben estar**: son la misma
  * cuenta en los tres sitios, y si cada uno los escribiera a su mano acabarian medidos por separado y volverían a no cuadrar. Lo único que sale del catálogo es la
  * forma y el relleno, que es lo que hace que un banner sea distinto de otro.
+ *
+ * **EL BORDE DEL BANNER VIENE DE SU `frameStyle`** (si lo tiene), no de un radio
+ * hardcoded. Cada banner declara su forma en `frameStyle.borderRadius` y su borde
+ * en `frameStyle.border`/`background`/`boxShadow`. Así un banner puede ser placa,
+ * círculo, o tener un borde de gradiente animado (p.ej. Espectro).
  */
 function bannerStyle(banner: Cosmetic): string {
   const propio = cosmeticStyle(banner);
-  // **EL BANNER ES EL FONDO, Y POR ESO NO LLEVA ESCALADO.**
-  //
-  // Antes iba escalado a 1,32 detrás de un núcleo que llevaba su propio degradado, así que
-  // de él solo se veía **un aro alrededor**: el fondo era el degradado del núcleo y el
-  // banner era un halo. Con un icono encima, eso era peor: el icono salía del color del
-  // degradado, o sea que el fondo que el jugador había comprado no le afectaba, que es
-  // justo lo contrario de lo que es un fondo.
-  //
-  // Ahora rellena la caja entera y el núcleo es transparente. Lo que se compra se ve.
-  // El marco se sigue poniendo encima y por eso el banner no necesita bordura propia.
+  // El radio del banner: si tiene frameStyle con borderRadius, úsalo; si no, placa.
+  const radio = banner.frameStyle?.borderRadius ?? '1.25rem';
+  // El borde/sombra del banner: si tiene frameStyle, aplícalo al fondo (no como capa aparte).
+  const borde = banner.frameStyle
+    ? Object.entries(banner.frameStyle)
+        .map(([k, v]) => `${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${v}`)
+        .join(';')
+    : '';
   return [
     'position:absolute',
     'inset:0',
     'opacity:1',
-    'border-radius:1.25rem',
-    propio
-  ].join(';');
+    `border-radius:${radio}`,
+    propio,
+    borde
+  ].filter(Boolean).join(';');
 }
 
 /** El estilo del marco. Idem: la forma viene del catálogo y no de la clase. */

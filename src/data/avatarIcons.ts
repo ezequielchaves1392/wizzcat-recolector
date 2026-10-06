@@ -77,6 +77,9 @@ const POR_ID: Record<string, IconoDeCosmetico> = {
   banner_datastorm: { icono: 'bolt', efecto: 2 },
   banner_aurora: { icono: 'sparkle', efecto: 1 },
   banner_spectrum: { icono: 'crystal', efecto: 2 },
+  banner_mosaic: { icono: 'grid', efecto: 0 },
+  banner_scanlines: { icono: 'monitor', efecto: 1 },
+  banner_aurora_high: { icono: 'star', efecto: 2 },
 
   // --- Marcos. Un marco describe el borde, así que su icono es el del material
   //     o del país, no otra vez el del banner: si los dos fueran el mismo icono se

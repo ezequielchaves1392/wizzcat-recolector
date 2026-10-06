@@ -205,6 +205,10 @@ export interface Cosmetic {
     hint?: string;
   };
   style: Record<string, string>;
+  /** Estilo del borde del avatar cuando este cosmético es un banner. */
+  frameStyle?: Record<string, string>;
+  /** Color del icono del avatar cuando este cosmético es un banner. */
+  iconColor?: string;
 }
 
 // --------------------------------------------------------------------------
