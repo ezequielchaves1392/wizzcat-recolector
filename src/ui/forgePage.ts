@@ -572,13 +572,30 @@ function nivelDe(w: any): number {
             </select>
           </div>
           <div class="flex gap-1 mb-2.5 overflow-x-auto pb-1">
-            ${tiers.map(t => `
-              <button class="px-3 h-10 rounded-lg text-[10px] font-mono cursor-pointer flex-shrink-0 transition
-                             ${t === ui.tier ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
+            ${tiers.map(t => {
+              const n = materiales.filter(w => w.tier === t).length;
+              // **UN TIER CON UN SOLO MATERIAL SE VSE, PERO NO SE USA.**
+              //
+              // Antes el tab salía como los demás y se podía tocar: se entraba en él, se veía
+              // un único material y el yunque se quedaba en "FALTA 1 MATERIAL" sin explicación
+              // de por qué. Ahora **el tab enseña su número y avisa**, porque un tab que no
+              // aparece parece un bug y un tab que no avisa parece un error.
+              //
+              // Y no se oculta: **ocultarlo es peor**. El jugador tiene ese item delante en el
+              // almacén y ve un tier que no aparece en la Forja, que es exactamente el fallo
+              // de "un filtro que parece un robo" que ya se corrigió una vez aquí.
+              const corto = n < MATERIALES_POR_FUSION;
+              return `
+              <button class="px-3 h-10 rounded-lg text-[10px] font-mono flex-shrink-0 transition
+                             ${corto
+                               ? 'btn-ghost text-[var(--text-muted)] opacity-60 cursor-not-allowed'
+                               : 'cursor-pointer'} ${t === ui.tier && !corto ? 'accent-bg text-slate-950' : 'btn-ghost text-[var(--text-muted)]'}"
+                      ${corto ? 'disabled aria-disabled="true"' : ''}
+                      ${corto ? `title="Solo tienes ${n} de este tier. Se necesitan ${MATERIALES_POR_FUSION} del mismo tier."` : ''}
                       data-act="tier" data-tier="${t}">
-                T${t} · ${materiales.filter(w => w.tier === t).length}
-              </button>
-            `).join('')}
+                T${t} · ${n}${corto ? ` <span class="opacity-70">(${n === 1 ? 'solo 1' : `solo ${n}`})</span>` : ''}
+              </button>`;
+            }).join('')}
           </div>
           <div class="inv-grid">
             ${materiales.filter(w => w.tier === ui.tier).map(matCell).join('') ||
