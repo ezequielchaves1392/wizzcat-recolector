@@ -598,6 +598,113 @@ body {
 .animate-rise-in { animation: riseIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 /* --------------------------------------------------------------------------
+   EL BRILLO DE UN ITEM: CUATRO ESCALONES, Y POR QUÉ SON ESTOS Y NO OTROS
+   --------------------------------------------------------------------------
+
+   El número sale de `data/brillo.ts` y estas clases solo lo vestían. Aquí no hay
+   ni una regla de juego: si el brillo sube, lo que cambia es la clase, no el CSS.
+
+   **POR QUÉ EL COLOR ES EL DE LA RAREZA Y NO UNO NUEVO.** `currentColor` toma el
+   color que ya pinta la rareza, así que un Divino brilla en su amarillo y un Raro en
+   su azul. Un brillo de otro color sería una segunda señal de calidad compitiendo
+   con la rareza: dos cosas diciendo lo mismo y ninguna acierta. Con el mismo color,
+   el brillo dice **cuánto** y la rareza sigue diciendo **qué**.
+
+   **POR QUÉ EL ANILLO VA EN UN `<span>` DE FUERA Y NO EN LA CASILLA.** Animar
+   `box-shadow` repinta la celda entera cada fotograma, y en una rejilla de 390 con
+   veinte celdas brillando eso es la diferencia entre fluido y atascado. Un anillo
+   aparte con `pointer-events: none` y opacidad animada vive en su propia capa y no
+   toca la celda.
+
+   **Y POR QUÉ NINGÚN ESCALÓN SE MUEVE SIEMPRE.** El 1 es un halo fijo y no se
+   anima: si hasta un Común pulsara, veinte celdas veinte veces por segundo es ruido,
+   y el brillo dejaría de ser una señal para ser una decoración. Se anima a partir del
+   2, que es donde el item ya es bastante bueno para que merezca la pena mirar.
+
+   El barrido del escalón 4 **reutiliza `rareSweep`**, que ya existía para los
+   estados raros, en vez de inventar una animación nueva: mismo movimiento, mismo
+   lenguaje, y el código que lo mantiene es uno.
+   -------------------------------------------------------------------------- */
+
+/* El anillo. Fijo en el escalón 1, animado a partir del 2. */
+.brillo-anillo {
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  box-shadow: 0 0 12px -2px currentColor;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.brillo-1 > .brillo-anillo { opacity: 0.28; box-shadow: 0 0 9px -3px currentColor; }
+.brillo-2 > .brillo-anillo { animation: brilloRespira 4.4s ease-in-out infinite; will-change: opacity; }
+.brillo-3 > .brillo-anillo {
+  animation: brilloRespira 3.2s ease-in-out infinite;
+  will-change: opacity;
+  box-shadow: 0 0 16px -2px currentColor;
+}
+.brillo-max > .brillo-anillo {
+  animation: brilloRespira 2.4s ease-in-out infinite;
+  will-change: opacity;
+  box-shadow: 0 0 20px -1px currentColor, inset 0 0 10px -4px currentColor;
+  opacity: 0.7;
+}
+
+/*
+ * Latido del brillo.
+ *
+ * **EL 100% ES IGUAL QUE EL 0% A PROPÓSITO, Y POR EL `prefers-reduced-motion` DE
+ * ABAJO.** Ese ajuste pone `animation-duration: 0.01ms` e `iteration-count: 1`, así
+ * que el anillo se queda clavado en el último fotograma. Si el 100% fuera más
+ * brillante que el 0%, con movimiento reducido todo item animado se vería más
+ * brillante que cuando se mueve, que es al revés de lo que se quiere. Con los dos
+ * extremos iguales, el estado final es el estado de reposo.
+ *
+ * Por eso **nada de esto usa `forwards`**: con `infinite` el estado final es el
+ * propio fotograma, y sin `forwards` no hay nada que clavar.
+ */
+@keyframes brilloRespira {
+  0%, 100% { opacity: 0.34; }
+  50% { opacity: 0.82; }
+}
+
+/*
+ * El barrido del escalón 4, y por qué tarda tanto en llegar.
+ *
+ * **OCHO SEGUNDOS DE CICLO CON EL BARRIDO EN EL ULTIMO TRAMO.** Un barrido cada
+ * dos segundos en veinte celdas es unficie de discoteca. Este pasa una vez cada
+ * ocho: cuando ocurre se nota, y el resto del tiempo el anillo respira. Es lo que
+ * hace que el tope del juego se persiga —porque se ve de vez en cuando— y no que
+ * aparezca sin que sepas de dónde.
+ */
+@keyframes brilloBarrido {
+  0%, 80% { transform: translateX(-130%); opacity: 0; }
+  86% { opacity: 0.85; }
+  100% { transform: translateX(230%); opacity: 0; }
+}
+
+.brillo-barrido {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+.brillo-barrido::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    color-mix(in srgb, currentColor 70%, transparent) 50%,
+    transparent 65%
+  );
+  animation: brilloBarrido 8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
+}
+
+/* --------------------------------------------------------------------------
    B10 · El botón parado cuando el juego está en pausa por inactividad.
    --------------------------------------------------------------------------
 

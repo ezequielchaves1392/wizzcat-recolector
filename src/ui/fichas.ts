@@ -22,6 +22,7 @@
  */
 
 import { ic } from './icons';
+import { marcoDeBrillo, textoDeBrillo } from './brillo';
 import { formatNumber } from '../utils/format';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe } from '../data/crafting';
 
@@ -34,6 +35,12 @@ export function slug(rarity: string): string {
 export interface RecolectorPintable {
   id: string;
   name: string;
+  /**
+   * No se usa: el brillo lo necesita y aquí se pone a mano, porque esta ficha **es** la
+   * de un recolector. Está en la interfaz solo para que quien la construya sepa que el
+   * campo existe en el item real del almacén y no se sorprenda de que falte aquí.
+   */
+  type?: string;
   tier?: number;
   level?: number;
   maxLevel?: number;
@@ -63,13 +70,30 @@ export function fichaDeRecolector(
   const rarity = w.rarity || 'Común';
   const affixes: string[] = w.affixes || [];
 
+  // **EL TIPO SE PONE AQUÍ, Y NO VIENE EN EL OBJETO.** El brillo necesita saber si el
+  // item tiene techo de nivel de recolector o de compañero, y `RecolectorPintable` no
+  // lo trae: quien pinta esta ficha sabe que es un recolector, y decirlo aquí es más
+  // honesto que publicarlo en el perfil —donde además tendría que coaccionarse al
+  // leer—. **Y ES LO QUE PERMITE QUE LA TARJETA Y LA BASE COINCIDAN**: las dos pintan
+  // esta misma función, así que el brillo sale del mismo número en las dos sin que
+  // nadie tenga que acordarse.
+  const paraBrillo = { ...w, type: 'collector' };
+
   return `
     <div class="flex items-center gap-3">
-      <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-           style="background: color-mix(in srgb, var(--accent) 12%, transparent);
-                  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
-        <span class="accent-text">${ic('collector', 'w-5 h-5')}</span>
-      </div>
+      ${marcoDeBrillo(paraBrillo, `
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+             style="background: color-mix(in srgb, var(--accent) 12%, transparent);
+                    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
+          <!--
+            EL ICONO HEREDA EL COLOR DE LA RAREZA, Y NO EL DE ACENTO. Antes llevaba
+            accent-text encima, que gana al color del marco: en el almacén el icono
+            sale del color de su rareza y en la ficha salía siempre en verde del tema,
+            con el mismo item delante de los dos sitios. **El marco lleva
+            rarity-<slug> y basta con no taparlo.**
+          -->
+          <span>${ic('collector', 'w-5 h-5')}</span>
+        </div>`, 'rarity-' + slug(rarity))}
 
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 flex-wrap">
@@ -82,6 +106,15 @@ export function fichaDeRecolector(
         <div class="flex items-center gap-2 mt-1">
           <span class="text-[10px] font-mono rarity-${slug(rarity)}">${rarity}</span>
           ${w.potential ? `<span class="text-[9px] text-amber-400">· ${estrellasDe(w.potential)}</span>` : ''}
+          <!--
+            EL BRILLO POR ESCRITO, Y POR QUÉ AQUÍ Y NO EN EL BOTÓN.
+
+            El icono ya brilla, así que el número es para quien quiere saber por qué. Va
+            junto a la rareza y no como cifra suelta: el brillo dice "cuánto" y la rareza
+            dice "qué", y separarlos en dos sitios distintos los hace leer como dos datos
+            sin relación.
+          -->
+          ${textoDeBrillo(paraBrillo) ? `<span class="text-[9px] font-mono rarity-${slug(rarity)}">· ${textoDeBrillo(paraBrillo)}</span>` : ''}
         </div>
         ${w.details ? `
           <div class="text-[10px] font-mono text-[var(--text-muted)] mt-1 truncate">

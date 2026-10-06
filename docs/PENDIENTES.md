@@ -2546,7 +2546,7 @@ _Cosas que estorban al trabajo más que al juego._
   consumible nuevo es tocar `CONSUMIBLES_ASIGNABLES` y la puerta se abre sola para
   selector, validación y coacción. No hay un segundo sitio donde estén escritos.
 
-### Sin comprobar en el navegador: que la hoja se cierre al elegir y la ✕ quite
+### Sin comprobar en el navegador: que la hoja se cierre al elegir y quitarla con la cruz
 
 - `showConfirmModal()` ahora **devuelve su `close()`**, porque un diálogo con botones
   propios en el contenido no lo cierra el `close()` de `confirmar()`: elegir un
@@ -2561,25 +2561,43 @@ _Cosas que estorban al trabajo más que al juego._
   con decenas de cambios, `preview.html` se quedó con `#app` vacío sin ningún error en
   el log. Reiniciarlo lo arregló. Cuando el preview "no pinta", reiniciar el servidor
   antes de culpar al código: se pierde mucho tiempo buscando un fallo que no existe.
-### La mitad del brillo que falta: pintar el efecto en las tres pantallas
+
+### El brillo: el numero, el efecto, y lo que no se ha podido mirar
 
 - **Hecho: el numero.** `src/data/brillo.ts` calcula un entero del 0 al 4 a partir del
   potencial, del nivel y del tope que pone la rareza, con `tieneEfectoPropio()` para el
   efecto propio y `etiquetaDeBrillo()` para el texto. 27 pruebas en `brilloCheck`, que es
-  el banco 33. Es dato puro, sin una clase de Tailwind: la vista decide el aspecto.
-- **Pendiente: el efecto.** Tres sitios, y los tres tienen que salir del mismo numero:
-  el icono del almacen, la descripcion en la base y la tarjeta del ranking. Nada de esto
-  esta escrito todavia.
-- **Lo que hay que decidir antes de escribirlo, y son tres cosas:**
-  - Que aspecto tiene cada escalon. Con CSS puro son cuatro anillos concéntricos con
-    distinta intensidad y un pulso; con una imagen, cuatro sprites. Los sprites se ven
-    mejor y cuestan un fichero por escalon mas las medidas para el movil.
-  - Si el brillo se ve **tambien sin tocar nada**, o solo como adorno de fondo detras del
-    icono. Lo segundo es mas discreto y no compite con el texto de la celda, que es lo
-    que mas falta hace en una rejilla de 390.
-  - Si el efecto propio es solo un escalon mas o algo reconocible de verdad —una sola
-    partícula, un destello— porque si es "un poco mas de brillo" el tope no se nota y el
-    jugador no lo persigue.
+  el banco 33. Es dato puro, sin una clase de Tailwind.
+- **Hecho: el efecto.** `ui/brillo.ts` viste ese numero y lo pintan las tres pantallas:
+  el icono de la celda del almacen, la ficha del recolector en la base y la tarjeta del
+  ranking. Las tres salen de la misma funcion, asi que no pueden discrepar.
+- **La decision que se tomo, y por que.** CSS puro, sin imagenes. El color es el de la
+  rareza por currentColor, para que el brillo diga cuanto y la rareza siga diciendo que.
+  El anillo va en un span aparte porque animar box-shadow repinta la celda cada fotograma.
+  El escalon 1 no se mueve: con veinte Comunes latiendo a la vez seria ruido. Y el
+  barrido del 4 **reutiliza `rareSweep`**, que ya existia para los estados raros, en vez
+  de inventar una animacion nueva.
+- **No esta hecho, y se dejo sin hacer a proposito:** el brillo del companero. El teorema
+  es el mismo, pero habria que publicar level y potential en la ficha del companero, que
+  hoy no los tiene. Lo que se pidio fueron "las armas", y un companero no es un arma.
+
+#### Lo que solo se puede mirar con el ojo, y sigue sin mirarse
+
+- Que el escalon 1 **no se mueva** es una decision de gusto y aqui no hay forma de
+  comprobar que un halo quieto se lee mejor que uno que late.
+- Que **ocho segundos entre barridos** sea el intervalo. Si se ve poco raro, se baja.
+- Que el escalon 4 se distinga de un 3 **de un vistazo**: los dos tienen anillo y los dos
+  laten, y lo unico que los separa es el barrido, que aparece una vez cada ocho segundos.
+  Puede que no baste.
+
+#### Una nota de medicion que aplica a todo lo que se anime
+
+- El navegador del banco visual **reporta movimiento reducido**, asi que las animaciones
+  salen a 0,00001s. Alli solo se puede medir la geometria: que el anillo rodea al icono,
+  que no desborda la pantalla ni su celda, y que no intercepta el clic. **El movimiento
+  no se ha visto**: hay que mirarlo en una partida de verdad.
+- Por eso el CSS no depende de nada que solo se vea en movimiento. El anillo tiene su
+  forma en reposo, y con movimiento reducido se queda en ella.
 
 ### Un fallo que solo apareció porque el banco miraba lo que no era un item
 

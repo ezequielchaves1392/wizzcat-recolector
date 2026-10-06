@@ -35,6 +35,7 @@ import { showCrateSummary, maximoDeApertura } from './crateSummary';
 import { showSintonizacion } from './sintonizacion';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
+import { marcoDeBrillo } from '../ui/brillo';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import { CRISTAL_NOMBRE } from '../data/items';
@@ -211,10 +212,25 @@ function draw(
               aria-pressed="${ui.multisel ? String(isMarcada) : 'false'}"
               style="${isEquipped ? 'border-color:#fbbf24; box-shadow: inset 0 0 0 1px #fbbf24;' : ''}"
               aria-label="${w.name}">
-        <span class="ring-${raritySlug(w.rarity)} w-8 h-8 rounded-lg grid place-items-center
-                     ${rarityClass(w.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">
-          ${ic(TYPE_ICON[w.type] ?? 'crate')}
-        </span>
+        <!--
+          EL BRILLO, Y POR QUÉ VA EN UN MARCO Y NO EN LA CELDA.
+
+          El anillo es un absolute y necesita un padre posicionado; si se aplicara
+          directamente a la celda, el position: absolute se resolvería contra la
+          rejilla entera y el halo saldría descentrado. Además el marco lleva la clase
+          de rareza, que es la que da el color al anillo por currentColor: por eso el
+          brillo de un Divino sale en su amarillo sin que este fichero sepa qué es un
+          Divino.
+
+          Y el halo no es solo adorno: es lo primero que se ve de un item bueno sin
+          tener que abrir la ficha, que es justo lo que hace falta en una rejilla de
+          veinte celdas en un móvil.
+        -->
+        ${marcoDeBrillo(w, `
+          <span class="ring-${raritySlug(w.rarity)} w-8 h-8 rounded-lg grid place-items-center
+                       ${rarityClass(w.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">
+            ${ic(TYPE_ICON[w.type] ?? 'crate')}
+          </span>`, 'rarity-' + raritySlug(w.rarity))}
         <!--
           LA MARCA DE "VA A VENDERSE", Y POR QUÉ ES UNA ESQUINA Y NO UN CAMBIO DE COLOR.
 

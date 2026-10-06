@@ -125,6 +125,23 @@ const MOCK: any = {
       lineage: ['Legendario', 'Mítico', 'Mítico'],
       equipped: true
     },
+    // **UN DIVINO AL TECHO DE NIVEL, Y ES PARA PODER REVISAR EL EFECTO PROPIO.** El otro
+    // Divino de la lista está en 12 de 35, así que su brillo se queda en 2 y **con él
+    // solo el almacén no alcanza ni para ver el escalón 4**. Sin un item al máximo, el
+    // barrido y el doble anillo no se pueden mirar en ninguna pantalla, que es justo lo
+    // que se pidió y lo único que no se puede comprobar con un número.
+    collector(10, {
+      id: 'forja_1',
+      name: 'Forja de Éter ABSOLUTA',
+      level: 35,
+      maxLevel: 35,
+      damage: 320,
+      potential: 5,
+      rarity: 'Divino',
+      affixes: ['aff_prime', 'aff_focus'],
+      forgedBy: 'CyberKnight',
+      lineage: ['Legendario', 'Mítico', 'Mítico', 'Mítico', 'Mítico', 'Mítico'],
+    }),
     collector(8, { id: 'a', name: 'Embestida Cuántica', level: 18, damage: 62 }),
     collector(7, { id: 'b', name: 'Lanza de Plasma', level: 9, damage: 44, potential: 2, affixes: ['aff_sharp'] }),
     collector(7, { id: 'c', name: 'Riel de Iones', level: 12, damage: 51 }),
