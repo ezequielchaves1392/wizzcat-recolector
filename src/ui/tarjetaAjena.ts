@@ -321,9 +321,9 @@ function bloqueDeRecolectores(t: TarjetaPublica): string {
       ${t.recolectores.map(r => `
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">
           ${fichaDeRecolector(r, {
-            etiqueta: 'Potencial',
-            valor: r.potential ? `P${r.potential}` : '--',
-            title: 'Las estrellas con las que salió; suben su techo de nivel'
+            etiqueta: 'Daño',
+            valor: Number(r.damage) > 0 ? `+${formatNumber(Number(r.damage))}` : '--',
+            title: 'Daño por clic, con el potencial ya aplicado'
           })}
         </div>`).join('')}
     </div>`;

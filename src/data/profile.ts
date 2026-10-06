@@ -87,6 +87,14 @@ export interface RecolectorPublico {
   maxLevel: number;
   potential: number;
   rarity: string;
+  /**
+   * El daño por clic, con el potencial ya aplicado.
+   *
+   * **NO ES DATO NUEVO:** el `details` del item ya lo dice en texto ("Recolección por
+   * click: +267"). Lo que se publica es el número suelto, para poder ponerlo en grande al
+   * lado del nombre en vez de leerlo de una frase.
+   */
+  damage?: number;
   /** Si es el recolector que este jugador tiene equipado ahora mismo. */
   equipado?: boolean;
 }
@@ -198,6 +206,7 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         name: String(w.name ?? 'Recolector'),
         tier: num(w.tier), level: num(w.level), maxLevel: num(w.maxLevel),
         potential: num(w.potential), rarity: String(w.rarity ?? ''),
+        damage: num(w.damage),
         equipado: true,
         affixes: Array.isArray(w.affixes) ? w.affixes.map(String) : [],
         forgedBy: String(w.forgedBy ?? ''),
@@ -208,17 +217,33 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
   // **SOLO LOS ACTIVOS**, por el mismo motivo que arriba, y porque la rejilla del inicio
   // enseña los activos y las ranuras vacías: la ficha pública enseña las que están
   // ocupadas.
+  // **EL PODER DEL COMPAÑERO ESTÁ EN LA FICHA, NO EN EL ITEM DEL ALMACÉN.** Hay dos
+  //  objetos con el mismo id: el item del almacén, que es lo que se ve y lo que tiene
+  //  nombre, rareza y tier, y la ficha de `state.companions`, que es la que paga. El
+  //  ingreso sale de `ficha.power` y el item no lo lleva.
+  //
+  //  **ANTES SE LEÍA `w.power` DEL ITEM Y SALÍA 0 EN TODOS.** La ficha enseñaba seis
+  //  compañeros con "INGRESO +0/s". Y no lo detectó el banco, porque el fixture de
+  //  pruebas tampoco lleva `power` en el item y el preview lo llevaba escrito a mano:
+  //  los dos probaban una forma que el juego nunca construye.
+  //
+  //  **SE LEE IGUAL QUE LO LEE EL MOTOR**, que es `state.companions` primero y el
+  //  item de vuelta. Copiar esa línea a mano es pedir que las dos se separen.
+  const fichas = Array.isArray(state?.companions) ? state.companions : [];
+
+
   const companeros = ordenados(
     almacen.filter(w => w?.type === 'companion' && activos.has(w.id))
       .map(w => ({
         id: String(w.id ?? ''),
         name: String(w.name ?? 'Compañero'),
         tier: num(w.tier),
-        // **EL PODER GUARDADO, NO UNO RECALCULADO.** El poder efectivo depende de los
-        // compañeros que tengas al lado y de los multiplicadores del árbol, y eso es
-        // estado del dueño que la tarjeta no tiene. Recalcularlo aquí inventaría un
-        // número, y un número inventado en una tarjeta pública es peor que noándolo.
-        power: num(w.power),
+        // **EL INGRESO ES EL DE LA FICHA.** Hay dos objetos con el mismo id: el item del
+        // almacén, que es lo que se ve, y la ficha de `state.companions`, que es la que
+        // paga. El item no lleva `power`, así que leerlo de ahí sale **0 en todos** y la
+        // ficha enseña seis compañeros con "INGRESO +0/s". Es el mismo orden que usa el
+        // motor al desglosar el daño, y se copia a propósito para que no se separen.
+        power: num((fichas as any[]).find((c: any) => c?.id === w.id)?.power ?? w?.power),
         equipado: true,
         rarity: String(w.rarity ?? ''),
         tipo: String(w.type ?? 'companion')
