@@ -6,10 +6,10 @@
 // header) y en escritorio se convierte en una fila de botones en la cabecera.
 //
 // Seguro para móvil:
-//  - `env(safe-area-inset-*)` en los bordes para notch y barra de gestos
-//  - `dvh` en lugar de `vh`: evita el salto cuando aparece la barra del navegador
+//  - env(safe-area-inset-*) en los bordes para notch y barra de gestos
+//  - dvh en lugar de vh: evita el salto cuando aparece la barra del navegador
 //  - sin hover-dependiente: todo lo accionable es un botón real con :active
-//  - las áreas de scroll usan `overscroll-behavior: contain` para que el
+//  - las áreas de scroll usan overscroll-behavior: contain para que el
 //    arrastre no mueva la página entera
 //
 // La barra inferior tiene exactamente 5 destinos. Antes tenía 5 también, pero
@@ -20,13 +20,13 @@
 //
 // LA BARRA ES DE AQUÍ Y SOLO DE AQUÍ. Este archivo pinta el menú principal, y
 // la barra inferior es su índice. Ninguna otra vista la dibuja: una vez entras
-// en un sector se sale con el `‹` de la cabecera, y la barra solo reaparece
+// en un sector se sale con el ‹ de la cabecera, y la barra solo reaparece
 // al volver a la base. La razón es que repetir el mismo menú de cinco botones
 // dentro de cada sector no daba información nueva —el botón del sector en el
 // que estás nunca cambiaba de sitio, y los enlaces reales de cada página
 // (perfil → prestigio, base → ranking) ya están dentro del contenido— y sí
 // costaba algo: en las pantallas cortas tapaba la última fila de la lista y
-// hacía que el `‹` dejara de ser la salida evidente.
+// hacía que el ‹ dejara de ser la salida evidente.
 // ==========================================================================
 
 import { ic, type IconName } from './icons';
@@ -63,14 +63,14 @@ export function renderLayoutHTML(
    * El estado de la partida, para la franja de recursos de la cabecera.
    *
    * **ES EL ÚNICO MOTIVO POR EL QUE ESTE PARÁMETRO EXISTE.** La franja se pinta una
-   * vez, al montar el layout, y de ahí en adelante la refresca `updateResourceBar()` en
+   * vez, al montar el layout, y de ahí en adelante la refresca updateResourceBar() en
    * cada tick; lo que hace falta al pintar es el valor inicial, y ese solo lo sabe el
    * motor.
    *
-   * Y es opcional a propósito: las pantallas de acceso y las del `navTest` montan este
+   * Y es opcional a propósito: las pantallas de acceso y las del navTest montan este
    * mismo layout **sin partida**, y si fuera obligatorio habría que inventar un estado
    * falso para ellas. Con que no venga, la cabecera se pinta sin recursos y el
-   * `updateResourceBar` no encuentra nada que actualizar —que es lo que devuelve, y lo
+   * updateResourceBar no encuentra nada que actualizar —que es lo que devuelve, y lo
    * que permite que nadie se entere—.
    */
   state?: any
@@ -122,11 +122,25 @@ export function renderLayoutHTML(
       })}
 
       <!-- ===================== ZONA DE JUEGO ===================== -->
+
+      <!--
+        POR QUÉ lg:overflow-hidden ESTABA Y POR QUÉ SE HA QUITADO. Era la causa de que
+        las cosas desaparecieran: en escritorio el contenido **no tenía scroll**, así que
+        lo que no cabía se cortaba en silencio, sin barra y sin aviso. Un jugador con la
+        ventana un poco más baja perdía el botón de ascender o la barra de consumibles y
+        no tenía forma de recuperarlos. Es el peor modo de fallo que hay en un layout:
+        no hay error, solo falta.
+
+        Ahora la columna se desplaza en todos los tamaños. **Que haya barra no es el
+        objetivo**: el objetivo es que no haga falta, y para eso lo de abajo. Pero una
+        red de seguridad que deja todo alcanzable siempre es mejor que un recorte que a
+        veces aparece, y sobre todo en pantallas que no son las de diseño.
+      -->
       <main
         class="relative z-10 flex-grow min-h-0 w-full max-w-[68rem] mx-auto
                px-3 md:px-4 pt-2 md:pt-3 pb-2 md:pb-3
                grid grid-cols-1 lg:grid-cols-12 gap-2.5 md:gap-4
-               overflow-y-auto lg:overflow-hidden overscroll-contain"
+               overflow-y-auto overscroll-contain"
         style="padding-bottom: calc(0.5rem + env(safe-area-inset-bottom))">
 
         <!-- ---------- Columna izquierda: el recolector ---------- -->
@@ -139,7 +153,8 @@ export function renderLayoutHTML(
           <div class="flex-shrink-0 w-full">
             <div class="flex items-baseline justify-center gap-1.5">
               <span id="nanites-counter"
-                    class="font-['Orbitron'] font-black text-[32px] md:text-4xl accent-text
+                    class="font-['Orbitron'] font-black accent-text
+                           text-[clamp(1.5rem,5.5vh,2.25rem)]
                            tabular leading-none tracking-tight
                            [text-shadow:0_0_28px_color-mix(in_srgb,var(--accent)_35%,transparent)]">0</span>
             </div>
@@ -189,11 +204,23 @@ export function renderLayoutHTML(
             </div>
           </div>
 
-          <!-- El botón: objetivo táctil grande y con respuesta táctil -->
+          <!--
+            EL BOTÓN, Y POR QUÉ SU TAMAÑO DEPENDE DE LA ALTURA DE LA VENTANA.
+
+            Era fijo: w-32 h-32 md:w-40 md:h-40 lg:w-44 lg:h-44 con un max-h-[38vh].
+            El max-h recortaba el **ancho** implícito sin avisar —el botón se volvía
+            ovalado en vez de cuadrado— y, sobre todo, fijaba 176 px de alto en pantallas
+            donde no caben: en una ventana de 700 px, la columna izquierda ya se pasaba.
+
+            Ahora es un clamp sobre vh: 104 px de suelo, 26% de la altura, 176 px de
+            techo. En una ventana alta sigue siendo el botón grande de siempre; en una
+            de 600 px baja a 156 px y en una de 500 a 130, y la columna entra. **El suelo
+            y el techo importan**: por debajo de 104 px el icono deja de leerse, así que
+            antes de encoger más se acepta que la barra aparezca.
+          -->
           <button id="click-btn"
             class="relative rounded-full flex-shrink-0
-                   w-32 h-32 md:w-40 md:h-40 lg:w-44 lg:h-44
-                   max-h-[38vh] aspect-square
+                   w-[clamp(6.5rem,26vh,11rem)] h-[clamp(6.5rem,26vh,11rem)]
                    flex flex-col items-center justify-center gap-1.5 cursor-pointer
                    border-[3px] border-[var(--accent)] app-bg
                    transition-transform duration-100 ease-out active:scale-95

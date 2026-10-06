@@ -2650,3 +2650,25 @@ _Cosas que estorban al trabajo más que al juego._
   reparten la rejilla exacta: Todo 21, Recolectores 9, Companeros 5, Cajas 1, Otros 6, y la suma
   cuadra con el todo. Lo demas no: la ficha con el numero grande, el texto fuera y el boton de las
   notas **hay que mirarlos en una partida de verdad**.
+
+### Que todo quepa sin scroll: hecho a medias y sin una sola medicion
+
+- Hecho: se quita el lg:overflow-hidden que cortaba el contenido en escritorio en silencio, el boton
+  grande pasa a medirse con clamp sobre vh (104 px de suelo, 26% de la altura, 176 px de techo) y el
+  contador igual con suelo de 24 px. Ese era el recorte, y era el que hacia desaparecer cosas.
+- **El banco visual NO ESTA DISPONIBLE, y no es un fallo del codigo.** El navegador de medicion
+  va por un proxy que devuelve **502 Bad Gateway** al pedir el servidor de desarrollo, mientras
+  que PowerShell responde 200 al mismo sitio. Se intento de todo: las dos rutas de preview, las
+  siete pantallas, tres viewports, servidor reiniciado y los procesos duplicados cerrados.
+  **Cuando aparezca un 502 en el titulo de la pestaña, no es que el preview este roto: es que
+  no llega.** Se pierde mucho tiempo persiguiendo un fallo que no existe.
+- **Lo que queda:** las otras seis pantallas. Aqui solo se ha tocado la base, porque es la unica
+  que se ha podido identificar leyendo el codigo —el recorte y el boton—. Forja, mercado, perfil,
+  ranking y ascension tienen tablas largas y rejillas propias, y medirlas sin navegador es
+  adivinar. Cuando el banco vuelva, lo primero es un barrido de scrollHeight en las siete a
+  1440x900, 1280x800 y 1024x768, y ahi se decide que mas encoger.
+- Y una nota sobre el criterio, para que no se pierda: **el recorte se quita y se deja la barra
+  como red, no al reves.** Que haya barra no es el objetivo, pero una red que deja todo
+  alcanzable siempre es mejor que un recorte que solo aparece en pantallas que no son las de
+  diseño —y el recorte no falla nunca en la pantalla donde se prueba, que es lo que lo
+  hace pasar.
