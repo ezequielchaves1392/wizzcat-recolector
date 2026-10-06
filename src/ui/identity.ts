@@ -11,7 +11,9 @@
 //  dos tamaños, y con dos copias se separan en cuanto se toca una.
 // ==========================================================================
 
+import { ic } from './icons';
 import { COSMETICS_BY_ID, cosmeticStyle } from '../data/cosmetics';
+import { iconoDeCosmetico } from '../data/avatarIcons';
 import type { Cosmetic } from '../types/domain';
 
 export interface IdentityCosmetics {
@@ -70,32 +72,37 @@ export function avatarStack(
   const banner = cosmetics?.banner ? COSMETICS_BY_ID[cosmetics.banner] : undefined;
   const hayBanner = !!banner && banner.id !== 'banner_none';
   const hayMarco = !!frame && frame.id !== 'frame_none';
+  // **EL ICONO SALE DEL COSMÉTICO, Y SI NO HAY NINGUNO EL DE BASE.**
+  //
+  // `initials` llega aquí y **no se usa**, y eso es lo que hay que dejar escrito: la
+  // firma lo conserva para no romper las cinco llamadas —cada una tenía su forma de
+  // llamarla—, pero dentro ya no se lee. Cuando se quiten las llamadas se puede quitar
+  // el parámetro; hasta entonces, dejar un argumento muerto es peor que un comentario
+  // que explica por qué sigue ahí.
+  const icono = iconoDeCosmetico(cosmetics);
 
   return `
-    <div class="avatar-stack ${dims} flex-shrink-0" aria-hidden="true">
+    <div class="avatar-stack ${dims} flex-shrink-0 av-efecto-${icono.efecto}" aria-hidden="true">
       ${hayBanner ? `
         <!--
-          F54 · EL BANNER VA EN UN ENVOLTORIO QUE LO RECORTA, Y SOLO ÉL.
+          F54 · EL ENVOLTORIO QUE RECORTA EL BANNER, Y SOLO ÉL.
 
-          El banner se pinta escalado (1,32 si es una placa y 1,7 si es circular) para
-          que se lea como un halo, y el avatar-stack NO recorta: lleva overflow visible.
-          Medido en el perfil, con un avatar de 80 px, el halo sale 13 px por cada lado
-          (106 px de ancho dentro de una caja de 80). En la tarjeta del Perfil eso todavía
-          cae dentro del padding y no se ve, pero en la cabecera y en las filas del
-          ranking el avatar es de 32 px, el halo se sale 10 px y el hueco hasta el nombre es
-          de 8: el halo se come las primeras letras del nombre.
+          Sigue haciendo falta por lo mismo que antes: el avatar-stack NO recorta,
+          y el marco se pinta centrado en el borde. Lo que cambia es lo que hay
+          dentro: el banner ya **no es un aro**, es el fondo. Antes iba escalado
+          a 1,32 detrás de un núcleo con su propio degradado, así que de él solo
+          se veía un halo y el fondo de verdad era el degradado. Ahora rellena la
+          caja y el núcleo es transparente.
 
-          Lo que se recorta es el banner y solo el banner, con este envoltorio. El marco
-          NO entra: su trazo está centrado en el borde de la caja, así que recortarlo
-          dejaría medio píxel de marco y todos los marcos se verían más finos unos que
-          otros. Recortando solo el halo, el marco conserva su grosor exacto y lo único
-          que deja de rebasar es lo que rebasar no aporta: el halo se ve entero dentro de
-          la caja, que es de donde se leía.
+          Por eso el envoltorio se llama avatar-fondo y no avatar-halo: el nombre
+          era la pista de lo que había antes.
         -->
-        <span class="avatar-halo">
+        <span class="avatar-fondo">
           <span class="avatar-frame w-full h-full" style="${bannerStyle(banner)}"></span>
         </span>` : ''}
-      <span class="avatar-core w-[78%] h-[78%] ${glyphClass}">${initials}</span>
+      <span class="avatar-core w-[78%] h-[78%] ${glyphClass}">
+        <span class="[&>span>svg]:w-full [&>span>svg]:h-full">${ic(icono.icono)}</span>
+      </span>
       ${hayMarco ? `
         <span class="avatar-frame w-full h-full"
               style="${frameStyle(frame)}"></span>` : ''}
@@ -111,13 +118,21 @@ export function avatarStack(
  */
 function bannerStyle(banner: Cosmetic): string {
   const propio = cosmeticStyle(banner);
-  const esCircular = /border-radius:\s*9999px/.test(propio);
+  // **EL BANNER ES EL FONDO, Y POR ESO NO LLEVA ESCALADO.**
+  //
+  // Antes iba escalado a 1,32 detrás de un núcleo que llevaba su propio degradado, así que
+  // de él solo se veía **un aro alrededor**: el fondo era el degradado del núcleo y el
+  // banner era un halo. Con un icono encima, eso era peor: el icono salía del color del
+  // degradado, o sea que el fondo que el jugador había comprado no le afectaba, que es
+  // justo lo contrario de lo que es un fondo.
+  //
+  // Ahora rellena la caja entera y el núcleo es transparente. Lo que se compra se ve.
+  // El marco se sigue poniendo encima y por eso el banner no necesita bordura propia.
   return [
     'position:absolute',
     'inset:0',
-    `transform:scale(${esCircular ? 1.7 : 1.32})`,
-    'opacity:.8',
-    esCircular ? 'border-radius:9999px' : 'border-radius:1.25rem',
+    'opacity:1',
+    'border-radius:1.25rem',
     propio
   ].join(';');
 }
@@ -125,11 +140,14 @@ function bannerStyle(banner: Cosmetic): string {
 /** El estilo del marco. Idem: la forma viene del catálogo y no de la clase. */
 function frameStyle(frame: Cosmetic): string {
   const propio = cosmeticStyle(frame);
-  // **EL RADIO SALE DEL CATÁLOGO CUANDO EL MARCO LO TRAE, Y SI NO, CIRCULAR.** Los
-  // siete marcos historicamente eran anillos; los nuevos dicen su forma con un radio
-  // propio y asi se distinguen de un vistazo. La comprobacion es sobre el mapa de estilos
-  // y no sobre el nombre, para que un marco futuro no necesite cambiar este sitio.
-  const radio = frame.style.borderRadius ? String(frame.style.borderRadius) : '9999px';
+  // **EL RADIO SALE DEL CATÁLOGO CUANDO EL MARCO LO TRAE, Y SI NO, UNO DE PLACA.**
+  //
+  // El if que había antes devolvía 9999px cuando el marco no decía su forma, y eso
+  // convertía **cualquier marco antiguo o futuro sin radio propio en un anillo**. El
+  // valor por defecto tiene que ser la forma de la caja, no la contraria: un marco sin
+  // radio propio que sale redondo se lleva por delante la separación entre "marco de
+  // placa" y "marco de anillo".
+  const radio = frame.style.borderRadius ? String(frame.style.borderRadius) : '1.25rem';
   return ['position:absolute', 'inset:0', `border-radius:${radio}`, propio].join(';');
 }
 

@@ -32,6 +32,7 @@ import {
   BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT, FILAS_DE_EJEMPLO
 } from '../src/services/rankingService';
 import { coresGastadosEnArbol } from '../src/data/tree';
+import { iconoDeCosmetico, ICONO_BASE } from '../src/data/avatarIcons';
 
 const RANK_DOC = 'rankings/test';
 
@@ -111,8 +112,25 @@ async function main() {
     const html = miniIdentity('Ab', {
       title: 'title_champion', frame: 'frame_neon', banner: 'banner_abyss',
     }, { hideDefaultTitle: true });
-    check('identidad: pinta las iniciales del nombre',
-      html.includes('>AB<'), 'sin AB');
+    // **YA NO PINTA LAS INICIALES, Y ESTA ES LA PRUEBA DE QUE NO VUELVEN.**
+    //
+    // El avatar llevaba las dos primeras letras del nombre y ahora lleva el icono del
+    // cosmético. La prueba se cambia de "pinta AB" a "NO pinta AB", porque una prueba que
+    // solo comprueba lo nuevo deja pasar la cosa vieja: si alguien reintroduce las
+    // iniciales, esta sigue en verde mientras el avatar vuelve a ser un sello.
+    check('identidad: ya NO pinta las iniciales del nombre',
+      !html.includes('>AB<'), 'vuelve a pintar AB');
+    check('identidad: y pinta el icono del cosmético, que es lo que lo identifica',
+      html.includes('<svg'), 'sin icono');
+    check('identidad: el icono sale del banner antes que del marco o el título',
+      iconoDeCosmetico({ banner: 'banner_abyss' }).icono !== iconoDeCosmetico({ frame: 'frame_neon' }).icono,
+      'banner y marco comparten icono');
+    check('identidad: sin cosméticos sale el de base, no un hueco',
+      iconoDeCosmetico(undefined).icono === ICONO_BASE.icono
+        && iconoDeCosmetico({}).icono === ICONO_BASE.icono,
+      'sin base');
+    check('identidad: el avatar es una placa y no un disco',
+      !html.includes('9999px'), 'queda un 9999px en el avatar');
     check('identidad: pinta el título equipado',
       html.includes('Campeón'), 'sin Campeón');
     check('identidad: el marco viaja en el estilo del avatar',
@@ -124,11 +142,29 @@ async function main() {
     // prueba clavada en un 1,9 solo sirve para avisar cuando se cambia el gusto, que no
     // es un fallo. El orden sí es una regla: el banner detrás del núcleo o no es un
     // banner.
-    const iBanner = html.indexOf('transform:scale(');
+    // **EL BANNER SE BUSCA POR SU CLASE, NO POR EL ESCALADO.** Se buscaba por
+// `transform:scale(`, que era justo lo que se quitó al dejar de ser un aro: la
+// prueba se quedaba mirando por la prueba de que el banner ya no existe.
+const iBanner = html.indexOf('avatar-frame');
     const iNucleo = html.indexOf('avatar-core');
-    check('identidad: el banner va de halo detrás del núcleo, no de fondo entero',
-      iBanner !== -1 && iNucleo !== -1 && iBanner < iNucleo,
+    // **EL BANNER ES EL FONDO, Y ESTA PRUEBA DICE QUE NO ES UN ARO.**
+    //
+    // Antes el banner iba escalado detrás de un núcleo con su propio degradado, así que
+    // de lo que se compraba solo se veía un halo y el fondo de verdad era el degradado.
+    // La prueba decía "va de halo detrás del núcleo" y por eso estaba en verde mientras
+    // el fondo no se veía. Ahora el orden sigue siendo el mismo —banner antes que núcleo—
+    // pero lo que se comprueba es que **no lleve escalado**, que es lo que lo convertía
+    // en aro.
+    check('identidad: el banner va detrás del núcleo y sin escalado: es el fondo',
+      iBanner !== -1 && iNucleo !== -1 && iBanner < iNucleo
+        && !html.slice(iBanner, iNucleo).includes('transform:scale('),
       `banner=${iBanner} nucleo=${iNucleo}`);
+    check('identidad: y el núcleo no lleva fondo propio, que tapaba el banner',
+      !html.includes('radial-gradient(circle at 35% 30%'),
+      'el nucleo vuelve a tapar el banner');
+    check('identidad: el icono va con su color, para leerse sobre cualquier banner',
+      html.includes('avatar-core') && !html.includes('>AB<'),
+      'sin icono propio');
     // Y el marco, ENCIMA del núcleo: el banner es el fondo del retrato y el marco es
     // el borde. Si el marco se colara debajo, el avatar lo taparía.
     const iMarco = html.lastIndexOf('avatar-frame');
@@ -148,13 +184,16 @@ async function main() {
     //  recortarlo deja medio píxel y todos los marcos se ven más finos unos que otros—.
     // ---------------------------------------------------------------------------
     {
-      const iHalo = html.indexOf('avatar-halo');
+      const iHalo = html.indexOf('avatar-fondo');
       const iCierreHalo = html.indexOf('</span>', iHalo);
-      check('F54: el halo existe y envuelve al banner',
+      check('F54: el envoltorio del fondo existe y envuelve al banner',
         iHalo !== -1 && iCierreHalo !== -1
-        && html.indexOf('transform:scale(', iHalo) > iHalo
-        && html.indexOf('transform:scale(', iHalo) < iCierreHalo,
-        `halo=${iHalo} cierre=${iCierreHalo}`);
+        && iBanner > iHalo && iBanner < iCierreHalo,
+        `envoltorio=${iHalo} cierre=${iCierreHalo}`);
+    check('F54: y ya NO lleva escalado, porque el banner es el fondo y no un aro',
+      html.indexOf('transform:scale(', iHalo) === -1
+        || html.indexOf('transform:scale(', iHalo) > iCierreHalo,
+      'queda un escalado dentro del envoltorio');
       check('F54: y el marco queda FUERA del recorte, con su trazo entero',
         iMarco > iCierreHalo, `marco=${iMarco} cierre del halo=${iCierreHalo}`);
       check('F54: y el núcleo va entre el halo y el marco, que es el orden de las capas',
@@ -164,7 +203,7 @@ async function main() {
       // los avatares del juego no llevan banner.
       const sinBanner = miniIdentity('Ab', { title: 'title_default', frame: 'frame_neon' });
       check('F54: y sin banner no hay envoltorio que no pinte nada',
-        sinBanner.indexOf('avatar-halo') === -1, 'aparece=' + sinBanner.indexOf('avatar-halo'));
+        sinBanner.indexOf('avatar-fondo') === -1, 'aparece=' + sinBanner.indexOf('avatar-fondo'));
     }
     // **Y QUE EL PERFIL USE EL MISMO AVATAR QUE LA CABECERA.** El markup estaba
     // copiado en `identityCard()` y las dos copias ya se habían separado. La prueba
@@ -194,8 +233,19 @@ async function main() {
     const roto = miniIdentity('Ab', {
       title: 'no_existe', frame: 'no_existe', banner: 'no_existe',
     });
+    // **UN ID DESCONOCIDO CAE AL ICONO DE BASE, Y NO A UN HUECO.**
+    //
+    // Antes la comprobación era que salieran las iniciales y que no hubiera un
+    // `undefined` suelto. Ahora lo que importa es que un cosmético inventado —de una
+    // partida vieja, o de un id que se renombró— **pinte el icono de base** en vez de
+    // dejar el núcleo vacío: un avatar en blanco se lee como que el jugador no tiene
+    // nombre.
     check('identidad: un id desconocido no rompe el HTML',
-      roto.includes('>AB<') && !roto.includes('undefined'), 'roto=' + roto.slice(0, 80));
+      roto.includes('<svg') && !roto.includes('undefined'), 'roto=' + roto.slice(0, 80));
+    check('identidad: y un id desconocido cae al icono de base, no a un hueco',
+      iconoDeCosmetico({ banner: 'no_existe', frame: 'no_existe', title: 'no_existe' }).icono
+        === ICONO_BASE.icono,
+      'no cae al base');
   }
 
   // -----------------------------------------------------------------------

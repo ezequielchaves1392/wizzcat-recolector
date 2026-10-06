@@ -206,7 +206,7 @@
    que es `position:absolute; inset:0`, se mida contra él y no contra el avatar entero.
    El marco NO entra aquí a propósito: su trazo está centrado en el borde y recortarlo
    dejaría medio píxel de grosor, que se nota más que el desborde que arregla. */
-.avatar-halo {
+.avatar-fondo {
   position: relative;
   overflow: hidden;
   /* El `width/height` al 100% NO es opcional: el avatar es un `grid` con
@@ -218,16 +218,95 @@
   height: 100%;
 }
 
+/* --------------------------------------------------------------------------
+   EL AVATAR, AHORA CUADRADO Y CON ICONO
+   --------------------------------------------------------------------------
+
+   **EL `border-radius: 9999px` DE AQUÍ ERA LA ÚNICA COSA QUE HACÍA QUE UN
+   MARCO PARECIESE UN MARCO.** Con el núcleo en círculo, todos los marcos —placa o
+   anillo— se leían igual: un aro alrededor de un disco. Y las iniciales no
+   ayudaban: se leían como un sello, que es justo lo que deja de ser.
+
+   Ahora el núcleo es una placa con esquinas suaves y el marco se apoya en la
+   forma de la caja. Un marco cuadrado sobre un cuadrado se ve como marco; un
+   marco redondo sobre un cuadrado se ve como un aro suelto.
+   -------------------------------------------------------------------------- */
+
 .avatar-core {
   display: grid;
   place-items: center;
-  border-radius: 9999px;
-  background: radial-gradient(circle at 35% 30%, var(--accent), var(--bg-deep) 72%);
-  color: var(--bg-app);
+  /* La placa, no el disco. El 9999px de antes era un radio enorme sobre una caja
+     cuadrada, o sea un círculo; el cambio no es de cantidad sino de intención. */
+  border-radius: 1.1rem;
+  /* **SIN FONDO PROPIO, Y ESTE ES EL PUNTO DEL CAMBIO.**
+   *
+   * El núcleo llevaba `radial-gradient(...)` con el color de acento, así que **tapaba el
+   * banner entero** y de lo que se compraba solo se veía un aro alrededor. El fondo del
+   * avatar es el banner; el núcleo solo pone el icono encima. Por eso no lleva
+   * `background`, y por eso el icono necesita su propio color: ya no hay un degradado
+   * oscuro detrás contra el que leerse.
+   */
+  background: transparent;
+  /* **EL ICONO CON SU PROPIO COLOR, Y UNO SOLO PARA TODOS.**
+   *
+   * No se puede dejar que herede el del banner: hay catorce fondos distintos y el icono
+   * tiene que leerse en los catorce. Con un color claro fijo se lee sobre todos, y es la
+   * única forma de que un icono siga siendo el mismo icono en las cuatro pantallas donde
+   * sale. Los cosméticos que quieran llevar su icono en su color se añaden después
+   * —con una sombra detrás, que es lo que hace legible un glifo claro sobre claro—.
+   */
+  color: var(--text-main);
+  /* Y una sombra mínima, porque sin ella el glifo se pierde en un banner claro. */
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55));
   font-family: 'Orbitron', sans-serif;
   font-weight: 900;
   line-height: 1;
   overflow: hidden;
+}
+
+/*
+ * LOS TRES ESCALONES DE EFECTO, Y POR QUÉ NO HAY UN CUARTO.
+ *
+ * El escalón sale de `data/avatarIcons.ts`, no del cosmético: el efecto es una
+ * propiedad **de lo rareza que es**, y metido en el catálogo se acabaría
+ * escribiendo a mano junto al color, que es donde ya vive el resto.
+ *
+ * **Y SOLO ANIMA LA OPACIDAD DE UNA CAPA, NADA MÁS.** Animar `box-shadow` o
+ * `filter` del avatar repinta el nodo cada fotograma, y hay hasta cinco avatares
+ * en una cabecera. Con una capa propia y opacidad —que vive en su propia capa de
+ * composición— el coste no depende de lo que tenga detrás.
+ *
+ * Con movimiento reducido los tres se quedan en su estado de reposo, porque los
+ * dos extremos de cada animación son iguales. Un avatar que con movimiento
+ * reducido se viera más brillante que cuando se mueve sería lo contrario de
+ *lo pedido.
+ */
+
+.avatar-stack.av-efecto-1 > .avatar-core::after,
+.avatar-stack.av-efecto-2 > .avatar-core::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 10px -2px currentColor;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.avatar-stack.av-efecto-1 > .avatar-core::after {
+  animation: avRespira 4.5s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.avatar-stack.av-efecto-2 > .avatar-core::after {
+  animation: avRespira 2.8s ease-in-out infinite;
+  will-change: opacity;
+  opacity: 0.5;
+}
+
+@keyframes avRespira {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.72; }
 }
 
 .avatar-frame {
@@ -479,7 +558,20 @@
 
 .rank-row {
   display: grid;
-  grid-template-columns: 2.25rem auto 1fr auto;
+  /* **MINMAX(0, ...) EN LOS DOS COLUMNAS QUE SE TIENEN QUE PODER ENCOGER.**
+   *
+   * `1fr` y `auto` solos tienen como mínimo el min-content de su contenido, así que la
+   * columna de las medallas no baja nunca de lo que mide la medalla más ancha, y la del
+   * nombre no baja de lo que mide el identificador. Sumado a la de la cifra, que es
+   * `auto` y no cede, en una pantalla estrecha las cuatro no caben: la fila se sale por
+   * la derecha y arrastra a la página entera, que es como se veía el ranking en el móvil
+   * —no "descolocado", sino que no se veía nada.
+   *
+   * `minmax(0, ...)` dice que la columna puede bajar a cero aunque su contenido no quepa,
+   * y es lo que deja que `truncate` de dentro haga su trabajo. **Sin esto, `truncate` es
+   * decorativo en una rejilla**: el padre no cede y el texto se sale igual.
+   */
+  grid-template-columns: 2.25rem auto minmax(0, 1fr) auto;
   gap: 0.625rem;
   align-items: center;
   padding: 0.625rem 0.75rem;
@@ -491,6 +583,10 @@
      `hidden` para que el relleno del catálogo no salga por las esquinas redondeadas. */
   position: relative;
   overflow: hidden;
+  /* Y que la propia fila nunca sea más ancha que su contenedor, por si algo dentro se
+     sale. Sin esto, un hijo ancho estira la fila y la pagina con ella. */
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* El banner de la fila. La opacidad es la del cosmético en el avatar (0,8) partida por
@@ -516,6 +612,32 @@
 .rank-row.is-me {
   border-color: color-mix(in srgb, var(--accent) 60%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* **EN MÓVIL, LAS MEDALLAS BAJAN A SU PROPIA LÍNEA.**
+ *
+ * Con las cuatro columnas en una fila, en 390 px cada hueco sale de 60 px: el
+ * identificador se queda con las iniciales y el nombre desaparece detrás del
+ * `truncate`, que es el peor sitio para el dato que más importa. Bajando las medallas
+ * debajo, el nombre recupera el ancho entero y se sigue leyendo el ranking entero — que
+ * es lo que se perdió, porque una fila que no cabe no es una fila con scantalla: es una
+ * fila que no existe.
+ *
+ * El criterio no es el ancho del móvil sino la altura, porque **es el ancho el que
+ * importa** y no tiene sentido ajustar por altura. Se usa 26rem de ancho porque por
+ * debajo de eso las cuatro columnas no caben ni con las medallas vacías.
+ */
+@media (max-width: 26rem) {
+  .rank-row {
+    grid-template-columns: 2rem auto minmax(0, 1fr);
+    row-gap: 0.375rem;
+  }
+
+  /* Las medallas ocupan las tres columnas debajo, y la cifra se va a su sitio en la
+   * esquina: sigue siendo el número grande de la fila, que es para eso. */
+  .rank-row > .min-w-0 {
+    grid-column: 1 / -1;
+  }
 }
 
 .rank-pos {

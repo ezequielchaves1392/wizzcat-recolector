@@ -2672,3 +2672,20 @@ _Cosas que estorban al trabajo más que al juego._
   alcanzable siempre es mejor que un recorte que solo aparece en pantallas que no son las de
   diseño —y el recorte no falla nunca en la pantalla donde se prueba, que es lo que lo
   hace pasar.
+
+### El ranking en movil y el avatar: hecho, sin ver
+
+- Hecho: el ranking deja de salirse por la derecha en pantallas estrechas (minmax(0,...) en las
+  columnas que ceden, y las medallas bajan a su propia linea por debajo de 26 rem de ancho), y el
+  avatar pasa de iniciales a icono cuadrado con el banner como fondo de verdad.
+- **Sin ver, por el 502 del proxy.** El ranking es lo primero que hay que mirar en un movil
+  real: si la fila se ve, ya esta; si sigue saliendose, el problema es un ancho fijo mas abajo que
+  esta fuera de la cuenta.
+- **El icono de los cosmeticos es una decision que se puede rehacer en un commit.** El mapa esta
+  en `data/avatarIcons.ts` y cambiar un icono es cambiar una fila. Conviene mirarlos todos en
+  el Perfil antes de dar por buena la eleccion de las formas: "Rejilla" por rejilla, "Atardecer"
+  por el sol bajo, etc.
+- Y lo que **no** esta hecho de lo que se pidio de los cosmeticos: que cada icono lleve su
+  propio color en vez del claro fijo. Se puede hacer con una sombra detras y un color por
+  cosmetico, pero hay que verlos sobre los catorce fondos antes, porque un color que se lee
+  sobre el Abismo no se lee sobre la Torrente.

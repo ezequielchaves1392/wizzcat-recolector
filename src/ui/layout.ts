@@ -140,7 +140,7 @@ export function renderLayoutHTML(
         class="relative z-10 flex-grow min-h-0 w-full max-w-[68rem] mx-auto
                px-3 md:px-4 pt-2 md:pt-3 pb-2 md:pb-3
                grid grid-cols-1 lg:grid-cols-12 gap-2.5 md:gap-4
-               overflow-y-auto overscroll-contain"
+               overflow-y-auto overflow-x-hidden overscroll-contain"
         style="padding-bottom: calc(0.5rem + env(safe-area-inset-bottom))">
 
         <!-- ---------- Columna izquierda: el recolector ---------- -->

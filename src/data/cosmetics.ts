@@ -29,7 +29,7 @@ import type { Cosmetic } from '../types/domain';
 /**
  * La base de los marcos: **un borde y nada más.**
  *
- * Antes eran dos cosas —`border: '1px solid'` **y** `borderRadius: '9999px'`— y el radio
+ * Antes eran dos cosas —`border: '1px solid'` **y** `borderRadius: '1.25rem'`— y el radio
  * era la razón de que **los nueve marcos se vieran iguales**: todos heredarían el mismo
  * círculo de un píxel, y lo único que cambiaría sería el color. Es lo que dice la captura
  * del Perfil: nueve círculos iguales con un tinte distinto.
@@ -39,6 +39,14 @@ import type { Cosmetic } from '../types/domain';
  * Porque **cada marco tiene que declarar su forma**, y un radio en la base es una
  * afirmación falsa sobre los ocho que lo llevan. Aquí solo está el grosor y el estilo, que
  * sí comparten todos; el radio, el ancho y el despiece son de cada uno.
+ *
+ * ## Y POR QUÉ NINGUNO ES UN CÍRCULO
+ *
+ * El avatar es una placa cuadrada. Un marco redondo sobre una placa no se lee como marco,
+ * se lee como **un aro suelto encima**, y además hace que el mismo marco se vea distinto
+ * según el tamaño: a 32 px el aro se separa del borde y a 80 px se funde. Los siete que
+ * seguían con radio de círculo pasaron a placa, que es lo que hace que los catorce marcos
+ * se lean como catorce y no como catorce anillos de colores.
  *
  * Y si un marco no declara radio, `frameStyle()` le pone un círculo: los marcos de una
  * partida vieja, que no tienen ninguno, siguen viéndose como se veían.
@@ -108,21 +116,21 @@ export const COSMETICS: Cosmetic[] = [
   // Neón: círculo de dos píxeles con pulso. El primero que se ve de lejos.
   { id: 'frame_neon', type: 'frame', name: 'Neón', description: 'Borde con brillo pulsante.', rarity: 'Épico',
     unlock: { kind: 'cores', value: 40 },
-    style: { ...glassBase, borderRadius: '9999px', borderWidth: '2px', borderColor: 'var(--accent)', boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 60%, transparent)', animation: 'framePulse 3s ease-in-out infinite' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderWidth: '2px', borderColor: 'var(--accent)', boxShadow: '0 0 18px color-mix(in srgb, var(--accent) 60%, transparent)', animation: 'framePulse 3s ease-in-out infinite' } },
 
   // Brasa: **doble aro**, que es lo que la distingue de Neón y Vacío sin mirar el color.
   { id: 'frame_ember', type: 'frame', name: 'Brasa', description: 'Borde naranja de fundición.', rarity: 'Épico',
     unlock: { kind: 'achievement', value: 'smith_25' },
-    style: { ...glassBase, borderRadius: '9999px', borderWidth: '2px', borderColor: '#f97316', boxShadow: '0 0 20px #f9731666, inset 0 0 0 1px #fb923c66' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderWidth: '2px', borderColor: '#f97316', boxShadow: '0 0 20px #f9731666, inset 0 0 0 1px #fb923c66' } },
 
   // Vacío: círculo **fino** con sombra interior, que se come la luz del avatar por dentro.
   { id: 'frame_void', type: 'frame', name: 'Vacío', description: 'Borde que absorbe la luz.', rarity: 'Legendario',
     unlock: { kind: 'cores', value: 250 },
-    style: { ...glassBase, borderRadius: '9999px', borderWidth: '1px', borderColor: '#7c3aed', boxShadow: '0 0 24px #7c3aed80, inset 0 0 20px #00000080' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderWidth: '1px', borderColor: '#7c3aed', boxShadow: '0 0 24px #7c3aed80, inset 0 0 20px #00000080' } },
   // Oro: el único de tres píxeles, y el único con brillo animado de tono.
   { id: 'frame_gold', type: 'frame', name: 'Oro Prohibido', description: 'Solo para el Top 1.',
     rarity: 'Divino', unlock: { kind: 'ranking', value: 1 },
-    style: { ...glassBase, borderRadius: '9999px', borderWidth: '3px', borderColor: '#fde047', boxShadow: '0 0 26px #fde04790', animation: 'frameShimmer 4s linear infinite' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderWidth: '3px', borderColor: '#fde047', boxShadow: '0 0 26px #fde04790', animation: 'frameShimmer 4s linear infinite' } },
   // Cascada: placa con esquinas marcadas y borde de degradado. El relleno va con la
   // técnica `padding-box/border-box`, y **solo funciona si hay algo dentro**: el relleno
   // del padding-box ocupa todo el interior. Por eso el catálogo lo enseña con un avatar
@@ -188,7 +196,7 @@ export const COSMETICS: Cosmetic[] = [
   // Cuántico: círculo de trazos cortos, como una señal que solo se ve cuando la miras.
   { id: 'frame_quantum', type: 'frame', name: 'Cuántico', description: 'Borde que solo está ahí cuando lo miras.',
     rarity: 'Mítico', unlock: { kind: 'crate', value: 10 },
-    style: { ...glassBase, borderRadius: '9999px', borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, repeating-linear-gradient(90deg,#22d3ee 0 6px,transparent 6px 12px) border-box' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderColor: 'transparent', borderWidth: '2px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, repeating-linear-gradient(90deg,#22d3ee 0 6px,transparent 6px 12px) border-box' } },
   { id: 'banner_aurora', type: 'banner', name: 'Aurora', description: 'El cielo de la Cyber Base visto desde el tejado.',
     rarity: 'Legendario', unlock: { kind: 'crate', value: 10 },
     style: { background: 'linear-gradient(120deg,#4c1d95,#0e7490 45%,#10b981)' } },
@@ -226,7 +234,7 @@ export const COSMETICS: Cosmetic[] = [
   {
     id: 'frame_legion', type: 'frame', name: 'Legión', description: 'Doble aro. Doce en pie, y el marco los cuenta.',
     rarity: 'Legendario', unlock: { kind: 'achievement', value: 'squad_12' },
-    style: { ...glassBase, borderRadius: '9999px', borderWidth: '3px', borderColor: '#e5e7eb', boxShadow: '0 0 0 2px #111827, inset 0 0 0 2px #6b7280' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderWidth: '3px', borderColor: '#e5e7eb', boxShadow: '0 0 0 2px #111827, inset 0 0 0 2px #6b7280' } },
   {
     id: 'frame_prisma', type: 'frame', name: 'Prisma', description: 'El mismo borde se ve en tres tonos a la vez.',
     rarity: 'Épico', unlock: { kind: 'achievement', value: 'doblaje' },
@@ -234,7 +242,7 @@ export const COSMETICS: Cosmetic[] = [
   {
     id: 'frame_spectrum', type: 'frame', name: 'Espectro', description: 'El arcoíris entero, girando despacio.',
     rarity: 'Mítico', unlock: { kind: 'achievement', value: 'perfect_10' },
-    style: { ...glassBase, borderRadius: '9999px', borderColor: 'transparent', borderWidth: '3px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, conic-gradient(from 0deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444) border-box', animation: 'frameSpectrum 9s linear infinite' } },
+    style: { ...glassBase, borderRadius: '1.25rem', borderColor: 'transparent', borderWidth: '3px', background: 'linear-gradient(#0b0b12,#0b0b12) padding-box, conic-gradient(from 0deg,#ef4444,#f59e0b,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444) border-box', animation: 'frameSpectrum 9s linear infinite' } },
   {
     id: 'banner_spectrum', type: 'banner', name: 'Espectro', description: 'Arcoíris en conic, con el centro justo detrás del avatar.',
     rarity: 'Mítico', unlock: { kind: 'achievement', value: 'perfect_10' },
