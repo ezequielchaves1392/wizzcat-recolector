@@ -184,9 +184,10 @@
 
 /* --------------------------------------------------------------------------
    Identidad y cosméticos
-   El avatar es un disco de 3 capas (núcleo, marco, aura). Las tres se
-   posicionan con `grid-area: 1/1` para no depender del orden del DOM: así el
-   marco puede animarse sin desplazar el glifo.
+   El avatar tiene DOS capas independientes: el banner (fondo) y el emblema
+   (el marco como icono de perfil). Las dos se apilan con `grid-area: 1/1`
+   para que el orden del DOM no importe; el fondo va `absolute` y el emblema
+   es la única pieza en flujo, centrada.
    -------------------------------------------------------------------------- */
 
 .avatar-stack {
@@ -194,96 +195,88 @@
   place-items: center;
   position: relative;
   isolation: isolate;
+  border-radius: 1.1rem;
 }
 
 .avatar-stack > * { grid-area: 1 / 1; }
 
-/* F54 · El envoltorio del halo, que es lo único que se recorta.
-   El banner va escalado (1,32 si es placa, 1,7 si es circular) para que se lea como
-   un halo alrededor del avatar, y sin esto se salía 13 px por cada lado de una caja de
-   80 px: en la cabecera, donde el avatar es de 32 px y el hueco hasta el nombre es de
-   8, el halo se comía las primeras letras. Que sea `relative` es para que el banner,
-   que es `position:absolute; inset:0`, se mida contra él y no contra el avatar entero.
-   El marco NO entra aquí a propósito: su trazo está centrado en el borde y recortarlo
-   dejaría medio píxel de grosor, que se nota más que el desborde que arregla. */
+/* El banner: el fondo del avatar. Recorta el relleno a las esquinas de la
+   caja para que un degradado o una rejilla no se salgan del marco redondeado.
+   Ya NO se escala: un fondo escalado era la forma de fingir un halo que nunca
+   llegó a leerse. Llena la caja y punto. */
 .avatar-fondo {
-  position: relative;
-  overflow: hidden;
-  /* El `width/height` al 100% NO es opcional: el avatar es un `grid` con
-     `place-items: center`, así que sus hijos se dimensionan por su contenido —y el halo
-     no tiene contenido en flujo, porque su único hijo es `position: absolute`—. Sin
-     esto el envoltorio mide 0×0, no recorta nada y además se lleva por delante el
-     núcleo, que comparte celda con él. */
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
 }
+
+/* El relleno del banner lo pone el catálogo en línea (`bannerStyle`). */
+.avatar-banner { display: block; }
 
 /* --------------------------------------------------------------------------
-   EL AVATAR, AHORA CUADRADO Y CON ICONO
+   EL EMBLEMA: EL MARCO COMO ICONO DE PERFIL
    --------------------------------------------------------------------------
 
-   **EL `border-radius: 9999px` DE AQUÍ ERA LA ÚNICA COSA QUE HACÍA QUE UN
-   MARCO PARECIESE UN MARCO.** Con el núcleo en círculo, todos los marcos —placa o
-   anillo— se leían igual: un aro alrededor de un disco. Y las iniciales no
-   ayudaban: se leían como un sello, que es justo lo que deja de ser.
+   **ANTES EL MARCO ERA UN ARO Y EL ICONO SALÍA DEL BANNER.** Así, cambiar de
+   fondo cambiaba de cara, y el marco que el jugador se ponía no se veía como
+   un icono: se veía como un borde. Ahora el marco es el icono de perfil: un
+   emblema centrado con su propio fondo, su propio icono y su propio estilo,
+   y el banner es solo el fondo.
 
-   Ahora el núcleo es una placa con esquinas suaves y el marco se apoya en la
-   forma de la caja. Un marco cuadrado sobre un cuadrado se ve como marco; un
-   marco redondo sobre un cuadrado se ve como un aro suelto.
+   El emblema NO hereda nada del banner: ni color, ni relleno. Lo que el
+   jugador tiene equipado se enseña tal cual.
    -------------------------------------------------------------------------- */
 
-.avatar-core {
+.avatar-emblem {
   display: grid;
   place-items: center;
-  /* La placa, no el disco. El 9999px de antes era un radio enorme sobre una caja
-     cuadrada, o sea un círculo; el cambio no es de cantidad sino de intención. */
-  border-radius: 1.1rem;
-  /* **SIN FONDO PROPIO, Y ESTE ES EL PUNTO DEL CAMBIO.**
-   *
-   * El núcleo llevaba `radial-gradient(...)` con el color de acento, así que **tapaba el
-   * banner entero** y de lo que se compraba solo se veía un aro alrededor. El fondo del
-   * avatar es el banner; el núcleo solo pone el icono encima. Por eso no lleva
-   * `background`, y por eso el icono necesita su propio color: ya no hay un degradado
-   * oscuro detrás contra el que leerse.
-   */
-  background: transparent;
-  /* **EL ICONO CON SU PROPIO COLOR, Y UNO SOLO PARA TODOS.**
-   *
-   * No se puede dejar que herede el del banner: hay catorce fondos distintos y el icono
-   * tiene que leerse en los catorce. Con un color claro fijo se lee sobre todos, y es la
-   * única forma de que un icono siga siendo el mismo icono en las cuatro pantallas donde
-   * sale. Los cosméticos que quieran llevar su icono en su color se añaden después
-   * —con una sombra detrás, que es lo que hace legible un glifo claro sobre claro—.
-   */
-  color: var(--text-main);
-  /* Y una sombra mínima, porque sin ella el glifo se pierde en un banner claro. */
-  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55));
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 900;
-  line-height: 1;
+  /* El tamaño del emblema dentro de la caja. Ni llena todo (entonces no se ve
+     el fondo) ni es diminuto (entonces no es la cara). */
+  width: 74%;
+  height: 74%;
+  border-radius: 1rem;
+  /* Sin marco equipado, un emblema neutro para que el chip de base se lea
+     sobre cualquier banner. */
+  background: color-mix(in srgb, var(--bg-app) 62%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-main) 12%, transparent);
   overflow: hidden;
+  /* Por defecto el icono hereda el color del texto; el marco puede traer el suyo
+     con `iconColor`, y ese manda. */
+  color: var(--text-main);
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
 }
+
+.avatar-emblem-glyph {
+  display: grid;
+  place-items: center;
+  width: 62%;
+  height: 62%;
+  line-height: 0;
+}
+
+.avatar-emblem-glyph > svg { width: 100%; height: 100%; }
 
 /*
  * LOS TRES ESCALONES DE EFECTO, Y POR QUÉ NO HAY UN CUARTO.
  *
  * El escalón sale de `data/avatarIcons.ts`, no del cosmético: el efecto es una
- * propiedad **de lo rareza que es**, y metido en el catálogo se acabaría
+ * propiedad **de la rareza que es**, y metido en el catálogo se acabaría
  * escribiendo a mano junto al color, que es donde ya vive el resto.
  *
  * **Y SOLO ANIMA LA OPACIDAD DE UNA CAPA, NADA MÁS.** Animar `box-shadow` o
- * `filter` del avatar repinta el nodo cada fotograma, y hay hasta cinco avatares
+ * `filter` del emblema repinta el nodo cada fotograma, y hay hasta cinco avatares
  * en una cabecera. Con una capa propia y opacidad —que vive en su propia capa de
  * composición— el coste no depende de lo que tenga detrás.
  *
  * Con movimiento reducido los tres se quedan en su estado de reposo, porque los
- * dos extremos de cada animación son iguales. Un avatar que con movimiento
- * reducido se viera más brillante que cuando se mueve sería lo contrario de
- *lo pedido.
+ * dos extremos de cada animación son iguales.
  */
 
-.avatar-stack.av-efecto-1 > .avatar-core::after,
-.avatar-stack.av-efecto-2 > .avatar-core::after {
+.avatar-stack.av-efecto-1 > .avatar-emblem::after,
+.avatar-stack.av-efecto-2 > .avatar-emblem::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -293,12 +286,15 @@
   pointer-events: none;
 }
 
-.avatar-stack.av-efecto-1 > .avatar-core::after {
+.avatar-stack.av-efecto-1 > .avatar-emblem { position: relative; }
+.avatar-stack.av-efecto-2 > .avatar-emblem { position: relative; }
+
+.avatar-stack.av-efecto-1 > .avatar-emblem::after {
   animation: avRespira 4.5s ease-in-out infinite;
   will-change: opacity;
 }
 
-.avatar-stack.av-efecto-2 > .avatar-core::after {
+.avatar-stack.av-efecto-2 > .avatar-emblem::after {
   animation: avRespira 2.8s ease-in-out infinite;
   will-change: opacity;
   opacity: 0.5;
@@ -307,11 +303,6 @@
 @keyframes avRespira {
   0%, 100% { opacity: 0.28; }
   50% { opacity: 0.72; }
-}
-
-.avatar-frame {
-  border-radius: 9999px;
-  pointer-events: none;
 }
 
 @keyframes framePulse {
@@ -328,23 +319,48 @@
 /**
  * EL GIRO DEL ESPECTRO, Y POR QUÉ ES UNA VUELTA COMPLETA Y LENTA.
  *
- * Los cosmos "Espectro" (marco y banner) llevan un `conic-gradient` de arcoíris en el
- * borde, y sin esto se ven como un arcoíris **quieto**: el nombre promete un espectro y lo
- * que hay es una foto de uno.
+ * Los marcos "Espectro" y "Cuántico" llevan un `conic-gradient` o un aro de trazos en el
+ * emblema, y sin esto se ven **quietos**: el nombre promete un espectro girando y lo que
+ * hay es una foto de uno.
  *
  * Dos decisiones. **Una vuelta completa de 9 s** —y no media vuelta— porque el
  * `conic-gradient` es simétrico: girar 180° es la misma imagen, y una animación a medio
- * girar vuelta parece salto. Y **sin `brightness`**, porque el brillo sobre un
- * `border-box` con relleno `padding-box` sube también el fondo y el marco deja de leerse
- * como marco en el segundo en que se enciende.
+ * girar vuelta parece un salto. Y **sin `brightness`**, porque el brillo sobre un
+ * `border-box` con relleno `padding-box` sube también el fondo y el emblema deja de
+ * leerse.
  *
- * Y hay un segundo sitio que gira el mismo arcoíris: el `::after` de `.cosmetic-banner`,
- * que ya usa `shimmer`. Este es el del cónico, y son animations distintas porque los dos
- *gradientes no se mueven igual: el lineal de las líneas de escaneo no puede girar.
+ * **Y ESTE GIRO ES SOLO PARA EL EMBLEMA, NUNCA PARA EL BANNER.** Aplicarlo a un fondo
+ * cuadrado se ve como un cuadrado girando, que es el "a veces se ve girando" que
+ * describió el jugador. El fondo no rota.
  */
 @keyframes frameSpectrum {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Brasa y otras luces: sube y baja el brillo de la caja, sin moverla. */
+@keyframes frameEmber {
+  0%, 100% { filter: brightness(0.92) saturate(1); }
+  50% { filter: brightness(1.18) saturate(1.15); }
+}
+
+/* Cascada / lluvia: desplaza el RELLENO, no la caja. Es lo que hace legible una
+   cascada; girar o mover la caja de un emblema cuadrado se ve como un cuadrado bailando. */
+@keyframes frameScan {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 0 14px, 0 0; }
+}
+
+/* Las líneas de escaneo bajan por la pantalla. */
+@keyframes scanDown {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 0 6px, 0 0; }
+}
+
+/* Las estrellas de Aurora Alta derivan muy despacio, para que el cielo no esté muerto. */
+@keyframes starDrift {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 90px -130px, 130px -90px, 0 0; }
 }
 
 .cosmetic-banner {

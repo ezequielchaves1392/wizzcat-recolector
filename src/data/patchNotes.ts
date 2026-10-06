@@ -57,6 +57,20 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.6.0',
+    fecha: '6 de octubre de 2026',
+    titulo: 'El banner es el fondo y el marco es tu icono',
+    lineas: [
+      'El banner y el marco ahora son dos cosas separadas: el banner es el fondo del avatar y el marco es tu icono de perfil.',
+      'Cada marco tiene su propio fondo, su propia figura y su color: se ve tal cual es, sin que el fondo lo tina.',
+      'Cambiar de banner ya no cambia tu icono: el fondo y la cara son independientes.',
+      'Los marcos se rediseñaron con una figura acorde a su nombre: Acero es un hexagono, Cuantico un atomo, Prisma un prisma, Cascada lluvia, Espectro un arcoiris.',
+      'Los marcos especiales tienen animacion: Neon late, Brasa respira, Cuantico y Espectro giran, Cascada cae.',
+      'Los banners tambien ganaron animacion sutil, pero sin girar: el fondo nunca se mueve como una caja.',
+      'En el perfil, el nombre y el titulo ya no empujan el icono: se queda en su sitio aunque el titulo sea largo.'
+    ]
+  },
+  {
     version: '1.5.0',
     fecha: '6 de octubre de 2026',
     titulo: 'Banners con carácter y el AFK que de verdad funciona',

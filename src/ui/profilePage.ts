@@ -94,15 +94,19 @@ export function identityCard(opts: {
 
   // **EL AVATAR LO PINTA `avatarStack()`, EL MISMO QUE LA CABECERA Y EL RANKING.**
   //
-  // Aquí había una segunda copia del markup del avatar con sus tres `span`, y las dos
-  // copias ya se habían separado: la de aquí no tachaba el halo cuando no había banner
-  // —dejaba un `avatar-frame` invisible ocupando el sitio— y la otra sí. Con el halo, el
-  // marco y el núcleo en un solo sitio, el perfil y el ranking enseñan lo mismo por
-  //construccion y no por casualidad.
+  // Aquí había una segunda copia del markup del avatar, y las dos copias ya se habían
+  // separado. Con el icono, el banner y el emblema en un solo sitio, el perfil y el
+  // ranking enseñan lo mismo por construcción y no por casualidad.
+  //
+  // **Y VA EN COLUMNA, NO EN FILA, PARA QUE EL TÍTULO NO MUEVA EL ICONO.** En fila, el
+  // bloque se centraba como un todo: un título más largo ensanchaba el conjunto y el
+  // avatar se desplazaba a la izquierda. El icono es la cara del jugador y no puede
+  // bailar porque cambie el nombre del título; en columna, el avatar está siempre en el
+  // mismo eje y el texto crece por debajo.
   return `
-    <div class="flex items-center gap-3 min-w-0">
+    <div class="flex flex-col items-center gap-2 min-w-0">
       ${avatarStack(initials, opts.cosmetics, dims, glyph)}
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 max-w-full text-center">
         <div class="font-['Orbitron'] font-bold text-[13px] md:text-sm text-[var(--text-main)] truncate leading-tight">
           ${opts.name}
         </div>

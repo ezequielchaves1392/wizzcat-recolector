@@ -88,6 +88,14 @@ export const ICONS = {
   grid: svg('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
   monitor: svg('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
   star: svg('<path d="m12 2 3 6.5 7 .8-5.2 4.7 1.5 6.9L12 17.3 5.7 21l1.5-7L2 9.3l7-.8L12 2Z"/>'),
+  // Iconos de los marcos ("iconos de perfil"). Uno por nombre del catálogo, con
+  // la forma que el ojo reconoce antes que el color: átomo, gema, prisma...
+  atom: svg('<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(0 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(120 12 12)"/>'),
+  gem: svg('<path d="M5 4h14l3 5-10 11L2 9l3-5Z"/><path d="M2 9h20"/><path d="M12 20 8 9l4-5 4 5-4 11"/>'),
+  prism: svg('<path d="M12 4 4 20h16L12 4Z"/><path d="M2 11h7"/><path d="M15.5 9.5 22 7M16 12h6M15.5 14.5 22 17"/>'),
+  rain: svg('<path d="M7 3v5M7 11v4M7 18v3M12 4v6M12 13v3M12 19v2M17 3v4M17 10v5M17 18v3"/>'),
+  spectrum: svg('<path d="M2 19a10 10 0 0 1 20 0"/><path d="M6 19a6 6 0 0 1 12 0"/><path d="M10 19a2 2 0 0 1 4 0"/>'),
+  hexagon: svg('<path d="M12 2 4 6.6v10.8L12 22l8-4.6V6.6L12 2Z"/><path d="M12 2v20M4 6.6l16 10.8M20 6.6 4 17.4"/>'),
   // Audio. `sound` es el altavoz (efectos) y `music` la nota (pista): los
   // dos interruptores de la cabecera necesitan icons que se distingan de un
   // vistazo en movil, donde no cabe la etiqueta de texto.

@@ -1,5 +1,5 @@
 // ==========================================================================
-//  Identidad mínima: avatar con marco + nombre + título
+//  Identidad: avatar (banner de fondo + icono de perfil) + nombre + título
 //
 //  Una sola fuente para los sitios que enseñan quién eres en pequeño: la
 //  cabecera (F16) y las filas del ranking (F8). Antes cada una pintaba su
@@ -13,7 +13,7 @@
 
 import { ic } from './icons';
 import { COSMETICS_BY_ID, cosmeticStyle } from '../data/cosmetics';
-import { iconoDeCosmetico } from '../data/avatarIcons';
+import { iconoDeCosmetico, ICONO_BASE } from '../data/avatarIcons';
 import type { Cosmetic } from '../types/domain';
 
 export interface IdentityCosmetics {
@@ -33,7 +33,7 @@ export function titleStyleFor(title: Cosmetic | undefined): string {
 }
 
 /**
- * EL AVATAR CON MARCO Y BANNER, Y POR QUÉ ESTÁ EN UN SOLO SITIO.
+ * EL AVATAR: BANNER DE FONDO E ICONO DE PERFIL, Y POR QUÉ SON DOS COSAS.
  *
  * ## EL PROBLEMA QUE ESTE FICHERO RESUELVE
  *
@@ -42,25 +42,28 @@ export function titleStyleFor(title: Cosmetic | undefined): string {
  * llega a una y no a la otra; y con tres, las tres se separan el día que alguien toca el
  * tamaño. Aquí está **una vez**, y los tres la llaman.
  *
- * ## POR QUÉ EL BANNER NO ERA UN BANNER
+ * ## BANNER Y MARCO SON DOS COSAS, Y ANTES NO LO ERAN
  *
- * Era `rounded-full` con `scale(1.9)` y `opacity:.5`: **un círculo pálido detrás del
- * avatar**. Con un patrón de rejilla o de degradado, a la mitad de opacidad y escalado,
- * eso no se lee: se ve un halo que podría ser cualquier cosa. Un banner tiene que
- * **verse**, y para eso son tres cosas y las tres importan:
+ * El banner era el fondo pero además elegía el icono central, y el marco era un aro
+ * alrededor. Así, cambiar de fondo **cambiaba de cara**, y lo que el jugador tenía
+ * equipado como marco no se veía como un icono: se veía como un borde.
  *
- * · **Opacidad de 0,8 y no 0,5.** A la mitad, el patrón se mezcla con el fondo y solo
- *   queda el color medio, que es justo lo que no distingue un banner de otro.
- * · **El banner manda su propia forma.** Antes la clase `rounded-full` estaba en el
- *   marcado y el estilo del cosmético no podía cambiarlo: todos los fondos salían
- *   circulares aunque el catálogoiera rectos. Ahora el radio sale del estilo, así que un
- *   banner puede ser una placa o un círculo según lo que sea.
- * · **El marco también.** Por el mismo motivo: `glassBase` forzaba `9999px` en los siete
- *   marcos, y por eso **todos se veían iguales**: un anillo. Los que ahora tienen
- *   esquinas, cortes o doble aro dicen algo al mirarlos de reojo.
+ * Ahora son independientes y cada uno dice lo suyo:
  *
- * Y el marco va **encima del núcleo** y el banner **detrás**, que es el orden correcto:
- * el banner es el fondo del retrato y el marco es el borde.
+ * · **El banner es el fondo.** Llena el avatar entero, por detrás de todo, con su
+ *   relleno y su forma. No aporta icono. Un fondo no es una cara.
+ * · **El marco es el icono de perfil.** Un emblema centrado con **su propio fondo, su
+ *   propio icono y su propio estilo**: es la cara del jugador, y se enseña tal cual,
+ *   sin que el banner la tiña. El icono sale de `avatarIcons` por el id del marco.
+ *
+ * Y por eso el icono central ya no toma el color del banner (`iconColor` pasó a ser del
+ * marco): un icono que cambia con el fondo no es la cara de nadie.
+ *
+ * ## LO QUE NO HAY AQUÍ
+ *
+ * El envoltorio que recortaba el banner se ha ido con el halo. El banner ya no se
+ * escala: rellena la caja y punto. Un fondo escalado era la forma de fingir un halo que
+ * nunca llegó a leerse.
  */
 export function avatarStack(
   initials: string,
@@ -72,8 +75,6 @@ export function avatarStack(
   const banner = cosmetics?.banner ? COSMETICS_BY_ID[cosmetics.banner] : undefined;
   const hayBanner = !!banner && banner.id !== 'banner_none';
   const hayMarco = !!frame && frame.id !== 'frame_none';
-  // **EL ICONO SALE DEL COSMÉTICO, Y SI NO HAY NINGUNO EL DE BASE.**
-  //
   // `initials` llega aquí y **no se usa**, y eso es lo que hay que dejar escrito: la
   // firma lo conserva para no romper las cinco llamadas —cada una tenía su forma de
   // llamarla—, pero dentro ya no se lee. Cuando se quiten las llamadas se puede quitar
@@ -81,78 +82,44 @@ export function avatarStack(
   // que explica por qué sigue ahí.
   const icono = iconoDeCosmetico(cosmetics);
 
+  // El emblema del marco: su propia forma y su propio relleno. Sin marco, un emblema
+  // neutro con el chip de base. Es la cara del jugador, y sale del marco, no del fondo.
+  const emblem = hayMarco ? frame : undefined;
+  const colorIcono = emblem?.iconColor;
+  const estiloEmblema = emblem
+    ? ['position:relative', cosmeticStyle(emblem)].join(';')
+    : 'position:relative';
+
   return `
     <div class="avatar-stack ${dims} flex-shrink-0 av-efecto-${icono.efecto}" aria-hidden="true">
       ${hayBanner ? `
-        <!--
-          F54 · EL ENVOLTORIO QUE RECORTA EL BANNER, Y SOLO ÉL.
-
-          Sigue haciendo falta por lo mismo que antes: el avatar-stack NO recorta,
-          y el marco se pinta centrado en el borde. Lo que cambia es lo que hay
-          dentro: el banner ya **no es un aro**, es el fondo. Antes iba escalado
-          a 1,32 detrás de un núcleo con su propio degradado, así que de él solo
-          se veía un halo y el fondo de verdad era el degradado. Ahora rellena la
-          caja y el núcleo es transparente.
-
-          Por eso el envoltorio se llama avatar-fondo y no avatar-halo: el nombre
-          era la pista de lo que había antes.
-        -->
-        <span class="avatar-fondo">
-          <span class="avatar-frame w-full h-full" style="${bannerStyle(banner)}"></span>
+        <span class="avatar-fondo" aria-hidden="true">
+          <span class="avatar-banner" style="${bannerStyle(banner)}"></span>
         </span>` : ''}
-      <span class="avatar-core w-[78%] h-[78%] ${glyphClass}" ${banner?.iconColor ? `style="color:${banner.iconColor}"` : ''}>
-        <span class="[&>span>svg]:w-full [&>span>svg]:h-full">${ic(icono.icono)}</span>
+      <span class="avatar-emblem ${glyphClass}" style="${estiloEmblema}">
+        <span class="avatar-emblem-glyph"${colorIcono ? ` style="color:${colorIcono}"` : ''}>${
+          ic(hayMarco ? icono.icono : ICONO_BASE.icono, 'w-full h-full')
+        }</span>
       </span>
-      ${hayMarco ? `
-        <span class="avatar-frame w-full h-full"
-              style="${frameStyle(frame)}"></span>` : ''}
     </div>`;
 }
 
 /**
- * El estilo del banner: **el del catálogo, más lo que hace falta para que se vea.**
+ * El estilo del banner: **el fondo del avatar, y solo eso.**
  *
- * El `scale` y la opacidad no están en el catálogo y **no deben estar**: son la misma
- * cuenta en los tres sitios, y si cada uno los escribiera a su mano acabarian medidos por separado y volverían a no cuadrar. Lo único que sale del catálogo es la
- * forma y el relleno, que es lo que hace que un banner sea distinto de otro.
+ * No lleva borde ni forma propia más allá del radio de la caja: el banner es el fondo, y
+ * un fondo con un aro encima deja de ser un fondo. La forma la pone `.avatar-fondo`, que
+ * es quien recorta para que el banner no se salga de las esquinas redondeadas.
  *
- * **EL BORDE DEL BANNER VIENE DE SU `frameStyle`** (si lo tiene), no de un radio
- * hardcoded. Cada banner declara su forma en `frameStyle.borderRadius` y su borde
- * en `frameStyle.border`/`background`/`boxShadow`. Así un banner puede ser placa,
- * círculo, o tener un borde de gradiente animado (p.ej. Espectro).
+ * Y **no gira.** El "Espectro" llevaba `animation: frameSpectrum`, que es un
+ * `transform: rotate`, y girar un cuadrado de fondo se ve como un cuadrado girando: el
+ * jugador lo describió como que el banner "a veces se ve girando". Un fondo no rota; si
+ * necesita movimiento, lo tiene con `background-position` o un cambio de tono, que no
+ * mueven la caja.
  */
 function bannerStyle(banner: Cosmetic): string {
   const propio = cosmeticStyle(banner);
-  // El radio del banner: si tiene frameStyle con borderRadius, úsalo; si no, placa.
-  const radio = banner.frameStyle?.borderRadius ?? '1.25rem';
-  // El borde/sombra del banner: si tiene frameStyle, aplícalo al fondo (no como capa aparte).
-  const borde = banner.frameStyle
-    ? Object.entries(banner.frameStyle)
-        .map(([k, v]) => `${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${v}`)
-        .join(';')
-    : '';
-  return [
-    'position:absolute',
-    'inset:0',
-    'opacity:1',
-    `border-radius:${radio}`,
-    propio,
-    borde
-  ].filter(Boolean).join(';');
-}
-
-/** El estilo del marco. Idem: la forma viene del catálogo y no de la clase. */
-function frameStyle(frame: Cosmetic): string {
-  const propio = cosmeticStyle(frame);
-  // **EL RADIO SALE DEL CATÁLOGO CUANDO EL MARCO LO TRAE, Y SI NO, UNO DE PLACA.**
-  //
-  // El if que había antes devolvía 9999px cuando el marco no decía su forma, y eso
-  // convertía **cualquier marco antiguo o futuro sin radio propio en un anillo**. El
-  // valor por defecto tiene que ser la forma de la caja, no la contraria: un marco sin
-  // radio propio que sale redondo se lleva por delante la separación entre "marco de
-  // placa" y "marco de anillo".
-  const radio = frame.style.borderRadius ? String(frame.style.borderRadius) : '1.25rem';
-  return ['position:absolute', 'inset:0', `border-radius:${radio}`, propio].join(';');
+  return ['position:absolute', 'inset:0', 'opacity:1', propio].filter(Boolean).join(';');
 }
 
 /**
@@ -160,28 +127,24 @@ function frameStyle(frame: Cosmetic): string {
  *
  * ## POR QUÉ ES UNA FUNCIÓN Y NO EL ESTILO DEL CATÁLOGO TAL CUAL
  *
- * `cosmeticStyle()` trae **geometría y relleno**: el radio es parte de la identidad del
- * cosmético. En el avatar esa geometría es lo que hace que un marco tenga esquinas o sea
- * un anillo. De fondo en una fila del ranking, la geometría correcta es **la de la fila**.
+ * `cosmeticStyle()` trae geometría y relleno. En el avatar esa geometría no aplica al
+ * fondo —lo pone la caja—, pero de fondo en una fila del ranking la geometría correcta es
+ * **la de la fila**.
  *
  * `border-radius: inherit` va **al final a propósito** y no es un descuido: el estilo del
  * catálogo va en el atributo `style`, y en un `style` en línea manda **la última
  * declaración de la misma propiedad**, no el `!important` de una hoja. Ponerlo detrás no
  * la reemplazaría.
  *
- * Y por qué importa: un banner circular (`border-radius: 9999px`) de fondo en una fila de
- * 700×80 no es un banner, es un disco recortado a una franja. La forma la pone la fila.
- *
- * La opacidad y la posición **no** vienen aquí: son del sitio que lo pinta, porque el
- * avatar y la fila los necesitan distintos. Lo único que sale del catálogo es lo único que
- * es del cosmético: el relleno.
+ * Y por qué importa: un banner circular de fondo en una fila de 700×80 no es un banner,
+ * es un disco recortado a una franja. La forma la pone la fila.
  */
 export function rellenoDeBanner(banner: Cosmetic): string {
   return `${cosmeticStyle(banner)};border-radius:inherit`;
 }
 
 /**
- * Avatar de 32 px con marco y halo del banner, nombre y título.
+ * Avatar de 32 px con icono de perfil, nombre y título.
  *
  * El título por defecto ("Sin título") se enseña o no según `hideDefaultTitle`:
  * en el ranking sale lo equipado tal cual, y en la cabecera se esconde porque

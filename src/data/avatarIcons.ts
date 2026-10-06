@@ -64,42 +64,24 @@ export interface IconoDeCosmetico {
 export const ICONO_BASE: IconoDeCosmetico = { icono: 'chip', efecto: 0 };
 
 const POR_ID: Record<string, IconoDeCosmetico> = {
-  // --- Banners ---
-  banner_none: ICONO_BASE,
-  banner_grid: { icono: 'layers', efecto: 0 },
-  banner_sunset: { icono: 'flame', efecto: 1 },
-  banner_abyss: { icono: 'core', efecto: 1 },
-  banner_toxic: { icono: 'flask', efecto: 1 },
-  banner_crimson: { icono: 'warning', efecto: 1 },
-  banner_crown: { icono: 'crown', efecto: 2 },
-  banner_hidden: { icono: 'lock', efecto: 0 },
-  banner_foundry: { icono: 'anvil', efecto: 2 },
-  banner_datastorm: { icono: 'bolt', efecto: 2 },
-  banner_aurora: { icono: 'sparkle', efecto: 1 },
-  banner_spectrum: { icono: 'crystal', efecto: 2 },
-  banner_mosaic: { icono: 'grid', efecto: 0 },
-  banner_scanlines: { icono: 'monitor', efecto: 1 },
-  banner_aurora_high: { icono: 'star', efecto: 2 },
-
-  // --- Marcos. Un marco describe el borde, así que su icono es el del material
-  //     o del país, no otra vez el del banner: si los dos fueran el mismo icono se
-  //     leería como un solo cosmético. ---
-  frame_none: ICONO_BASE,
-  frame_steel: { icono: 'shield', efecto: 0 },
-  frame_neon: { icono: 'bolt', efecto: 1 },
+  // --- Marcos. **EL MARCO ES EL ICONO DE PERFIL**: su forma es la cara del
+  //     jugador, así que cada uno lleva un icono que dice lo que su nombre
+  //     promete. El banner ya no participa aquí: es el fondo, no el icono. ---
+  frame_steel: { icono: 'hexagon', efecto: 0 },
+  frame_neon: { icono: 'bolt', efecto: 2 },
   frame_ember: { icono: 'flame', efecto: 1 },
   frame_void: { icono: 'eye', efecto: 1 },
-  frame_gold: { icono: 'medal', efecto: 1 },
-  frame_matrix: { icono: 'graph', efecto: 1 },
+  frame_gold: { icono: 'crown', efecto: 1 },
+  frame_matrix: { icono: 'rain', efecto: 1 },
   frame_oxy: { icono: 'anvil', efecto: 0 },
-  frame_quantum: { icono: 'core', efecto: 2 },
-  frame_onyx: { icono: 'shield', efecto: 0 },
-  frame_legion: { icono: 'medal', efecto: 1 },
-  frame_prisma: { icono: 'crystal', efecto: 2 },
-  frame_spectrum: { icono: 'sparkle', efecto: 2 },
+  frame_quantum: { icono: 'atom', efecto: 2 },
+  frame_onyx: { icono: 'gem', efecto: 0 },
+  frame_legion: { icono: 'shield', efecto: 1 },
+  frame_prisma: { icono: 'prism', efecto: 2 },
+  frame_spectrum: { icono: 'spectrum', efecto: 2 },
 
   // --- Títulos. Un título es lo que el jugador ha hecho, así que su icono es lo
-  //     que hizo: forjar, ascender, competir. ---
+  //     que hizo: forjar, ascender, competir. Solo se usa si no hay marco. ---
   title_default: ICONO_BASE,
   title_recruited: { icono: 'user', efecto: 0 },
   title_smith: { icono: 'hammer', efecto: 0 },
@@ -130,15 +112,16 @@ const POR_ID: Record<string, IconoDeCosmetico> = {
  * decidir qué hacer con el hueco, y hay cinco sitios. Con el base aquí dentro, los
  * cinco pintan lo mismo sin tener que saber nada.
  *
- * El orden es **banner, marco, título** y no el que sea: el título es lo más
- * reciente y lo menos informativo —dos letras de un rango—, así que no debe tapar al
- * icono que sí dice qué tienes. Un cosmético sin banner y sin marco cae al base.
+ * **EL ORDEN ES MARCO, TÍTULO, Y EL BANNER YA NO ESTÁ.** El marco es el icono de
+ * perfil: la cara del jugador. El banner es el fondo, y un fondo que además
+ * eligiera el icono central mezclaba las dos cosas y hacía que cambiar de fondo
+ * cambiara de cara. Si no hay marco, manda el título; si no, el base.
  */
 export function iconoDeCosmetico(
   cosmetics: { banner?: string; frame?: string; title?: string } | undefined
 ): IconoDeCosmetico {
   if (!cosmetics) return ICONO_BASE;
-  const candidatos = [cosmetics.banner, cosmetics.frame, cosmetics.title];
+  const candidatos = [cosmetics.frame, cosmetics.title];
   for (const id of candidatos) {
     if (!id) continue;
     const encontrado = POR_ID[id];
