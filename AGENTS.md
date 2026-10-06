@@ -91,7 +91,15 @@ se escribió íntegramente para advertir de esta situación.
 ```bash
 npm run build     # tsc && vite build
 npm run verify    # 32 bancos = 2056 pruebas. El total es estable y comprobable: da 2056 las dos veces seguidas. Antes no lo era, porque una prueba de playthroughCheck estaba dentro de un if que dependia del dado; ahora el dado va fijado con conRoll.
+npm run rules     # publica firestore.rules. La primera vez pide `npx firebase login`
 ```
+
+**`npm run rules` es obligatorio después de tocar `firestore.rules`.** Un cambio a las
+reglas que no se publica no cambia nada, y se manifiesta como un fallo que parece
+del juego: la ficha de otro jugador sale a medias. `firebase.json` **no tiene
+bloque `hosting` y es a propósito** — con él, un `firebase deploy` sin `--only`
+publicaría el juego entero, y el juego tiene una terminal de administración con un
+botón de borrar la base de datos.
 
 Un banco que no imprime no es un banco que pasa: `run.mjs` envuelve cada uno en
 un `try/catch` que lo dice, y el banco exporta `main()` ya invocada.

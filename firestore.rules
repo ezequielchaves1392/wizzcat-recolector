@@ -22,8 +22,21 @@ rules_version = '2';
 //     «Email/Password». (El juego convierte el nickname en un correo interno,
 //     `<nombre>@cyberforge.game`, justamente para no depender de Google.)
 //
-//  2. Firebase console → Firestore Database → Rules → pega este archivo →
-//     Publish.
+//  2. Publicar. Hay dos vías y las dos dan lo mismo:
+//
+//     · `npm run rules` — la de siempre, con la CLI. La primera vez pide un solo login
+//       (`npx firebase login`) y a partir de ahí publica este fichero.
+//     · Firebase console → Firestore Database → Rules → pega este archivo → Publish.
+//
+//     **Y CÓMO SABER QUE ESTÁ PUBLICADO, QUE ES LO QUE MÁS CUESTA.** Abrir una ficha de
+//     jugador: si aparece la sección "Lo que tiene puesto", está. Si sale el aviso de ficha a
+//     medias, no está, y el texto del aviso dice por qué —que ya no dice "vuelve la conexión"
+//     cuando en realidad son las reglas, que es lo que pasaba antes—.
+//
+//     Ojo al revés también: sin esto, fallan **tres** cosas a la vez y parece una sola. La
+//     ficha, la comprobación de bloqueo (`[bloqueo]`) y el latido de sesión (`[sesion]`). Las
+//     tres reglas están en este fichero, así que si fallan las tres a la vez, lo que hay
+//     desplegado no es este fichero.
 //
 //  3. Crea un documento `admins/{tu-uid}` para tu cuenta, con cualquier
 //     contenido. Opcionalmente `{"email": "tu@correo.com"}` para tener registro.

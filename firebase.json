@@ -1,0 +1,16 @@
+{
+  "//": "SOLO las reglas de Firestore. NO hay bloque `hosting` y es deliberado.",
+  "//hosting": "Con un bloque `hosting` aqui, un `firebase deploy` sin `--only` publicaria el juego. Y el juego tiene una terminal de administracion con un boton de BORRAR LA BASE DE DATOS, asi que WantExactly: el proyecto decidio no publicar en ningun sitio (ver `GH_PAGES` en vite.config.ts y el aviso de AGENTS.md). Si alguna vez hace falta hosting, que sea con un `--only hosting` explicito y despues de pensar las reglas.",
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    }
+  }
+}

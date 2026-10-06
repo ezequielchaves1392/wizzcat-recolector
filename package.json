@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "verify": "node verify/scanTexto.mjs && node verify/scanPlantillas.mjs && node verify/scanCss.mjs && vite build --config verify/vite.config.ts && node verify/run.mjs",
     "scan": "node verify/scanTexto.mjs && node verify/scanPlantillas.mjs && node verify/scanCss.mjs",
-    "scan:probar": "node verify/probarScan.mjs && node verify/probarAlcance.mjs && node verify/probarPlantillas.mjs && node verify/probarScanCss.mjs"
+    "scan:probar": "node verify/probarScan.mjs && node verify/probarAlcance.mjs && node verify/probarPlantillas.mjs && node verify/probarScanCss.mjs",
+    "rules": "firebase deploy --only firestore:rules",
+    "rules:mirar": "firebase deploy --only firestore:rules --dry-run"
   },
   "dependencies": {
     "firebase": "^10.8.0",
@@ -17,9 +19,9 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.6.1",
+    "firebase-tools": "^15.32.1",
     "postcss": "^8.5.28",
     "typescript": "^5.3.3",
     "vite": "^8.3.1"
   }
 }
-

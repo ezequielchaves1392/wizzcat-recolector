@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "chronos-tap",
+    "cromo": "chronos-tap"
+  }
+}
