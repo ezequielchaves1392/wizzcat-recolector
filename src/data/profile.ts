@@ -109,6 +109,21 @@ export interface CompanionPublico {
   equipado?: boolean;
   /** 'companion' o 'multiplier': un multiplicador enseña ×1,5 y no ingreso. */
   tipo: string;
+  /**
+   * Nivel y potencial, publicados solo para el brillo.
+   *
+   * Los dos son públicos en el sentido de que ya se enseñan: el nivel se ve en el
+   * almacén y el potencial sale en las estrellas. Lo que se publica aquí es para que
+   * **el halo del compañero se calcule igual en la tarjeta que en la base**, y sin esto
+   * sale siempre en cero: la tarjeta no tiene el item con su nivel, tiene el número que
+   * esta función escribe.
+   *
+   * Y no es información que salga de aquí: el dueño ya puede verlos en su propio inventario, y quien
+   * mira su perfil ve lo que ha invertido, que es lo mismo que se ve en su base.
+   */
+  nivel?: number;
+  potencial?: number;
+  maxLevel?: number;
 }
 
 export interface NodoPublico {
@@ -230,6 +245,8 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
   //  **SE LEE IGUAL QUE LO LEE EL MOTOR**, que es `state.companions` primero y el
   //  item de vuelta. Copiar esa línea a mano es pedir que las dos se separen.
   const fichas = Array.isArray(state?.companions) ? state.companions : [];
+  /** La ficha del compañero por id, que es la que guarda el nivel y el potencial. */
+  const fichaDe = (id: any) => (fichas as any[]).find((c: any) => c?.id === id);
 
 
   const companeros = ordenados(
@@ -243,10 +260,16 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         // paga. El item no lleva `power`, así que leerlo de ahí sale **0 en todos** y la
         // ficha enseña seis compañeros con "INGRESO +0/s". Es el mismo orden que usa el
         // motor al desglosar el daño, y se copia a propósito para que no se separen.
-        power: num((fichas as any[]).find((c: any) => c?.id === w.id)?.power ?? w?.power),
+        power: num(fichaDe(w.id)?.power ?? w?.power),
         equipado: true,
         rarity: String(w.rarity ?? ''),
-        tipo: String(w.type ?? 'companion')
+        tipo: String(w.type ?? 'companion'),
+        // **DE LA FICHA, COMO EL POWER.** El nivel y el potencial del compañero viven en
+        // `state.companions`; el item del almacén es otra copia y puede no traerlos. Leerlos
+        // del item daría 0 y el halo de la tarjeta saldría siempre apagado.
+        nivel: num(fichaDe(w.id)?.level ?? w?.level),
+        potencial: num(fichaDe(w.id)?.potential ?? w?.potential),
+        maxLevel: num(fichaDe(w.id)?.maxLevel)
       }))
   ).slice(0, TOPE_COMPANEROS);
 

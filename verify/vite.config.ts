@@ -39,6 +39,7 @@ export default defineConfig({
         stackCheck: resolve(here, 'stackCheck.ts'),
         potencialCheck: resolve(here, 'potencialCheck.ts'),
         brilloCheck: resolve(here, 'brilloCheck.ts'),
+        companionCheck: resolve(here, 'companionCheck.ts'),
         loteCheck: resolve(here, 'loteCheck.ts'),
         consumableCheck: resolve(here, 'consumableCheck.ts'),
         stateCheck: resolve(here, 'stateCheck.ts'),

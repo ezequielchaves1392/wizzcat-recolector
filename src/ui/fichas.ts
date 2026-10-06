@@ -82,9 +82,22 @@ export function fichaDeRecolector(
   return `
     <div class="flex items-center gap-3">
       ${marcoDeBrillo(paraBrillo, `
-        <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-             style="background: color-mix(in srgb, var(--accent) 12%, transparent);
-                    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent)">
+        <!--
+            EL CAJÓN DEL ICONO VA EN EL COLOR DE LA RAREZA, Y NO EN EL DE ACENTO.
+
+            Es el mismo fallo que el del icono, un nivel más arriba: el marco ya lleva
+            rarity-<slug>, y aquí el fondo y el borde se pintaban con var(--accent), que
+            gana. El resultado era que **el mismo icono salía con el borde amarillo en la
+            tarjeta y verde en la base**, que es el mismo item en dos pantallas distintas.
+
+            currentColor lo hace sin repetir la rareza: el marco ya la puso, así que basta
+            con usarla. Y el fondo va con una mezcla de currentColor al 12%, que es lo que
+            hace que un Divino se note en su caja sin necesidad de otro color.
+          -->
+          <div class="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0
+                      ring-1 ring-current"
+               style="background: color-mix(in srgb, currentColor 12%, transparent)"
+               title="${textoDeBrillo(paraBrillo) || w.name}">
           <!--
             EL ICONO HEREDA EL COLOR DE LA RAREZA, Y NO EL DE ACENTO. Antes llevaba
             accent-text encima, que gana al color del marco: en el almacén el icono
@@ -107,14 +120,17 @@ export function fichaDeRecolector(
           <span class="text-[10px] font-mono rarity-${slug(rarity)}">${rarity}</span>
           ${w.potential ? `<span class="text-[9px] text-amber-400">· ${estrellasDe(w.potential)}</span>` : ''}
           <!--
-            EL BRILLO POR ESCRITO, Y POR QUÉ AQUÍ Y NO EN EL BOTÓN.
+            EL BRILLO NO SE ESCRIBE EN LA FICHA, Y ESTA ES LA RAZÓN.
 
-            El icono ya brilla, así que el número es para quien quiere saber por qué. Va
-            junto a la rareza y no como cifra suelta: el brillo dice "cuánto" y la rareza
-            dice "qué", y separarlos en dos sitios distintos los hace leer como dos datos
-            sin relación.
+            Se puso y quedó feo: "Legendario · ★★★ · Brillo 2 de 4" no cabe en la línea, la
+            parte a dos renglones y deja las estrellas colgando debajo de la rareza. El
+            icono ya brilla —es justo lo que se pidió—, así que el número solo servía para
+            **repetir en texto lo que el ojo ya sabe**, y a cambio rompía el que sí importa:
+            la rareza y las estrellas, que están en la misma línea por algo.
+
+            Se queda en el title del icono, que es donde va la información de apoyo: ahí
+            no empuja nada y se lee cuando alguien la busca.
           -->
-          ${textoDeBrillo(paraBrillo) ? `<span class="text-[9px] font-mono rarity-${slug(rarity)}">· ${textoDeBrillo(paraBrillo)}</span>` : ''}
         </div>
         ${w.details ? `
           <div class="text-[10px] font-mono text-[var(--text-muted)] mt-1 truncate">
@@ -169,6 +185,18 @@ export interface CompaneroPintable {
   type?: string;
   power?: number;
   rarity?: string;
+  /**
+   * Nivel y potencial, y solo existen para el brillo.
+   *
+   * El compañero **sí** tiene nivel y potencial, y los dos pagan: el nivel por
+   * `multiplicadorDeNivel()` y el potencial por su posición en el rango del tier. Lo que
+   * no estaba escrito en la ficha que la pinta, así que el brillo no tenía con qué
+   * calcularse — y por eso hasta ahora el compañero salía sin halo siendo un item de la
+   * misma calidad que el recolector de al lado.
+   */
+  level?: number;
+  maxLevel?: number;
+  potential?: number;
 }
 
 /**
@@ -187,14 +215,21 @@ export function casillaDeCompanero(c: CompaneroPintable, aporta?: number): strin
     ? `×${(1 + (c.power ?? 0)).toFixed(2).replace(/\.?0+$/, '')}`
     : `+${formatNumber(aporta ?? c.power ?? 0)}/s`;
   const label = isMult ? 'MULT' : 'INGRESO';
+  // **EL COMPAÑERO TAMBIÉN BRILLA, Y USA EL MISMO NÚMERO QUE EL RECOLECTOR.** El tipo se
+  // pone a mano por lo mismo que en la ficha del recolector: esta casilla ES la de un
+  // compañero, y `c.type` es el subtipo ('multiplier' o el que produce), no el tipo de
+  // item. Sin esto, el brillo lo calcularía con el techo de nivel equivocado y el
+  // escalón 4 le tocaría a un compañero que no lo tiene.
+  const paraBrillo = { ...c, type: 'companion' };
 
   return `
     <div class="rounded-xl p-2.5 text-center border relative overflow-hidden
                 ${sweep ? 'rare-sweep' : ''}"
          style="background: var(--bg-app);
                 border-color: color-mix(in srgb, var(--accent) 35%, transparent)">
-      <div class="flex justify-center mb-1.5">
-        <span style="color: var(--accent)">${ic(isMult ? 'sparkle' : 'companion', 'w-5 h-5')}</span>
+      <div class="flex justify-center mb-1.5" title="${textoDeBrillo(paraBrillo)}">
+        ${marcoDeBrillo(paraBrillo, `
+          <span style="color: currentColor">${ic(isMult ? 'sparkle' : 'companion', 'w-5 h-5')}</span>`, 'rarity-' + slug(rarity))}
       </div>
       <div class="text-[10px] font-mono text-[var(--text-main)] truncate leading-tight
                   font-semibold">${c.name}</div>

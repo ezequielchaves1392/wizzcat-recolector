@@ -232,6 +232,31 @@ export const deType = (g: any, type: string): number => wh(g).filter((w: any) =>
 export const find = (g: any, id: string): any => wh(g).find((w: any) => w.id === id);
 
 /**
+ * LA RAREZA DEL COMPAÑERO DE EJEMPLO, Y POR QUÉ ES COMÚN Y NO ÉPICO.
+ *
+ * El multiplicador de rareza del compañero se aplica sobre `power`, así que **un
+ * compañero Épico de potencia 10 rinde 12**. Con la rareza por defecto en Épico, los
+ * bancos de ingreso pasivo dejaron de medir el ingreso: medían el multiplicador.
+ * Catorce pruebas se rompieron a la vez por lo mismo, y todas con un número mayor del
+ * esperado, que es la firma de un multiplicador nuevo y no de un bug.
+ *
+ * Un alzamiento de prueba tiene que ser **neutro**: que lo que se mide sea lo que el
+ * banco dice medir. Los que si miran la rareza la ponen explicita.
+ */
+export const RAREZA_NEUTRA = 'Común';
+
+export const ficha = (id: string, tier = 3, over: any = {}) => ({
+  id,
+  name: `Compañero T${tier}`,
+  type: 'passive',
+  power: 10,
+  rarity: RAREZA_NEUTRA,
+  tier,
+  ...over
+});
+
+
+/**
  * Cuántas ranuras ocupa el almacén.
  *
  * No es `wh(g).length`: desde `data/stacking` la capacidad se cuenta por GRUPOS,
@@ -266,23 +291,13 @@ export const companion = (id: string, tier = 3, over: any = {}) => ({
   name: `Compañero T${tier}`,
   type: 'companion',
   details: 'Recolección por segundo: +10/s',
-  rarity: 'Épico',
+  rarity: RAREZA_NEUTRA,
   tier,
   sellPrice: 2000,
   ...over
 });
 
 /** El companion de `state.companions` (la ficha que paga pasivo), no el item. */
-export const ficha = (id: string, tier = 3, over: any = {}) => ({
-  id,
-  name: `Compañero T${tier}`,
-  type: 'passive',
-  power: 10,
-  rarity: 'Épico',
-  tier,
-  ...over
-});
-
 /**
  * F31 · LAS FÁBRICAS DE ITEMS TOMAN EL NIVEL, NO UN NOMBRE.
  *

@@ -342,7 +342,7 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
         **dentro** del nodo que se sustituye, no en sus antepasados, y esa fue la dirección
         equivocada en el primer intento.
       - **Y cambiar de página sigue empezando arriba**, que es lo que había que evitar al
-        arreglar esto: navegar vacía `#app` antes de montar, así que `mountInto` no
+        arreglar esto: navegar vacía app antes de montar, así que `mountInto` no
         encuentra nodo previo y no conserva nada. Solo se conserva en el repintado de la
         misma página, que es el único caso en el que conservarlo es lo correcto.
       **Lo que no hay aquí: banco.** El comportamiento del scroll es de layout, y
@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **33 bancos, 2114**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **34 bancos, 2133**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -2388,7 +2388,7 @@ _Cosas que estorban al trabajo más que al juego._
         `maxCompanionSlots`, `buffs` y `cosmetics`.
       - **Y la pantalla en negro.** El arranque era una cadena de `await` sin un solo
         `catch`: cualquier fallo iba al `catch` del motor, que escribía una línea en la
-        consola, y el jugador se quedaba con un `#app` vacío. Ahora hay una pantalla que
+        consola, y el jugador se quedaba con un app vacío. Ahora hay una pantalla que
         dice qué ha pasado —**con otro texto si es cuota de Firestore**, que tiene arreglo
         distinto— y un botón de reintentar. Es además el aviso de que no se ha guardado
         nada, que es lo que el jugador necesita saber.
@@ -2558,7 +2558,7 @@ _Cosas que estorban al trabajo más que al juego._
   desaparece entre llamadas. Las dos rutas están cubiertas por pruebas del motor, pero
   **el efecto visual del cierre no**. Es lo primero que hay que mirar en una partida real.
 - De paso: **el servidor de desarrollo se wedgea.** Tras horas sirviendo el mismo módulo
-  con decenas de cambios, `preview.html` se quedó con `#app` vacío sin ningún error en
+  con decenas de cambios, `preview.html` se quedó con app vacío sin ningún error en
   el log. Reiniciarlo lo arregló. Cuando el preview "no pinta", reiniciar el servidor
   antes de culpar al código: se pierde mucho tiempo buscando un fallo que no existe.
 
@@ -2614,3 +2614,29 @@ _Cosas que estorban al trabajo más que al juego._
   la prueba daba verde **con la regla rota**. Ahora usan un Divino, y el comentario explica
   por qué. Un tope de rareza en medio de la regla es una tapadera, y se descubre solo
   cuando alguien escribe la prueba y se pregunta por qué no se mueve.
+
+### El companero ya paga su rareza: lo que falta mirar
+
+- Hecho: el multiplicador de rareza y el extra por potencial, el ingreso y el stat unificados,
+  la ficha del companero con nivel y potencial para el halo, el borde del cajon del recolector
+  en el color de su rareza, y el texto "Brillo N de M" fuera de la ficha (se queda en el title).
+- **SIN COMPROBAR EN PANTALLA, Y HAY QUE MIRARLO EN UNA PARTIDA DE VERDAD.** El banco visual
+  se quedo con `app` a cero y sin un solo error en el log, asi que no hay ni una medicion de
+  esto. Concretamente:
+  - Que el borde del cajon del icono salga del color de la rareza tambien en la base, que era
+    lo que faltaba y no se ha podido ver arreglado.
+  - Que el halo del companero salga, y que con un companero Divino al tope de nivel tenga el
+    barrido. En el preview no hay ningun companero con nivel y potencial, asi que **su halo no
+    sale ni en el banco** hasta que se le pongan a los del ejemplo.
+  - Que la linea de la rareza y las estrellas ya no se parte a dos renglones.
+- **Y una correccion al Metodo.** El `preview` dejo de montar la pagina del todo en la
+  ultima tanda, con app a cero y el log limpio, y la causa sigue sin ascertainse. Reiniciar
+  el servidor lo habia arreglado la vez anterior; esta vez no se probo. **Cuando el preview no
+  pinta, reiniciar el servidor antes que nada.**
+- **Y una correccion a un banco, que es de fiar.** Una prueba del multiplicador afirmo que un
+  T{n+1} en su peor caso gana siempre a un T{n} en el suyo, y fallo: un T2 con estrella 5 y un
+  T3 con estrella 1 empatan en 21, porque los rangos bajos se pisan y el redondeo los junta.
+  **Ese empate es anterior a este cambio**: la prueba inventaba una garantia que el rango no
+  tiene. Ahora se comprueba a igual potencial, que es lo único que se puede prometer, y se
+  dejo escrito por que no se promete mas.
+

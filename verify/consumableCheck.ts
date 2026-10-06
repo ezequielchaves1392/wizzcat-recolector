@@ -30,7 +30,7 @@ import { totalConcedidoDe } from '../src/data/buffs';
 import { unidadesDeBuff, matchesFilter } from '../src/components/warehouse';
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
-  collector, crate, consumable
+  collector, crate, consumable, RAREZA_NEUTRA
 } from './kit';
 
 const AFK_MS = AFK_CARD_DURATION_MS;
@@ -346,12 +346,17 @@ async function main() {
   }
   {
     // El buff de pasivo tiene que DOBLAR el ingreso, que es para lo que sirve.
+    //
+    // **RARIZA NEUTRA A PROPOSITO.** El compañero se construye a mano aquí, con Épico, y
+    // con el multiplicador de rareza un Épico de potencia 10 rinde 12: la prueba pedía 10
+    // y recibía 12. La prueba es del buff, no de la rareza, así que el compañero va
+    // neutro. Si algún día se deja aquí un Épico, esta vuelve a estar midiendo dos cosas.
     const g = await boot(baseSave([
       consumable('b2', 'passiveBoost', 1, { name: 'Buff Pasivo x2' }),
-      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: 'Épico', tier: 1, sellPrice: 100 }
+      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: RAREZA_NEUTRA, tier: 1, sellPrice: 100 }
     ], {
       activeCompanions: ['m1'],
-      companions: [{ id: 'm1', name: 'Compañero T1', type: 'passive', power: 10, rarity: 'Épico', tier: 1 }]
+      companions: [{ id: 'm1', name: 'Compañero T1', type: 'passive', power: 10, rarity: RAREZA_NEUTRA, tier: 1 }]
     }));
     const pasivoSinBuff = s(g).passiveIncome;
     check('passiveBoost: hay ingreso pasivo de partida', pasivoSinBuff === 10, 'pasivo=' + pasivoSinBuff);

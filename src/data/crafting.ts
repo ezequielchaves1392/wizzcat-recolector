@@ -857,7 +857,7 @@ export function poderDeCompanero(tier: number, potential: number): number {
 
   const [min, max] = rangoDePoder(tier);
 
-  const p = potencialNormalizado(potential);
+  const p = potencialNormalizado(potential ?? undefined);
 
   return Math.round(min + ((max - min) * (p - 1)) / 4);
 
@@ -883,7 +883,7 @@ export function crearCompanioDeTier(
   potential: number,
   rng: () => number = Math.random
 ): { id: string; name: string; type: 'click'; power: number; rarity: string; tier: number; potential: number; level: number; maxLevel: number } {
-  const p = potencialNormalizado(potential);
+  const p = potencialNormalizado(potential ?? undefined);
   return {
     id: `comp_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
     name: nombreDe('companion', tier, rng),
@@ -1054,8 +1054,130 @@ export const costeDeNivelDeCompanio = costeDeNivel;
  * Por eso el poder guardado es el de base y el multiplicado se aplica al sumar el
  * ingreso.
  */
-export function poderEfectivoDeCompanio(comp: { power?: number; level?: number }): number {
-  return Math.round((comp.power || 0) * multiplicadorDeNivel(comp.level));
+/**
+ * LO QUE PAGAN LA RAREZA Y EL POTENCIAL EN UN COMPAÑERO, Y POR QUÉ ESTÁN SEPARADOS
+ * DEL RANGO DEL TIER.
+ *
+ * **EL POTENCIAL YA HACE UNA COSA, Y HAY QUE DECIR CUÁL.** `poderDeCompanero()` coloca
+ * el potencial dentro del rango del tier: un ★5 se acerca al techo de su tier y un ★1 al
+ * suelo. Eso **ya es un multiplicador**, aunque no se llame así, y por eso el de aquí es
+ * corto a propósito: si la rareza y el potencial pagaran su propio peso entero, el
+ * potencial contaría dos veces y un ★5 al tope se iría de la partida.
+ *
+ * El comentario de `poderDeCompanero()` explica por qué el multiplicador **no** va dentro
+ * del rango: con la fórmula del recolector el techo de cada tier se multiplicaba otra vez
+ * por el potencial y un T10 salía once veces más fuerte con la misma carta. Aquí es
+ * distinto porque va **después** de la carta, como una bonificación del objeto y no de su
+ * precio: el precio sigue siendo el del rango y la carta que compras no se encarece sola.
+ *
+ * **Y NINGÚN MULTIPLICADOR BAJA DE 1.** Con la cuenta del potencial al revés tal cual, un
+ * ★1 saldría por debajo de 1 y sería una **pena** para quien ya tiene uno forjado sin que
+ * hubiera hecho nada malo. El potencial paga un extra por encima de la media y nunca
+ * resta por debajo.
+ *
+ * Los números no están repartidos a ojo: la rareza es la escala de seis escalones que ya
+ * usa el juego, y cada salto da un 10% o un 12% al anterior. Con un Divino en 1,60 y un
+ * Mítico en 1,45, un compañero Divino rinde un 10% más que el Mítico de la misma carta:
+ * poco, pero bastante para que la rareza deje de ser decorativa.
+ */
+export const MULTIPLICADOR_POR_RAREZA: Record<string, number> = {
+  'Común': 1.00,
+  'Raro': 1.10,
+  'Épico': 1.20,
+  'Legendario': 1.32,
+  'Mítico': 1.45,
+  'Divino': 1.60
+};
+
+/**
+ * **EL EXTRA POR POTENCIAL TIENE UN TECHO, Y ESTE ES EL NÚMERO QUE LO DICE.**
+ *
+ * El primer intento puso ★5 en 1,10 y **invirtió el orden entre tiers**: un T9 con
+ * cinco estrellas rendía 609 y un T10 con una sola rendía 597. El comentario de
+ * `poderDeCompanero()` existe justamente para que eso no pase — dice que el techo del T9
+ * es menor que el suelo del T10, y es la garantía de que el tier alto no sea una trampa—,
+ * así que un multiplicador que la rompe está fuera deBounds por mucho que el jugador lo
+ * encuentre más justo.
+ *
+ * El límite sale de esa misma cuenta, y por eso está escrito aquí y no solo en el banco:
+ *
+ *     techo del T9 (346) x mult(★5)  <  suelo del T10 (373) x mult(★1)
+ *
+ * con mult(★1) = 1, el extra de ★5 tiene que ser **menor que 373/346 = 1,078**. Se queda
+ * en 1,06: por debajo del límite con margen para el redondeo, y suficiente para que un ★5
+ * se note sobre un ★3. Si algún día se sube este número, el banco del multiplicador falla
+ * antes de que un jugador descubra que su T10 le sale más barato que un T9.
+ *
+ * Y como la rareza multiplica a los dos por igual en esa comparación, **el límite no
+ * depende de ella**: subir la rareza no rompe el orden entre tiers.
+ */
+export function multiplicadorPorPotencialDeCompanero(potential: number | undefined | null): number {
+  const p = potencialNormalizado(potential ?? undefined);
+  if (p >= 5) return 1.06;
+  if (p === 4) return 1.03;
+  return 1;
+}
+
+/**
+ * El multiplicador de un compañero por su rareza y su potencial, los dos juntos.
+ *
+ * **UNA RAREZA QUE NO SE CONOCE DALE 1, Y NO "LA DE COMÚN".** Hoy las dos son 1,00, así
+ * que la diferencia no se ve; lo que importa es el motivo. Una rareza inventada tiene que
+ * poder, no romperse: si mañana se añade una rareza y se olvida esta tabla, el item nuevo
+ * no puede dejar debuster ingreso por un `undefined` que se multiplica.
+ *
+ * Y la lectura es **sin acentos y en minúsculas**, como en `data/brillo.ts`: "Mitica" y
+ * "Mítica" tienen que dar el mismo multiplicador. El color del halo y el poder del
+ * compañero salen de la misma rareza, y si uno la leyera distinto del otro, el mejor
+ * item del juego daría más ingreso del que aparenta.
+ */
+export function multiplicadorDeCalidadDeCompanero(
+  rarity: string | undefined | null,
+  potential: number | undefined | null
+): number {
+  const porPotencial = multiplicadorPorPotencialDeCompanero(potential);
+  const clave = String(rarity ?? '').trim();
+  const directo = MULTIPLICADOR_POR_RAREZA[clave];
+  if (typeof directo === 'number') return directo * porPotencial;
+  const plano = clave.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  for (const [nombre, valor] of Object.entries(MULTIPLICADOR_POR_RAREZA)) {
+    const nombrePlano = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (nombrePlano === plano) return valor * porPotencial;
+  }
+  return 1 * porPotencial;
+}
+
+/**
+ * El poder que un compañero **rinde** de verdad, con su nivel, su rareza y su potencial.
+ *
+ * **ESTO ES LA PIEZA QUE HACE QUE EXISTA LA FUNCIONALIDAD.** Sin ella, el nivel del
+ * compañero sería un número que sube y no hace nada, que es el peor tipo de progreso: el
+ * jugador lo ve crecer y no gana nada. Y el sitio donde se aplica **no puede ser el que
+ * guarda el poder**, porque ese número es el que `poderDeCompanero()` calcula del tier y
+ * el potencial, y los bancos comparan contra esa función. Si el nivel se guardara dentro
+ * de `power`, dejaría de ser "el poder de un T5 con potencial 3" y pasaría a ser "el
+ * poder de uno al que ya le has subido cinco niveles", que es otra pregunta.
+ *
+ * Por eso el poder guardado es el de base y los multiplicadores se aplican al sumar el
+ * ingreso.
+ *
+ * **Y AQUÍ ESTÁ EL MOTIVO DE QUE ESTA FUNCIÓN LLEVE LA RAREZA.** Antes el ingreso se
+ * sumaba en `gameLoop.ts` con un `Math.round(power × multiplicadorDeNivel(level))` y el
+ * stat se pintaba llamando a esta. **Dos copias del mismo cálculo en dos sitios**, que
+ * es justo lo que R3 prohíbe: el día que se añadiese la rareza a una y no a la otra, el
+ * número grande y el cobro se separaban sin que nada lo dijera. Ahora los dos llaman
+ * aquí, y por eso la firma crece con la rareza y el potencial.
+ */
+export function poderEfectivoDeCompanio(comp: {
+  power?: number;
+  level?: number;
+  rarity?: string;
+  potential?: number;
+}): number {
+  const bruto = (comp.power || 0)
+    * multiplicadorDeNivel(comp.level)
+    * multiplicadorDeCalidadDeCompanero(comp.rarity, comp.potential);
+  return Math.round(bruto);
 }
 /**
  * LO QUE LAS DOS FUSIONES TIENEN QUE COMPARECER.

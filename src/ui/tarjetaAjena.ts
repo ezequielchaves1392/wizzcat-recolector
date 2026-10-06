@@ -348,7 +348,17 @@ function bloqueDeCompaneros(t: TarjetaPublica): string {
     <div class="grid grid-cols-3 gap-2">
       ${t.companeros.map(c => `
         <div class="relative">
-          ${casillaDeCompanero(c)}
+          ${casillaDeCompanero({
+            ...c,
+            // **EL NOMBRE DE LA TARJETA Y EL DE LA FICHA NO COINCIDEN.** El público es
+            // `nivel` y `potencial` en español, porque es lo que escribe `tarjetaDesdeEstado()`,
+            // y la casilla lee `level` y `potential` como los leen el item del almacén y la
+            // ficha de la base. Sin traducir aqui, el halo del compañero en la tarjeta
+            // saldría siempre en cero: el mismo número con dos nombres en dos ficheros.
+            level: c.nivel,
+            potential: c.potencial,
+            maxLevel: c.maxLevel
+          })}
         </div>`).join('')}
     </div>
     <div class="text-[9px] font-mono text-[var(--text-muted)] leading-relaxed">

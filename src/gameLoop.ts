@@ -2642,7 +2642,19 @@ function sePuedeGuardar(): boolean {
         //
         // Y el multiplicador es la MISMA función que usa el recolector, así que un
         // nivel vale lo mismo en los dos y no hay dos reglas que separar.
-        base += Math.round((comp.power || 0) * multiplicadorDeNivel(comp.level));
+        //
+        // **Y LA RAREZA Y EL POTENCIAL ENTRAN AQUÍ, NO EN UN `*` DE AL LADO.** Antes esta
+        // línea era un `Math.round(power × multiplicadorDeNivel(level))` propio y el stat
+        // de la ficha se pintaba con `poderEfectivoDeCompanio()`: **dos copias del mismo
+        // cálculo**. Con la rareza añadida a una y no a la otra, el número grande habría
+        // dicho una cosa y el ingreso otra. Ahora los dos llaman a la misma función, que
+        // es la razón de que la firma de esa lleve la rareza y el potencial.
+        base += poderEfectivoDeCompanio({
+          power: comp.power,
+          level: comp.level,
+          rarity: comp.rarity,
+          potential: comp.potential
+        });
         contributors.push(comp);
       }
     });
@@ -3854,7 +3866,15 @@ const RITMO_GUARDADO_MS = 30_000;
           // además por un 1,3 sería una regla nueva que nadie pidió. Sale de aquí y no
           // de la vista porque es el mismo `power` que usa el reparto del ingreso.
           ? Math.round((1 + power) * 100) / 100
-          : poderEfectivoDeCompanio({ power, level: nivel });
+          : poderEfectivoDeCompanio({
+            power,
+            level: nivel,
+            // **LA RAREZA Y EL POTENCIAL DE LA FICHA, NO DEL ITEM.** El item del almacén
+            // y la ficha son dos copias del mismo compañero, y la ficha es la que tiene el
+            // potencial guardado: leerlo del item daría 0 y el stat no pagaría la rareza.
+            rarity: comp?.rarity ?? (w as any).rarity,
+            potential: comp?.potential ?? (w as any).potential
+          });
         return {
           tipo: 'companion' as const,
           subtipo: tipo,

@@ -24,6 +24,7 @@ for (const banco of [
   'stackCheck',
   'potencialCheck',
   'brilloCheck',
+  'companionCheck',
   'loteCheck',
   'consumableCheck',
   'stateCheck',
