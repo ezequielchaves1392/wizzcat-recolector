@@ -25,7 +25,7 @@ import { renderLayoutHTML } from './ui/layout';
 import { wirePreviewAudio } from './previewAudio';
 import { renderPanel } from './ui/playerPanel';
 import { renderBuffHudForPreview } from './ui/buffHud';
-import { renderWarehouseTab } from './components/warehouse';
+import { renderWarehouseTab, pintarBarraDeConsumibles } from './components/warehouse';
 import { renderStoreTab } from './components/store';
 import { renderForgePage } from './ui/forgePage';
 import { showPatchNotes } from './ui/patchNotes';
@@ -618,6 +618,11 @@ switch (vista) {
       onNavigate: noop, onLogout: noop,
       onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
     }, undefined, MOCK);
+    // La barra se pinta aqui porque el preview no llama a updateUI(): tiene su propio
+    // render. Sin esto la barra sale vacia en el preview y no hay forma de revisarla.
+    pintarBarraDeConsumibles(fakeGame, noop);
+    //
+    // barra sale vacía en el preview y **no hay forma de revisarla**, que es exactamente
     muestraTarjetaDeEjemplo();
     break;
   default:
@@ -629,6 +634,11 @@ switch (vista) {
       onNavigate: noop, onLogout: noop,
       onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
     }, undefined, MOCK);
+    // La barra se pinta aqui porque el preview no llama a updateUI(): tiene su propio
+    // render. Sin esto la barra sale vacia en el preview y no hay forma de revisarla.
+    pintarBarraDeConsumibles(fakeGame, noop);
+    //
+    // barra sale vacía en el preview y **no hay forma de revisarla**, que es exactamente
 
     // El cuarto argumento es la cifra REAL que aporta cada compañero, con los
     // multiplicadores ya puestos. Sin él, `renderPanel` cae a `comp.power` y el

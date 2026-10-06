@@ -2100,7 +2100,7 @@ function inferCrateType(name: string): CrateType | null {
  * **SIN SELECTOR CUANDO SOLO CABE UNA**, porque un diálogo con un número que solo
  * puede ser uno es ruido.
  */
-function useConsumable(game: any, item: any, redraw: () => void) {
+export function useConsumable(game: any, item: any, redraw: () => void) {
   const plan = game.planUseConsumable?.(item.id) ?? { unidades: 0, max: 0, motivo: null };
   if (plan.unidades <= 0) {
     sfx.error();
@@ -2147,6 +2147,99 @@ function useConsumable(game: any, item: any, redraw: () => void) {
       },
     }
   );
+}
+
+/**
+ * CUANTOS CONSUMIBLES HAY, Y CUALES SON LOS TRES QUE ENTRAN EN LA BARRA.
+ *
+ * **LOS TRES PRIMEROS DEL ALMACÉN, Y NO UN ORDEN NUEVO.** El almacén ya sabe ordenar;
+ * escribir aquí otra regla de orden es la forma de que las dos rejillas se separen un día y
+ * el jugador vea dos almacenes. Se pide al almacén lo mismo que se le pide a su rejilla, con
+ * el eje `value`, así que lo que sale son **los tres consumibles más caros**.
+ *
+ * Y eso es lo que entra, no "lo que más te interesa": el que puede ser de más valor es el
+ * que más cuesta reponer, así que es el que más duele perder si se te acaba. El expansor va
+ * por delante de la tarjeta porque una ranura perdida no vuelve, y el orden no se negocia
+ * aquí para que la barra y la rejilla nunca se contradigan.
+ *
+ * Y sale lo que sale: si no hay tres consumibles, hay tres huecos vacíos.
+ */
+export function consumiblesDeAcceso(game: any, maxSlots = 3): any[] {
+  const state = game.getState();
+  // **`'all'` PARA ORDENAR Y EL TIPO PARA FILTRAR.** No se cede el filtro al almacén:
+  // `matchesFilter()` solo admite cuatro valores —`all`, `otros`, `collector` y
+  // `companion`— y **cualquier otro cae al final de la función y no casa con nada**.
+  // No hay valor "consumible": no es un tipo de la rejilla, es un tipo de item. Se pide la
+  // lista completa ordenada por valor y se filtra por `type === 'consumable'`, que es la
+  // marca que usan el motor y la rejilla.
+  //
+  // El fallo era invisible: una barra con tres huecos vacíos y ningún error en pantalla, y
+  // la causa estaba a cuatro líneas de aquí, en un `'consumible'` que parecía la palabra
+  // correcta. Por eso el banco no repite el filtro escrito a mano: **pregunta a
+  // `matchesFilter()`**, que es donde vive el vocabulario.
+  const todos = visibleStacksFor(game, state, 'all', 'value')
+    .map((c: any) => c.item)
+    .filter((w: any) => w.type === 'consumable' && (w.stackCount ?? 1) > 0);
+  return todos.slice(0, maxSlots);
+}
+
+/**
+ * PINTAR LA BARRA, Y CABLEARLA.
+ *
+ * **EL MOTOR DICE SI SE PUEDE USAR, NO LA VISTA.** `planUseConsumable()` es el mismo que
+ * llama `useConsumable()`, así que el hueco se apaga por la regla de verdad y no por una
+ * cuenta hecha aquí (R3). Un hueco apagado con el motivo escrito: "ya está al tope" y "no
+ * tienes" son cosas distintas y el jugador tiene que saber cuál.
+ *
+ * **SE LLAMA EN CADA REPINTA Y NO AL MONTAR LA PÁGINA.** El contenido cambia con cada
+ * guardado —gastas uno y desaparece— y una barra que solo se dibuja al entrar se queda
+ * mintiendo hasta que recargas.
+ */
+export function pintarBarraDeConsumibles(game: any, redraw: () => void): void {
+  const barra = document.getElementById('barra-consumibles');
+  if (!barra) return;
+  const items = consumiblesDeAcceso(game);
+
+  barra.innerHTML = Array.from({ length: 3 }, (_, ranura) => {
+    const w = items[ranura];
+    if (!w) {
+      return `<div class="h-11 rounded-xl border border-dashed w-full
+        style="border-color: color-mix(in srgb, var(--text-main) 12%, transparent)"
+        aria-hidden="true"></div>`;
+    }
+    const plan = game.planUseConsumable?.(w.id) ?? { unidades: 0, max: 0, motivo: null };
+    const n = Number(w.stackCount) || 1;
+    const sirve = plan.unidades > 0;
+    return `
+      <button data-consumible="${w.id}"
+        class="h-11 rounded-xl border px-2 flex flex-col justify-center items-center w-full
+               cursor-pointer transition active:scale-95 ${sirve ? '' : 'opacity-45 cursor-not-allowed'}"
+        style="background: color-mix(in srgb, var(--accent) 5%, transparent);
+               border-color: color-mix(in srgb, var(--accent) 30%, transparent)"
+        ${sirve ? '' : 'disabled aria-disabled="true"'}
+        title="${sirve ? (w.details || w.name) : (plan.motivo || 'No se puede usar ahora')}">
+        <span class="w-full text-center text-[9px] font-mono text-[var(--text-muted)] leading-none truncate">
+          ${w.name}
+        </span>
+        <span class="text-[12px] font-mono font-bold accent-text leading-tight mt-0.5 tabular">
+          ${n}
+        </span>
+      </button>`;
+  }).join('');
+
+  barra.querySelectorAll('button[data-consumible]:not([disabled])').forEach(b => {
+    b.addEventListener('click', () => {
+      const id = b.getAttribute('data-consumible');
+      const item = items.find((x: any) => x.id === id);
+      if (!item) return;
+      // El diálogo de cantidad y el de un solo uso los pone `useConsumable()`, que es el
+      // mismo camino que el almacén. **La barra no reimplementa el uso: lo llama.**
+      useConsumable(game, item, () => {
+        redraw();
+        pintarBarraDeConsumibles(game, redraw);
+      });
+    });
+  });
 }
 
 function sellItem(game: any, item: any, redraw: () => void) {

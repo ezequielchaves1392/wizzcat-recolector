@@ -20,7 +20,7 @@ import { consultarBloqueo } from './services/bloqueoService';
 import { createGameLoop } from './gameLoop';
 import type { BuffKey } from './data/buffs';
 import { showToast, syncToastOffset } from './utils/toast';
-import { renderWarehouseTab } from './components/warehouse';
+import { renderWarehouseTab, pintarBarraDeConsumibles } from './components/warehouse';
 import { renderRankings } from './components/rankings';
 import { renderStoreTab } from './components/store';
 import { renderForgePage } from './ui/forgePage';
@@ -1175,6 +1175,20 @@ function updateUI(state: any, isAfk: boolean = false) {
       : pending > 0
         ? `Reciclar: +${formatNumber(pending)} núcleos`
         : '0 núcleos';
+  }
+
+  // **LA BARRA DE CONSUMIBLES SE REPINTA AQUÍ, Y NO AL MONTAR LA PÁGINA.**
+  //
+  // Su contenido depende de lo que hay en el almacén, y el almacén cambia en cada guardado.
+  // Una barra dibujada solo al entrar enseñaría un consumible que ya gastaste y escondería
+  // uno que acaba de caer de una caja. Va al lado del `#prestige-hint` porque los dos son lo
+  // mismo: un dato de la partida que hay que ver sin abrir su página.
+  //
+  // El repintado que le pasa es el de la base, así que usarlo redibuja la base entera. **No
+  // se puede pasar el de la página del almacén**: esa sigue montada debajo y su propio redraw
+  // se encargaría de lo suyo cuando vuelva a ella.
+  if (activeGameInstance) {
+    pintarBarraDeConsumibles(activeGameInstance, () => updateUI(state));
   }
 
   renderBuffHud(state, now);

@@ -1407,7 +1407,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2060**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **32 bancos, 2066**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -2518,4 +2518,17 @@ _Cosas que estorban al trabajo más que al juego._
   `setTimeout(saveToFirebase, 1200)` del arranque. **Apuntado aquí, no arreglado**, porque
   arreglarlo de verdad es tocar el arranque del motor, y eso merece su propio commit con su
   propio banco.
+### La columna del cartel de la base no llega a su contenido a 390
 
+- Al anadir la barra de consumibles se vio que el `<section>` del contador mide 328 px y su
+  contenido pasa de eso: el boton RECOLECTAR es de 128 px y por encima y por debajo hay el
+  numero, el ingreso, el dano por click, el aviso de ascension y ahora la barra. El `section`
+  es `flex flex-col justify-center min-h-0` dentro de una rejilla, asi que el desborde se
+  reparte por los dos lados y **la barra se sale por abajo de la tarjeta**. A 1440 no pasa.
+- **No lo creo la barra.** La columna ya venia justa, y esto solo se ve a 390, que es el ancho
+  en el que se juega de verdad. Es una decision de layout, no un parche: o el boton RECOLECTAR
+  cede tamano a 390 (`max-h-[38vh]` ya esta puesto, pero 38vh de 844 son 320 px y sobra margen),
+  o el `<section>` crece y deja de medir lo que mide.
+- Lo que **no** se debe hacer es dejar la barra con `absolute` o con margen negativo para que
+  "entre": es tapar el desborde en vez de arreglarlo, y el siguiente elemento que se anada
+  vuelve a salir.

@@ -247,6 +247,28 @@ export function renderLayoutHTML(
               </span>
             </span>
           </button>
+
+          <!--
+            BARRA DE ACCESO RÁPIDO A CONSUMIBLES. TRES HUECOS FIJOS, NO UNA LISTA.
+
+            **POR QUÉ TRES Y NO TODOS.** Un consumible se usa cuando lo decides, y para
+            decidirlo tienes que verlo. Con veinte huecos no decides nada: es el almacén otra
+            vez. Con tres decides "de estos, ahora", y si tienes más de tres entran los tres
+            más caros, que son los que más duele reponer. El orden lo pone el almacén, no
+            esta barra: es el mismo eje que su rejilla, y si los dos sitios ordenaran distinto
+            el mismo consumible aparecería en dos posiciones sin que ninguna se explique.
+
+            **Y FIJOS, PARA QUE NO SALTE NADA AL USAR UNO.** Un hueco por cada consumible
+            distinto, en el orden del almacén, hace que al gastar uno desaparezca una casilla
+            y las otras se desplacen: el dedo que iba a la tercera acaba en otra cosa. Con
+            tres ranuras fijas el botón que pulsas sigue siendo el mismo después.
+
+            El repintado lo pone main.ts en el mismo sitio que el #prestige-hint de al
+            lado, y el motor dice cuántos se pueden usar de cada uno.
+          -->
+          <div id="barra-consumibles"
+               class="flex-shrink-0 grid grid-cols-3 gap-2 mt-3 w-full"
+               aria-label="Consumibles del almacén"></div>
         </section>
 
         <!-- ---------- Columna derecha: paneles ---------- -->

@@ -27,6 +27,7 @@ import {
   techoDeExpansor
 } from '../src/data/store';
 import { totalConcedidoDe } from '../src/data/buffs';
+import { consumiblesDeAcceso, visibleStacksFor, matchesFilter } from '../src/components/warehouse';
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
   collector, crate, consumable
@@ -884,6 +885,123 @@ async function main() {
     check('b13: y el buff sigue puesto con el mismo tiempo',
       Math.abs((s(g2).buffs.passiveBoostExpiresAt - s(g).buffs.passiveBoostExpiresAt)) < 5_000,
       `antes=${s(g).buffs.passiveBoostExpiresAt} despues=${s(g2).buffs.passiveBoostExpiresAt}`);
+  }
+
+  // =========================================================================
+  //  BARRA DE ACCESO RÁPIDO: LOS MISMOS TRES QUE ENTRAN EN LA REJILLA
+  //
+  //  La barra de la base no es una lista: son tres huecos fijos. Eso obliga a
+  //  decidir *qué* va en ellos, y la decisión fácil de escribir es "los que tenga" o
+  //  "los más usados". Aquí no cabe ninguna de las dos: sale del almacén, con su eje.
+  //
+  //  **Y POR QUÉ EL EJE ES `value` Y NO OTRO.** La barra no es un almacén pequeño, es
+  //  una ventana sobre el mismo almacén. Si la barra ordenara por otra cosa, el jugador
+  //  vería un consumible arriba y en la rejilla en otra posición, sin ninguna razón que
+  //  pueda leer. Con `value` los dos sitios cuentan la misma historia: primero lo más caro.
+  //  Y lo caro es lo que más duele reponer, que es el que conviene tener a mano.
+  //
+  //  **Y TRES, NO UN HUECO POR CONSUMIBLE.** Con un hueco por consumible, gastar uno
+  //  desaparece una casilla y las otras se desplazan: el dedo que iba a la tercera acaba
+  //  en la segunda. Estas pruebas son la forma de que eso no ashore al añadir un
+  //  consumible nuevo.
+  //
+  //  **EL BUG QUE ESTA SECCIÓN ATRAPÓ PRIMERO, Y POR QUÉ HACE FALTA LA PRUEBA DEL
+  //  VOCABULARIO.**
+  //
+  //  La barra se escribio primero con `visibleStacksFor(..., 'consumible', ...)`, y
+  //  `matchesFilter()` no tiene ese valor: sus cuatro son `all`, `otros`, `collector` y
+  //  `companion`. Lo que hace un valor que no es ninguno es **caer al final de la función y
+  //  devolver `filtro === 'all'`, o sea falso**. Cero items, cero error, una barra con tres
+  //  huecos vacíos y ninguna pista de por qué.
+  //
+  //  O sea: un filtro mal escrito **no se rompe, se vacía**, y es el peor modo de fallo que
+  //  hay porque no hay nada que mirar. La prueba siguiente fija el vocabulario con la misma
+  //  función que lo aplica: si alguien vuelve a escribir un valor de oído, esta falla antes
+  //  de que la barra salga vacía en la partida de alguien.
+  // =========================================================================
+  {
+    const unItem = consumable('voc', 'afk', 1, { name: 'Uno' });
+    check('filtro: el vocabulario de matchesFilter es estos cuatro, y solo estos',
+      ['all', 'otros', 'collector', 'companion']
+        .filter((f: string) => matchesFilter(unItem, f)).join(',') === 'all,otros',
+      'casan=' + ['all', 'otros', 'collector', 'companion']
+        .filter((f: string) => matchesFilter(unItem, f)).join(','));
+    check('filtro: y un valor inventado no casa con nada, en vez de dar error',
+      matchesFilter(unItem, 'consumible') === false
+        && matchesFilter(unItem, 'todos') === false,
+      'consumible=' + matchesFilter(unItem, 'consumible')
+        + ' todos=' + matchesFilter(unItem, 'todos'));
+  }
+
+  {
+    const g = await boot(baseSave([
+      consumable('bar-a', 'passiveBoost', 2, { name: 'A', sellPrice: 100 }),
+      consumable('bar-b', 'afk', 1, { name: 'B', sellPrice: 900 }),
+      consumable('bar-c', 'clickBoost', 5, { name: 'C', sellPrice: 500 }),
+      consumable('bar-d', 'passiveBoost', 1, { name: 'D', sellPrice: 10_000 }),
+      collector('bar-e', { name: 'Un recolector, que no es un consumible' })
+    ]));
+    const tres = consumiblesDeAcceso(g);
+
+    check('barra: sale uno por ranura, no uno por consumible que tengas',
+      tres.length === 3,
+      'traidos=' + tres.length + ' de 4 consumibles');
+
+    check('barra: van los tres mas caros, con el mismo eje que la rejilla',
+      tres.map((w: any) => w.id).join(',') === 'bar-d,bar-b,bar-c',
+      'orden=' + tres.map((w: any) => w.id).join(','));
+
+    check('barra: y sale lo MISMO que el principio de la rejilla del almacen',
+      tres.map((w: any) => w.id).join(',')
+        === visibleStacksFor(g, s(g), 'all', 'value')
+          .map((c: any) => c.item)
+          .filter((w: any) => w.type === 'consumable')
+          .slice(0, 3).map((w: any) => w.id).join(','),
+      'barra=' + tres.map((w: any) => w.id).join(','));
+
+    check('barra: un recolector no ocupa una ranura aunque valga mas que todos',
+      !tres.some((w: any) => w.id === 'bar-e'),
+      'ids=' + tres.map((w: any) => w.id).join(','));
+
+    check('barra: y trae el item entero, con su pila, no un numero suelto',
+      tres[0].id === 'bar-d' && tres[0].stackCount === 1,
+      'pila=' + String(tres[0].stackCount));
+  }
+  {
+    // **CON MENOS DE TRES, SALEN LOS QUE HAY.** La barra dibuja siempre tres huecos, pero
+    // el reparto de huecos a items lo hace esta función. Si devolviera huecos de mentira,
+    // el jugador vería tres cosas pulsables y solo una existiría.
+    const g = await boot(baseSave([
+      consumable('poco-a', 'afk', 1, { name: 'A', sellPrice: 100 }),
+      consumable('poco-b', 'passiveBoost', 1, { name: 'B', sellPrice: 900 })
+    ]));
+    check('barra: con dos consumibles salen dos, y no se inventa un tercero',
+      consumiblesDeAcceso(g).length === 2,
+      'salidos=' + consumiblesDeAcceso(g).length);
+
+    const g0 = await boot(baseSave([collector('nada', { name: 'Nada que usar' })]));
+    check('barra: sin ningun consumible sale vacia, que es lo unico honesto',
+      consumiblesDeAcceso(g0).length === 0,
+      'salidos=' + consumiblesDeAcceso(g0).length);
+  }
+  {
+    // **UNA PILA A CERO NO OCUPA HUECO.** El almacén guarda `stackCount: 0` cuando gastas
+    // el último, y el filtro de la rejilla lo esconde. La barra usa el mismo filtro, pero
+    // se comprueba aparte: si un item a cero llegara a un hueco, el botón aparecería con
+    // un "0" debajo y al pulsarlo no pasaría nada.
+    const g = await boot(baseSave([
+      consumable('cero-a', 'afk', 1, { name: 'Agotada', sellPrice: 100 }),
+      consumable('cero-b', 'passiveBoost', 1, { name: 'Viva', sellPrice: 900 })
+    ]));
+    // Se gasta el primero entero.
+    g.useConsumable('cero-a');
+    const g2 = await reload();
+    const pilaAgotada = s(g2).warehouse.find((w: any) => w.id === 'cero-a');
+    const enBarra = consumiblesDeAcceso(g2).map((w: any) => w.id);
+    check('barra: la pila a cero no ocupa ranura',
+      !enBarra.includes('cero-a') && enBarra.includes('cero-b'),
+      'agotada=' + (pilaAgotada ? 'pila ' + String(pilaAgotada.stackCount) : 'se fue del almacen')
+        + ' ids=' + enBarra.join(','));
   }
 
   resumen('consumibles');
