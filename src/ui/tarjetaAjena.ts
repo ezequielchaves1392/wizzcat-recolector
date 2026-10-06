@@ -577,18 +577,29 @@ function seccion(titulo: string, icono: IconName, bloques: string[]): string {
  * compañero: la información estaba, pero no se veía de golpe, que es justo lo que se viene a
  * mirar un perfil.
  *
- * **A PARTIR DE `lg` LOS TRES BLOQUES VAN EN DOS COLUMNAS, Y EN `xl` EN TRES.** Los compañeros
- * son cuadrados pequeños y el recolector es una tarjeta ancha: en dos columnas cada uno va a
- * su ancho natural y ninguno queda estrangulado.
+ * **DOS COLUMNAS, NO TRES: A LA IZQUIERDA EL RECOLECTOR Y A LA DERECHA LOS COMPAÑEROS.**
+ * Tres columnas metían los logros en una tercera tan estrecha como un tercio de la pantalla,
+ * y como los logros son una tira de etiquetas esa columna salía casi vacía con el rótulo solo.
+ * Con dos, el arma queda a un lado y los compañeros al otro, que es como se comparan de verdad:
+ * "esto es lo que tiene puesto y esto es lo que produce".
  *
- * Y el ancho de la hoja sube en el mismo escalón (`md:max-w-3xl lg:max-w-5xl`): una rejilla
- * de tres columnas dentro de una caja de 420 px no son tres columnas, son tres columnas
- * estrechas. Las dos cosas van juntas o no sirven de nada.
+ * **Y CADA BLOQUE VA ENVUELTO EN UN `div`, QUE ES LO QUE FALLABA.** Un bloque son **varios**
+ * elementos —el rótulo y luego el contenido—, y al pegarlos con `join('')` dentro de la
+ * rejilla cada uno se convierte en una celda: el rótulo "Recolector" caía en la columna uno,
+ * la carta en la dos y "Compañeros" en la tres, con el contenido de cada uno rechazado en
+ * otra parte. Por eso se veía el rótulo de un bloque en un sitio y su contenido en otro. Un
+ * bloque es una celda o no es un bloque.
+ *
+ * **EL TERCER BLOQUE —LOS LOGROS— OCUPA LAS DOS COLUMNAS ENTERAS.** Son una tira de
+ * etiquetas y metidas en una sola mitad se leerían a medias; en la fila de abajo, a lo ancho,
+ * se leen de una vez.
  */
 function cuerpoDeSeccion(bloques: string[]): string {
   if (bloques.length < 2) return bloques.join('');
-  return `<div class="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3 xl:gap-4">
-    ${bloques.join('')}
+  return `<div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
+    ${bloques
+      .map((b, i) => `<div class="min-w-0${i === 2 ? ' lg:col-span-2' : ''}">${b}</div>`)
+      .join('')}
   </div>`;
 }
 
