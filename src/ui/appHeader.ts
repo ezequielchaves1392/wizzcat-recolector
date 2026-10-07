@@ -199,7 +199,9 @@ export interface AppHeaderOptions {
    *
    * El audio, el tema y la salida están en la hoja de ajustes, que es de la cabecera y
    * va en las siete. Aquí solo cabe lo que es de un sector —el botón que abre la ayuda
-   * de la Forja, la píldora de núcleos del prestigio— y por eso es opcional.
+   * de la Forja— y por eso es opcional. Lo que NO cabe es otro saldo: la franja de
+   * recursos ya enseña nanitas, cristales y núcleos, y un segundo número del mismo
+   * saldo en la misma fila es el bug B14 (la píldora de núcleos del prestigio).
    */
   actions?: string;
   /** Los saldos. `false` los quita, que es el caso de la pantalla de acceso. */

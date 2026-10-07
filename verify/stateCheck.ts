@@ -1098,6 +1098,29 @@ async function main() {
     check('prestigio: reiniciar otra vez no rompe el estado', typeof s(g3).nanites === 'number',
       'nanites=' + s(g3).nanites);
   }
+  {
+    // **B14 · LOS NÚCLEOS SALÍAN DOS VECES EN ASCENSIÓN.**
+    //
+    // La cabecera ya los enseña en su franja de recursos y la página pasaba ADEMÁS
+    // una píldora con el mismo número en `actions`: dos cifras del mismo saldo en
+    // la misma fila. Se renderiza la página y se cuenta la cifra formateada en el
+    // HTML: con la píldora salía 2 veces, sin ella 1 (la de la cabecera, que es la
+    // fuente única del saldo).
+    //
+    // Y la cifra es rara a propósito (12.345): con un número redondo podría
+    // coincidir con un coste de nodo y contar de más sin que hubiera duplicado.
+    const { renderPrestigePage } = await import('../src/ui/prestigePage');
+    const g = await boot(baseSave([], { cores: 12345, nanites: 0 }));
+    const doc = (globalThis as any).document;
+    const contenedor = doc.createElement('div');
+    contenedor.ownerDocument = doc;
+    renderPrestigePage(contenedor, { getState: () => s(g) });
+    const html = (contenedor.children || []).map((c: any) => c.innerHTML || '').join('');
+    const cifra = formatNumber(12345);
+    const veces = html.split(cifra).length - 1;
+    check('prestigio: los núcleos salen una sola vez en Ascensión, en la cabecera',
+      html.length > 0 && veces === 1, `veces=${veces} html=${html.length}`);
+  }
 
   // =========================================================================
   //  10. La forja

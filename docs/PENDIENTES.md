@@ -673,17 +673,21 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
 
 **Bugs (se elige uno y se reproduce antes de arreglar):**
 
-- [ ] **B14 · Núcleos duplicados en el nav.**
+- [x] **B14 · Núcleos duplicados en el nav.** Hecho en v1.7.1.
       > "Los nucleos se muestran dos veces en el nav (sector ascensión)"
+      > **Causa raíz: la página pasaba su propia píldora en `actions` y la
+      > cabecera ya los enseña en su franja.** Dos cifras del mismo saldo en la
+      > misma fila. Se quita la píldora; la cabecera es la fuente única.
 - [ ] **B15 · El buscador del almacén pierde el foco.**
       > "El buscador en el almacen tiene un placeholder cortado que sea 'buscar...' y al poner la primera letra pierde el foco del input"
 - [ ] **B16 · El daño crítico no funciona.**
       > "Ver el daño critico, no esta funcionando"
 - [ ] **B17 · Los ajustes de ruleta y notas se resetean solos.**
       > "Al deshabilitar los settings de ruleta y notas, se vuelven por default al hacer un tiro de ruleta."
-      > **Decisión tuya pendiente:** además pediste "Quitar la ruleta". No se toca
-      > hasta que digas si es quitar la ruleta entera o quitar el bug que resetea
-      > los ajustes.
+      > **Decisión tuya (7 de octubre de 2026): FUERA LA RULETA ENTERA.** Se elimina
+      > la animación de la ruleta: abrir cajas y forjar dan el resultado directo,
+      > sin girar nada. Incluye el bug del reseteo de ajustes, que desaparece con
+      > ella.
 - [ ] **B18 · "Ojo de Caja" no dice el 10% de qué.**
       > "'Ojo de caja' que hace puntualmente? 10% de que? especificar"
 

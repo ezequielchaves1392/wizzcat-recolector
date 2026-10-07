@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.7.1',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Núcleos sin duplicar',
+    lineas: [
+      'En Ascensión los núcleos salían dos veces en la misma pantalla: ahora salen una sola, arriba en la cabecera.',
+      'La cifra de la cabecera es la misma en los siete sectores y se actualiza sola al comprar cada nodo.',
+      'Si al comprar un nodo el saldo no te alcanza, la hoja te dice cuántos te faltan antes de confirmar.'
+    ]
+  },
+  {
     version: '1.7.0',
     fecha: '7 de octubre de 2026',
     titulo: 'Stock en el mercado y packs de cristal',

@@ -264,14 +264,13 @@ export function renderPrestigePage(
     title: 'Ascensión',
     icon: 'recycle',
     route: 'prestigio',
-    state,
-    actions: `
-      <span class="inline-flex items-center gap-1 px-2.5 h-9 rounded-lg border border-[var(--border-color)]
-                   text-[11px] font-mono accent-text"
-            style="background: color-mix(in srgb, var(--accent) 10%, transparent)">
-        ${ic('core', 'w-3.5 h-3.5')} ${formatNumber(state.cores)}
-      </span>
-    `
+    state
+    // **SIN PÍLDORA DE NÚCLEOS EN `actions`, Y POR QUÉ.** La cabecera ya enseña los
+    // núcleos en su franja de recursos, que es la cifra única del saldo en las siete
+    // pantallas. La píldora repetía el mismo número en la misma fila: dos cifras
+    // para un solo saldo, y basta con que una refresque antes que la otra para que
+    // se note. El saldo se mira arriba, a la altura de la cabecera, como en el resto
+    // de sectores.
   }, body));
 
   wireNav(root, { go });
