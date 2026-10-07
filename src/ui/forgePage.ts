@@ -28,7 +28,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal } from '../utils/modal';
@@ -301,6 +301,20 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   // materiales en vez de la primera pareja que se vea.
   const aportan = ui.tipo === 'collector' ? aporteDeAfijos(elegidos) : null;
 
+  // F60 · LO COMPARTIDO, Y POR QUÉ SE ENSEÑA ANTES DE TIRAR. La forja conserva
+  // la rareza compartida 3 de cada 4 y los afijos compartidos entran primero:
+  // son las dos mitades de "forzar por probabilidades", y las dos se deciden
+  // con lo que hay en el yunque. Si no se enseñaran, forzar sería superstición.
+  //
+  // Los números salen de la regla, no de aquí: la probabilidad es la que tira
+  // el motor y los nombres los del catálogo. Una cifra escrita a mano sería la
+  // segunda copia del número que decide.
+  const rarezaCompartida = ui.tipo === 'collector' && ready && elegidos.length === MATERIALES_POR_FUSION
+    && elegidos[0].rarity && elegidos[0].rarity === elegidos[1].rarity
+    ? String(elegidos[0].rarity) : null;
+  const compartidos = ui.tipo === 'collector' && ready ? afijosCompartidos(elegidos) : [];
+  const nombresCompartidos = compartidos.map(id => AFFIX_BY_ID[id]?.name ?? id).filter(Boolean);
+
   // --- Fragmentos -------------------------------------------------------
 
   const slot = (i: number) => {
@@ -474,6 +488,16 @@ function nivelDe(w: any): number {
         ${aportan !== null && ready ? `
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
             ${aportan > 0 ? `Aportan ${aportan} afijos` : 'Tus materiales no traen afijos'} · ${explicacionDeAfijos()}
+          </p>
+        ` : ''}
+        ${rarezaCompartida && ready ? `
+          <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            Rareza compartida (${rarezaCompartida}): ${Math.round(PROB_CONSERVA_RAREZA * 100)}% de conservarla
+          </p>
+        ` : ''}
+        ${nombresCompartidos.length > 0 && ready ? `
+          <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            Compartidos: ${nombresCompartidos.join(' · ')} (entran primero)
           </p>
         ` : ''}
       </div>

@@ -64,7 +64,8 @@ const NOMBRE_NANO = 'Nanopartícula de Estabilidad';
 import {
   attemptForge, rangoDeAfijosForjados, danioDeRango,
   AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION,
-  valorDeUnCristal, cristalesDeConsuelo
+  valorDeUnCristal, cristalesDeConsuelo, rarezaFusionada, afijosCompartidos,
+  PROB_CONSERVA_RAREZA
 } from '../src/data/crafting';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
@@ -1013,6 +1014,75 @@ const falloCon = async () => {
     check('autoforge: y la serie se completa igualmente sin piedras',
       r10.success === true && r10.resultados.length === 1,
       `success=${r10.success} resultados=${r10.resultados.length}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  F60 · LA RAREZA Y LOS AFIJOS SE HEREDAN POR PROBABILIDAD
+  //
+  //  Dos Comunes daban cualquier rareza según el tier, y dos objetos con
+  //  Baluarte sorteaban sus afijos con el resto: los materiales decidían
+  //  cuántos, no cuáles ni de qué rareza. Ahora lo compartido tira a quedarse:
+  //  la rareza compartida se conserva 3 de cada 4 y los afijos compartidos
+  //  entran primero. Es lo que permite "forzar" un afijo poniendo dos
+  //  materiales que lo traigan.
+  // -------------------------------------------------------------------------
+  {
+    check('herencia: la probabilidad de conservar está escrita y es 3 de cada 4',
+      PROB_CONSERVA_RAREZA === 0.75, `p=${PROB_CONSERVA_RAREZA}`);
+    check('herencia: con el dado a favor se conserva la compartida',
+      rarezaFusionada('Común', 'Común', 'Épico', () => 0) === 'Común', 'no la conservó');
+    check('herencia: con el dado en contra sale la calculada',
+      rarezaFusionada('Común', 'Común', 'Épico', () => 0.99) === 'Épico', 'no salió la calculada');
+    check('herencia: sin rareza compartida no hay nada que conservar',
+      rarezaFusionada('Común', 'Raro', 'Épico', () => 0) === 'Épico', 'conservó sin compartir');
+    check('herencia: una rareza que no existe no se conserva',
+      rarezaFusionada('Rara', 'Rara', 'Épico', () => 0) === 'Épico', 'conservó una inventada');
+    check('herencia: y sin rareza en un material tampoco',
+      rarezaFusionada(undefined, 'Común', 'Épico', () => 0) === 'Épico', 'conservó con hueco');
+  }
+  {
+    // Dos Comunes de T3 al máximo daban un Épico por tier+potencial; ahora lo
+    // normal es que salga Común, que es lo que se puso en el yunque.
+    const comun = (id: string) => collector(id, 3, { potential: 5, rarity: 'Común', damage: danioDeRango(3, 5) });
+    const r = conRoll(0, () => attemptForge([comun('x'), comun('y')], 3, 'X', opts()));
+    check('herencia: dos Comunes dan un Común casi siempre',
+      r.success === true && r.collector?.rarity === 'Común',
+      `rarity=${r.collector?.rarity}`);
+  }
+  {
+    // Lo compartido entra primero, en orden de aparición: forzar es elegir.
+    check('herencia: lo compartido sale en el orden en que aparece',
+      afijosCompartidos([
+        { affixes: ['aff_bulwark', 'aff_sharp'] },
+        { affixes: ['aff_sharp', 'aff_bulwark'] }
+      ]).join(',') === 'aff_bulwark,aff_sharp',
+      afijosCompartidos([
+        { affixes: ['aff_bulwark', 'aff_sharp'] },
+        { affixes: ['aff_sharp', 'aff_bulwark'] }
+      ]).join(','));
+    check('herencia: lo no compartido no entra en la lista',
+      afijosCompartidos([{ affixes: ['aff_bulwark'] }, { affixes: ['aff_sharp'] }]).length === 0,
+      'entró algo sin compartir');
+    check('herencia: y un id que no existe tampoco',
+      afijosCompartidos([{ affixes: ['aff_bulwark', 'invento'] }, { affixes: ['aff_bulwark', 'invento'] }]).join(',') === 'aff_bulwark',
+      'coló un invento');
+  }
+  {
+    // De punta a punta: dos Legendarios con Baluarte y filo, y el forjado lo
+    // trae el primero. Con el dado a cero el número es el suelo (3) y los dos
+    // primeros huecos son los compartidos, en orden.
+    const leg = (id: string) => collector(id, 3, {
+      potential: 5, rarity: 'Legendario', damage: danioDeRango(3, 5),
+      affixes: ['aff_bulwark', 'aff_sharp']
+    });
+    const r = conRoll(0, () => attemptForge([leg('x'), leg('y')], 3, 'X', opts()));
+    const afijos = r.collector?.affixes ?? [];
+    check('herencia: el forjado conserva la rareza compartida',
+      r.success === true && r.collector?.rarity === 'Legendario',
+      `rarity=${r.collector?.rarity}`);
+    check('herencia: y el compartido entra el primero',
+      afijos[0] === 'aff_bulwark' && afijos[1] === 'aff_sharp',
+      afijos.join(','));
   }
   resumen('la forja: dos del mismo tier, potencial medio y afijos por linaje');
 }

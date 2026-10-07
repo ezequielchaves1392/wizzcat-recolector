@@ -47,6 +47,7 @@
 // ==========================================================================
 
 import type { Affix, Rarity, CollectorItem } from '../types/domain';
+import { RARITY_ORDER } from '../types/domain';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from './tiers';
 import { nombreDe } from './nombres';
 // `costeDeCaja` es de la tienda, y la flecha va de aquí hacia allí. **No crea ciclo
@@ -1438,10 +1439,12 @@ export function attemptForge(
   const damage = danioDeRango(newTier, potential);
 
   // La rareza va ANTES que los afijos, porque es lo que decide cuántos lleva: la
-  // rareza da el mínimo y el tope es 6 para todos. Antes el número venía del
-  // potencial y la rareza no influía en nada, así que un Divino podía salir con
-  // un afijo y un Común con tres.
-  const rarity = collectorRarity(newTier, potential);
+  // rareza da el mínimo y el tope es 6 para todos.
+  //
+  // **Y LA RAREZA SALE DE LOS MATERIALES, NO SOLO DEL TIER (F60).** Si los dos
+  // comparten rareza, el resultado la conserva 3 de cada 4 veces: dos Comunes
+  // dan un Común casi siempre. Si no comparten, sale la calculada de siempre.
+  const rarity = rarezaFusionada(materials[0]?.rarity, materials[1]?.rarity, collectorRarity(newTier, potential), rng);
   const affixes = pickAffixes(materials, rarity, (options.nanoUsed ?? 0) > 0, rng);
 
   const collector: CollectorItem = {
@@ -1529,6 +1532,63 @@ function collectorRarity(tier: number, potential: number): Rarity {
   if (potential >= 3 && tier >= 5) return 'Legendario';
   if (potential >= 2 && tier >= 3) return 'Épico';
   return (base as Rarity) || 'Común';
+}
+
+/**
+ * LA PROBABILIDAD DE CONSERVAR LA RAREZA COMPARTIDA, Y POR QUÉ ES UN NÚMERO.
+ *
+ * Dos materiales de la misma rareza "probablemente" dan esa rareza: 3 de cada
+ * 4 veces la conserva, 1 de cada 4 sale la calculada. Es una decisión de
+ * equilibrio con nombre propio para que se pueda mover sin tocar la regla, y
+ * los bancos la clavan por los dos lados.
+ */
+export const PROB_CONSERVA_RAREZA = 0.75;
+
+/**
+ * LA RAREZA SALE DE LOS MATERIALES, NO SOLO DEL TIER.
+ *
+ * Si los dos materiales comparten rareza, el resultado la conserva con
+ * `PROB_CONSERVA_RAREZA` y si no, sale la calculada de siempre. Es la mitad de
+ * "forzar por probabilidades": dos Comunes dan un Común casi siempre, y dos
+ * Legendarios conservan su escalón en vez de caer al que toque por tier.
+ *
+ * **Y SI LA RAREZA COMPARTIDA NO ES UNA RAREZA, NO SE CONSERVA NADA.** Un item
+ * viejo o corrupto puede traer cualquier cadena en `rarity`, y conservarla
+ * sería fabricar un item de una rareza que el juego no conoce: sin precio, sin
+ * suelo de afijos y sin color. La compartida tiene que estar en el catálogo
+ * de rarezas o no cuenta como compartida.
+ */
+export function rarezaFusionada(
+  rarA: string | undefined, rarB: string | undefined, calculada: Rarity,
+  rng: () => number = Math.random
+): Rarity {
+  const compartida = rarA && rarA === rarB && (RARITY_ORDER as readonly string[]).includes(rarA)
+    ? (rarA as Rarity)
+    : null;
+  if (compartida && rng() < PROB_CONSERVA_RAREZA) return compartida;
+  return calculada;
+}
+
+/**
+ * LOS AFIJOS QUE TRAEN LOS DOS MATERIALES, EN ORDEN.
+ *
+ * Es la otra mitad de "forzar por probabilidades": lo compartido entra primero
+ * en el item, mientras haya hueco. El orden es el de aparición (primero lo del
+ * primer material), no un sorteo: forzar es elegir, y un sorteo entre
+ * compartidos sería forzar a medias. Los ids que no están en el catálogo no
+ * entran, que es lo mismo que ya filtraba la herencia.
+ */
+export function afijosCompartidos(materials: Array<{ affixes?: string[] }>): string[] {
+  if (materials.length < 2) return [];
+  const delSegundo = new Set(materials[1].affixes ?? []);
+  const vistos = new Set<string>();
+  const salida: string[] = [];
+  for (const id of materials[0].affixes ?? []) {
+    if (vistos.has(id)) continue;
+    vistos.add(id);
+    if (delSegundo.has(id) && AFFIXES.some(a => a.id === id)) salida.push(id);
+  }
+  return salida;
 }
 
 /**
@@ -1679,9 +1739,10 @@ export function aporteDeAfijos(materials: Array<{ affixes?: string[] }>): number
  *
  * **La mezcla es en dos pasos, y ese orden es lo que la hace tener sentido:**
  *
- * 1. Primero se cogen afijos **de los dos materiales**, al azar entre los que
- *    tienen entre los dos. Es la herencia: los afijos buenos se transmiten de
- *    verdad, y por eso buscar un item con buenos afijos tiene recompensa.
+ * 1. Primero lo que traen **los dos materiales**, en orden: es lo que permite
+ *    forzar un afijo. Después, al azar entre el resto de lo que tienen entre
+ *    los dos. Es la herencia: los afijos buenos se transmiten de verdad, y por
+ *    eso buscar un item con buenos afijos tiene recompensa.
  * 2. Si aún faltan para llegar al número que salió del dado, se rellenan **al azar
  *    de todo el catálogo**, con los raros pesando menos.
  *
@@ -1714,7 +1775,15 @@ function pickAffixes(
   const picked: string[] = [];
   const usados = new Set<string>();
 
-  // 1 · Herencia: al azar entre los afijos que tienen los dos materiales juntos.
+  // 1 · Herencia: primero lo que traen LOS DOS, en orden. Es lo que permite
+  // forzar un afijo: dos materiales con Baluarte lo ponen el primero mientras
+  // haya hueco. Después, al azar entre el resto de lo que traen juntos.
+  const compartidos = afijosCompartidos(materials);
+  for (const id of compartidos) {
+    if (picked.length >= objetivo) break;
+    picked.push(id);
+    usados.add(id);
+  }
   const heredables: string[] = [];
   for (const m of materials) {
     for (const id of m.affixes ?? []) {

@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.10.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Forzar afijos en la forja',
+    lineas: [
+      'Si los dos materiales comparten rareza, el resultado la conserva casi siempre: dos Comunes dan un Común.',
+      'Si los dos traen el mismo afijo, entra el primero: pon dos con Baluarte y sale con Baluarte.',
+      'La forja avisa de las dos cosas antes de tirar, con lo que hay en el yunque.'
+    ]
+  },
+  {
     version: '1.9.0',
     fecha: '7 de octubre de 2026',
     titulo: 'Ordenar por tipo en el almacén',

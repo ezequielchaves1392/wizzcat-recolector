@@ -728,10 +728,16 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > tiene cifras (`ORDENES_ALMACEN`), el orden por tipo agrupa compañeros,
       > recolectores, cajas y resto, y cambiar de filtro devuelve a Default si
       > el orden deja de aplicar. Lo cubre `filterCheck` (+9).
-- [ ] **F60 · La forja hereda rareza y afijos por probabilidad.**
+- [x] **F60 · La forja hereda rareza y afijos por probabilidad.** Hecho en v1.10.0.
       > "En la forja considerar la rareza y los afijos para la combinación final, dos comunes probablemente hagan uno común, dos objetos con 'baluarte' por ejemplo tiene altas chances de salir con ese afijo... hagamos esto para que el jugador pueda 'forzar' por probabilidades un afijo"
-- [ ] **F61 · Apilar cajas, no solo consumibles.**
-      > "el apilar debe apilar cajas, no solo los consumibles."
+      > **Dos reglas nuevas, las dos en datos.** Rareza compartida: se conserva
+      > 3 de cada 4 (`PROB_CONSERVA_RAREZA`); si no comparten sale la calculada.
+      > Afijos compartidos: entran primero, en orden de aparición, mientras haya
+      > hueco. Los compañeros quedan fuera: su eje es el potencial (diseño B2).
+      > La página lo enseña antes de tirar. Lo cubre `forjaCheck` (+12).
+- [-] **F61 · Apilar cajas, no solo consumibles.** Descartada: probado con sonda
+      (dos pilas sueltas del mismo tier se funden al cargar y el botón las
+      cuenta); el motor apila cajas en carga, alta y botón. Confusión del jugador.
 - [ ] **F62 · Ver el árbol pagado de cada jugador en su perfil.**
       > "cuando termines : en la parte del perfil del jugador me gustaría que se pueda ver el arbol de pasivas que tiene 'pagado' para ver que build se está armando cada jugador"
       > **Dato previo:** el dato ya viaja en la tarjeta pública (`nodos` con nivel y
