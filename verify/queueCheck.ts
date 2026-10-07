@@ -135,7 +135,14 @@ async function main() {
   {
     const g = await boot(baseSave([collector('r1', 3)]));
     // Un guardado bueno primero, para tener un punto de partida creíble.
-    s(g).nanites = 1000;
+    //
+    // **EL NÚMERO ES 1000 Y ESO ANTES NO IMPORTABA; AHORA SÍ.** B28 hace que el guardado
+    // se salte si el documento no ha cambiado, y `baseSave()` deja `nanites: 1000`. Con
+    // este `= 1000` la firma es idéntica a la del arranque, el guardado se salta, la cola
+    // no se confirma y esta comprobación falla. El motor tenía razón: la partida
+    // **no había cambiado**, y no hay nada que confirmar. Se pone 1.000 distinto para
+    // que haya un punto de partida de verdad, que es lo que la prueba quiere.
+    s(g).nanites = 1001;
     g.flush();
     await new Promise((r) => setTimeout(r, 20));
     check('cola: punto de partida guardado', cola() === undefined);
@@ -150,7 +157,7 @@ async function main() {
 
     const c = leerCola();
     check('cola: sin red, la cola sobrevive', c?.nanites === 4242, 'cola=' + c?.nanites);
-    check('cola: y el documento sigue con lo último bueno', guardado().nanites === 1000,
+    check('cola: y el documento sigue con lo último bueno', guardado().nanites === 1001,
       'doc=' + guardado().nanites);
 
     // El jugador cierra la pestaña y vuelve. `createGameLoop` lee la cola. El

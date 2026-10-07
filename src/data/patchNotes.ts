@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.2',
+    fecha: '7 de octubre de 2026',
+    titulo: 'La partida no se vuelve a guardar si no ha cambiado nada',
+    lineas: [
+      'El juego te guardaba la partida cada medio minuto aunque no hubieras hecho nada. Con la pestaña abierta mirando el almacén, eso eran 120 guardados por hora sin que ganaras ni una nanita.',
+      'Ahora solo se guarda cuando algo cambia de verdad. Una hora mirando la partida no cuesta ni una escritura.',
+      'Tus clics, tu ingreso automatico y las tarjetas que uses se siguen guardando igual: si algo cambia, se guarda en el acto.',
+      'Tambien se arreglo un fallo que hacia justo lo contrario: si se caia la conexion al guardar, la partida se quedaba sin subir hasta que tocabas algo.'
+    ]
+  },
+  {
     version: '1.15.1',
     fecha: '7 de octubre de 2026',
     titulo: 'Una partida que no se puede leer ya no se pierde',

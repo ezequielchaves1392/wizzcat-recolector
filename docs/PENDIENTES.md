@@ -1132,32 +1132,55 @@ feature que falta):**
       normal sigue sobreviviendo a la recarga.
       **LO QUE QUEDA, Y ES LO DE VERDAD:** la causa raíz es **la cuota de Firestore
       agotada**, y eso no lo arregla este commit. El plan Spark da 50.000 lecturas y
-      20.000 escrituras al día, y el juego **guarda cada 15 s por jugador** más el latido
-      de sesión, la presencia, el ranking y la tarjeta pública. Con pocos usuarios eso
-      ya se lleva el presupuesto. **Sin una subida de plan o sin bajar el ritmo de
-      escritura, esto vuelve**, y esta vez sin la red de seguridad del crash.
-- [ ] **B28 · Bajar el ritmo de escritura, que es lo que agotó la cuota.**
-      **Sale de B27 y es la mitad que de verdad importa**, porque B27 solo quita el
-      síntoma. Hoy el juego escribe en `users/{uid}`:
-      · el guardado, **cada 15 segundos**, y en cada compra, venta, apertura, forja,
-        subida de nivel y pulsación de menú;
-      · el latido de sesión, cada 15 segundos, con su propio plazo de 8 s;
-      · la presencia en el ranking, cada 60 segundos;
-      · el documento del ranking, cada 5 minutos, **y solo si su fila cambió**
-        (eso ya se optimizó, y `guardadoCheck` lo cuenta);
-      · la tarjeta pública, cada 5 minutos, con firma aparte.
-      **LA CUENTA QUE HAY QUE HACER ANTES DE TOCAR NÚMERO.** El plan Spark da 20.000
-      escrituras al día. Con un jugador que juega dos horas: el guardado son 480, el
-      latido 480, la presencia 120 — unas 1.100. **Cinco jugadores activos se lo
-      llevan.** Y el gasto no es del jugador que las pide sino del que reintenta: con
-      la cuota agotada, cada `anotarLatido` que falla **vuelve a intentarlo**, y así es
-      como la avería se convierte en una avalancha.
-      **LO QUE NO SE DEBE HACER, Y POR QUÉ.** Bajar el intervalo del guardado a 60 s
-      sin más **empeora la cosa que el guardado protege**: si compras y recargas al
-      instante, con 60 s pierdes la compra. El commit que serializó los guardados
-      (`queueCheck`) ya probó que aplazar la escritura hace exactamente eso. **La
-      palanca buena es no escribir cuando no hay nada nuevo**, que ya se hace con el
-      ranking y no se hace con la partida.
+      20.000 escrituras al día. **La parte de la partida está resuelta en B28** (no se
+      escribe cuando el documento no ha cambiado; una hora mirando pasa de 120 escrituras
+      a cero). **Lo que queda son los relojes que no son la partida** —el latido de
+      sesión y la presencia—, que viven fuera del motor y siguen escribiendo en idle.
+      **Sin una subida de plan o sin tocar esos relojes, esto vuelve**, y esta vez sin la
+      red de seguridad del crash.
+- [x] **B28 · Bajar el ritmo de escritura, que es lo que agotó la cuota.** `[v1.15.2]`
+      **Sale de B27 y era la mitad que de verdad importaba**, porque B27 solo quita el
+      síntoma. Hecho: **el guardado no escribe si el documento no ha cambiado**, que es
+      la palanca que ya se usaba con el ranking y que no se usaba con la partida.
+      **LO QUE DECÍA ESTA ENTRADA Y ERA FALSO, Y POR QUÉ IMPORTA.** Escribía "el
+      guardado, cada 15 segundos" y "el latido, cada 15 segundos". **Los dos están mal**:
+      el guardado va **cada 30 s** (`RITMO_GUARDADO_MS`, ya subido antes a propósito) y
+      el latido va **cada 22,5 s** (`VENTANA_MS / 2`, la mitad de la ventana de 45 s).
+      Una cuenta hecha sobre números inventados da una cifra con aspecto de exacta, así
+      que los números se **midieron** en vez de multiplicarse: `cuotaCheck` cuenta lo que
+      el stub de Firestore ha visto de verdad.
+      **LA CUENTA, YA MEDIDA.** El arranque cuesta **5** escrituras, una compra **1**, y
+      **un tick del juego, 0** —el motor ya no escribe por su cuenta. El caso que quemaba
+      la cuota era el guardado automático: **una pestaña abierta mirando el almacén sin
+      tocar nada eran 120 escrituras de la nada por hora**, y la cuota es de 20.000 al día
+      **para el proyecto entero**, no por jugador. Ahora esa hora cuesta **cero**.
+      **LA PALANCA, Y POR QUÉ NO BAJAR EL INTERVALO.** Bajar el guardado a 60 s sin más
+      empeora justo lo que el guardado protege: comprar y recargar al instante perdería la
+      compra. La pregunta que sí vale es "¿ha cambiado el documento?", y esa se hace
+      **comparando el documento entero**, no enumerando campos.
+      **DOS ERRORES PROPIOS QUE SALIERON HACIÉNDOLO, Y LOS DOS ESTABAN EN EL BANCO.**
+      · **La firma iba en el sitio equivocado.** Firmaba **antes** del `setDoc`, con lo
+        que al escribir se confirmaba una escritura que quizá ni ocurrió: con la red
+        caída, el fallo dejaba la firma puesta y **el reintento de quince segundos —que
+        existe justo para eso— se saltaba**. La partida se quedaba sin guardar hasta que
+        el jugador moviera algo. Ahora **se firma después del `setDoc`**, y hay dos
+        pruebas que lo atan en los dos sentidos.
+      · **Enumerar campos no funciona.** La primera versión firmaba "saldo, producción y
+        clics" y **se olvidaba de los buffs**: la Tarjeta AFK se usaba, el buff se
+        aplicaba y la firma no se enteraba. **Siete pruebas del guardado se pusieron
+        rojas y tenían razón.** La regla que sale de ahí: **no se escribe una lista de lo
+        que importa, se compara lo que se va a escribir entero.** Una lista se queda
+        corta en cuanto alguien añade un campo, y el olvido es silencioso.
+      `cuotaCheck` (nuevo, 10) y `guardadoCheck`/`queueCheck` actualizados: una hora
+      mirando cuesta 0 escrituras; el pasivo y el clic **sí** se guardan; un guardado
+      **fallido se reintenta** al volver la red; y con la red aún caída **se sigue
+      intentando**, porque el documento no está en el servidor.
+      **LO QUE QUEDA, Y NO ES DE ESTE COMMIT.** El latido de sesión (22,5 s, dos
+      escrituras) y la presencia (60 s) viven en `main.ts` y `sessionService`, fuera del
+      motor, y **siguen escribiendo con la pestaña en idle**: son unos 160 + 60 por hora
+      que este commit **no toca**. Medidos, no estimados, pero **fuera de alcance aquí**.
+      Sin una subida de plan, B27 **vuelve**, y esta vez sin el crash que hacía de red
+      de seguridad.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un

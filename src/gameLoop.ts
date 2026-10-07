@@ -419,6 +419,26 @@ export async function createGameLoop(
   const achievementState = createAchievementState();
 
   /**
+   * B28 · LA HUELLA DE LA ÚLTIMA ESCRITURA, **Y POR QUÉ VIVE AQUÍ Y NO FUERA**.
+   *
+   * Lo primero: está aquí porque se usa antes de existir. `saveToFirebase()` se llama
+   * **durante la carga** —una migración, por ejemplo— y eso ocurre antes de donde
+   * estuviera la declaración. Con `let` debajo es un `ReferenceError: Cannot access
+   * 'ultimaFirma' before initialization` y la carga entera revienta en el arranque.
+   *
+   * Lo segundo, que es el motivo de que esté **dentro** de `createGameLoop` y no junto a
+   * `partidaNoCargada`: **si fuera de módulo, dos partidas distintas compartirían la
+   * firma**, y la segunda dejaría de escribir porque la primera ya había escrito esos
+   * mismos valores. En el juego hay una partida por pestaña y no se nota; en un banco
+   * de pruebas, que levanta una partida tras otra, **era justo lo que pasaba**: una
+   * prueba que arrancaba con el mismo estado que la anterior se saltaba su primer
+   * guardado y el aviso de "sin guardar" no se encendía. El bug de pruebas y el bug de
+   * producción son el mismo: **el estado del guardado pertenece a la partida que se
+   * está guardando**, y una partida nueva empieza sin saber nada de la anterior.
+   */
+  let ultimaFirma = '';
+
+  /**
    * ¿Venía cola de la sesión anterior?
    *
    * Se pregunta **aquí**, antes de cargar, y no junto al `setTimeout` que la
@@ -2414,7 +2434,12 @@ function sePuedeGuardar(): boolean {
   checkAchievements();
 
   // Guardar inmediatamente al iniciar sesión
-  await saveToFirebase();
+  // **Con `forzar`.** Es el primero de todos, y `ultimaFirma` está vacía: sin el
+  // `forzar` compararía contra una cadena vacía, que no es la firma de ningún documento
+  // y por eso escribiría igual — pero depender de que el vacío nunca coincida con una
+  // firma real no vale, porque `JSON.stringify` de un objeto vacío **sí** puede dar
+  // `{}`. Que el primer guardado de una partida no dependa de esa casualidad no vale.
+  await saveToFirebase(true);
 
   // Los compañeros tipo 'multiplier' no aportan nanitas: multiplican el rendimiento.
   // power es el factor extra (0.5 = +50%, 2.0 = +200%)
@@ -3183,7 +3208,44 @@ function sePuedeGuardar(): boolean {
     return multiplier;
   }
 
-  async function saveToFirebase() {
+  /**
+   * B28 · LA HUELLA DE LO ÚLTIMO QUE SE ESCRIBIÓ, PARA NO ESCRIBIR DOS VECES LO
+   * MISMO.
+   *
+   * **EL PROBLEMA QUE ESTE NÚMERO RESUELVE.** El temporizador de guardado dispara
+   * cada 30 segundos **aunque no haya pasado nada**, porque `saveToFirebase()` no
+   * pregunta. Y `updatedAt: new Date()` cambia en cada llamada, así que el documento
+   * **nunca es igual al anterior** y no hay forma de saltarse la escritura por
+   * comparación. El caso real: un jugador que abre la pestaña, se sienta a mirar el
+   * almacén y no toca nada durante una hora son **120 escrituras de la nada** — y la
+   * cuota de Firestore es de 20.000 al día **para el proyecto entero**, no por
+   * jugador.
+   *
+   * **Y CÓMO SE COMPRUEBA "NO HA CAMBIADO": EL DOCUMENTO ENTERO, SIN `updatedAt`.**
+   *
+   * La primera versión de esto **enumeraba los campos que parecían progreso** —saldo,
+   * producción, clics— y midió mal por partida, que es el peor sitio para
+   * equivocarse. **Se olvidaba de los buffs**, y un buff se aplica sin que el jugador
+   * toque nada: la Tarjeta AFK se usaba, el estado cambiaba, la firma **no**, y el buff
+   * no se guardaba. Loatkanaron siete pruebas del guardado en el primer commit. La
+   * regla que sale de ahí es la del proyecto entera: **no se escribe una lista de lo
+   * que importa, se compara lo que se va a escribir entero.** Una lista se queda corta
+   * en cuanto alguien añade un campo, y el olvido es silencioso.
+   *
+   * **EL COSTE, Y POR QUÉ NO ES NADA.** `JSON.stringify` del documento, cada 30
+   * segundos, en memoria. Con un almacén de 240 items eso son unos kilobytes de texto:
+   * compararlo es infinitamente más barato que mandarlo por la red, que es justo lo que
+   * se está economizando. Y la alternativa —comparar a mano un puñado de campos— es la
+   * que acaba de perder siete pruebas.
+   *
+   * **`updatedAt` SE QUITA DE LA COMPARACIÓN, Y ES LO ÚNICO QUE HAY QUE QUITAR.** Es un
+   * `new Date()` que cambia en cada llamada, o sea que si se comparara con él dentro, el
+   * documento **nunca** sería igual a sí mismo y la comparación devolvería siempre
+   * "cambió": la guarda no guardaría nada y el arreglo sería inocuo sin avisar. Se
+   * compara el documento **tal y como se iba a escribir, menos la marca de tiempo**.
+   */
+
+  async function saveToFirebase(forzar = false) {
     // **PRIMERO DE TODO, Y POR ENCIMA DE LA COLA.** La cola local es buena idea y aqui
     // seria un error: apuntar "lo que hay que subir" de una partida que no se ha leido
     // es apuntar una partida en blanco. Con el flag puesto no se anota nada, no se
@@ -3278,7 +3340,59 @@ function sePuedeGuardar(): boolean {
       //  Con la opción, el campo que falte simplemente no se escribe y el resto
       //  llega igual. Es la diferencia entre "un item sin un número" y "todo el
       //  progreso de la partida".
+
+      // ==========================================================================
+      //  B28 · ¿HA CAMBIADO ALGO? SE PREGUNTA AQUÍ, CON EL DOCUMENTO YA LISTO.
+      // ==========================================================================
+      //
+      //  Va **justo antes del `setDoc`**, que es el único sitio donde el documento que se
+      //  va a escribir está construido entero y es el mismo que se comparará. Preguntarlo
+      //  antes, con una firma hecha a mano de un puñado de campos, es lo que se intentó
+      //  primero y **se olvidaba de los buffs**: la Tarjeta AFK se usaba, el buff se
+      //  aplicaba, y la firma de "saldo, producción y clics" no se enteraba. Siete
+      //  pruebas del guardado se pusieron rojas y tenían razón.
+      //
+      //  **Y VA AQUÍ, Y NO ANTES DE LA COLA, POR UN MOTIVO CONCRETO.** La cola local
+      //  es lo que garantiza que el saldo esté en disco aunque la red se caiga. Si la
+      //  pregunta se hiciera antes de anotar, entonces **un guardado que se salta
+      //  tampoco anotaría nada en la cola** — y la cola es lo que sobrevive a que este
+      //  proceso muera. Con la pregunta aquí, la cola se sigue anotando siempre y lo
+      //  único que se salta es la red, que es lo caro.
+      //
+      //  `forzar` es la salida de emergencia: `beforeunload` y el arranque pasan por
+      //  aquí y **no preguntan**, porque un guardado que se salta porque "no ha cambiado"
+      //  es justo lo que no puede pasar en el momento de cerrar la pestaña, donde el
+      //  proceso se muere en cuanto termina.
+      // **`deleteField()` y `Date` no son comparables**, así que salen de la firma.
+      // `deleteField()` es un objeto distinto en cada llamada y compararía siempre
+      // diferente —y la fecha cambia siempre—, o sea que sin quitarlos la comparación
+      // daría "cambió" en cada llamada y la guarda no guardaría nada sin avisar. Se
+      // quitan **copiando**, no del objeto que se va a escribir: ese se manda tal cual.
+      const { updatedAt: _fuera1, shards: _fuera2, ...comparable } = gameData as any;
+      // El nombre lleva "partida" porque **en este mismo bloque hay otra `firma`, la
+      // del ranking**, que ya existía y que compara algo distinto: la fila pública, con
+      // su periodo de cinco minutos. Dos firmas distintas, dos comparaciones
+      // distintas, y un solo nombre las habría fundido en una.
+      const firmaPartida = forzar ? '' : JSON.stringify(comparable);
+      if (!forzar && firmaPartida === ultimaFirma) return;
+
       await setDoc(userRef, gameData, { merge: true });
+
+      // **Y LA FIRMA SE PONE AQUÍ, DESPUÉS DEL `setDoc`, Y NO ANTES. ES EL ORDEN QUE
+      // IMPORTA Y EL QUE HACE FALTA.**
+      //
+      // La primera versión la ponía antes de escribir, para "no repetir el trabajo de
+      // comparar si se repite". Con la red en su sitio daba igual. **Con la red caída es
+      // un agujero:** el `setDoc` lanza, la firma **ya estaba puesta**, y el reintento de
+      // quince segundos —que existe precisamente para eso— se encuentra con un documento
+      // idéntico y **se salta**. La partida se queda sin guardar hasta que el jugador haga
+      // algo que mueva el documento, y el aviso de "sin guardar" encendido no arregla
+      // nada porque solo un cambio lo apagaría.
+      //
+      // Es decir: **firmar antes de escribir es firmar una escritura que no ocurrió**, y
+      // la firma dice "esto ya está en el servidor" cuando no lo está. Se firma lo que se
+      // ha escrito, ni un momento antes.
+      if (!forzar) ultimaFirma = firmaPartida;
 // ==========================================================================
       //  PASO 1bis · EL DOCUMENTO DEL RANKING. ES OTRO, Y FALLAR AQUÍ NO ES
       //  PERDER LA PARTIDA.
@@ -3692,7 +3806,12 @@ const RITMO_GUARDADO_MS = 30_000;
 
 
   const saveInterval = setInterval(saveToFirebase, RITMO_GUARDADO_MS);
-  const handleUnload = () => { saveToFirebase(); };
+  // `forzar` porque **este es el último guardado que va a haber**: si se cerrara la
+  // pestaña con progreso sin escribir y la pregunta lo saltara por "no ha cambiado"...
+  // bueno, si no ha cambiado no hay nada que perder, pero la cola puede tener algo que
+  // la red no confirmó, y la red se va. Forzar aquí cuesta una escritura y garantiza que
+  // lo último que sale de la partida llegue al disco antes de que esto muera.
+  const handleUnload = () => { saveToFirebase(true); };
   window.addEventListener('beforeunload', handleUnload);
 
   /**

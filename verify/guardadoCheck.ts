@@ -225,7 +225,35 @@ async function main() {
   // -------------------------------------------------------------------------
   await conIndicador(async () => {
     const g = await boot(baseSave([], { nanites: 4321, totalNanitesProduced: 9000 }));
+
+    // **POR QUÉ ESTA COMPROBACIÓN, Y POR QUÉ ESTÁ ANTES DE LA DEL AVISO.**
+    //
+    // Esta prueba fallaba después de B28, y el motivo **no era el aviso**: era que el
+    // `flush()` no tenía nada que escribir. El arranque ya dejó la partida guardada, y
+    // entre el arranque y aquí el jugador no ha hecho nada, así que el documento sería
+    // idéntico byte a byte y la escritura se salta —que es exactamente lo que B28
+    // quiere—. Con la red caída **no hay nada que escribir, así que no hay nada que
+    // falle, y el aviso correctamente no se enciende.** El motor hacía bien y la
+    // comprobación miraba un caso que ya no podía pasar.
+    //
+    // Por eso aquí se afirma **la causa** antes que el síntoma: con la red en su sitio,
+    // un guardado sin cambios no escribe. Y por eso el aviso se prueba **con un cambio
+    // de verdad**: un fallo que no intenta escribir no puede encender nada, y una
+    // comprobación que espera ver el aviso sin cambiar nada estaría probando que el
+    // motor escribe de más.
+    const db: any = (globalThis as any).__MEM_DB__;
+    db.escrituras = 0;
+    await g.flush();
+    await asentar();
+    check('aviso: un guardado sin cambios ni siquiera intenta escribir (o no falla)',
+      db.escrituras === 0,
+      `escrituras=${db.escrituras}`);
+
     (globalThis as any).__MEM_DB__.fallar = true;
+    // **El cambio que hace falta: la partida se mueve.** Es el ingreso pasivo, que sube
+    // el saldo solo, o sea lo mismo que un jugador que está jugando de verdad. Sin esto
+    // el guardado se salta y el aviso no se enciende porque no hay nada que ocultar.
+    g.getState().nanites += 500;
     await g.flush();
     await asentar();
     delete (globalThis as any).__MEM_DB__.fallar;
@@ -345,9 +373,17 @@ async function main() {
     // tabla— y a partir de ahí la fila solo se toca si cambia o si pasan cinco minutos.
     const filasAlArrancar: number = db.filas ?? 0;
 
-    // Seis guardados seguidos sin que cambie nada. La partida se escribe seis veces,
-    // porque una compra no puede esperar; el ranking **ninguna**, porque su fila sería
-    // idéntica byte a byte y Firestore la cobra igual. Antes eran seis y seis.
+    // Seis guardados seguidos **sin que cambie nada**. Y aquí la regla **cambió con
+    // B28**: antes la partida se escribía seis veces porque una compra no puede
+    // esperar, y el ranking ninguna. Ahora **las dos son cero**, y el motivo es que un
+    // guardado que no cambia nada no tiene nada que guardar: el documento quedaría
+    // byte a byte idéntico y Firestore cobra la escritura igual. Con el temporizador de
+    // 30 segundos, una pestaña abierta mirando el almacén una hora son 120 escrituras
+    // de la nada, y la cuota es de 20.000 al día **para el proyecto entero**.
+    //
+    // **Y NO ES "NO GUARDAR NUNCA": es "guardar cuando algo cambia", y eso se afirma
+    // justo debajo.** La compra no puede esperar, y esta prueba no la ha quitado de en
+    // medio: la que viene después dice que un cambio escribe.
     db.escrituras = 0;
     db.filas = 0;
     for (let n = 0; n < 6; n++) {
@@ -356,12 +392,12 @@ async function main() {
     }
 
     check(
-      'cuota: seis guardados escriben la partida seis veces',
-      db.escrituras >= 6 && db.escrituras <= 8,
-      `escrituras=${db.escrituras} de 6 guardados`
+      'cuota: seis guardados SIN CAMBIOS no cuestan ni una escritura',
+      db.escrituras === 0,
+      `escrituras=${db.escrituras} de 6 guardados sin cambios`
     );
     check(
-      'cuota: y el ranking NINGUNA, que era la mitad de las escrituras',
+      'cuota: y el ranking tampoco, que era la mitad de las escrituras',
       db.filas === 0,
       `filas=${db.filas} de 6 guardados`
     );
