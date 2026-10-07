@@ -59,12 +59,13 @@ export const NOTAS: NotaDeParche[] = [
   {
     version: '1.15.1',
     fecha: '7 de octubre de 2026',
-    titulo: 'La forja deja de mentir y el resumen enseña el tier',
+    titulo: 'Una partida que no se puede leer ya no se pierde',
     lineas: [
       'Cuando la forja se cancelaba por algo que no habías puesto, el cartel decia que habias fallado y que los materiales se gastaban igual. No era verdad: no se habia tirado nada y tus materiales seguian ahi.',
       'Ahora esos casos tienen su propio cartel, dicen el motivo y te enseñan que el yunque quedo intacto.',
       'Al abrir las cajas, cada compañero y cada recolector enseña su tier al lado de la rareza. Las estrellas te dicen dónde cayó dentro de su tier; el tier te dice cuál es.',
-      'El contador de ranuras del almacén va en un tamaño más grande: es la única cifra que queda en esa pantalla y decide si cabe algo.'
+      'Si el servidor te devuelve la partida a medias, el juego deja de guardarla en vez de escribir una vacía encima. Tu partida sigue intacta: solo avisa y espera.',
+      'El contador de ranuras del almacén va en un tamaño más grande, y con el signo que separa lo que da el expansor de lo que da el árbol.'
     ]
   },
   {

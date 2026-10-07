@@ -1103,6 +1103,61 @@ feature que falta):**
       `CONSUMABLES`, y `consumableCheck` tiene que afirmar que **los cuatro
       `buffId` nuevos resuelven** (con la invariante "toda carta de expansor
       comprable tiene efecto conocido").
+- [x] **B27 · Una lectura a medias dejaba al jugador sin partida.** Hecho en v1.15.1.
+      **NO HABÍA NADA PERDIDO.** El jugador se encontró con una partida en blanco (140
+      nanitas, Blaser de partida, 0 núcleos) y en la consola de Firestore sus datos
+      estaban **enteros**: 1.687 millones de nanitas, 2012 forjadas, 3984 cajas.
+      Nunca se perdió nada: **el juego no llegó a leerlos.**
+      > "algo reinicio mi cuenta se me reinicio el perfil incluso, le pasa a otro usuarios igual"
+      **LA CONSOLA DIJO TODO:**
+      `FirebaseError: [code=resource-exhausted]: Quota exceeded.` seguido de
+      `Using maximum backoff delay` y de
+      `TypeError: Cannot read properties of undefined (reading 'some') at gameLoop.ts:1534`.
+      **LA CUOTA DE FIRESTORE SE AGOTÓ, LA LECTURA LLEGÓ A MEDIAS, Y UNA LÍNEA DE LA
+      CARGA ASUMÍA QUE EL ALMACÉN VENÍA.** El `TypeError` tumbó la carga entera, el
+      `catch` puso `partidaNoCargada` —que desactiva el guardado, y por eso no se
+      pisó nada— y el jugador se quedó con los defaults de un motor al que nunca le
+      dejaron leer el documento. **Y "le pasa a otros usuarios igual" no era un misterio:
+      era la cuota, que es del proyecto entero.**
+      - **La línea era `(data.warehouse as any[]).some(...)`**, y `data.warehouse`
+        puede no venir. Ahora coacciona, que es R11 ("coacciona al cargar").
+      - **Y EL SEGUNDO ARREGLO, QUE ES EL IMPORTANTE.** Arreglar solo el crash es
+        **peor**: la carga dejaría de reventar, el juego creería que ha cargado bien y
+        **sí guardaría**, escribiendo una partida en blanco encima de la buena. El
+        crash estaba haciendo de red de seguridad sin que nadie lo supiera. Así que
+        ahora una carga a medias **marca `partidaNoCargada` y no guarda**, con un
+        `console.error` que dice qué campos faltaron y por qué se sospecha de la cuota.
+      `cargaIncompletaCheck` (nuevo, 11): la carga no revienta, los cuatro campos que
+      pueden faltar no la tumban, **la carga a medias no deja guardar**, y una partida
+      normal sigue sobreviviendo a la recarga.
+      **LO QUE QUEDA, Y ES LO DE VERDAD:** la causa raíz es **la cuota de Firestore
+      agotada**, y eso no lo arregla este commit. El plan Spark da 50.000 lecturas y
+      20.000 escrituras al día, y el juego **guarda cada 15 s por jugador** más el latido
+      de sesión, la presencia, el ranking y la tarjeta pública. Con pocos usuarios eso
+      ya se lleva el presupuesto. **Sin una subida de plan o sin bajar el ritmo de
+      escritura, esto vuelve**, y esta vez sin la red de seguridad del crash.
+- [ ] **B28 · Bajar el ritmo de escritura, que es lo que agotó la cuota.**
+      **Sale de B27 y es la mitad que de verdad importa**, porque B27 solo quita el
+      síntoma. Hoy el juego escribe en `users/{uid}`:
+      · el guardado, **cada 15 segundos**, y en cada compra, venta, apertura, forja,
+        subida de nivel y pulsación de menú;
+      · el latido de sesión, cada 15 segundos, con su propio plazo de 8 s;
+      · la presencia en el ranking, cada 60 segundos;
+      · el documento del ranking, cada 5 minutos, **y solo si su fila cambió**
+        (eso ya se optimizó, y `guardadoCheck` lo cuenta);
+      · la tarjeta pública, cada 5 minutos, con firma aparte.
+      **LA CUENTA QUE HAY QUE HACER ANTES DE TOCAR NÚMERO.** El plan Spark da 20.000
+      escrituras al día. Con un jugador que juega dos horas: el guardado son 480, el
+      latido 480, la presencia 120 — unas 1.100. **Cinco jugadores activos se lo
+      llevan.** Y el gasto no es del jugador que las pide sino del que reintenta: con
+      la cuota agotada, cada `anotarLatido` que falla **vuelve a intentarlo**, y así es
+      como la avería se convierte en una avalancha.
+      **LO QUE NO SE DEBE HACER, Y POR QUÉ.** Bajar el intervalo del guardado a 60 s
+      sin más **empeora la cosa que el guardado protege**: si compras y recargas al
+      instante, con 60 s pierdes la compra. El commit que serializó los guardados
+      (`queueCheck`) ya probó que aplazar la escritura hace exactamente eso. **La
+      palanca buena es no escribir cuando no hay nada nuevo**, que ya se hace con el
+      ranking y no se hace con la partida.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un

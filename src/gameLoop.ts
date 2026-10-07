@@ -1531,7 +1531,53 @@ function sePuedeGuardar(): boolean {
   // **Y NO SE SUMAN LOS DOS.** Sumar el contador y las pilas sería darle el doble: el
   // almacén es la fuente de verdad siempre que tenga algo, y el contador solo cuando
   // el almacén está vacío.
-  const hayPilasDeCristal = (data.warehouse as any[]).some((w: any) => w.type === 'crystal');
+  // B27 · `?? []` AQUÍ, Y NO POR ESTILO: ESTA LÍNEA TUMBABA PARTIDAS ENTERAS.
+  //
+  // Escribía `(data.warehouse as any[]).some(...)`, o sea que asumía que el almacén
+  // venía. **Con la cuota de Firestore agotada la lectura llega INCOMPLETA**: el
+  // documento existe pero algunos campos no viajan, y `warehouse` era uno de ellos.
+  // Entonces `.some()` sobre `undefined` lanza el `TypeError`, la carga entera cae al
+  // `catch`, y el jugador se encuentra con una partida en blanco **con sus datos
+  // intactos en el servidor** — que es la peor forma de perderla: parece borrada y no
+  // lo está. Lo que se veía en su pantalla no era su partida, era el estado por defecto
+  // de un motor al que nunca le dejaron leer el documento.
+  //
+  // **Y LA COACCIÓN NO ES OPCIONAL AQUÍ, PORQUE EL LADO DE "NO VIENE" ES EL NORMAL.**
+  // R11 dice coaccionar al cargar, y el motivo escrito es "una partida vieja no trae el
+  // campo". Este caso es peor: **un documento actual al que la red le recortó el campo**.
+  // Las dos son la misma línea y el mismo `??`.
+  // B27 · UNA LECTURA INCOMPLETA ES UNA CARGA FALLIDA, Y HAY QUE DEJARLO DICHO.
+  //
+  // Lo de arriba evita el `TypeError`, y con eso la carga deja de reventar. **Pero eso
+  // solo es peor de lo que parece**: si la lectura llega a medias y el juego cree que ha
+  // cargado bien, entonces sí guarda — y **escribe una partida en blanco encima de la
+  // buena, que está intacta en el servidor**. O sea: arreglar el crash sin este aviso
+  // convierte "el jugador ve una pantalla en blanco y su partida sigue a salvo" en "el
+  // jugador ve una pantalla en blanco y su partida desaparece de verdad". El crash
+  // estaba haciendo de red de seguridad sin que nadie lo supiera.
+  //
+  // **CÓMO SE DISTINGUE "NO EXISTE" DE "EXISTE Y NO VIENE TODO".** El documento existe
+  // —por eso estamos en esta rama— y le falta un campo que toda partida guardada tiene.
+  // La lista es deliberadamente corta: solo los campos que **ninguna** partida, por
+  // vieja que sea, puede no traer. `warehouse` está ahí desde el principio del juego y
+  // `nanites` también: sin saldo no hay partida.
+  //
+  // **Y ES LA MISMA BANDERA QUE LA DE LA EXCEPCIÓN, A PROPÓSITO.** `partidaNoCargada`
+  // es la que ya desactiva el guardado cuando la lectura lanza y la que la pantalla de
+  // arranque lee para decir "tu progreso sigue a salvo". Reutilizarla es lo que hace que
+  // el jugador reciba ese aviso en vez de jugar de mentira sobre una partida fantasma.
+  const camposQueSiempreHay = ['warehouse', 'nanites'] as const;
+  if (camposQueSiempreHay.some(c => !(c in data))) {
+    partidaNoCargada = true;
+    console.error(
+      '[carga] El documento existe pero llegó incompleto (cuota de Firestore, probablemente). '
+      + 'No se guarda nada para no pisar la partida que sí está en el servidor. Faltan: '
+      + camposQueSiempreHay.filter(c => !(c in data)).join(', ')
+    );
+  }
+
+  const almacenGuardado = Array.isArray(data.warehouse) ? data.warehouse as any[] : [];
+  const hayPilasDeCristal = almacenGuardado.some((w: any) => w.type === 'crystal');
   state.crystals = typeof data.crystals === 'number'
     ? data.crystals
     : (hayPilasDeCristal ? 0 : (data.crystalTotal ?? data.upgradeCrystals ?? 5));

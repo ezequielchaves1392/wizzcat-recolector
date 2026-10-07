@@ -46,6 +46,7 @@ export default defineConfig({
         lootCheck: resolve(here, 'lootCheck.ts'),
         queueCheck: resolve(here, 'queueCheck.ts'),
         guardadoCheck: resolve(here, 'guardadoCheck.ts'),
+        cargaIncompletaCheck: resolve(here, 'cargaIncompletaCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
         perfilCheck: resolve(here, 'perfilCheck.ts'),

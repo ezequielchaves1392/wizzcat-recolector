@@ -31,6 +31,7 @@ for (const banco of [
   'lootCheck',
   'queueCheck',
   'guardadoCheck',
+  'cargaIncompletaCheck',
   'forjaCheck',
   'sessionCheck',
   'perfilCheck',
