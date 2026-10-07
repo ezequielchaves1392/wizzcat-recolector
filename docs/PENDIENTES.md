@@ -870,12 +870,25 @@ programarlo, para que no viva solo en una conversación.*
       son el mismo 'crate'). Hay que llevar icono+acento **por tier** en
       `CRATE_META` (azul, rojo, violeta...) con el set SVG que ya existe, y un
       banco que ate que los diez se distinguen y que cada icono existe.
-- [ ] **F73 · El tier en las filas del resumen de apertura.** (para después)
+- [x] **F73 · El tier en las filas del resumen de apertura.** Hecho en v1.15.1.
       > "para dsp, que aca aparezca el tier de los compañeros y recolectores"
-      En el cartel de apertura las filas de objeto enseñan nombre, estrellas
-      (F64) y rareza ("Común"), pero no el tier. El premio lo trae (el item de
-      compañero/recolector tiene su `tier`); falta pintarlo en la fila
-      (`crateSummary.ts`, al lado de `estrellasDeFila()`), p. ej. "Común · T1".
+      **La línea de abajo pasa de "Común" a "Común · T1", y solo en las filas que
+      lo tienen.** Las estrellas (F64) dicen *dónde cayó dentro del tier* y el tier
+      dice *cuál es*: son las dos dimensiones del objeto y sin las dos veinte "Dron
+      Centinela" de una caja T1 son veinte filas idénticas, y no hay forma de
+      compararlas sin abrir el almacén, que es justo lo que el resumen viene a
+      evitar.
+      **LO QUE NO LLEVA TIER Y POR QUÉ.** Las nanitas y los cristales no son
+      objetos de un tier, y las cajas ya lo dicen en su nombre ("Caja T2"): ponerle
+      un T a una moneda sería inventar el dato, que es lo que este resumen no hace
+      nunca. **Y EL SALTO SÍ LO LLEVA, y por eso tiene su propio `if`:** es el
+      premio de la caja, y sin esto sería la única fila sin nivel — la que más
+      importa y la única que se quedaría a medias.
+      El orden es el de las preguntas del jugador: qué es (nombre) → de qué calidad
+      (rareza y tier) → de qué clase de premio es (la unidad). `tierDeFila()` está
+      exportada para el banco por el mismo motivo que `estrellasDeFila()`: la regla
+      es qué fila lleva tier, y una prueba que la escribiera a mano sería su segunda
+      copia. `loteCheck` (+8), incluido el tier corrupto que cae a nada y no a "T0".
 
 ### Lote G · ENCARGO DEL 7 DE OCTUBRE (quinta parte)
 
@@ -1103,6 +1116,67 @@ feature que falta):**
 
 **Features:**
 
+- [ ] **F78 · Los checks de consumibles van DENTRO del modal del forja múltiple.**
+      > "para despues : esos checks deben estar dentro del modal que abre cuando todo el forjar multiple"
+      **Lo que hay hoy:** los checks (piedras / nanopartícula) están en la **página**,
+      y el modal solo **lee** el estado y lo enseña como filas de texto. O sea que
+      para ver qué va a gastar hay que decidir en un sitio y confirmar en otro, y el
+      modal se abre después de que ya no se puede cambiar nada.
+      **Y POR QUÉ EL MODAL ES EL SITIO BUENO, Y NO UNA COSA DE ORDEN.** El modal es
+      el último momento en el que el jugador todavía puede **cancelar sin gastar**, y
+      es donde ya se ha escrito el "Forjar 7 · 3 tiradas". Meter el check ahí es
+      cambiar un dato de una fila que ya se pintó por un control que la cambia, y es
+      **la misma decisión con su coste al lado**.
+      **Lo que hay que tener cuidado, y es la razón de que esto sea una feature y no
+      un arrastre:** `confirmAutoForge()` calcula el plan con
+      `autoForgePreview(...)` **antes** de abrir el modal, así que cambiar un check
+      dentro **obliga a recalcular el plan y a reescribir el botón de confirmar**.
+      Si el texto del botón dice "Forjar 7 · 3 tiradas" y el check lo cambia a 2, ese
+      número es una promesa y tiene que moverse con él (R3). El resumen del modal
+      (`autoForgePreview`) es la única fuente, y el plan se vuelve a pedir al motor
+      en cada cambio: **nada de recalcular la probabilidad en la vista.**
+      Los checks se quedan en la página además: quien ya sabe lo que va a gastar no
+      debería tener que abrir nada.
+- [ ] **F79 · El modal de la forja simple se parece al de la serie.**
+      > "emprolijemos este texto demosle , el segundo me gusta como esta formateado hagamos algo asi"
+      **El de la serie ya está como se pide (F63) y el simple no.** Los dos son
+      `showConfirmModal` y los dos salen del mismo `case 'forge'` / `case
+      'auto-forge'`, así que **la diferencia de formato es una decisión de la página**,
+      no una limitación del diálogo: `showConfirmModal` ya acepta un nodo en vez de
+      una cadena (`htmlToNode`), y la serie lo usa.
+      **EL POR QUÉ ES DE LECTURA, NO DE ESTILO.** El simple tiene **un párrafo de
+      tres frases con números dentro**: "Dos recolectores de tier 1 se funden en uno
+      de tier 2. El potencial del nuevo es la media de los dos, y los dos se
+      consumen." Son cuatro datos (tier de entrada, tier de salida, la regla del
+      potencial, y que se gastan) embaldosados en una frase que se lee entera antes
+      de entender nada. **La serie lo hace al revés: una fila por dato, con la
+      etiqueta a la izquierda y el número a la derecha**, y se lee de un vistazo.
+      **Ojo con el orden de las etiquetas de la serie**: "Entran / Tiradas /
+      Sobran / Piedras" es el orden de las *preguntas del jugador* —qué pongo, cuántas
+      veces, qué me queda, qué me cuesta—, y ese es el criterio que hay que copiar al
+      simple. **NO es "mismo número de filas": es el mismo criterio para escolher las
+      filas.**
+      **Las filas del simple serían cuatro, por el mismo orden:**
+      Entran (los dos y su tier) · Sale (el tier nuevo) · Sale el potencial
+      (la media, y **con la consecuencia**: promediar nunca sube) · Coste (las
+      piedras y la nano que van, o que no van y por qué).
+      **Y HAY TRES COSAS QUE EL SIMPLE NO DICE Y QUE LA SERIE SÍ, Y QUE NO SON
+      COSMÉTICAS:**
+      - **Qué pasa si sale bien y qué pasa si sale mal.** El simple promete una
+        fusión y no dice que un fallo **gasta los dos materiales igual**. Es la
+        duda más cara de la pantalla y está en un sitio donde nadie la mira.
+      - **Qué pasa con las piedras.** La serie tiene su fila "Piedras: no gastas: no
+        tienes o no hacen falta"; el simple no dice nada y deja que el jugador
+        descubra en el cartel de resultado —que hasta B22 era un "fallo" ambiguo—
+        que se le cobran igual.
+      - **El nombre del autor.** La serie es "Por ti" porque no hay autor; el simple
+        sí lo pone en la card de resultado, y en el momento de decidir no.
+      **Sin banco, y hay que decirlo:** es estructura de diálogo sobre números que ya
+      están comprobados. Lo que sí se mide a mano es el ancho: cuatro filas con
+      etiquetas largas **en el hueco de un `max-w-sm`**, que es el que usa
+      `showConfirmModal`. A 390 px, "Entran / 7 recolectores del tier 1, de dos en dos
+      y por potencial" no cabe en una línea y **un modal que se parte en tres es peor
+      que el párrafo**.
 - [ ] **F75 · Los expansores viejos se convierten en Inicial.**
       > "Converti las antiguas t1 , t2 , t3 y t4 que posean los usuarios a iniciales."
       **Cuidado, que "convertir" tiene dos lecturas y la mala rompe partidas:**

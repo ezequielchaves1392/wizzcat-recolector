@@ -401,8 +401,15 @@ function draw(
               siete pantallas y el único que se refresca en cada tick. Aquí queda lo que
               no es un saldo: cuántas ranuras quedan, que no está en ningún otro sitio y
               es lo que decide si un item se puede meter.
+
+              EL TAMAÑO ES DE 12 Y NO DE 10 A PROPOSITO, y es el tamaño de la cifra que
+              el jugador usa para decidir, no el de una etiqueta. A 10 px el "26/63
+              ranuras" se leía como un texto de pie de foto al lado del buscador: es la
+              única cifra que queda en la cabecera de esta pantalla y es la que dice si
+              cabe algo. Lo que cambia de color cuando el almacén se llena es la misma
+              cifra, así que tiene que poder leerse de un vistazo a 390 px.
             -->
-            <span class="text-[10px] font-mono tabular ${occupied >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
+            <span class="text-[12px] font-mono tabular ${occupied >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
               ${occupied}/${capacity} ranuras
             </span>
           </div>

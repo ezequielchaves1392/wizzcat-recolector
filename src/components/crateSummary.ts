@@ -146,6 +146,42 @@ export function estrellasDeFila(reward: CrateReward): string {
 }
 
 /**
+ * EL TIER DE UNA FILA, Y SOLO EN LAS QUE LO TIENEN.
+ *
+ * **POR QUÉ NO VA EN EL NOMBRE Y VA EN LA LÍNEA DE ABAJO.** El nombre es el
+ * nombre del objeto —"Dron Centinela"—, y el tier es una de las tres cosas que
+ * definen cuál de dos drones iguales te tocó: el **tier** dice cuánto vale, las
+ * **estrellas** dicen dónde cayó dentro del tier. Con las dos a la vista, dos
+ * "Dron Centinela" de la caja T1 se distinguen por su T1 y por sus estrellas, y
+ * el jugador no tiene que abrir el almacén a comprobarlo.
+ *
+ * **Y POR QUÉ SOLO CUANDO EL PREMIO LO TRAE.** Las nanitas y los cristales no
+ * tienen tier de objeto: el cristal de una caja es "de la caja", y las cajas ya
+ * lo dicen en el nombre ("Caja T2"). Ponerle un T a una moneda sería inventar un
+ * dato, y una fila que dice "Común · T1" sobre algo que no tiene tiers es
+ * exactamente el tipo de mentira que este resumen no lleva.
+ *
+ * **Va detrás de la rareza y antes de la unidad** porque ese es el orden en el
+ * que el jugador lee la fila: **qué es** → **de qué calidad** → **de qué nivel**.
+ * La rareza y el tier son las dos dimensiones del objeto; la unidad ("Nanitas",
+ * "Cajas") es de qué tipo de premio es, y esa ya va detrás del nombre.
+ *
+ * Exportada por el mismo motivo que `estrellasDeFila()`: la regla es qué fila
+ * lleva tier, y una prueba que la escribiera a mano sería su segunda copia.
+ */
+export function tierDeFila(reward: CrateReward): string {
+  const esObjeto = reward.kind === 'collector' || reward.kind === 'companion';
+  if (!esObjeto) return '';
+  // El salto (`up`) trae un tier por encima del de su caja, y también lo trae:
+  // es justo el premio del que más importa saber el nivel, porque no es el que
+  // esperabas. Sin este `if`, el salto —el mejor premio de la caja— sería la
+  // única fila sin nivel.
+  const t = reward.tier;
+  if (typeof t !== 'number' || !Number.isFinite(t) || t < 1) return '';
+  return `T${Math.floor(t)}`;
+}
+
+/**
  * La clave con la que dos premios se suman.
  *
  * **LO QUE SE SUMA Y LO QUE NO, Y POR QUÉ.** Se suman las monedas y los
@@ -252,12 +288,19 @@ export function showCrateSummary(
     // asterisco sería ruido en todas las filas.
     const veces = f.veces > 1 ? `<span class="text-[9px] font-mono opacity-70 ml-1">×${f.veces}</span>` : '';
     const estrellas = estrellasDeFila(r);
+    // **RARIDAD · TIER · UNIDAD, Y EL ORDEN ES EL DE LAS PREGUNTAS DEL JUGADOR:**
+    // qué es (el nombre) → de qué calidad (rareza y tier, las dos dimensiones del
+    // objeto) → de qué clase de premio es (la unidad). El tier va entre la rareza y
+    // la unidad porque `tierDeFila()` ya devuelve cadena vacía en lo que no lo
+    // tiene, así que el separador no aparece nunca suelto.
+    const tier = tierDeFila(r);
+    const pie = [r.rarity, tier, unit].filter(Boolean).join(' · ');
     return `
       <div class="flex items-center gap-3 rounded-xl border ${rarityColor} px-3 ${esNanitas ? 'py-3' : 'py-2'} ${glow}" style="background: color-mix(in srgb, var(--accent) ${esNanitas ? 14 : 6}%, transparent)">
         <span class="flex-shrink-0 ${RARITY_TEXT[r.rarity] || ''} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(r.icon as IconName)}</span>
         <span class="min-w-0 flex-1">
           <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${r.name}${veces}${estrellas ? ` <span class="text-amber-300">${estrellas}</span>` : ''}</span>
-          <span class="block text-[9px] font-mono text-[var(--text-muted)] truncate">${r.rarity}${unit ? ` · ${unit}` : ''}</span>
+          <span class="block text-[9px] font-mono text-[var(--text-muted)] truncate">${pie}</span>
         </span>
         <span class="text-right flex-shrink-0">
           ${counted ? `<span class="block ${esNanitas ? 'text-[17px]' : 'text-[13px]'} font-mono font-bold accent-text tabular">+${formatNumber(f.total)}</span>` : ''}

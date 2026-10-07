@@ -59,11 +59,12 @@ export const NOTAS: NotaDeParche[] = [
   {
     version: '1.15.1',
     fecha: '7 de octubre de 2026',
-    titulo: 'La forja ya no confunde un fallo con un rechazo',
+    titulo: 'La forja deja de mentir y el resumen enseña el tier',
     lineas: [
       'Cuando la forja se cancelaba por algo que no habías puesto, el cartel decia que habias fallado y que los materiales se gastaban igual. No era verdad: no se habia tirado nada y tus materiales seguian ahi.',
       'Ahora esos casos tienen su propio cartel, dicen el motivo y te enseñan que el yunque quedo intacto.',
-      'El aviso que se queda al cerrar tambien cambia, para que no vuelvas a leer un fallo donde no lo hubo.'
+      'Al abrir las cajas, cada compañero y cada recolector enseña su tier al lado de la rareza. Las estrellas te dicen dónde cayó dentro de su tier; el tier te dice cuál es.',
+      'El contador de ranuras del almacén va en un tamaño más grande: es la única cifra que queda en esa pantalla y decide si cabe algo.'
     ]
   },
   {

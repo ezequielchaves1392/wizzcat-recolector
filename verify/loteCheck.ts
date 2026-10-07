@@ -23,7 +23,7 @@ import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, dis
 import { STORE_ITEMS, costeDeCaja, CRATE_TYPES, type CrateType } from '../src/data/store';
 import { CRISTAL_NOMBRE } from '../src/data/items';
 import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
-import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura, estrellasDeFila } from '../src/components/crateSummary';
+import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura, estrellasDeFila, tierDeFila } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
 
 async function main() {
@@ -430,6 +430,35 @@ async function main() {
       estrellasDeFila(moneda) === '', 'llevan');
     check('resumen: y sin el campo no se inventa ninguna',
       estrellasDeFila(sinCampo) === '', 'inventa');
+
+    // **EL TIER EN LA MISMA FILA (F73).** Las estrellas dicen *dónde cayó dentro
+    // del tier* y el tier dice *cuál es*: son las dos dimensiones del objeto y
+    // hace falta las dos. Sin el tier, veinte "Dron Centinela" de la caja T1
+    // son veinte filas idénticas y no hay forma de compararlas sin abrir el
+    // almacén, que es justo lo que el resumen viene a evitar.
+    check('resumen: el recolector enseña su tier',
+      tierDeFila(arma3) === 'T1', tierDeFila(arma3));
+    check('resumen: y el compañero el suyo',
+      tierDeFila(dron5) === 'T1', tierDeFila(dron5));
+    check('resumen: el salto enseña el tier de ARRIBA, que es lo que lo hace premio',
+      tierDeFila({ ...arma3, tier: 2 }) === 'T2', tierDeFila({ ...arma3, tier: 2 }));
+    // **LO QUE NO TIENE TIER NO LO LLEVA.** Las monedas y los materiales no son
+    // objetos de un tier, y las cajas ya lo dicen en su nombre. Ponerle un T a una
+    // moneda sería inventar el dato, que es lo que el resumen no hace nunca.
+    check('resumen: las nanitas no llevan tier',
+      tierDeFila(moneda) === '', 'llevan');
+    check('resumen: y los cristales tampoco',
+      tierDeFila({ ...moneda, kind: 'crystals', name: 'Cristal de Mejora' }) === '',
+      'llevan');
+    check('resumen: un objeto sin tier no inventa uno',
+      tierDeFila({ ...sinCampo, tier: undefined }) === '', 'inventa');
+    check('resumen: y un tier corrupto cae a nada, no a "T0"',
+      tierDeFila({ ...arma3, tier: 0 }) === '' && tierDeFila({ ...arma3, tier: NaN }) === '',
+      'T0 o NaN');
+    // Y las dos mitetas juntas, que es como se leen en la fila.
+    check('resumen: rareza y tier conviven en la misma línea sin pisarse',
+      [arma3.rarity, tierDeFila(arma3)].join(' · ') === 'Común · T1',
+      [arma3.rarity, tierDeFila(arma3)].join(' · '));
   }
 
   // -------------------------------------------------------------------------
