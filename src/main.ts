@@ -989,7 +989,7 @@ function renderBase(onNavigate: (r: Route) => void) {
     // ningún sitio: si entre las dos entraba un cobro del pasivo, el "+N"
     // incluía dinero de otro origen. El motor ya sabe cuánto cobró y lo
     // devuelve, así que aquí no hay nada que recalcular (R1, R3).
-    const collected = game.click();
+    const golpe = game.click();
 
     // El rótulo de debajo NO se toca aquí. `game.click()` ya dispara `onUpdate`,
     // que termina en `updateUI`, y ese es el sitio que escribe
@@ -997,8 +997,17 @@ function renderBase(onNavigate: (r: Route) => void) {
     // "+X por click", con otro formato: como llegaba después, el texto
     // alternaba entre las dos frases en cada click y el tick siguiente lo
     // devolvía, y de ahí el "+X por click" que parpadeaba. Un solo escritor.
-    playHitEffect(1);
-    showFloatingText(mouseEvent.clientX, mouseEvent.clientY, `+${formatNumber(collected)}`);
+    playHitEffect(golpe.critico ? 1.4 : 1);
+    // **EL CRÍTICO SE VE DISTINTO, Y TIENE QUE SER OTRA COSA QUE UN NÚMERO
+    // MAYOR.** Un "+200" al lado de un "+100" se lee como un click mejor, no
+    // como un evento: el jugador no sabe que el afijo ha hecho nada. Con el
+    // "¡CRÍT!" delante y el dorado de la forja, el crítico se reconoce sin leer
+    // la cifra.
+    if (golpe.critico) {
+      showFloatingText(mouseEvent.clientX, mouseEvent.clientY, `¡CRÍT! +${formatNumber(golpe.cantidad)}`, '#fde047');
+    } else {
+      showFloatingText(mouseEvent.clientX, mouseEvent.clientY, `+${formatNumber(golpe.cantidad)}`);
+    }
   });
 
   // ---- Cancelación de buffs (delegación: las tarjetas se parchean cada tick) ----

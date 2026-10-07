@@ -48,7 +48,8 @@
 //  el juego cambia el ritmo, esto falla en vez de seguir pasando por debajo.
 // ==========================================================================
 
-import { check, resumen, boot, nanites, baseSave, collector, ficha } from './kit';
+import { check, resumen, boot, nanites, baseSave, collector, ficha, conRoll } from './kit';
+import { MULTIPLICADOR_CRITICO } from '../src/data/crafting';
 
 type Intervalo = { fn: () => void; ms: number };
 
@@ -266,22 +267,80 @@ async function main() {
     g.equipCollector('r1');
 
     const antes = nanites(g);
-    const devuelto = g.click();
+    const golpe = g.click();
     const entrado = nanites(g) - antes;
 
-    check('click() devuelve un número', typeof devuelto === 'number', 'devuelto=' + devuelto);
-    check('y es exactamente lo que entró en la cuenta',
-      devuelto === entrado,
-      `devuelto=${devuelto} entrado=${entrado}`);
+    // **EL CLICK DEVUELVE CUÁNTO Y SI FUE CRÍTICO, Y NO UN NÚMERO SUELTO.** Antes
+    // devolvía el número y la vista no tenía forma de saber si el afijo había
+    // hecho nada: el crítico entraba en la cuenta sin señal. Ahora viajan las dos
+    // cosas del mismo click, como `rolled` en la sintonización.
+    check('click() dice cuánto entró y si fue crítico',
+      typeof golpe.cantidad === 'number' && typeof golpe.critico === 'boolean',
+      JSON.stringify(golpe));
+    check('y la cantidad es exactamente lo que entró en la cuenta',
+      golpe.cantidad === entrado,
+      `cantidad=${golpe.cantidad} entrado=${entrado}`);
     // Y que la cifra no dependa de una SEGUNDA llamada al motor. `click()`
     // calcula el daño con el estado de este instante; si entre el click y la
     // lectura cambiara un buff, los dos números dejarían de coincidir sin que
     // hubiera pasado nada raro. La relación que importa es con lo que entró, que
     // es la de arriba; esta solo avisa de que el daño es estable dentro del mismo
     // estado, así que se admite el redondeo a entero de cada lado.
+    //
+    // **Y SIN AFIJO DE CRÍTICO NO HAY CRÍTICO QUE ROMPA ESTA COMPARACIÓN.** El
+    // item de esta prueba no lleva afijos, así que su probabilidad es cero y el
+    // dado no puede salir: la cifra tiene que ser la del daño normal.
     check('el daño no cambia entre el click y la lectura',
-      Math.abs(devuelto - g.getClickDamage()) <= 1,
-      `devuelto=${devuelto} getClickDamage=${g.getClickDamage()}`);
+      Math.abs(golpe.cantidad - g.getClickDamage()) <= 1 && golpe.critico === false,
+      `cantidad=${golpe.cantidad} getClickDamage=${g.getClickDamage()} critico=${golpe.critico}`);
+  }
+
+  // -----------------------------------------------------------------------
+  //  4b. EL CRÍTICO: EL AFIJO QUE NO HACÍA NADA (B16).
+  //
+  //  `aff_crit` se enseñaba en la ficha y se cobraba en la valoración, pero
+  //  ningún cálculo tiraba su dado: un jugador con +8% de crítico no veía un
+  //  crítico nunca. Estas pruebas atan la probabilidad del afijo al dado del
+  //  click, con el dado clavado (`conRoll`): sin clavar, una prueba de
+  //  probabilidad es una prueba de suerte.
+  //
+  //  **Y EL CRÍTICO ES DEL CLICK DEL JUGADOR.** Los automáticos del árbol no
+  //  critican: el crítico es un evento que se ve y los automáticos entran en
+  //  silencio por su propia cola. Cambiar eso es economía, no este bug.
+  // -----------------------------------------------------------------------
+  {
+    // Sin afijo de crítico, doscientos clicks y ni un crítico: la probabilidad
+    // es cero y el dado no existe. Es determinista sin clavar nada.
+    const g = await boot(baseSave([collector('r1', 3, { damage: 60 })], { nanites: 1000 }));
+    g.equipCollector('r1');
+    let criticos = 0;
+    for (let i = 0; i < 200; i++) {
+      if ((g.click() as any).critico) criticos++;
+    }
+    check('crítico: sin afijo no hay crítico nunca',
+      criticos === 0, `criticos=${criticos}/200`);
+  }
+  {
+    // Con el afijo y el dado clavado a cero, todos critican: el dado sale
+    // siempre por debajo de cualquier probabilidad no nula.
+    //
+    // **Y CON `first_click` YA DESBLOQUEADO.** Ese logro da +2% y salta en el
+    // primer click: sin pre-desbloquearlo, `base` y `crit` se medirían con bonus
+    // distintos y el ×2 no cuadraría por un 2% que no es del crítico.
+    const g = await boot(baseSave(
+      [collector('r1', 3, { damage: 60, affixes: ['aff_crit'] })],
+      { nanites: 1000, unlockedAchievements: ['first_click'] }));
+    g.equipCollector('r1');
+    const base = conRoll(0.99999, () => (g.click() as any).cantidad);
+    const crit = conRoll(0, () => g.click() as any);
+    check('crítico: con el dado a favor, el click critica',
+      crit.critico === true, JSON.stringify(crit));
+    check('crítico: y el crítico paga exactamente el doble',
+      crit.cantidad === base * MULTIPLICADOR_CRITICO,
+      `crit=${crit.cantidad} base=${base} x${MULTIPLICADOR_CRITICO}`);
+    check('crítico: y con el dado en contra, no critica',
+      conRoll(0.99999, () => (g.click() as any).critico) === false,
+      'criticó con 0.99999 y 8%');
   }
 
   // -----------------------------------------------------------------------

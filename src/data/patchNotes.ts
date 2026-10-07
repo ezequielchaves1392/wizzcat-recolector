@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.7.3',
+    fecha: '7 de octubre de 2026',
+    titulo: 'El crítico ya pega',
+    lineas: [
+      'Los afijos de crítico ahora hacen lo que dicen: cada click puede salir crítico y pegar el doble.',
+      'El crítico se ve distinto en la pantalla: sale marcado en dorado para reconocerlo sin leer la cifra.',
+      'Vale para los clicks que pulsas tú sobre el recolector.'
+    ]
+  },
+  {
     version: '1.7.2',
     fecha: '7 de octubre de 2026',
     titulo: 'Buscador que no pierde el foco',

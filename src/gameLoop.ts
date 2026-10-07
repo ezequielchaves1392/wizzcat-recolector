@@ -58,7 +58,7 @@ import {
   type ConfigAutoVenta, type TipoDeVentaAuto
 } from './data/autoventa';
 import { generateCompanionByTier, generateCollectorByTier } from './data/generators';
-import { costeDeNivel, valorDeUnCristal } from './data/crafting';
+import { costeDeNivel, valorDeUnCristal, MULTIPLICADOR_CRITICO } from './data/crafting';
 
 // Se re-exportan las que el resto del juego ya importaba de aquí, con el mismo
 // motivo que `TIER_SYSTEM` unas líneas más arriba: romper diez imports de golpe
@@ -2812,9 +2812,15 @@ function sePuedeGuardar(): boolean {
    * Bonificaciones de los afijos del recolector equipado. Se suman al daño aquí y no
    * se hornean en `item.damage`: si se guardaran, vender y volver a comprar el
    * mismo objeto cambiaría su estadística.
+   *
+   * **TAMBIÉN SALE EL CRÍTICO, Y ANTES NO SALÍA NADA.** Los afijos `aff_crit`,
+   * `aff_focus` y `aff_void` traen `critChance` y la ficha los enseña, pero esta
+   * función no los leía y ningún cálculo tiraba el dado: el afijo se cobraba en la
+   * valoración y no hacía nada en la partida (B16). Ahora la probabilidad viaja
+   * aquí y el que tira el dado es `click()`.
    */
-  function equippedAffixEffect(): { clickMult: number; passiveMult: number } {
-    const out = { clickMult: 0, passiveMult: 0 };
+  function equippedAffixEffect(): { clickMult: number; passiveMult: number; critChance: number } {
+    const out = { clickMult: 0, passiveMult: 0, critChance: 0 };
     if (!state.equippedCollectorId) return out;
     const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
     if (!item?.affixes?.length) return out;
@@ -2824,6 +2830,7 @@ function sePuedeGuardar(): boolean {
       if (!affix) continue;
       out.clickMult += affix.effect.clickMult || 0;
       out.passiveMult += affix.effect.passiveMult || 0;
+      out.critChance += affix.effect.critChance || 0;
       // Los que dependen del nivel suman un PORCENTAJE por nivel, no un número
       // plano: es lo que hace que subir de nivel siga valiendo sin que un
       // "+8 por nivel" turned un T1 en un T10. Ver el comentario de AFFIXES.
@@ -4799,7 +4806,19 @@ const RITMO_GUARDADO_MS = 30_000;
       }
       const collectorDamage = calculateClickDamage();
       const multiplier = calculateMultiplier();
-      const totalGain = Math.floor(collectorDamage * multiplier);
+      // **EL CRÍTICO ES DEL CLICK DEL JUGADOR, Y EL DADO SE TIRA AQUÍ.**
+      //
+      // La probabilidad sale de los afijos del recolector equipado
+      // (`equippedAffixEffect().critChance`) y el premio es `MULTIPLICADOR_CRITICO`.
+      // Se tira con `Math.random` para que los bancos lo claven con `conRoll`.
+      //
+      // Y solo aquí, no en `calculateClickDamage`: esa función es pura y la leen el
+      // panel, el desglose y los clics automáticos del árbol. Un dado dentro haría
+      // que el número enseñado cambiara en cada lectura. Los automáticos del árbol
+      // no critican: el crítico es un evento que se VE (el flotante), y los
+      // automáticos entran en silencio por su propia cola.
+      const critico = Math.random() < equippedAffixEffect().critChance;
+      const totalGain = Math.floor(collectorDamage * multiplier * (critico ? MULTIPLICADOR_CRITICO : 1));
       state.nanites += totalGain;
       state.totalNanitesProduced += totalGain;
       state.totalClicks += 1;
@@ -4814,7 +4833,13 @@ const RITMO_GUARDADO_MS = 30_000;
       //
       // El motor es el único que sabe cuánto entró, así que el motor lo dice
       // (R1, R3). Lo que se paint es lo que se cobró, no una resta.
-      return totalGain;
+      //
+      // **Y AHORA DICE TAMBIÉN SI FUE CRÍTICO.** La vista necesita las dos cosas
+      // del mismo click —cuánto entró y si critica— y leer la segunda en otro
+      // sitio sería deducir en la vista una regla del motor. Es el mismo patrón
+      // que `rolled` en la sintonización: el estado explícito viaja en el
+      // resultado, no en un canal aparte.
+      return { cantidad: totalGain, critico };
     },
     /**
      * Sintoniza el recolector equipado con un cristal del nivel pedido.

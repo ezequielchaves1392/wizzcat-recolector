@@ -106,6 +106,16 @@ export const AFFIXES: Affix[] = [
 
 export const AFFIX_BY_ID: Record<string, Affix> = Object.fromEntries(AFFIXES.map(a => [a.id, a]));
 
+/**
+ * EL MULTIPLICADOR DE CRÍTICO, Y POR QUÉ ES UN NÚMERO Y NO PARTE DE CADA AFIJO.
+ *
+ * Las tres descripciones que lo prometen dicen "×2 daño". Si el ×2 viviera dentro de
+ * cada `effect`, un futuro afijo con ×3 cumpliría su texto y rompería la promesa de
+ * los otros dos sin que nadie lo viera: tres números iguales en tres sitios son tres
+ * ocasiones de que uno deje de serlo. Aquí hay uno solo, y el motor lo multiplica.
+ */
+export const MULTIPLICADOR_CRITICO = 2;
+
 /** Techo de nivel de un recolector que no lo trae: los de la tienda. */
 export const BASE_COLLECTOR_MAX_LEVEL = 20;
 

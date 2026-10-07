@@ -687,8 +687,14 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > `BODY` tras la primera letra, ahora foco en `wh-buscar` con "a" y "ak".
       > Sin banco: es DOM real y en el stub pasaría en verde sin comprobar nada
       > (precedente A5).
-- [ ] **B16 · El daño crítico no funciona.**
+- [x] **B16 · El daño crítico no funciona.** Hecho en v1.7.3.
       > "Ver el daño critico, no esta funcionando"
+      > **Causa raíz: el dado no existía.** `equippedAffixEffect()` no leía
+      > `critChance` y ningún cálculo lo tiraba: el afijo se enseñaba y se
+      > valoraba pero nunca disparaba. Ahora `click()` tira con la probabilidad
+      > del equipado y paga ×2, y devuelve `{ cantidad, critico }` para que la
+      > vista lo pinte distinto ("¡CRÍT!" dorado). El crítico es del click del
+      > jugador: los automáticos del árbol no critican.
 - [ ] **B17 · Los ajustes de ruleta y notas se resetean solos.**
       > "Al deshabilitar los settings de ruleta y notas, se vuelven por default al hacer un tiro de ruleta."
       > **Decisión tuya (7 de octubre de 2026): FUERA LA RULETA ENTERA.** Se elimina
