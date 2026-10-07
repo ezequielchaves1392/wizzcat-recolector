@@ -206,13 +206,14 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'vault_115',
     title: 'Almacén Definitivo',
-    description: 'Amplía el almacén a 115 ranuras',
+    description: 'Amplía el almacén a 240 ranuras',
     icon: 'warehouse',
     rewardText: 'Marco "Ónix"',
     reward: { clickBonus: 0, passiveBonus: 0 },
-    // **115 ES LA CIMA DE LA ESCALERA**, `techoDeExpansor(10)`, y sale de ahí en vez de
+    // **240 ES LA CIMA DE LA ESCALERA**, `techoDeExpansor(4)`, y sale de ahí en vez de
     // estar escrito a mano: si la escalera sube, el logro sube con ella y no se queda
-    // pidiendo algo que ya no existe.
+    // pidiendo algo que ya no existe. El `id` conserva el 115 para no mover los
+    // guardados que ya lo tienen: lo que se enseña es la descripción, no la clave.
     progress: (s) => ({
       current: Math.min(
         (s.warehouseCapacity ?? 0) + (s.bonus?.storageSlots ?? 0),

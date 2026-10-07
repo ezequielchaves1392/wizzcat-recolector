@@ -460,8 +460,8 @@ async function main() {
     // Lo que se compra dos veces es el expansor, que es el producto que se
     // apila sin tope: el papel que tenía la carta de llave.
     const g = await boot(baseSave([collector('r1')], { nanites: 10_000_000 }));
-    g.buyStoreItem('expansorT1');
-    g.buyStoreItem('expansorT1');
+    g.buyStoreItem('expansorInicial');
+    g.buyStoreItem('expansorInicial');
     g.buyStoreItem('upgradeCrystal');
     g.buyStoreItem('crateT1');
     g.buyStoreItem('crateT1');
@@ -513,7 +513,7 @@ async function main() {
     const g2 = await boot(baseSave([...lleno, crate('c1', 1, 1), consumable('u1', 'afk', 1)],
       { warehouseCapacity: 6, nanites: 10_000_000 }));
     const antes = nanites(g2);
-    const r2 = g2.buyStoreItem('expansorT1');
+    const r2 = g2.buyStoreItem('expansorInicial');
     check('lleno: y un item que si ocupa ranura se rechaza', r2 === false, String(r2));
     check('lleno: sin cobrar por encima', nanites(g2) === antes, `${antes} -> ${nanites(g2)}`);
 
@@ -552,9 +552,9 @@ async function main() {
     check('tienda: y comprar una caja funciona de verdad',
       g.buyStoreItem('crateT1') !== false, 'rechazada');
     check('tienda: con el almacen lleno, una carta que necesita ranura propia NO cabe',
-      g.canBuyStoreItem('expansorT1') === false, String(g.canBuyStoreItem('expansorT1')));
+      g.canBuyStoreItem('expansorInicial') === false, String(g.canBuyStoreItem('expansorInicial')));
     check('tienda: y comprarla falla de verdad',
-      g.buyStoreItem('expansorT1') === false, 'aceptada');
+      g.buyStoreItem('expansorInicial') === false, 'aceptada');
     // Y el botón del cristal dice que SÍ con el almacén lleno, porque la pregunta
     // de espacio no le aplica. Botón apagado para algo que sí se puede comprar es
     // un jugador que cree que no le llega la nanita cuando sí le llega.
@@ -565,7 +565,7 @@ async function main() {
     // Y con hueco de sobra, nada se rechaza: un boton apagado sin motivo es un
     // jugador que cree que no le llega la nanita cuando si le llega.
     const g = await boot(baseSave([collector('r1')], { warehouseCapacity: 30, nanites: 10_000_000 }));
-    for (const k of ['expansorT1', 'upgradeCrystal', 'crateT1', 'afkCard']) {
+    for (const k of ['expansorInicial', 'upgradeCrystal', 'crateT1', 'afkCard']) {
       if (g.canBuyStoreItem(k) === false) {
         check(`tienda: ${k} se puede comprar con el almacen vacio`, false, 'dice que no cabe');
       }
@@ -581,7 +581,7 @@ async function main() {
     const g = await boot(baseSave([...lleno, crate('c1', 1, 1), consumable('u1', 'afk', 1)],
       { warehouseCapacity: 6, maxCompanionSlots: 1, nanites: 10_000_000 }));
     check('tienda: ampliar el almacen con el almacen lleno se rechaza sin pila',
-      g.canBuyStoreItem('expansorT1') === false && g.buyStoreItem('expansorT1') === false);
+      g.canBuyStoreItem('expansorInicial') === false && g.buyStoreItem('expansorInicial') === false);
     check('tienda: y añadir un hueco de companero sigue entrando',
       g.canBuyStoreItem('companionSlot1') === true && g.buyStoreItem('companionSlot1') !== false);
   }
@@ -610,7 +610,7 @@ async function main() {
     // la prueba.
     const cartas: [string, string][] = [
       ['crateT1', 'crate'],
-      ['afkCard', 'consumable'], ['expansorT1', 'consumable']
+      ['afkCard', 'consumable'], ['expansorInicial', 'consumable']
     ];
     for (const [k, tipo] of cartas) {
       const gk = await boot(baseSave([collector('r1')], { nanites: 10_000_000 }));
@@ -712,6 +712,43 @@ async function main() {
     check('gastar: y la pila queda en 2',
       wh(g).find((w: any) => w.id === pila.id)?.stackCount === 2,
       String(wh(g).find((w: any) => w.id === pila.id)?.stackCount));
+  }
+
+  // =========================================================================
+  //  7. Apilar funde también las cajas
+  // =========================================================================
+  // B20 · Las pilas se funden solas al cargar y al añadir, así que para que
+  // haya algo que apilar hay que meter las pilas sueltas por la puerta de
+  // atrás (`updateState`, que asigna sin fundir). Lo que se comprueba es que
+  // `apilar()` las trata igual que a los consumibles: las funde, respeta el
+  // tope de 99 por pila y no mezcla tiers.
+  {
+    const g = await boot(baseSave([collector('r1')], { nanites: 0, warehouseCapacity: 30 }));
+    g.updateState({ warehouse: [collector('r1'), crate('c1', 1, 40), crate('c2', 1, 40)] });
+    const res = g.apilar();
+    const cajas = wh(g).filter((w: any) => w.type === 'crate');
+    const total = cajas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    check('apilar: dos pilas de 40 cajas se funden en una de 80',
+      res.ok === true && cajas.length === 1 && total === 80,
+      `pilas=${cajas.length} total=${total} ok=${res.ok}`);
+  }
+  {
+    const g = await boot(baseSave([collector('r1')], { nanites: 0, warehouseCapacity: 30 }));
+    g.updateState({ warehouse: [collector('r1'), crate('c1', 1, 50), crate('c2', 1, 50)] });
+    const res = g.apilar();
+    const counts = wh(g).filter((w: any) => w.type === 'crate')
+      .map((w: any) => w.stackCount || 1).sort((a: number, b: number) => a - b);
+    check('apilar: 50+50 se funden pero el tope manda (99+1, no 100)',
+      counts.join(',') === '1,99', `pilas=${counts.join(',')} ok=${res.ok}`);
+  }
+  {
+    const g = await boot(baseSave([collector('r1')], { nanites: 0, warehouseCapacity: 30 }));
+    g.updateState({ warehouse: [collector('r1'), crate('c1', 1, 40), crate('c2', 2, 40)] });
+    g.apilar();
+    const cajas = wh(g).filter((w: any) => w.type === 'crate');
+    const total = cajas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    check('apilar: cajas de distinto tier NO se mezclan',
+      cajas.length === 2 && total === 80, `pilas=${cajas.length} total=${total}`);
   }
 
   resumen('apilado');

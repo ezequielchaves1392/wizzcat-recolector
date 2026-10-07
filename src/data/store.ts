@@ -20,6 +20,8 @@
 //  que son del motor. Lo de aquí es lo que se puede decidir sin mirar la partida.
 // ==========================================================================
 
+import { PIEDRA_PUNTOS } from './constants';
+
 // ==========================================================================
 //  Consumibles
 // ==========================================================================
@@ -51,7 +53,7 @@ export const CONSUMABLES_SIN_EXPANSOR = {
   afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
   clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
-  calibrationStone: { name: 'Piedra de Calibración', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone' },
+  calibrationStone: { name: 'Piedra de Calibración', details: `Sube ${PIEDRA_PUNTOS} puntos la probabilidad de la próxima fusión`, rarity: 'Raro', buffId: 'calibrationStone' },
   stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'En un recolector, un afijo extra garantizado; en un compañero, +1 de potencial', rarity: 'Legendario', buffId: 'stabilityNano' }
 } as const;
 
@@ -292,67 +294,55 @@ export function costeDeCaja(tier: number): number {
 export const CRATE_COSTS: readonly number[] = COSTE_POR_TIER.map(c => Math.round(c * 3 / 4));
 
 // ==========================================================================
-//  Expansores de almacén, uno por tier de caja
+//  Expansores de almacén: cuatro tramos, cada uno con su techo
 // ==========================================================================
 //
-//  EL MODELO: **diez expansores, uno por tier, y cada uno tiene un TECHO de
-//  capacidad.** Un expansor T{n} solo sirve mientras el almacén esté por debajo
-//  de su techo; cuando ya lo has alcanzado, **no se puede usar** y hay que buscar
-//  uno de un tier superior, que llega más lejos.
+//  EL MODELO: **cuatro expansores, y cada uno tiene un TECHO de capacidad.**
+//  Un expansor solo sirve mientras el almacén esté por debajo de su techo;
+//  cuando ya lo has alcanzado, **no se puede usar** y hay que buscar el
+//  siguiente, que llega más lejos.
 //
-//      Expansor T1  →  hasta 25 ranuras
-//      Expansor T2  →  hasta 35
-//      …
-//      Expansor T10 →  hasta 115
+//      Expansor Inicial     →  hasta 60 ranuras   (tienda, y cajas T1-T2)
+//      Expansor Intermedio  →  hasta 120          (cajas T3-T6)
+//      Expansor Avanzado    →  hasta 180          (cajas T7-T9)
+//      Expansor Supremo     →  hasta 240          (caja T10)
 //
-//  LA ESCALERA, Y POR QUÉ +10. El almacén arranca en 15 y cada peldaño son 10
-//  ranuras, así que la tabla es `15 + 10 × n` y **el techo de un expansor es
-//  exactamente el suelo del siguiente más un peldaño**. Con eso cada expansor
-//  sirve una vez y se queda muerto: el T1 te lleva a 25 y a partir de ahí necesitas
-//  el T2, que te lleva a 35. Eso convierte al expansor en **una razón para subir
-//  de caja**: la caja T4 trae el expansor T4 y sin él no puedes pasar de 55.
+//  POR QUÉ UNO SOLO AL PRINCIPIO. Antes eran diez —uno por tier, de diez en
+//  diez— y cada uno daba +1: el T1 llevaba a 25, el T2 a 35 y así. Con +1 por
+//  uso, esperar al último salía igual que ir uno por uno pero sin pagar los
+//  anteriores, así que los tres primeros eran una trampa: convenía saltárselos
+//  y los otros se volvían irrelevantes. Un solo Inicial hasta 60 quita la
+//  decisión falsa, y el siguiente ya no se compra: sale de las cajas T3 en
+//  adelante, que es lo que hace que subir de caja siga siendo la decisión buena.
 //
-//  **EL PASO Y LA CANTIDAD SON EL MISMO NÚMERO, Y A PROPÓSITO.** Con el paso a 10
-//  pero el expansor dando 5, subir un peldaño pediría *dos* expansores del mismo
-//  tier: el T1 te dejaría en 20 y su tarjeta dice 25, así que el jugador compraría
-//  el segundo pensando que el primero estaba roto. Y el expansor que da medio
-//  peldaño obliga a la tienda a vender unidades de algo cuyo texto promete un
-//  número que una unidad no alcanza. Aquí
-//  `RANURAS_POR_EXPANSOR` **es** el peldaño: lo que da el expansor es exactamente
-//  lo que separa su suelo del techo siguiente, y las dos mitades de la regla
-//  salen del mismo número para que no puedan separarse. Es una decisión de
-//  equilibrio —cada expansor da el doble— y por eso está escrita aquí y no
-//  repartida por los tres sitios que la usan.
+//  **EL PASO SIGUE SIENDO +1.** El Inicial son 45 usos, el resto 60 cada uno.
+//  Dar el tramo entero de una vez haría que el primer tramo quedara por detrás
+//  de un botón barato, que es justo lo que se evitó al poner el +1.
 //
-//  **LO QUE ANTES ERA, Y POR QUÉ ESTABA MAL.** Eran tres tipos con techos de 120,
-//  300 y 600, con 2, 5 y 10 ranuras cada uno. El techo no frenaba nada: con 15
-//  ranuras de partida, el expansor T1 seguía sirviendo a los 119, y los tres
-//  tipos eran casi lo mismo con otro nombre. El techo tenía que ser **el
-//  siguiente escalón real**, no un número grande.
+//  SOLO TOPE POR ARRIBA Y NO BANDAS CERRADAS, COMO ANTES. Un Intermedio en un
+//  almacén de 20 tiene que servir: si solo valiera a partir de 60, sería botín
+//  muerto para quien no llega. Lo que no puede es un Inicial barato donde toca
+//  un Avanzado: por eso cada uno tiene su techo y no su suelo.
 //
 //  EL TECHO FRENA EL CRECIMIENTO, NO RECORTA LO QUE HAY. Esto es lo importante
-//  para las partidas viejas: un jugador con 200 de capacidad no pierde nada, sus
-//  expansores simplemente no sirven. **Bajaría `WAREHOUSE_MAX_CAP` a 115 y
+//  para las partidas viejas: un jugador con 300 de capacidad no pierde nada, sus
+//  expansores simplemente no sirven. **Bajar `WAREHOUSE_MAX_CAP` a 240 y
 //  `enforceWarehouseCapacity()` empezaría a BORRARLE items del almacén**, que es
 //  justo lo que la regla "la migración no quita nada" prohíbe. Por eso
 //  `WAREHOUSE_MAX_CAP` sigue siendo 600: es el suelo de seguridad para el stock
-//  viejo de `warehouseExpander` (+1), no el techo de la escalera nueva.
+//  viejo, no el techo de la escalera nueva.
 //
-//  SOLO TOPE POR ARRIBA Y NO BANDAS CERRADAS. Un expansor T7 en un almacén de 20
-//  tiene que servir: si solo valiera a partir de 35, sería botín muerto para
-//  quien no llega. Lo que no puede es un T1 barato donde toca un T4: por eso cada
-//  uno tiene su techo y no su suelo.
-//
-//  LO VIEJO SIGUE SIRVIENDO. Los `warehouseExpander` (+1) de los almacenes
-//  anteriores al F27 siguen dando +1 hasta 600. Son stock finito de antes de los
-//  tipos, no un tipo encubierto.
+//  LO VIEJO SIGUE SIRVIENDO. Los diez `expansorT{n}` de antes de F66 siguen
+//  dando +1 hasta su techo de siempre (`EXPANSOR_LEGACY`), y el
+//  `warehouseExpander` (+1) hasta 600. Son stock finito de antes de los tramos,
+//  no tipos encubiertos.
 // ==========================================================================
 
 /**
  * Tope duro de capacidad base del almacén. Los slots del árbol suman encima.
  *
- * **NO ES EL TECHO DE LA ESCALA DE EXPANSORES**, que son 115. Este es 600 a
- * propósito, para que las partidas que ya pasaron de 115 no pierdan items: el
+ * **NO ES EL TECHO DE LA ESCALERA DE EXPANSORES**, que son 240. Este es 600 a
+ * propósito, para que las partidas que ya pasaron de 240 no pierdan items: el
  * borrow del almacén solo recorta si la capacidad baja, y bajarla sería cambiar
  * el progreso de un jugador que hizo todo lo que el juego le dejó hacer.
  */
@@ -362,41 +352,36 @@ export const WAREHOUSE_MAX_CAP = 600;
 export const WAREHOUSE_BASE_CAP = 15;
 
 /**
- * Cuántas ranuras añade cada expansor: **una**. El peldaño de la escalera son diez, así
- * que un expansor T{n} se puede usar diez veces seguidas, y a la undécima ya no: de ahí
- * en adelante hace falta el T{n+1}, que llega más lejos.
+ * Cuántas ranuras añade cada expansor: **una**.
  *
- * ## POR QUÉ UNO Y NO UNO POR PELDAÑO
+ * ## POR QUÉ UNO Y NO UNO POR TRAMO
  *
  * Las dos mitades de la regla son **cuánto da** y **hasta dónde sirve**, y son
- * independientes. Si el expansor diera el peldaño entero, un T1 llevaría el almacén de
- * 15 a 25 de una vez y las primeras cajas del juego quedarían por detrás de un botón de
- * 225 nanitas: comprar el expansor sería mejor que abrir cajas, que es justo lo que la
- * tienda alta de la caja T8 vino a arreglar.
+ * independientes. Si el expansor diera el tramo entero, el Inicial llevaría el
+ * almacén de 15 a 60 de una vez y las primeras cajas del juego quedarían por
+ * detrás de un botón barato: comprar el expansor sería mejor que abrir cajas.
  *
- * Con +1 el expansor es **un poco cada vez**: la tienda da el primer tramo, el botín de
- * las cajas da el resto, y subir de caja sigue siendo la decisión buena. Y el lote lo
- * hace cómodo: `planUseConsumable()` dice cuántas caben hasta el techo, así que los diez
- * usos de un peldaño son un diálogo y no diez viajes al almacén.
+ * Con +1 el expansor es **un poco cada vez**: la tienda da el primer tramo, el
+ * botín de las cajas da el resto, y subir de caja sigue siendo la decisión
+ * buena. Y el lote lo hace cómodo: `planUseConsumable()` dice cuántas caben
+ * hasta el techo, así que los 45 usos del primer tramo son un diálogo y no 45
+ * viajes al almacén.
  */
 export const RANURAS_POR_EXPANSOR = 1;
 
-/**
- * Cuántas ranuras separa el techo de un expansor del del siguiente: **diez**.
- *
- * ## POR QUÉ SON DOS NÚMEROS Y NO UNO
- *
- * Son reglas distintas yáá se escribieron con el mismo número: "cuánto da el
- * expansor" y "hasta dónde llega". Con uno solo, subir el escalón a diez **cambió las
- * dos cosas** y los techos pasaron a ser 16, 17, 18… 19: un expansor T4 que valía hasta
- * 55 valía hasta 19. Por eso aquí van separados, y el techo sale del escalón y la
- * cantidad sale de `RANURAS_POR_EXPANSOR`.
- */
-export const RANURAS_POR_ESCALON = 10;
+/** El techo del tramo n de la escalera nueva: 60, 120, 180 y 240. */
+const TECHOS_DE_TRAMO = [60, 120, 180, 240] as const;
 
-/** El techo del expansor T{n}: 25, 35, 45… hasta 115. */
-export function techoDeExpansor(tier: number): number {
-  return WAREHOUSE_BASE_CAP + RANURAS_POR_ESCALON * Math.max(1, Math.floor(tier));
+/**
+ * El techo del expansor del tramo n.
+ *
+ * Sale de la tabla y no de una fórmula, porque los tramos no son regulares:
+ * el primero son 45 ranuras y el resto 60. Una fórmula los igualaría y el
+ * Inicial dejaría de llegar a 60.
+ */
+export function techoDeExpansor(tramo: number): number {
+  const e = EXPANSOR_TIERS.find((t) => t.tier === Math.floor(tramo));
+  return e ? e.maxCap : TECHOS_DE_TRAMO[TECHOS_DE_TRAMO.length - 1];
 }
 
 export interface ExpansorTier {
@@ -412,34 +397,61 @@ export interface ExpansorTier {
   /** El `buffId` del consumible que lo aplica. */
   buffId: string;
   name: string;
+  /** Rareza que se enseña en la carta y en el botín. Sale de la caja que lo suelta. */
+  rareza: string;
 }
 
 /**
- * LOS DIEZ EXPANSORES, GENERADOS.
+ * LOS CUATRO EXPANSORES, ESCRITOS.
  *
- * Los tres de antes eran tres líneas escritas a mano con tres números cada una —
- * `slots`, `cost`, `maxCap`— y con diez tiers serían treinta números que pueden
- * descuadrarse entre sí. Aquí los diez salen de `techoDeExpansor()` y del mismo
- * `COSTE_POR_TIER` que el resto del juego, así que **añadir un tier de caja no
- * puede olvidarse de añadir su expansor**: no hay nada que añadir.
+ * Diez salían generados de `techoDeExpansor()` y de `COSTE_POR_TIER`, porque con
+ * diez tiers una tabla escrita a mano son treinta números que se descuadran.
+ * Con cuatro tramos irregulares (45 + 60 + 60 + 60) la generación ya no ahorra
+ * nada: una fórmula los igualaría y el Inicial dejaría de llegar a 60. Cuatro
+ * filas escritas se leen de un vistazo y no se pueden "olvidar de añadir" al
+ * añadir un tier de caja, porque ya no hay un expansor por tier.
  *
- * EL PRECIO sale de la curva de tiers por un cuarto, que es la misma regla que la
- * reventa de todo lo demás (R18). **Los cuatro primeros se venden**: son la red de
- * seguridad de las primeras cajas, que es donde el expansor es barato comparado con
- * lo que cuesta el botín, y con la escalera a 10 se llega a 55 mucho antes que antes,
- * así que hace falta un expansor a la venta en el tramo en el que el almacén empieza
- * a ser el cuello de botella. Del T5 para arriba siguen saliendo solo de cajas, que es
- * que es lo que hace que subir de caja siga siendo la decisión buena.
+ * EL PRECIO del Inicial sale de la curva de tiers por un cuarto, que es la
+ * misma regla que la reventa de todo lo demás (R18): es el precio del T2
+ * (425), más barato que una caja, porque es la red de seguridad del arranque.
+ * La reventa de los tres de caja sale del tier de la primera caja que los
+ * suelta (T3, T7 y T10), por la misma regla.
  */
-export const EXPANSOR_TIERS: ExpansorTier[] = CRATE_TIERS.map((tier) => ({
-  tier,
-  slots: RANURAS_POR_EXPANSOR,
-  cost: tier <= 4 ? Math.floor(COSTE_POR_TIER[tier - 1] / 4) : null,
-  resale: Math.floor(COSTE_POR_TIER[tier - 1] / 16),
-  maxCap: techoDeExpansor(tier),
-  buffId: `expansorT${tier}`,
-  name: `Expansor T${tier}`
-}));
+export const EXPANSOR_TIERS: ExpansorTier[] = [
+  { tier: 1, slots: RANURAS_POR_EXPANSOR, cost: Math.floor(COSTE_POR_TIER[1] / 4), resale: Math.floor(COSTE_POR_TIER[1] / 16), maxCap: 60, buffId: 'expansorInicial', name: 'Expansor Inicial', rareza: 'Común' },
+  { tier: 2, slots: RANURAS_POR_EXPANSOR, cost: null, resale: Math.floor(COSTE_POR_TIER[2] / 16), maxCap: 120, buffId: 'expansorIntermedio', name: 'Expansor Intermedio', rareza: 'Raro' },
+  { tier: 3, slots: RANURAS_POR_EXPANSOR, cost: null, resale: Math.floor(COSTE_POR_TIER[6] / 16), maxCap: 180, buffId: 'expansorAvanzado', name: 'Expansor Avanzado', rareza: 'Legendario' },
+  { tier: 4, slots: RANURAS_POR_EXPANSOR, cost: null, resale: Math.floor(COSTE_POR_TIER[9] / 16), maxCap: 240, buffId: 'expansorSupremo', name: 'Expansor Supremo', rareza: 'Divino' },
+];
+
+/**
+ * QUÉ EXPANSOR SUELTA CADA CAJA, EN UNA FUNCIÓN.
+ *
+ * Antes era "la caja T{n} suelta el expansor T{n}", que con diez expansores se
+ * escribía solo. Con cuatro tramos, el reparto se escribe aquí y en ningún otro
+ * sitio: ni en el botín ni en la tienda. Si mañana el Intermedio pasa a salir
+ * en la T2, se cambia esta función y las diez cajas lo heredan.
+ */
+export function expansorDeCaja(tier: number): ExpansorTier {
+  if (tier >= 10) return EXPANSOR_TIERS[3];
+  if (tier >= 7) return EXPANSOR_TIERS[2];
+  if (tier >= 3) return EXPANSOR_TIERS[1];
+  return EXPANSOR_TIERS[0];
+}
+
+/**
+ * LOS DIEZ ANTERIORES, SOLO PARA LAS PARTIDAS VIEJAS.
+ *
+ * Un almacén guardado antes de F66 tiene `expansorT1`..`expansorT10` con sus
+ * techos de 25 a 115. Borrarlos de la tabla los dejaría sin efecto conocido y
+ * `useConsumable` los rechazaría: el jugador perdería items que pagó. Así que
+ * siguen resolviendo, con su techo de siempre, pero **ya no se venden ni salen
+ * de cajas**: no están en `STORE_ITEMS` ni los suelta `expansorDeCaja()`.
+ */
+const TECHOS_VIEJOS: Record<string, number> = {
+  expansorT1: 25, expansorT2: 35, expansorT3: 45, expansorT4: 55, expansorT5: 65,
+  expansorT6: 75, expansorT7: 85, expansorT8: 95, expansorT9: 105, expansorT10: 115,
+};
 
 /**
  * LO QUE DICE UN EXPANSOR, EN UNA FRASE, PARA LOS CUATRO SITIOS QUE LO DICEN.
@@ -458,23 +470,23 @@ export function textoDeExpansor(e: ExpansorTier): string {
 /**
  * LOS EXPANSORES, COMO CONSUMIBLES. SALEN DE LA MISMA TABLA.
  *
- * **ESTOS DOS ENTRADAS ESTABAN ESCRITAS A MANO Y MENTÍAN.** Decían "+2 slots,
+ * **ESTAS ENTRADAS ESTABAN ESCRITAS A MANO Y MENTÍAN.** Decían "+2 slots,
  * vale hasta 120" y "+5 slots, vale hasta 300" mientras la tabla decía otra
  * cosa, y cuando los tres números cambiaron a la vez no había nada que impidiera
  * que se quedaran atrás: es la misma trampa que B6 y que la leyenda de las cajas,
  * y por eso aquí no hay ningún número escrito.
  *
- * La rareza sale de la rareza del tier de caja, que es lo que el expansor
- * representa: el expansor T5 es un item de caja T5. Y el texto **enseña el
+ * La rareza sale del tramo, que es lo que el expansor representa: el
+ * Intermedio es un item de caja T3. Y el texto **enseña el
  * techo**, que es la mitad de la regla y lo que el jugador necesita para decidir
- * si le sirve: "vale hasta 35" contesta a "¿me sirve?" sin que tenga que abrir la
+ * si le sirve: "vale hasta 60" contesta a "¿me sirve?" sin que tenga que abrir la
  * ficha del almacén.
  */
 export const EXPANSOR_CONSUMABLES = Object.fromEntries(
   EXPANSOR_TIERS.map(e => [e.buffId, {
     name: e.name,
     details: textoDeExpansor(e),
-    rarity: CRATE_TYPES[e.tier as CrateType]?.rarity ?? 'Raro',
+    rarity: e.rareza,
     buffId: e.buffId
   }])
 ) as Record<string, { name: string; details: string; rarity: string; buffId: string }>;
@@ -494,7 +506,19 @@ export const CONSUMABLES = {
 
 /** El tipo de expansor de un `buffId`, o `undefined` si no es un expansor. */
 export function expansorPorBuff(buffId: string): ExpansorTier | undefined {
-  return EXPANSOR_TIERS.find(t => t.buffId === buffId);
+  const nuevo = EXPANSOR_TIERS.find(t => t.buffId === buffId);
+  if (nuevo) return nuevo;
+  // Stock de antes de F66: resuelve con su techo de siempre, para que una
+  // partida vieja no pierda lo que pagó. No se vende ni sale de cajas.
+  const techo = TECHOS_VIEJOS[buffId];
+  if (techo === undefined) return undefined;
+  const n = Number(buffId.replace('expansorT', ''));
+  return {
+    tier: n, slots: RANURAS_POR_EXPANSOR, cost: null,
+    resale: Math.floor(COSTE_POR_TIER[Math.min(COSTE_POR_TIER.length, Math.max(1, n)) - 1] / 16),
+    maxCap: techo, buffId, name: `Expansor T${n}`,
+    rareza: CRATE_TYPES[Math.min(MAX_CRATE_TIER, Math.max(1, n)) as CrateType]?.rarity ?? 'Raro'
+  };
 }
 
 // ==========================================================================
@@ -699,7 +723,7 @@ export const STORE_ITEMS = {
   // comprar algo cuyo valor no sabes.
   // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
   // una decisión, no algo que se compre en masa y se gaste sin pensar.
-  calibrationStone: { cost: 45000, label: 'Piedra de Calibración (+12% de éxito)' },
+  calibrationStone: { cost: 45000, label: `Piedra de Calibración (+${PIEDRA_PUNTOS}% de éxito)` },
   stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y afijo o potencial extra)' }
 };
 

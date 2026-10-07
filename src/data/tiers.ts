@@ -218,7 +218,7 @@ export const LORE: Record<string, string> = {
   //  Arriba hay sesenta nombres de tier y seis exclusivos, y todos tienen su línea.
   //  **Los demás objetos del juego no tenían ninguna**: las cinco consumibles, los
   //  diez expansores, las tres tarjetas de ranura y las diez cajas tienen un
-  //  `details` —"Sube 12 puntos la probabilidad"— y nada más.
+  //  `details` —"Sube 7 puntos la probabilidad"— y nada más.
   //
   //  Y ese `details` es una descripción mecánica, no un lore: dice lo que hace el
   //  objeto y no de dónde sale. La diferencia se ve en la ficha del almacén, que para
@@ -244,16 +244,14 @@ export const LORE: Record<string, string> = {
   'Piedra de Calibración': 'Alguien tuvo que medirlo antes de que lo fusieras.',
   'Nanopartícula de Estabilidad': 'Tan pequeña que decide cómo se rompe lo grande.',
   // --------------------------------------------------------------- EXPANSORES
-  'Expansor T1': 'Un centímetro más de pared, y ya no cabe lo que sobraba.',
-  'Expansor T2': 'Alargó el pasillo hasta donde estaba el ruido.',
-  'Expansor T3': 'La obra que siempre se aplazaba por falta de sitio.',
-  'Expansor T4': 'Ganada en la discusión sobre qué se guarda y qué se tira.',
-  'Expansor T5': 'Un almacén con sala para las dudas.',
-  'Expansor T6': 'El espacio que se ganó discutiendo con el inventario.',
-  'Expansor T7': 'Ni una caja más en el suelo, que es como empezó esto.',
-  'Expansor T8': 'La cubicación dejó de ser una disculpa.',
-  'Expansor T9': 'Cabe lo que faltaba, y lo que va a faltar.',
-  'Expansor T10': 'El último metro cuadrado de la Cyber Base.',
+  // Cuatro tramos (F66). Las frases de los tramos segundo a cuarto vienen de los
+  // expansores viejos que cubrían esa zona, para no perder el sabor; las diez
+  // claves viejas se van con la tabla, porque un lore sin nombre que lo busque
+  // es contenido inalcanzable (D4).
+  'Expansor Inicial': 'Un centímetro más de pared, y ya no cabe lo que sobraba.',
+  'Expansor Intermedio': 'La obra que siempre se aplazaba por falta de sitio.',
+  'Expansor Avanzado': 'Ni una caja más en el suelo, que es como empezó esto.',
+  'Expansor Supremo': 'El último metro cuadrado de la Cyber Base.',
   // ------------------------------------------------------- TARJETAS DE RANURA
   'Slot de Compañero 2': 'Uno ya no es compañía: es un puesto.',
   'Ranura de Escuadrón (ranuras 3 y 4)': 'Formación. Ya no son tres cosas sueltas.',

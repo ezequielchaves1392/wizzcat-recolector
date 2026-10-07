@@ -28,7 +28,8 @@
 import { check, resumen } from './kit';
 import { conTiempoLimite, esTiempoAgotado } from '../src/utils/timeout';
 import { PLAZO_DE_LECTURA_MS } from '../src/services/sessionService';
-import { estaOnline } from '../src/services/rankingService';
+import { estaOnline, textoUltimaConexion } from '../src/services/rankingService';
+import { puntoDePresencia } from '../src/components/rankings';
 
 // La misma regla que usa el juego, pero sin Firestore: el reloj es lo único que
 // decide y aquí se puede mover a voluntad.
@@ -191,6 +192,64 @@ async function main() {
       typeof VENTANA_MS === 'number' && VENTANA_MS > 0
       && !estaOnline(ahora - VENTANA_MS - 1, ahora),
       `ventana=${VENTANA_MS} ms`);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  F67 · EL OFFLINE DICE HACE CUÁNTO, EN MINUTOS, HORAS O DÍAS.
+  //
+  //  Donde la fila decía "offline" a secas, ahora dice "hace 3 h" con el latido
+  //  que ya trae: saber si alguien se fue hace cinco minutos o hace un mes es
+  //  lo que hace útil el punto rojo. Y los tramos tienen techo, porque sin él
+  //  un latido viejo saldría como minutos de seis cifras, que no dice nada y
+  //  parece un bug —que es justo lo que se viene a comprobar aquí.
+  // ---------------------------------------------------------------------------
+  {
+    const ahora = 1_700_000_000_000;
+    const hace = (ms: number) => textoUltimaConexion(ahora - ms, ahora);
+    check('ultima: hace medio minuto es "hace un momento", no "hace 0 min"',
+      hace(30_000) === 'hace un momento', String(hace(30_000)));
+    check('ultima: cinco minutos son minutos',
+      hace(5 * 60_000) === 'hace 5 min', String(hace(5 * 60_000)));
+    check('ultima: 59 minutos siguen siendo minutos',
+      hace(59 * 60_000) === 'hace 59 min', String(hace(59 * 60_000)));
+    check('ultima: una hora son horas, no 60 minutos',
+      hace(60 * 60_000) === 'hace 1 h', String(hace(60 * 60_000)));
+    check('ultima: 23 horas siguen siendo horas',
+      hace(23 * 3_600_000) === 'hace 23 h', String(hace(23 * 3_600_000)));
+    check('ultima: un día son días, no 24 horas',
+      hace(24 * 3_600_000) === 'hace 1 día', String(hace(24 * 3_600_000)));
+    check('ultima: 29 días siguen siendo días',
+      hace(29 * 86_400_000) === 'hace 29 días', String(hace(29 * 86_400_000)));
+    check('ultima: un mes es tope, no 30 días contados',
+      hace(30 * 86_400_000) === 'hace más de un mes', String(hace(30 * 86_400_000)));
+    // **EL CASO PEDIDO: UN LATIDO VIEJÍSIMO NO SALE EN MINUTOS.** Un millón de
+    // minutos son casi dos años: la frase con techo dice lo mismo sin el número
+    // absurdo.
+    check('ultima: un millón de minutos sale como "más de un mes", nunca en minutos',
+      hace(1_000_000 * 60_000) === 'hace más de un mes', String(hace(1_000_000 * 60_000)));
+    // Sin latido no hay frase, y la fila se queda con el "offline" de siempre.
+    const sinDato: any[] = [undefined, null, 0, -1, NaN, 'ahora' as any];
+    check('ultima: sin latido no hay frase que inventar',
+      sinDato.every(v => textoUltimaConexion(v, ahora) === null),
+      sinDato.map(v => String(textoUltimaConexion(v, ahora))).join(','));
+    // Y un reloj hacia atrás no da un "hace -3 min": se recorta a ahora.
+    check('ultima: un latido del futuro es "hace un momento", no un negativo',
+      textoUltimaConexion(ahora + 60_000, ahora) === 'hace un momento',
+      String(textoUltimaConexion(ahora + 60_000, ahora)));
+
+    // **Y EL PUNTO LO ENSEÑA.** La fila en línea sigue diciendo "en línea", la
+    // offline con latido dice el hace-cuánto (con el title que lo explica), y
+    // la offline sin latido se queda como estaba.
+    const puntoOnline = puntoDePresencia(ahora - 1_000, ahora);
+    check('punto: en línea sigue diciendo "en línea"',
+      puntoOnline.includes('en línea') && !puntoOnline.includes('hace'), puntoOnline.slice(0, 120));
+    const puntoViejo = puntoDePresencia(ahora - 3 * 3_600_000, ahora);
+    check('punto: offline con latido dice hace cuánto',
+      puntoViejo.includes('hace 3 h') && puntoViejo.includes('última conexión'),
+      puntoViejo.slice(0, 160));
+    const puntoSin = puntoDePresencia(undefined, ahora);
+    check('punto: offline sin latido se queda en "offline"',
+      puntoSin.includes('offline') && !puntoSin.includes('hace'), puntoSin.slice(0, 120));
   }
 
   // =========================================================================

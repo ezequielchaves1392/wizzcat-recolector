@@ -28,7 +28,7 @@ import { COMPANION_SLOT_BUY, RANURA_POR_CARTA } from '../src/data/store';
 // tocarse.
 import { valorDeUnCristal } from '../src/data/crafting';
 import {
-  boot, reload, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, consumable, distintos
+  boot, reload, recargar, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, consumable, distintos
 } from './kit';
 
 async function main() {
@@ -461,13 +461,36 @@ async function main() {
       r !== false && ranuras(g) === 4, `ranuras=${ranuras(g)}`);
   }
   {
+    // B20 · Y el caso redondo: 10 espacios libres son 990 cajas, o sea 10 pilas
+    // de 99. El tope lo manda el espacio en pilas, no en unidades: pedir 991
+    // necesitaría una undécima ranura que no hay.
+    const unit = STORE_ITEMS.crateT1.cost;
+    const g = await boot(baseSave([], { nanites: unit * 2000, warehouseCapacity: 10 }));
+    const max = g.getBulkMax('crateT1');
+    check('lote caja: con 10 espacios libres el tope son 990 cajas (10 pilas)',
+      max === 990, `max=${max} (con el dinero alcanza para 2000)`);
+    const r = g.buyStoreItem('crateT1', max) as any;
+    const total = wh(g).reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    check('lote caja: y comprar el tope llena las 10 pilas sin pasarse',
+      r !== false && ranuras(g) === 10 && total === 990,
+      `ranuras=${ranuras(g)} total=${total}`);
+    const g2 = await recargar(g);
+    const total2 = wh(g2).reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    check('lote caja: y el lote sobrevive a la recarga',
+      ranuras(g2) === 10 && total2 === 990, `ranuras=${ranuras(g2)} total=${total2}`);
+    const g3 = await boot(baseSave([], { nanites: unit * 2000, warehouseCapacity: 10 }));
+    check('lote caja: y una más allá del tope se rechaza sin cobrar',
+      g3.buyStoreItem('crateT1', 991) === false && nanites(g3) === unit * 2000,
+      `nanites=${nanites(g3)}`);
+  }
+  {
     // F27 · La ampliación YA no es un permiso: el expansor es un item y ocupa
     // ranura (las ranuras de compañero sí siguen siendo permisos). Con el
     // almacén lleno y sin pila a la que sumarse, se rechaza sin cobrar.
     const g = await boot(baseSave(distintos(30), { nanites: 200_000 }));
     const capAntes = s(g).warehouseCapacity;
     const antes = nanites(g);
-    const r = g.buyStoreItem('expansorT1');
+    const r = g.buyStoreItem('expansorInicial');
     check('capacidad: el expansor sin hueco ni pila se rechaza', r === false, String(r));
     check('capacidad: y no se cobra', nanites(g) === antes, 'nanites=' + nanites(g));
     check('capacidad: y la capacidad no se mueve', s(g).warehouseCapacity === capAntes,
@@ -478,10 +501,10 @@ async function main() {
     // La pila del expansor no existe aún: se crea la primera comprando con
     // hueco, y el lote siguiente tiene que fundirse sin abrir ranura.
     const g2 = await boot(baseSave([], { nanites: 200_000, warehouseCapacity: 30 }));
-    const e1 = g2.buyStoreItem('expansorT1') as any;
+    const e1 = g2.buyStoreItem('expansorInicial') as any;
     check('capacidad: el primer expansor abre su pila',
       !!e1 && find(g2, e1.id)?.stackCount === 1, `pila=${e1 && find(g2, e1.id)?.stackCount}`);
-    const e2 = g2.buyStoreItem('expansorT1', 4) as any;
+    const e2 = g2.buyStoreItem('expansorInicial', 4) as any;
     check('capacidad: el lote se suma a la pila, no abre otra',
       !!e2 && find(g2, e1.id)?.stackCount === 5 && ranuras(g2) === 1,
       `pila=${e1 && find(g2, e1.id)?.stackCount} ranuras=${ranuras(g2)}`);
@@ -542,7 +565,7 @@ async function main() {
     // detalle de esta prueba: es el bloque siguiente entero.
     const g = await boot(baseSave([], { nanites: 200_000, warehouseCapacity: 1 }));
     const r1 = g.buyStoreItem('crateT1');
-    const r2 = g.buyStoreItem('expansorT1');
+    const r2 = g.buyStoreItem('expansorInicial');
     check('capacidad: el primer item entra', r1 !== false);
     check('capacidad: el segundo se rechaza al llenarse', r2 === false && ranuras(g) === 1,
       'ranuras=' + ranuras(g));

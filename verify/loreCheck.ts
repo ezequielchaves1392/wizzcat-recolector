@@ -47,14 +47,14 @@ async function main() {
   // -----------------------------------------------------------------------
   //
   //  **DE `CONSUMABLES_SIN_EXPANSOR`, NO DE `CONSUMABLES`.** Los dos existen y se parecen
-  //  mucho: el segundo es el primero **más los diez expansores**. Pedir los dos aquí no
+  //  mucho: el segundo es el primero **más los cuatro expansores**. Pedir los dos aquí no
   //  da error y da el doble: la lista salía de 38 nombres con diez repetidos, y el banco
   //  que dice "cada nombre tiene su lore" pasaba en verde con el mismo nombre contado
   //  dos veces. Un nombre repetido en la lista es un objeto que se comprueba dos veces y
   //  otro que no se comprueba nunca.
   const nombresDeObjeto = [
     ...Object.values(CONSUMABLES_SIN_EXPANSOR).map(c => c.name),
-    ...EXPANSOR_TIERS.map(e => `Expansor T${e.tier}`),
+    ...EXPANSOR_TIERS.map(e => e.name),
     ...COMPANION_SLOT_BUY.map(c => c.etiqueta),
     ...CRATE_TIERS.map(t => CRATE_TYPES[t as CrateType].name),
     // El cristal también entra por su nombre, y el nombre sale de `data/items`: es el
@@ -170,7 +170,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
-  //  F52 · LOS VEINTIOCHO OBJETOS QUE NO SON RECOLECTORES NI COMPAÑEROS.
+  //  F52 · LOS OBJETOS QUE NO SON RECOLECTORES NI COMPAÑEROS.
   //
   //  La comprobación de arriba ya los incluye en la lista de nombres, y eso ya dice que
   //  no falta ninguno. Lo que falta es decir **que la lista es la de verdad**: que no se
@@ -184,7 +184,7 @@ async function main() {
   {
     const esperados = Object.keys(CONSUMABLES_SIN_EXPANSOR).length + EXPANSOR_TIERS.length
       + COMPANION_SLOT_BUY.length + CRATE_TIERS.length + 1;
-    check('lore: F52 los veintiocho objetos tienen lore',
+    check('lore: F52 los objetos tienen lore',
       nombresDeObjeto.length === esperados && nombresDeObjeto.every(n => lorePara(n) !== null),
       `objetos=${nombresDeObjeto.length} esperados=${esperados} sin lore=${nombresDeObjeto.filter(n => lorePara(n) === null).join(',')}`);
 

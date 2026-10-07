@@ -358,13 +358,18 @@ function coaccionaBarraConsumibles(guardado: unknown): (string | null)[] {
 // Se usa una sola vez, al migrar saves antiguas.
 function inferBuffIdFromName(name: string): string | null {
   const lower = name.toLowerCase();
-  // Los tipos van antes que el genérico: un "Expansor T7" sin `buffId` es un
-  // T7, no el +1 viejo. El genérico queda para el stock de antes de los tipos.
+  // Los tipos van antes que el genérico. Los cuatro tramos de F66 se leen por
+  // su nombre ("Expansor Inicial"...), y el stock de antes de los tramos por su
+  // número ("Expansor T7"). El genérico queda para el +1 más viejo.
   //
   // **Y EL NÚMERO SE SACA CON UNA EXPRESIÓN, NO CON DIEZ `if`.** Antes había tres líneas para tres expansores y con diez habría sido una línea por tier, que
   // es exactamente el sitio donde un expansor nuevo nace sin migrar: el item
   // guardado se leería como el +1 viejo y aplicaría una ranura en vez de cinco.
   // Un `match` sobre el número del nombre no puede quedarse atrás.
+  if (lower.includes('expansor inicial')) return 'expansorInicial';
+  if (lower.includes('expansor intermedio')) return 'expansorIntermedio';
+  if (lower.includes('expansor avanzado')) return 'expansorAvanzado';
+  if (lower.includes('expansor supremo')) return 'expansorSupremo';
   const tierDeNombre = lower.match(/expansor t(\d+)/);
   if (tierDeNombre) return `expansorT${Number(tierDeNombre[1])}`;
   if (lower.includes('expansor')) return 'warehouseExpander';
@@ -839,7 +844,11 @@ function precioUnitarioTienda(itemKey: string): number {
  */
 function motivoDeExpansorAlTope(tipo: any, capacidad: number): string {
   if (!tipo) return `Almacén al máximo (${WAREHOUSE_MAX_CAP}).`;
-  const siguiente = EXPANSOR_TIERS.find((t) => t.tier === tipo.tier + 1);
+  // El siguiente es el primero cuyo techo queda por encima de donde estás, y no
+  // "el tier + 1": con cuatro tramos y diez techos viejos conviviendo, el +1 de
+  // un `Expansor T4` viejo sería un `Expansor T5` que ya no sale en ninguna
+  // parte. Buscar por techo vale para los nuevos y para el stock viejo.
+  const siguiente = EXPANSOR_TIERS.find((t) => t.maxCap > capacidad);
   return siguiente
     ? `Tu almacén ya está en ${capacidad} y el ${tipo.name} solo vale hasta ${tipo.maxCap}. Necesitas un ${siguiente.name} (hasta ${siguiente.maxCap}).`
     : `Tu almacén ya está en ${capacidad}, que es todo lo que da el ${tipo.name}. No hay expansor por encima.`;
@@ -2554,6 +2563,21 @@ function sePuedeGuardar(): boolean {
       (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
     );
     return stones ? (stones.stackCount || 1) : 0;
+  }
+
+  /**
+   * CUÁNTAS NANOPARTÍCULAS QUEDAN EN EL ALMACÉN.
+   *
+   * La gemela de `stonesDisponibles()`, por el mismo motivo: la serie la
+   * necesita para decir cuántas tiradas alcanzan, y el diálogo la enseña. Sin
+   * esta cuenta, la vista sumaría pilas por su cuenta y serían dos criterios
+   * para el mismo número.
+   */
+  function nanoDisponibles(): number {
+    const nano = state.warehouse.find(
+      (w: any) => w.type === 'consumable' && w.buffId === 'stabilityNano'
+    );
+    return nano ? (nano.stackCount || 1) : 0;
   }
 
   function materialesDeForja(
@@ -4600,7 +4624,7 @@ const RITMO_GUARDADO_MS = 30_000;
       const afkMs = afkCardDurationMs();
 
       // **EL EXPANSOR, POR SU VEZ, Y CON SU MISMA TABLA.**
-      if (buffId === 'warehouseExpander' || buffId.startsWith('expansorT')) {
+      if (buffId === 'warehouseExpander' || buffId.startsWith('expansor')) {
         const tipo = buffId === 'warehouseExpander' ? null : expansorPorBuff(buffId);
         if (buffId !== 'warehouseExpander' && !tipo) {
           return {
@@ -4691,12 +4715,14 @@ const RITMO_GUARDADO_MS = 30_000;
       //  da noventa minutos en vez de dar treinta y cobrarse tres.
       const aplicarUna = (): { ok: boolean; msg?: string } => {
         switch (buffId) {
-          // Los expansores son diez `case`, uno por tier. Se podrían cubrir con un
-          // `default` que preguntara a la tabla, pero entonces un `buffId` mal
-          // escrito daría el mensaje de "no sé qué hace" y un expansor nuevo
-          // nacía muerto sin que nadie lo notara: **con diez casos escritos, el
-          // banco `consumableCheck` ve que los diez buffIds de la tabla tienen su
-          // caso**, y un undécimo expansor obliga a tocar este sitio a propósito.
+          // Los expansores son un `case` por `buffId`: los cuatro tramos y los
+          // diez viejos. Se podrían cubrir con un `default` que preguntara a la
+          // tabla, pero entonces un `buffId` mal escrito daría el mensaje de "no
+          // sé qué hace" y un expansor nuevo nacía muerto sin que nadie lo
+          // notara: **con los casos escritos, el banco `consumableCheck` ve que
+          // los buffIds de la tabla tienen su caso**, y un expansor nuevo obliga
+          // a tocar este sitio a propósito.
+          case 'expansorInicial': case 'expansorIntermedio': case 'expansorAvanzado': case 'expansorSupremo':
           case 'expansorT1': case 'expansorT2': case 'expansorT3': case 'expansorT4': case 'expansorT5':
           case 'expansorT6': case 'expansorT7': case 'expansorT8': case 'expansorT9': case 'expansorT10': {
             // El tipo sale de la tabla, y con un `case` por buffId no puede ser
@@ -4706,10 +4732,10 @@ const RITMO_GUARDADO_MS = 30_000;
             if (!tipo) {
               return { ok: false, msg: `No hay expansor ${buffId}: la escalera de expansores y la del almacén se han separado.` };
             }
-            // **EL TECHO ES LO QUE DECIDE SI SIRVE.** El expansor T{n} vale hasta
-            // `techoDeExpansor(n)`; a partir de ahí no se usa y hay que buscar uno
-            // de un tier superior. El mensaje dice el número y el nombre del
-            // siguiente, para que el rechazo conteste "¿y qué hago?" en vez de
+            // **EL TECHO ES LO QUE DECIDE SI SIRVE.** Cada expansor vale hasta
+            // su `maxCap`; a partir de ahí no se usa y hay que buscar el
+            // siguiente. El mensaje dice el número y el nombre del siguiente,
+            // para que el rechazo conteste "¿y qué hago?" en vez de
             // dejar al jugador adivinando.
           if (state.warehouseCapacity >= tipo.maxCap) {
             return {
@@ -5874,7 +5900,7 @@ const RITMO_GUARDADO_MS = 30_000;
 /**
      * Fusiona 2 recolectores del mismo tier en uno de tier+1.
      * `stonesUsed` es cuántas Piedras de Calibración se consumen: cada una
-     * sube 12 puntos la probabilidad, hasta 5.
+     * sube lo que dice PIEDRA_APORTA, hasta MAX_PIEDRAS_POR_FUSION.
      */
     /**
      * CUÁNTAS PIEDRAS HACEN FALTA PARA LLEGAR AL 95 %, Y SI LAS TIENES.
@@ -5907,7 +5933,7 @@ const RITMO_GUARDADO_MS = 30_000;
      * revés, los dos mejores se consumen entre ellos y cada uno se lleva por delante al
      * otro. El mismo conjunto de materiales da un resultado peor solo por cómo se agrupó.
      */
-    autoForgePreview: (tipoForge: 'collector' | 'companion', tier: number) => {
+    autoForgePreview: (tipoForge: 'collector' | 'companion', tier: number, usarPiedras = true, usarNano = false) => {
       const nombre = tipoForge === 'collector' ? 'recolectores' : 'compañeros';
       const equipIds = new Set<string>(idsEquipados(tipoForge));
       const delTier = (state.warehouse as any[])
@@ -5925,9 +5951,14 @@ const RITMO_GUARDADO_MS = 30_000;
       // total de la serie no es un número: es la suma de un número por tirada. Se
       // resuelve aquí y no en el modal para que lo que promete el botón sea lo que
       // cobra `autoForge()`.
+      //
+      // **Y SI EL CHECK DE PIEDRAS ESTÁ APAGADO, SON CERO.** El `usarPiedras` lo
+      // pone la pantalla con su check, y `autoForge()` lee este mismo plan: el
+      // diálogo y el cobro no pueden separarse ni aunque alguien cambie uno de
+      // los dos checks sin tocar el otro.
       const porId = new Map<string, any>(delTier.map((m: any) => [m.id, m]));
       const stones = pares.map(par =>
-        Math.min(
+        !usarPiedras ? 0 : Math.min(
           piedrasParaObjetivo(
             tier,
             state.bonus.craftLuck,
@@ -5945,6 +5976,13 @@ const RITMO_GUARDADO_MS = 30_000;
         pares,
         stones,
         stonesTotal: stones.reduce((a: number, n: number) => a + n, 0),
+        // **LA NANO ES UNA POR TIRADA, Y EL STOCK SE ENSEÑA.** Si no alcanza
+        // para todas, las parejas sin nano fallan sin gastar materiales, así
+        // que el diálogo tiene que decir cuántas hay antes de cobrar.
+        nanoPorTirada: usarNano ? 1 : 0,
+        nanoTotal: usarNano ? pares.length : 0,
+        nanoStock: nanoDisponibles(),
+        piedrasStock: stonesDisponibles(),
         disponibles: ordenados.length,
         tiradas: pares.length,
         // **EL SOBRANTE SE CUENTA, NO SE TIRA.** Con un número impar el último material se
@@ -5982,7 +6020,7 @@ const RITMO_GUARDADO_MS = 30_000;
      * La serie se resuelve entera y se guarda una vez al final: o sale bien entero o no
      * cambia nada.
      */
-    autoForge: (tipoForge: 'collector' | 'companion', tier: number, stonesUsed: number | 'auto' = 'auto', nanoUsed = 0) => {
+    autoForge: (tipoForge: 'collector' | 'companion', tier: number, usarPiedras = true, usarNano = false) => {
       handleUserActivity();
       const uno = tipoForge === 'collector' ? 'recolector' : 'compañero';
 
@@ -5990,7 +6028,13 @@ const RITMO_GUARDADO_MS = 30_000;
       // entre un botón que anuncia lo que va a pasar y uno que anuncia lo que pasó: aquí y
       // en `autoForgePreview()` hay una sola cuenta, y por eso no pueden separarse ni
       // aunque alguien añada un filtro nuevo en un sitio y se olvide del otro.
-      const plan = estado.autoForgePreview(tipoForge, tier);
+      //
+      // **Y LOS CHECKS VIAJAN EN LOS DOS.** La vista previa y la serie reciben los
+      // mismos `usarPiedras` y `usarNano` que puso la pantalla: el diálogo promete
+      // con esos flags y el cobro gasta con esos flags. (Antes había un
+      // `stonesUsed` que se aceptaba y se ignoraba: el cuerpo siempre gastaba el
+      // plan, así que quien pasaba un número creía mandar y no mandaba nada.)
+      const plan = estado.autoForgePreview(tipoForge, tier, usarPiedras, usarNano);
       if (!plan.puede) {
         return { success: false, msg: plan.msg, resultados: [] };
       }
@@ -6013,14 +6057,23 @@ const RITMO_GUARDADO_MS = 30_000;
         // par**, que es lo único que puede bajarlas. Recalcularlo aquí sería poner una
         // segunda copia de la cuenta en el mismo motor, y el modal —que lee el
         // preview— podría prometer un total mientras el motor cobra otro.
-        const piedrasDeEstePar = plan.stones[i];
+        //
+        // **Y CON EL CHECK APAGADO SON CERO, AQUÍ TAMBIÉN.** El plan ya las trae
+        // a cero, pero no se confía en eso: si el check dice que no, no se gasta,
+        // diga lo que diga el plan. Dos sitios que dicen que no es lo que hace
+        // que un plan viejo no pueda cobrar piedras.
+        const piedrasDeEstePar = usarPiedras ? plan.stones[i] : 0;
+        const nanoDeEstePar = usarNano ? 1 : 0;
 
         const r: any = tipoForge === 'collector'
-          ? estado.forgeCollector(ids, piedrasDeEstePar, nanoUsed)
-          : estado.forgeCompanion(ids, piedrasDeEstePar, nanoUsed);
+          ? estado.forgeCollector(ids, piedrasDeEstePar, nanoDeEstePar)
+          : estado.forgeCompanion(ids, piedrasDeEstePar, nanoDeEstePar);
 
-        stonesTotal += piedrasDeEstePar;
-        nanoTotal += nanoUsed;
+        // **LO COBRADO DE VERDAD, NO LO PLANEADO.** Si la nano se agota a mitad
+        // de la serie, las parejas que siguen fallan sin gastar ni materiales ni
+        // consumibles, y el total no puede contar lo que no salió del almacén.
+        stonesTotal += r.stones ?? 0;
+        nanoTotal += r.nano ?? 0;
 
         resultados.push({
           exito: !!r.success,
@@ -6108,7 +6161,7 @@ const RITMO_GUARDADO_MS = 30_000;
       if (mat.error || !mat.materials) return { success: false, msg: mat.error };
 
       const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed);
-      if (pago.error) return { success: false, msg: pago.error };
+      if (pago.error) return { success: false, msg: pago.error, stones: 0, nano: 0 };
 
       const author = user.displayName || username || 'Anónimo';
       const result = attemptForge(mat.materials, mat.tier!, author, {
@@ -6134,6 +6187,11 @@ const RITMO_GUARDADO_MS = 30_000;
           success: true,
           collector: w,
           chance: result.chanceUsed,
+          // **LO COBRADO, NO LO PEDIDO.** La serie suma estos campos para decir
+          // lo que se gastó de verdad: una pareja que falla por falta de stock
+          // no gasta, y el total no puede contarla.
+          stones: pago.stones,
+          nano: pago.nano,
           msg: `${w.name} forjada`
         };
       }
@@ -6169,6 +6227,8 @@ const RITMO_GUARDADO_MS = 30_000;
         success: false,
         crystals: consuelo,
         chance: result.chanceUsed,
+        stones: pago.stones,
+        nano: pago.nano,
         msg: `Fallo en la forja: +${consuelo} cristales`
       };
     },
@@ -6195,7 +6255,7 @@ const RITMO_GUARDADO_MS = 30_000;
       if (mat.error || !mat.materials) return { success: false, msg: mat.error };
 
       const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed);
-      if (pago.error) return { success: false, msg: pago.error };
+      if (pago.error) return { success: false, msg: pago.error, stones: 0, nano: 0 };
 
       const result = attemptForgeCompanion(mat.materials, mat.tier!, {
         craftLuck: state.bonus.craftLuck,
@@ -6225,6 +6285,8 @@ const RITMO_GUARDADO_MS = 30_000;
           success: true,
           companion: c,
           chance: result.chanceUsed,
+          stones: pago.stones,
+          nano: pago.nano,
           msg: `${c.name} forjado`
         };
       }
@@ -6245,6 +6307,8 @@ const RITMO_GUARDADO_MS = 30_000;
         success: false,
         crystals: consuelo,
         chance: result.chanceUsed,
+        stones: pago.stones,
+        nano: pago.nano,
         msg: `Fallo en la forja: +${consuelo} cristales`
       };
     },

@@ -57,6 +57,26 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Títulos que se ven, serie a la carta y última conexión',
+    lineas: [
+      'Los títulos con degradado se veían en su carta pero no junto a tu nombre: ahora salen en el perfil, en la cabecera y en el ranking.',
+      'La forja en serie trae dos checks: usar piedras de calibración y usar nanopartículas, cada uno por su cuenta.',
+      'En el ranking, el punto rojo ahora dice hace cuánto se vio a cada jugador: minutos, horas o días.'
+    ]
+  },
+  {
+    version: '1.14.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Expansores de mochila unificados',
+    lineas: [
+      'La tienda vende un solo expansor inicial, que amplía el almacén hasta dejarlo en un tamaño cómodo para empezar.',
+      'Los tramos siguientes salen de las cajas: cada caja trae el expansor que toca según lo lejos que hayas llegado.',
+      'Quien ya tenía expansores de los de antes los conserva, y se siguen usando igual.'
+    ]
+  },
+  {
     version: '1.13.0',
     fecha: '7 de octubre de 2026',
     titulo: 'Estrellas al abrir cajas',

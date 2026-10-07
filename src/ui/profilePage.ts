@@ -231,8 +231,15 @@ export function renderProfilePage(
             </span>` : tab === 'banner' ? `
             <span class="w-9 h-6 rounded-md flex-shrink-0" style="${cosmeticStyle(cos)}"></span>
           ` : `
+            <!--
+              LA MUESTRA SALE DE titleStyleFor, COMO LA CABECERA. Antes tenía
+              su propia cuenta del degradado a mano, y las dos ya se habían
+              separado: la carta enseñaba el color plano y la cabecera no enseñaba
+              nada, porque el transparente solo lo ponía una. Lo que eliges aquí
+              es lo que te pones.
+            -->
             <span class="title-display text-[9px] truncate flex-1"
-                  style="${cosmeticStyle(cos)}${cos.style.gradient ? ';background-clip:text;-webkit-background-clip:text' : ''}">
+                  style="${titleStyleFor(cos)}">
               ${cos.name}
             </span>
           `}

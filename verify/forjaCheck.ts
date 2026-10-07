@@ -40,7 +40,7 @@
 //  afijos—, así que una prueba que tire una vez mide el azar, no la regla.
 // ==========================================================================
 
-import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll, reload } from './kit';
+import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll, reload, recargar } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { successChance, baseSuccessChance } from '../src/data/crafting';
 import { poderDeCompanero } from '../src/data/crafting';
@@ -958,7 +958,8 @@ const falloCon = async () => {
   // tiradas el jugador ha pagado cinco piedras que no le dijeron. Por eso el
   // auto-forge gasta `plan.stones[i]` y no recalcula.
   {
-    // Cuatro del T9: sin piedras, base de 0,43 y hacen falta cinco por tirada.
+    // Cuatro del T9: sin piedras no llegan, y con stock cada par pide las suyas
+    // para el 95 % (nueve por tirada con siete puntos cada una).
     const g8 = await boot(baseSave([
       recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
       recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2)
@@ -970,7 +971,7 @@ const falloCon = async () => {
       `total=${plan8.stonesTotal} porTirada=${JSON.stringify(plan8.stones)}`);
 
     // Con piedras de sobra, la suma por par debe ser el total, y no un número
-    // redondo inventado: cinco por tirada son diez en dos tiradas.
+    // redondo inventado: nueve por tirada son dieciocho en dos tiradas.
     const g9 = await boot(baseSave([
       recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
       recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2),
@@ -987,7 +988,7 @@ const falloCon = async () => {
       .filter((w: any) => w.buffId === 'calibrationStone')
       .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
     const antes = gastadas();
-    const r9 = conRoll(0.001, () => g9.autoForge('collector', 9, 'auto'));
+    const r9 = conRoll(0.001, () => g9.autoForge('collector', 9));
     const gastadasDeVerdad = antes - gastadas();
 
     check('autoforge: el preview promete el mismo gasto que el cobro',
@@ -1010,10 +1011,94 @@ const falloCon = async () => {
       plan10.stonesTotal === 2,
       `total=${plan10.stonesTotal} porTirada=${JSON.stringify(plan10.stones)}`);
 
-    const r10 = conRoll(0.001, () => g10.autoForge('collector', 9, 'auto'));
+    const r10 = conRoll(0.001, () => g10.autoForge('collector', 9));
     check('autoforge: y la serie se completa igualmente sin piedras',
       r10.success === true && r10.resultados.length === 1,
       `success=${r10.success} resultados=${r10.resultados.length}`);
+  }
+
+  // --- F65 · LA SERIE CON DOS CHECKS: PIEDRAS Y NANO, POR SEPARADO --------
+  // **APAGAR NO ES AHORRAR A MEDIAS.** Con el check de piedras apagado, el
+  // preview promete cero y el cobro gasta cero: si el diálogo dijera el total
+  // de siempre y la serie no gastara, el jugador no sabría qué pagó.
+  {
+    const g = await boot(baseSave([
+      recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
+      recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2),
+      consumable('piedras', 'calibrationStone', 40)
+    ], { warehouseCapacity: 40 }));
+    const plan = g.autoForgePreview('collector', 9, false, false);
+    check('autoforge: con el check apagado el preview promete cero piedras',
+      plan.stonesTotal === 0 && plan.stones.every((n: number) => n === 0),
+      `total=${plan.stonesTotal} porTirada=${JSON.stringify(plan.stones)}`);
+
+    const gastadas = () => wh(g)
+      .filter((w: any) => w.buffId === 'calibrationStone')
+      .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    const antes = gastadas();
+    const r = conRoll(0.001, () => g.autoForge('collector', 9, false, false));
+    check('autoforge: y la serie no gasta ni una aunque haya stock',
+      r.success === true && r.hechos === 2 && r.stonesTotal === 0 && gastadas() === antes,
+      `hechos=${r.hechos} total=${r.stonesTotal} stock=${gastadas()} antes=${antes}`);
+    const g2 = await recargar(g);
+    check('autoforge: y la serie sin piedras sobrevive a la recarga',
+      wh(g2).filter((w: any) => w.type === 'collector').length === 2,
+      `quedan=${wh(g2).filter((w: any) => w.type === 'collector').length}`);
+  }
+  {
+    // **LA NANO SE VE EN EL POTENCIAL DEL COMPAÑERO.** En compañeros la nano
+    // sube +1 al potencial, que es un número exacto y no un sorteo: dos ★2 con
+    // nano dan un ★3, y sin nano dan un ★2. Es la prueba que distingue "la nano
+    // entró" de "la nano se cobró y no hizo nada".
+    const dos = () => [
+      companion('c1', 2, { potential: 2 }),
+      companion('c2', 2, { potential: 2 }),
+      companion('c3', 2, { potential: 2 }),
+      companion('c4', 2, { potential: 2 })
+    ];
+    const g = await boot(baseSave([...dos(), consumable('n1', 'stabilityNano', 4)],
+      { warehouseCapacity: 40 }));
+    const plan = g.autoForgePreview('companion', 2, true, true);
+    check('autoforge: el preview cuenta una nano por tirada y dice el stock',
+      plan.nanoTotal === 2 && plan.nanoStock === 4,
+      `total=${plan.nanoTotal} stock=${plan.nanoStock} tiradas=${plan.tiradas}`);
+
+    const r = conRoll(0.001, () => g.autoForge('companion', 2, true, true));
+    check('autoforge: con nano, los dos forjados suben +1 de potencial',
+      r.hechos === 2 && r.resultados.every((x: any) => x.item?.potential === 3),
+      `hechos=${r.hechos} potenciales=${r.resultados.map((x: any) => x.item?.potential).join(',')}`);
+    check('autoforge: y se gastó una nano por tirada, lo que dijo el preview',
+      r.nanoTotal === plan.nanoTotal && r.nanoTotal === 2,
+      `gastadas=${r.nanoTotal} previstas=${plan.nanoTotal}`);
+
+    // **Y SIN NANO, EL MISMO PAR DA UN ★2.** La diferencia entre las dos series
+    // es la nano y nada más: sin ella el potencial es la media sin subir.
+    const gB = await boot(baseSave(dos(), { warehouseCapacity: 40 }));
+    const rB = conRoll(0.001, () => gB.autoForge('companion', 2, true, false));
+    check('autoforge: sin nano el potencial es la media, sin subir',
+      rB.hechos === 2 && rB.resultados.every((x: any) => x.item?.potential === 2),
+      `potenciales=${rB.resultados.map((x: any) => x.item?.potential).join(',')}`);
+  }
+  {
+    // **SI LA NANO NO ALCANZA, LA PAREJA FALLA SIN PERDER MATERIALES.** El
+    // cobro va antes de la tirada: sin nano que gastar, la pareja se queda
+    // como está y el total solo cuenta lo que salió del almacén.
+    const g = await boot(baseSave([
+      companion('c1', 2, { potential: 2 }),
+      companion('c2', 2, { potential: 2 }),
+      companion('c3', 2, { potential: 2 }),
+      companion('c4', 2, { potential: 2 }),
+      consumable('n1', 'stabilityNano', 1)
+    ], { warehouseCapacity: 40 }));
+    const r = conRoll(0.001, () => g.autoForge('companion', 2, true, true));
+    check('autoforge: con una nano para dos tiradas solo sale una',
+      r.hechos === 1 && r.fallos === 1,
+      `hechos=${r.hechos} fallos=${r.fallos}`);
+    check('autoforge: y el total cuenta una nano, no dos',
+      r.nanoTotal === 1, `total=${r.nanoTotal}`);
+    check('autoforge: y la pareja sin nano se queda en el almacén',
+      ['c3', 'c4'].every(id => wh(g).some((w: any) => w.id === id)),
+      'quedan=' + wh(g).map((w: any) => w.id).join(','));
   }
 
   // -------------------------------------------------------------------------

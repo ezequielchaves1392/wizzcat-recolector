@@ -353,7 +353,7 @@ async function main() {
     const antesSlots = wh(g7).length;
 
     g7.updateState({ nanites: 3000 });
-    const expansor = g7.buyStoreItem('expansorT1');
+    const expansor = g7.buyStoreItem('expansorInicial');
     check('almacén: el expansor SÍ es un item',
       Boolean(expansor) && deType(g7, 'consumable') === 1, 'consumibles=' + deType(g7, 'consumable'));
     const capTrasComprar = g7.getCapacity();
@@ -363,8 +363,8 @@ async function main() {
       wh(g7).length === antesSlots + 1, `${antesSlots} -> ${wh(g7).length}`);
     const usado = g7.useConsumable((expansor as any).id);
     check('almacén: ampliar es usarlo', usado.ok === true, usado.msg ?? '');
-// El expansor T1 da +1 ranura y vale hasta 25, que es su techo: a partir de ahí deja
-    // de servir y hay que buscar el T2. Un uso son +1, y el lote es lo que sube el peldaño
+// El expansor Inicial da +1 ranura y vale hasta 60, que es su techo: a partir de ahí deja
+    // de servir y hay que buscar el Intermedio. Un uso son +1, y el lote es lo que sube el tramo
     // entero; aquí la comprobación es de un solo uso porque es la que hace el botón.
     check('almacén: y al usarlo sube una ranura',
       g7.getCapacity() === capTrasComprar + 1,
@@ -402,9 +402,9 @@ async function main() {
     // El expansor es un consumible de verdad, y `stackCheck` mide el mismo par desde
     // el otro lado; aquí lo que se mide es que el camino de la tienda sigue entero.
     check('almacén lleno: un item que necesita ranura NO cabe',
-      g9.canBuyStoreItem('expansorT1') === false, 'dice que cabe');
+      g9.canBuyStoreItem('expansorInicial') === false, 'dice que cabe');
     check('almacén lleno: y al comprarlo no se cobra',
-      (() => { g9.buyStoreItem('expansorT1'); return nanites(g9) === 100_000; })(),
+      (() => { g9.buyStoreItem('expansorInicial'); return nanites(g9) === 100_000; })(),
       'nanitas=' + nanites(g9));
     // **Y LA CARTA DEL CRISTAL, AL REVÉS: ES LO QUE NO NECESITA RANURA.** Con las
     // quince ranuras ocupadas, comprar material de mejora tiene que funcionar: es un

@@ -25,9 +25,23 @@ export interface IdentityCosmetics {
 /** El color del título: su estilo, el degradado y el brillo. */
 export function titleStyleFor(title: Cosmetic | undefined): string {
   if (!title) return '';
+  // **EL DEGRADADO NECESITA UN FONDO, Y ESTA ES LA LÍNEA QUE FALTABA.** Con
+  // `background-clip:text` y `color:transparent` pero sin `background-image`,
+  // el texto no se ve en ningún sitio: cinco títulos equipados (Mil Millones
+  // entre ellos) no aparecían ni en el perfil ni en el ranking ni en la tarjeta
+  // ajena, aunque la carta los enseñaba en plano porque ese camino nunca ponía
+  // el transparente. La bandera `gradient` es la única fuente: si trae un
+  // degradado se usa, y si trae `'true'` el brillo sale del propio color.
+  const grad = title.style.gradient;
+  const fondo = !grad
+    ? ''
+    : /gradient\s*\(/.test(grad)
+      ? `background-image:${grad}`
+      : `background-image:linear-gradient(90deg,${title.style.color},#ffffff,${title.style.color})`;
   return [
     cosmeticStyle(title),
-    title.style.gradient ? 'background-clip:text;-webkit-background-clip:text;color:transparent' : '',
+    fondo,
+    grad ? 'background-clip:text;-webkit-background-clip:text;color:transparent' : '',
     title.style.glow === 'true' ? 'text-shadow:0 0 16px currentColor' : ''
   ].filter(Boolean).join(';');
 }

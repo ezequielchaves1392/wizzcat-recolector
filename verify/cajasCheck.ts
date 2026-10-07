@@ -27,7 +27,8 @@
 
 import { check, resumen, boot, baseSave, wh, key, crate } from './kit';
 import { CRATE_TYPES, costeDeCaja, CRATE_TIERS, STORE_ITEMS, type CrateType } from '../src/data/store';
-import { CRATE_LOOT, pickLoot, resolveLootAmount } from '../src/components/crateLoot';
+import { CRATE_LOOT, pickLoot, resolveLootAmount, CRATE_META } from '../src/components/crateLoot';
+import { ICONS } from '../src/ui/icons';
 
 const CAJAS = Object.keys(CRATE_TYPES).map(Number).filter(n => n >= 1) as CrateType[];
 /**
@@ -278,6 +279,23 @@ async function main() {
         maximo > 0 && maximo <= costeDeCaja(c),
         `maximo=${maximo} tope=${costeDeCaja(c)}`);
     }
+  }
+
+  // -----------------------------------------------------------------------
+  //  F72 · CADA CAJA TIENE SU CARA: ICONO Y ACENTO POR TIER.
+  //
+  //  Antes salían de la rareza y la T1 y la T2 eran la misma cara: abrir la
+  //  siguiente no se sentía distinto. Ahora cada tier trae su pareja, y lo que
+  //  se ata es que no haya dos iguales y que cada icono exista en el set (un
+  //  nombre que no existe pinta la palabra "undefined" en el HTML).
+  // -----------------------------------------------------------------------
+  {
+    const caras = CRATE_TIERS.map(t => `${CRATE_META[t as CrateType].icon}+${CRATE_META[t as CrateType].accent}`);
+    check('caras: las diez cajas tienen caras distintas',
+      new Set(caras).size === CRATE_TIERS.length, caras.join(' | '));
+    const sinIcono = CRATE_TIERS.filter(t => !(CRATE_META[t as CrateType].icon in ICONS));
+    check('caras: y cada icono existe en el set',
+      sinIcono.length === 0, sinIcono.map(t => `T${t}=${CRATE_META[t as CrateType].icon}`).join(',') || 'los diez existen');
   }
 
   resumen('cajas: se abren solas, cuestan lo mismo y las llaves viejas se redimen');

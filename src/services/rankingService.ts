@@ -107,6 +107,31 @@ export function estaOnline(latido: number | null | undefined, ahora: number = Da
   return ahora - latido < VENTANA_MS && ahora >= latido - VENTANA_MS;
 }
 
+/**
+ * HACE CUÁNTO SE VIO A ALGUIEN, EN MINUTOS, HORAS O DÍAS.
+ *
+ * Es lo que lee la fila del ranking donde antes solo decía "offline": el
+ * latido ya viaja en la fila, así que decir "hace 3 h" no cuesta una lectura
+ * más. Y **los tramos tienen techo**: minutos hasta 59, horas hasta 23, días
+ * hasta 29 y después "más de un mes". Sin techo, un latido viejo de meses
+ * saldría como minutos de seis cifras, que no dice nada y parece un bug.
+ *
+ * Devuelve `null` cuando no hay latido que medir, y la fila se queda con el
+ * "offline" de siempre: sin dato no hay frase, y una frase inventada sería la
+ * mentira contraria.
+ */
+export function textoUltimaConexion(latido: number | null | undefined, ahora: number = Date.now()): string | null {
+  if (typeof latido !== 'number' || !isFinite(latido) || latido <= 0) return null;
+  const min = Math.floor(Math.max(0, ahora - latido) / 60_000);
+  if (min < 1) return 'hace un momento';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return d === 1 ? 'hace 1 día' : `hace ${d} días`;
+  return 'hace más de un mes';
+}
+
 
 /**
  * Las cuatro tablas y cómo se ordenan.

@@ -41,6 +41,22 @@ interface ForgeUIState {
   selected: string[];
   stones: number;
   nano: boolean;
+  /**
+   * LOS CHECKS DE LA SERIE, Y POR QUÉ SON DOS Y VAN APARTE DE LOS DE ARRIBA.
+   *
+   * La forja de a uno elige piedras con botones 1..N y nano con interruptor;
+   * la serie gasta de golpe, sin elegir par a par, así que lo único que puede
+   * decidir es usar o no usar. Son dos checks separados porque son dos
+   * consumibles con dos precios: apagar las piedras y dejar la nano (o al
+   * revés) tiene que poder decirse. Y van aparte de `stones`/`nano` porque el
+   * yunque y la serie son dos decisiones distintas: marcar nano arriba no
+   * puede gastar nanos abajo sin avisar.
+   *
+   * **POR DEFECTO, PIEDRAS SÍ Y NANO NO**, que es lo que hacía la serie hasta
+   * ahora: las justas para el 95 % por tirada y ni una nano.
+   */
+  serieStones: boolean;
+  serieNano: boolean;
   tier: number;
   /**
    * Qué se está fundiendo. La misma pantalla, dos resultados distintos: el
@@ -64,7 +80,7 @@ interface ForgeUIState {
 }
 
 const ui: ForgeUIState = {
-  selected: [], stones: 0, nano: false, tier: 0, tipo: 'collector',
+  selected: [], stones: 0, nano: false, serieStones: true, serieNano: false, tier: 0, tipo: 'collector',
   // **'stat' Y NO '': EL VALOR POR DEFECTO ES EL QUE YA HABIA.** La rejilla se ha
   // ordenado siempre por stat final, y por eso el statCelda de la esquina esta a la
   // vista: sin el número, un orden por algo que no se ve no se puede comprobar.
@@ -456,7 +472,7 @@ function nivelDe(w: any): number {
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
             base T${matTier} ${Math.round(baseSuccessChance(matTier) * 100)}%
             ${info.craftLuck > 0 ? ` · árbol +${Math.round(info.craftLuck * 100)}%` : ''}
-            ${ui.stones > 0 ? ` · piedras +${ui.stones * 12}%` : ''}
+            ${ui.stones > 0 ? ` · piedras +${Math.round(ui.stones * PIEDRA_APORTA * 100)}%` : ''}
             ${ui.nano ? ' · nanopartícula +8%' : ''}
             · tope 95%
           </p>
@@ -522,7 +538,7 @@ function nivelDe(w: any): number {
                </span>`
             : `<button class="ml-1 px-2.5 h-9 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
                       data-act="stones" data-n="0">Quitar</button>`}
-          ${ui.stones > 0 ? `<span class="ml-auto text-[10px] font-mono accent-text">+${ui.stones * PIEDRA_APORTA * 100}%</span>` : ''}
+          ${ui.stones > 0 ? `<span class="ml-auto text-[10px] font-mono accent-text">+${Math.round(ui.stones * PIEDRA_APORTA * 100)}%</span>` : ''}
         </div>
 
         <!--
@@ -628,7 +644,7 @@ function nivelDe(w: any): number {
         una decisión: el mejor se gasta el primero porque es el que más rinde.
       -->
       ${(() => {
-        const plan = game.autoForgePreview?.(ui.tipo, ui.tier) ?? null;
+        const plan = game.autoForgePreview?.(ui.tipo, ui.tier, ui.serieStones, ui.serieNano) ?? null;
         if (!plan || !plan.puede) {
           return `<p class="text-[9px] text-[var(--text-muted)] text-center mt-3 leading-relaxed">
                     ${plan?.msg ?? ''}
@@ -637,7 +653,42 @@ function nivelDe(w: any): number {
         const sobra = plan.sobrantes > 0
           ? ` · sobra ${plan.sobrantes}`
           : '';
-        return `<button data-act="auto-forge" ${plan.puede ? '' : 'disabled'}
+        // **LOS DOS CHECKS DE CONSUMIBLES, Y POR QUÉ VAN AQUÍ.** La serie
+        // gasta de golpe: sin estos checks, las piedras salen siempre y la
+        // nano sale si el yunque la tenía marcada, que es gastar por una
+        // decisión tomada en otra pantalla. Los números (stock) salen del
+        // mismo preview que el botón, no de una cuenta de aquí.
+        const checkFila = (act: string, on: boolean, titulo: string, linea: string) => `
+          <button class="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                  data-act="${act}" aria-pressed="${on}">
+            <span class="w-5 h-5 rounded-md grid place-items-center flex-shrink-0 border transition
+                         ${on ? 'accent-bg text-slate-950 border-transparent' : 'btn-ghost text-[var(--text-muted)]'}"
+                  aria-hidden="true">
+              <span class="[&>span>svg]:w-3 [&>span>svg]:h-3">${ic('check')}</span>
+            </span>
+            <span class="min-w-0">
+              <span class="block text-[10px] font-bold text-[var(--text-main)] leading-tight">
+                ${titulo}
+              </span>
+              <span class="block text-[9px] font-mono text-[var(--text-muted)] leading-tight">
+                ${linea}
+              </span>
+            </span>
+          </button>`;
+        return `
+        <div class="mt-3 pt-2.5 border-t border-[var(--border-color)] flex flex-col gap-2">
+          ${checkFila('serie-stones', ui.serieStones, 'Piedras de calibración',
+            ui.serieStones
+              ? `${plan.piedrasStock} en almacén · auto hasta el 95 % por tirada`
+              : 'Apagadas: la serie no gasta ninguna')}
+          ${checkFila('serie-nano', ui.serieNano, 'Nanopartícula de Estabilidad',
+            !ui.serieNano
+              ? 'Apagada: la serie no gasta ninguna'
+              : plan.nanoStock > 0
+                ? `${plan.nanoStock} en almacén · una por tirada`
+                : 'No tienes ninguna')}
+        </div>
+        <button data-act="auto-forge" ${plan.puede ? '' : 'disabled'}
                   class="w-full mt-3 px-3 rounded-xl btn-ghost font-mono text-[11px] font-bold
                          tracking-wide cursor-pointer transition active:scale-[0.99]"
                   style="min-height:44px"
@@ -979,6 +1030,21 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
         redraw();
         break;
       }
+      case 'serie-stones': {
+        // **DOS CHECKS Y NADA MÁS.** La serie no elige cuántas: o gasta las
+        // justas para el 95 % en cada tirada, o no gasta ninguna. El número lo
+        // dice el preview con este mismo flag, así que aquí no se calcula nada.
+        sfx.nav();
+        ui.serieStones = !ui.serieStones;
+        redraw();
+        break;
+      }
+      case 'serie-nano': {
+        sfx.nav();
+        ui.serieNano = !ui.serieNano;
+        redraw();
+        break;
+      }
       case 'forge': {
         confirmForge(container, game, redraw);
         break;
@@ -1005,7 +1071,7 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
  * cifra que el jugador no puede verificar—.
  */
 function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void) {
-  const plan = game.autoForgePreview?.(ui.tipo, ui.tier);
+  const plan = game.autoForgePreview?.(ui.tipo, ui.tier, ui.serieStones, ui.serieNano);
   if (!plan || !plan.puede) {
     showToast(plan?.msg ?? 'No hay materiales suficientes en este tier.', 'info');
     return;
@@ -1032,13 +1098,29 @@ function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void)
   // número distinto según los afijos que tenga, y la suma la hace el motor. Calcularlo
   // aquí con un afix luck de cero daría el número **más alto** de los posibles —el de una
   // pareja sin afijos—, o sea que el modal prometería más de lo que va a cobrar.
-  if ((plan.stonesTotal ?? 0) > 0) {
+  //
+  // **Y CON EL CHECK APAGADO NO SE PROMETE NINGUNA.** El preview ya las trae a
+  // cero, y la fila lo dice en vez de esconderla: una fila que desaparece al
+  // apagar el check no se distingue de una fila que nunca existió.
+  if (!ui.serieStones) {
+    filas.push({ etiqueta: 'Piedras', valor: 'apagadas: la serie no gasta ninguna' });
+  } else if ((plan.stonesTotal ?? 0) > 0) {
     filas.push({ etiqueta: 'Piedras', valor: `${plan.stonesTotal} en total, lo justo para el 95 % en cada tirada` });
   } else {
     filas.push({ etiqueta: 'Piedras', valor: 'no gastas: no tienes o no hacen falta' });
   }
-  if (ui.nano) {
-    filas.push({ etiqueta: 'Nano', valor: 'una por tirada', tono: 'accent-text' });
+  // **LA NANO SOLO SALE SI SU CHECK ESTÁ PUESTO.** Y con el stock corto se dice:
+  // las parejas sin nano fallan sin gastar materiales, así que "tienes 1 para 4
+  // tiradas" es lo que se decide, no un detalle.
+  if (ui.serieNano) {
+    const stock = plan.nanoStock ?? 0;
+    filas.push({
+      etiqueta: 'Nano',
+      valor: stock <= 0
+        ? 'no tienes ninguna: esas tiradas fallarían sin gastar materiales'
+        : `una por tirada · tienes ${stock}${stock < plan.tiradas ? ` (solo alcanza para ${stock})` : ''}`,
+      tono: stock < plan.tiradas ? 'accent-text' : undefined
+    });
   }
 
   showConfirmModal(
@@ -1072,8 +1154,8 @@ function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void)
  * para llegar al 95 % no es una comodidad: es que **cada par tiene sus propios afijos**
  * y son los afijos los que bajan el número de piedras. La vista no puede saberlo sin
  * repasar el almacén otra vez, y si lo hiciera con los materiales de toda la serie
- * gastaría de más en las parejas que salieran sin afijos. Se le pide "automático" y
- * el motor lo resuelve par a par.
+ * gastaría de más en las parejas que salieran sin afijos. El check dice si se
+ * gastan o no, y el motor resuelve cuántas par a par.
  *
  * **LA SELECCIÓN MANUAL SE VACÍA.** En este botón el jugador no eligió nada, así que
  * lo que se limpia es la lista de la forja de a uno: si no, quedaría con ids que ya
@@ -1081,8 +1163,10 @@ function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void)
  */
 function runAutoForge(game: any, redraw: () => void) {
   sfx.hammer();
-  // El segundo argumento es "automático": las piedras las pone el motor.
-  const r = game.autoForge(ui.tipo, ui.tier, 'auto', ui.nano ? 1 : 0);
+  // **LOS MISMOS FLAGS DEL DIÁLOGO.** El preview que enseñó los números y la
+  // serie que cobra reciben los dos checks: prometer con unos y cobrar con
+  // otros sería cobrar por lo que el botón no dijo.
+  const r = game.autoForge(ui.tipo, ui.tier, ui.serieStones, ui.serieNano);
 
   if (!r.success) {
     sfx.forgeFail();

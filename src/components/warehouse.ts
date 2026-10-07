@@ -943,7 +943,7 @@ function detailContent(item: any, state: any, game: any): string {
           distintos para lo mismo y uno de los dos mentía**.
 
           Para el resto de tipos la línea se queda, porque ahí no es una cifra: es la
-          única descripción que tienen. "Contiene recompensas máximas", "Sube 12 puntos
+          única descripción que tienen. "Contiene recompensas máximas", "Sube 7 puntos
           la probabilidad" — eso no está en ninguna otra parte.
 
           Y si algún día un recolector viniera sin details, tampoco sale el "Sin

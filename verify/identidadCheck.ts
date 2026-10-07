@@ -20,7 +20,7 @@
 // ==========================================================================
 
 import { check, resumen, boot, baseSave, reload, s, collector } from './kit';
-import { miniIdentity, rellenoDeBanner } from '../src/ui/identity';
+import { miniIdentity, rellenoDeBanner, titleStyleFor } from '../src/ui/identity';
 import { identityCard, unlockHint } from '../src/ui/profilePage';
 import {
   SECRET_ACHIEVEMENTS, ACHIEVEMENT_REWARDS, LOGROS_DIFICILES, sumaDeBonificacion,
@@ -32,6 +32,7 @@ import {
   BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT, FILAS_DE_EJEMPLO
 } from '../src/services/rankingService';
 import { coresGastadosEnArbol } from '../src/data/tree';
+import { techoDeExpansor, EXPANSOR_TIERS } from '../src/data/store';
 import { iconoDeCosmetico, ICONO_BASE } from '../src/data/avatarIcons';
 
 const RANK_DOC = 'rankings/test';
@@ -208,6 +209,46 @@ async function main() {
       iconoDeCosmetico({ banner: 'no_existe', frame: 'no_existe', title: 'no_existe' }).icono
         === ICONO_BASE.icono,
       'no cae al base');
+  }
+
+  // -----------------------------------------------------------------------
+  //  B21 · UN TÍTULO CON DEGRADADO SE VE, NO SE PONE TRANSPARENTE SIN FONDO.
+  //
+  //  Cinco títulos equipados no aparecían en ningún sitio donde van con
+  //  `titleStyleFor()` (cabecera del perfil, cabecera, filas del ranking,
+  //  tarjeta ajena): el estilo ponía `color:transparent` con
+  //  `background-clip:text` pero ningún `background-image` que recortar, y el
+  //  texto quedaba invisible. La carta del catálogo sí lo enseñaba, en plano,
+  //  porque ese camino nunca ponía el transparente: dos copias de la regla que
+  //  ya decían cosas distintas.
+  // -----------------------------------------------------------------------
+  {
+    const titulos = (COSMETICS as any[]).filter(c => c.type === 'title');
+    const conDegradado = titulos.filter(t => t.style?.gradient);
+    check('títulos: hay títulos con degradado en el catálogo',
+      conDegradado.length > 0, conDegradado.map(t => t.id).join(','));
+    // **LA INVARIANTE, SOBRE TODOS.** Si el estilo deja el color transparente
+    // es porque hay un fondo que recortar: sin fondo no se ve nada.
+    const invisibles = titulos
+      .map(t => ({ id: t.id, estilo: titleStyleFor(t) }))
+      .filter(x => /color\s*:\s*transparent/.test(x.estilo) && !/background-image\s*:/.test(x.estilo))
+      .map(x => x.id);
+    check('títulos: ninguno se pinta invisible (transparente sin fondo)',
+      invisibles.length === 0, invisibles.join(',') || `${titulos.length} visibles`);
+    // Y el caso reportado: Mil Millones trae su fondo para el degradado.
+    const mil = titleStyleFor((COSMETICS as any[]).find(c => c.id === 'title_mil_millones'));
+    check('títulos: Mil Millones trae fondo para su degradado',
+      /background-image\s*:linear-gradient/.test(mil),
+      mil.slice(0, 160));
+    // Y la cabecera del perfil lo enseña con su nombre: equipado y pintado
+    // salen del mismo id, así que si está puesto se lee.
+    const cabecera = identityCard({
+      name: 'Ab',
+      cosmetics: { title: 'title_mil_millones', frame: 'frame_none', banner: 'banner_none' }
+    });
+    check('títulos: la cabecera del perfil enseña el Mil Millones puesto',
+      cabecera.includes('Mil Millones') && /background-image\s*:/.test(cabecera),
+      cabecera.slice(0, 160));
   }
 
   // -----------------------------------------------------------------------
@@ -635,7 +676,9 @@ async function main() {
       totalCores: 10_000, resets: 20, totalNanitesProduced: 1_000_000_000,
       passiveIncome: 100_000, cratesOpened: 500, totalClicks: 100_000,
       passiveMultiplier: 2, unlockedNodes: Array.from({ length: 20 }, (_, i) => `n${i}`),
-      warehouseCapacity: 115, bonus: { storageSlots: 0 }
+      // La cima de la escalera de expansores, salga lo que salga: si sube, la
+      // partida madura sube con ella y el logro no se queda sin completar.
+      warehouseCapacity: techoDeExpansor(EXPANSOR_TIERS.length), bonus: { storageSlots: 0 }
     } as any);
 
     const porId = (id: string) => ACHIEVEMENTS.find(a => a.id === id) as any;

@@ -23,7 +23,7 @@
 
 import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, collector, companion, ficha, consumable, conRoll, find } from './kit';
 import { RARITY_ORDER } from '../src/types/domain';
-import { CRATE_TYPES, EXPANSOR_TIERS, CONSUMABLES } from '../src/data/store';
+import { CRATE_TYPES, EXPANSOR_TIERS, CONSUMABLES, expansorDeCaja } from '../src/data/store';
 import {
   RARITY_RANK, RARITY_TEXT, RARITY_BORDER, RARITY_GLOW, raritySlug,
   CRATE_LOOT, tablaDePesos
@@ -345,32 +345,36 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  //  5. EL EXPANSOR DE LA CAJA ES EL DE SU TIER
+  //  5. EL EXPANSOR DE LA CAJA ES EL DE SU TRAMO
   // -------------------------------------------------------------------------
   {
+    // T1-T2 el Inicial, T3-T6 el Intermedio, T7-T9 el Avanzado y T10 el
+    // Supremo. El reparto vive en `expansorDeCaja()`: aquí se comprueba que el
+    // botín de las diez lo cumpla, no que la tabla diga una cosa y el botín otra.
     let fallos = 0;
     let detalle = '';
     for (const tier of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const) {
       const entrada = CRATE_LOOT[tier].find((e: any) => e.id === 'expansor');
       if (!entrada) { fallos++; detalle += `T${tier}: sin entrada `; continue; }
       const p: any = entrada.build({ ownedCosmetics: [] });
-      if (p.item?.buffId !== `expansorT${tier}`) {
+      const esperado = expansorDeCaja(tier).buffId;
+      if (p.item?.buffId !== esperado) {
         fallos++;
-        detalle += `T${tier}: dio ${p.item?.buffId} `;
+        detalle += `T${tier}: dio ${p.item?.buffId} (esperado ${esperado}) `;
       }
     }
-    check('expansor: la caja T{n} suelta el expansor T{n}',
+    check('expansor: cada caja suelta el expansor de su tramo',
       fallos === 0, detalle || 'los diez tiers');
 
     // Y con el techo nuevo, cada expansor sirve **hasta** su techo y se muere
     // después. Lo que da y hasta dónde llega son dos reglas distintas: da **una**
-    // ranura y llega a `15 + 10n`, así que un peldaño son diez usos. Que las dos
-    // salieran del mismo número era el error de esta misma tarde: al subir el escalón
-    // a diez, el techo bajó a 16, 17, 18 y 19 y el T4 dejó de llegar a 55.
+    // ranura y llega a 60, 120, 180 y 240. Cuatro tramos escritos, no una
+    // fórmula: una fórmula los igualaría y el Inicial dejaría de llegar a 60.
     const total = EXPANSOR_TIERS.reduce((a, e) => a + e.slots, 0);
-    check('expansor: la escalera va de 15 a 115, de diez en diez, y cada uno da una ranura',
-      EXPANSOR_TIERS[0].maxCap === 25 && EXPANSOR_TIERS[9].maxCap === 115 && total === 10,
-      `${EXPANSOR_TIERS[0].maxCap}..${EXPANSOR_TIERS[9].maxCap} · ${total} ranuras`);
+    check('expansor: la escalera va de 15 a 240 en cuatro tramos, y cada uno da una ranura',
+      EXPANSOR_TIERS.length === 4
+      && EXPANSOR_TIERS[0].maxCap === 60 && EXPANSOR_TIERS[3].maxCap === 240 && total === 4,
+      `${EXPANSOR_TIERS.map(e => e.maxCap).join(',')} · ${total} ranuras`);
 
     // Y la ficha del expansor DICE su techo: es lo que contesta "¿me sirve?" sin
     // que el jugador tenga que abrir el almacén.
@@ -380,7 +384,7 @@ async function main() {
     });
     check('expansor: el texto de cada expansor enseña su techo',
       sinTecho.length === 0,
-      sinTecho.map(e => `T${e.tier}`).join(',') || 'los diez');
+      sinTecho.map(e => e.name).join(',') || 'los cuatro');
   }
 
   // -------------------------------------------------------------------------

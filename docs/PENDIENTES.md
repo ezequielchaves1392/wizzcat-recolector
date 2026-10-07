@@ -755,8 +755,19 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > **Las filas de objeto enseñan sus estrellas.** Salen de `estrellasDe()`,
       > la misma de la rejilla, y solo si el premio trae el campo. Lo cubre
       > `loteCheck` (+4, vía `estrellasDeFila()`).
-- [ ] **F65 · Elegir si la serie usa consumibles.** (para después)
+- [x] **F65 · Elegir si la serie usa consumibles.** Hecho en v1.15.0, con **dos
+      checks por separado** como pediste: piedras y nano.
       > "para despues, aca poder tener un check para usar o no consumibles... piedras de mejora y nanoparticulas"
+      > "En la forja automática agregar un check si quiere usar nanopartículas y piedras de calibración"
+      La serie hoy gastaba piedras siempre y nano si el yunque lo tenía marcado.
+      Ahora `autoForgePreview()` y `autoForge()` reciben los dos flags, y el
+      diálogo promete y cobra con los mismos: con piedras apagadas el total es
+      cero aunque haya stock, y con nano puesta gasta una por tirada. Si la nano
+      no alcanza, esas parejas fallan **sin perder materiales**, el diálogo lo
+      avisa con el stock, y el total cuenta lo cobrado de verdad (antes contaba
+      lo planeado). El `stonesUsed` que se aceptaba y se ignoraba se va con el
+      cambio. `forjaCheck` (+10: preview a cero, serie sin gasto con stock,
+      +1 de potencial con nano, media sin nano, y corto de nano).
 
 **Hecho y commiteado en v1.7.0:**
 paginador de cosméticos/logros de a 10 con las flechas arriba, stock en cartas
@@ -771,6 +782,100 @@ conserva guardados pero sin bonus (el agregador ignora nodos fuera del catálogo
 hace `await` sobre ese `default`: sin export el banco corría en fondo mezclando
 sus filas con los vecinos, y el conteo de sesión variaba entre corridas (11, 4,
 50) sin fallar nunca. Ahora los 34 bancos dan 2184 dos veces seguidas.
+
+### Lote D · ENCARGO DEL 7 DE OCTUBRE (segunda parte)
+
+*Lo pedido, con tus palabras. Se escribe aquí antes de programarlo, para que no
+viva solo en una conversación.*
+
+- [x] **F66 · Unificar los expansores de mochila.** Hecho en v1.14.0.
+      > "Unificar el expansor de mochila inicial... hasta 60... en definitiva conviene esperar y comprar el ultimo... y los otros se vuelven irrelevantes asi que dejemos uno... y el próximo de 60 a 100 aparece en t3 en adelante..."
+      > "Unifiquemos las cartas existentes en expansor inicial, el siguiente expansor que sea intermedio por ejemplo que vaya de 60 a 120 y que salga en cajas t3 recien, y otro que salga en cajas tier 7 que llegue a 180 y asi" + "se puede llegar hasta un maximo de 240"
+      **Cuatro tramos de +1 con solo techo** (sin banda mínima, como antes):
+      **Inicial** hasta 60 (la única carta en tienda, 425; también en cajas
+      T1-T2), **Intermedio** hasta 120 (cajas T3-T6), **Avanzado** hasta 180
+      (cajas T7-T9) y **Supremo** hasta 240 (caja T10). El reparto caja→tramo
+      vive en `expansorDeCaja()`. Los diez `expansorT{n}` viejos y el
+      `warehouseExpander` siguen sirviendo con su techo de siempre, y el mensaje
+      al llegar a un techo pide el tramo nuevo que cubre ese número (un T7 viejo
+      en 85 pide el Intermedio, no un T8 que ya no sale). El logro pasa a 240.
+      `consumableCheck` reescrito a los cuatro tramos + legado, `potencialCheck`
+      §5 al reparto por tramos, y el resto de bancos a la carta única.
+- [x] **B20 · Tope de compra de cajas y apilado.** Verificado y fijado en v1.14.0.
+      > "Verificar que al comprar cajas los slots máximos que pueda comprar entren en el almacen ejemplo si tengo 10 espacios, debo poder comprar máximo 990 que equivalen a 10 stacks … Si toco apilar se deben apilar también las cajas."
+      **Reproducido con sonda: no había bug en ninguno de los dos.** Con 10
+      espacios libres `getBulkMax` da 990, la compra entra en 10 pilas y sobrevive
+      a la recarga; y `apilar()` ya funde cajas (40+40 en una de 80, 50+50 en
+      99+1 respetando el tope). Queda fijado con pruebas: el 10→990 en `buyCheck`
+      (al lado del 4→297 que ya había) y el apilado de cajas en `stackCheck` §7
+      (funde, respeta el tope y no mezcla tiers).
+
+### Lote E · ENCARGO DEL 7 DE OCTUBRE (tercera parte)
+
+*Lo pedido, con tus palabras. Sin tocar todavía: se escribe aquí antes de
+programarlo, para que no viva solo en una conversación.*
+
+- [x] **F67 · Última conexión en el punto de presencia del ranking.** Hecho en v1.15.0.
+      > "Al offline agregarle la ultima conexión... que se muestre en minutos, horas, días … para evitar por ejemplo 1000000 minutos."
+      Donde la fila decía "offline" a secas, ahora dice hace cuánto con el
+      latido que ya trae (`textoUltimaConexion()`, al lado de `estaOnline()`):
+      minutos hasta 59, horas hasta 23, días hasta 29 y después "hace más de un
+      mes", así que un número absurdo no puede salir nunca. Sin latido se queda
+      el "offline" de siempre. `sessionCheck` (+14: los tramos, el millón de
+      minutos, el futuro, y el punto en sus tres estados).
+
+### Lote F · ENCARGO DEL 7 DE OCTUBRE (cuarta parte)
+
+*Lo pedido, con tus palabras. Sin tocar todavía.*
+
+- [ ] **F68 · La tarjeta ajena enseña el menú principal con sus buffs.**
+      > "En el perfil del jugador en rankings me tiene que aparecer una preview del menú principal del jugador con lso buffs aplicados."
+      La tarjeta ya trae el recolector equipado, los compañeros activos, los
+      nodos y los logros, pero **no trae buffs ni los dos números de la base**
+      (daño de click e ingreso pasivo). Hay que publicar el snapshot de buffs
+      activos (`perfiles/{uid}`, con coacción y reglas si hace falta) y pintar
+      el bloque "así juega ahora" en la tarjeta ajena, diciendo que es al
+      guardar (los buffs caducan y la tarjeta no).
+- [ ] **F69 · Diez piedras por fusión, cada una más suave.**
+      > "Ahora se pueden agregar hasta 10 piedras de calibración reducir la probabilidad base que aumenta cada una..."
+      El tope de 10 **ya está** (`maximoDePiedras()`); lo que falta es bajar el
+      aporte de 12 a **7 puntos** por piedra. Con 7, el 95 % se sigue alcanzando
+      en todos los tiers (el T11+ lo pide justo con 10, que es lo que hace que
+      la pila entera importe) y el techo sube de 60 a 70. Toca etiqueta de
+      tienda, `details`, comentarios que dicen "12"/"5", y los bancos que clavan
+      el 12 %.
+- [ ] **F70 · Cada Ascensión pide más, y los núcleos no compran núcleos.**
+      > "Ver que cada reinicio o ascensión en base a los nucleos obtenidos me vaya pidiendo mas nanitas para el próximo reset, balancerlo lo mejor posible para evitar exploits."
+      Dos mitades: (a) el escalado por `totalCores` **ya existe** (cada reset
+      pide `nanitesForCores(totalCores+1)`, estrictamente más que el anterior)
+      y hay que fijarlo con banco; (b) **el exploit sí existe**: `core_yield`
+      (+20 %/nivel) se aplica a TODA la producción histórica, así que comprar
+      el nodo paga núcleos gratis sin producir. Al subir `coreGain`, lo
+      retroactivo se anula en una base aparte (la cartera no se toca y el
+      pendiente no se mueve: el bonus rige desde ahora). Sin campo nuevo no se
+      puede: `?? 0` y las partidas viejas conservan lo ya cobrado.
+- [ ] **F71 · Tarjetas x1.5 (tienda) y x2 (cajas) para compañeros.** Decidido el
+      7 de octubre: **x1.5 comprable, x2 solo de cajas, 30 segundos cada una.**
+      > "Que existan cards igual al x2 y x3 de clicks pero que apliquen a los compañeros, ver algo balanceado. no se si un x2 x3 seria demasiado."
+      **Por qué 30 segundos y no 30 minutos:** reabrir el buff pasivo comprable
+      choca con F4 (tapaba el corte del AFK). Con 30 s por carta y tope total de
+      30 s no puede cubrir una ausencia (el corte es a 60 s): lo máximo que
+      cubre son 29 s usándola justo antes de irse, con juego activo para
+      usarla. `tarjetaCheck` se reescribe a esa invariante ("comprable ⇒ dura
+      y topa por debajo de 60 s") en vez de "ninguno comprable". Precio x1.5
+      por fijar contra la curva (el x2 de click vale 5000).
+- [ ] **F72 · Iconos de caja distintos por tier, con brillo y color.**
+      > "Hacer diferentes los iconitos de las cjas, podermos cambiarlos con mas brillo distinto colro, azul, rojo, violeta..."
+      Hoy `CRATE_ICON` mapea por rareza y T1-T2 comparten cara (Común y Raro
+      son el mismo 'crate'). Hay que llevar icono+acento **por tier** en
+      `CRATE_META` (azul, rojo, violeta...) con el set SVG que ya existe, y un
+      banco que ate que los diez se distinguen y que cada icono existe.
+- [ ] **F73 · El tier en las filas del resumen de apertura.** (para después)
+      > "para dsp, que aca aparezca el tier de los compañeros y recolectores"
+      En el cartel de apertura las filas de objeto enseñan nombre, estrellas
+      (F64) y rareza ("Común"), pero no el tier. El premio lo trae (el item de
+      compañero/recolector tiene su `tier`); falta pintarlo en la fila
+      (`crateSummary.ts`, al lado de `estrellasDeFila()`), p. ej. "Común · T1".
 
 ---
 
@@ -1310,7 +1415,7 @@ recomiendo**. Con la primera no hay problema de seguridad: es un documento que e
 escribe con lo que decide enseñar. De paso le daría en qué apoyarse a **F20**, porque la
 imagen de perfil es justo el dato que hay que poder leer de otro.
 
-**Es el único bug abierto del juego.** Todos los demás están cerrados y con banco.
+**Son tres los bugs abiertos del juego: B8, B11 y B21.** Todos los demás están cerrados y con banco.
 
 ### B11 · En el celular no se puede cerrar sesión ni cambiar de theme
 
@@ -1334,6 +1439,22 @@ versiones.**
 3. Y una decisión de fondo: **cerrar sesión siendo invisible en el móvil es un problema de
    confianza, no de layout**. Si el jugador no puede cerrar sesión, no puede dejar de jugar
    en el móvil. Eso no se arregla solo moviendo un botón.
+
+### B21 · El título "Mil Millones" no aparece — HECHO (sin versión: sale en la próxima)
+
+> "para dsp, el titulo mil millones no aparece"
+
+**Causa raíz: el degradado no tenía fondo.** Cinco títulos equipados no se
+veían en ningún sitio que pinta con `titleStyleFor()` (cabecera del perfil,
+cabecera, filas del ranking, tarjeta ajena): el estilo ponía
+`color:transparent` con `background-clip:text` pero ningún `background-image`
+que recortar, y el texto quedaba invisible. La carta del catálogo sí lo
+enseñaba, en plano, porque ese camino nunca ponía el transparente: dos copias
+de la regla que ya decían cosas distintas. Ahora la bandera `gradient` se
+traduce a `background-image` en la única función (el valor tal cual si es un
+degradado, brillo del propio color si es `'true'`), y la carta usa esa misma
+función. `identidadCheck` (+4, con la invariante "transparente ⇒ con fondo"
+sobre los 20 títulos).
 
 ---
 

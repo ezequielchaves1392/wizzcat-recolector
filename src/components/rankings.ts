@@ -28,7 +28,7 @@ import {
   getTopRankings, sortByBoard, boardValue,
   BOARDS,
   type LeaderboardEntry, type BoardKind
-, estaOnline } from '../services/rankingService';
+, estaOnline, textoUltimaConexion } from '../services/rankingService';
 import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from '../ui/identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
@@ -269,7 +269,7 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
       <div class="min-w-0">
         <div class="flex items-center gap-1.5 flex-wrap mt-1">
           ${isMe ? `<span class="medal accent-text flex-shrink-0">TÚ</span>` : ''}
-          ${puntoDePresencia(estaOnline(r.latido))}
+          ${puntoDePresencia(r.latido)}
           ${r.achievements ? `<span class="medal text-amber-400">${ic('achievement', 'w-3 h-3')} ${r.achievements}</span>` : ''}
           ${r.secretAchievements ? `<span class="medal text-fuchsia-300" title="Logros secretos">${ic('lock', 'w-3 h-3')} ${r.secretAchievements}</span>` : ''}
           ${r.forgedCount ? `<span class="medal text-cyan-300" title="Recolectores forjados">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>` : ''}
@@ -302,16 +302,24 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
  * **LA FRASE ES "EN LÍNEA" Y NO "ONLINE".** Todo el juego está en español y una palabra
  * inglesa suelta en la única fila que se lee entera sería la excepción. Con dos puntos se
  * escribe `en línea` y se dice `en línea`.
+ *
+ * **Y EL OFFLINE DICE HACE CUÁNTO.** Donde antes decía "offline" a secas, ahora dice
+ * "hace 3 h" con el latido que ya trae la fila (`textoUltimaConexion()`): saber si
+ * alguien se fue hace cinco minutos o hace un mes es lo que hace útil el punto rojo.
+ * Sin latido se queda el "offline" de siempre, porque sin dato no hay frase.
  */
-export function puntoDePresencia(online: boolean): string {
+export function puntoDePresencia(latido: number | null | undefined, ahora: number = Date.now()): string {
+  const online = estaOnline(latido, ahora);
   const color = online ? '#34d399' : '#f87171';
   const halo = online ? 'rgba(52,211,153,.35)' : 'rgba(248,113,113,.30)';
+  const ultimo = online ? null : textoUltimaConexion(latido, ahora);
+  const texto = online ? 'en línea' : (ultimo ?? 'offline');
   return `
-    <span class="flex items-center gap-1 flex-shrink-0" title="${online ? 'En línea' : 'Offline'}">
+    <span class="flex items-center gap-1 flex-shrink-0" title="${online ? 'En línea' : `Offline${ultimo ? ` · última conexión ${ultimo}` : ''}`}">
       <span aria-hidden="true" class="w-1.5 h-1.5 rounded-full flex-shrink-0"
             style="background:${color}; box-shadow: 0 0 6px ${halo}"></span>
       <span class="text-[9px] font-mono ${online ? 'text-emerald-400' : 'text-rose-400'}">
-        ${online ? 'en línea' : 'offline'}
+        ${texto}
       </span>
     </span>`;
 }

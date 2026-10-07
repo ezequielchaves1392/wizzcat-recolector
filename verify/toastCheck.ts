@@ -403,17 +403,18 @@ async function main() {
   //
 // **EL EXPANSOR T1 DA +1 Y SIRVE HASTA SU TECHO, QUE AHORA ES 25.** Antes daba +5 y
   // se usaba una vez, porque su techo estaba a cinco. Ahora un uso es una ranura y el
-  // techo está a diez, así que el mismo Shopping del logro —Almacén Masivo, a 20— se
-  // alcanza con cinco expansores, y el techo se comprueba llegando a 25.
+  // techo del tramo está a 45, así que el mismo Shopping del logro —Almacén Masivo, a 20— se
+  // alcanza con cinco expansores, y el techo se comprueba llegando a 60.
   //
   // Lo que se comprueba sigue siendo lo que importa: **que el techo sea una regla y no un
   // número decorativo**. Con la capacidad en su techo, el expansor no se gasta.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
-    // **QUINCE, Y NO CINCO, PORQUE LOS USOS SE COMEN LA PILA ENTERA.** Con cinco
+    // **CINCUENTA, Y NO CINCO, PORQUE LOS USOS SE COMEN LA PILA.** Con cinco
     // comprados el lote se los lleva todos y a la segunda tanda el item ya no existe:
     // la prueba fallaba por el `msg` de "ya no está en el almacén", no por la regla.
-    const e = g.buyStoreItem('expansorT1', 15) as any;
+    // Hacen falta 45 para llegar al techo de 60, más los 5 del logro.
+    const e = g.buyStoreItem('expansorInicial', 50) as any;
     g.useConsumable(e.id, 5);
     check(
       'logros: ampliar el almacen hasta 20 desbloquea el logro',
@@ -426,18 +427,18 @@ async function main() {
       vistos.includes('Almacén Masivo'),
       'anunciados=' + JSON.stringify(vistos)
     );
-    // Y hasta su propio techo sigue sirviendo: el T1 llega a 25.
-    const hastaTope = g.useConsumable(e.id, 5) as any;
-    check('logros: y el mismo expansor sigue sirviendo hasta su techo de 25',
-      hastaTope.ok === true && g.getState().warehouseCapacity === 25,
+    // Y hasta su propio techo sigue sirviendo: el Inicial llega a 60.
+    const hastaTope = g.useConsumable(e.id, 40) as any;
+    check('logros: y el mismo expansor sigue sirviendo hasta su techo de 60',
+      hastaTope.ok === true && g.getState().warehouseCapacity === 60,
       `ok=${hastaTope.ok} cap=${g.getState().warehouseCapacity}`);
     // Ya en el techo, no sirve ni se gasta. El item se queda, porque no se gasta un item
     // que no hace nada: es lo que el jugador tiene que poder comprobar después.
     const otro = g.useConsumable(e.id);
     const sobran = g.getState().warehouse.find((w: any) => w.id === e.id);
-    check('logros: y en su techo el expansor T1 no sirve de nada',
-      otro.ok === false && g.getState().warehouseCapacity === 25
-      && (sobran?.stackCount ?? 0) > 0,
+    check('logros: y en su techo el expansor Inicial no sirve de nada',
+      otro.ok === false && g.getState().warehouseCapacity === 60
+      && (sobran?.stackCount ?? 0) === 5,
       `ok=${otro.ok} cap=${g.getState().warehouseCapacity} stack=${sobran?.stackCount} msg=${otro.msg ?? ''}`);
   }
   // 7b · Y que se anuncie UNA VEZ. Con más usos, el logro ya está
@@ -445,22 +446,17 @@ async function main() {
   // desbloqueado y no debe volver a salir: un "×2" en el cartel sería el mismo
   // bug que el del "×5" de los avisos, y aquí no hay forma de verlo mirando.
   //
-  // **Y AQUÍ NO SE PUEDE REPETIR EL MISMO EXPANSOR**, porque con la escalera de
-  // diez el T1 se queda muerto en el primer uso: usarlo tres veces seguidas
-  // solo daría dos rechazos y el logro no volvería a saltar, que no es lo que
-  // esta comprobación mide. Lo que mide es "el cartel no repite", y para eso
-  // hacen falta dos AMPLIOSIONES DISTINTAS que sí sirvan: el T1 y el T2.
+  // **Y AQUÍ NO HACEN FALTA DOS EXPANSORES DISTINTOS**, porque con el tramo
+  // único el Inicial sirve 45 veces seguidas: tres usos seguidos son tres
+  // ampliaciones que sí sirven, y el logro no debe volver a saltar en ninguna.
   {
     const { g, vistos } = await motorConLogros(saveParaAmpliar(15));
-    g.buyStoreItem('expansorT1', 1);
-    g.buyStoreItem('expansorT2', 1);
-    const t1 = (g.getState().warehouse as any[]).find((w: any) => w.buffId === 'expansorT1');
-    const t2 = (g.getState().warehouse as any[]).find((w: any) => w.buffId === 'expansorT2');
+    g.buyStoreItem('expansorInicial', 3);
+    const t1 = (g.getState().warehouse as any[]).find((w: any) => w.buffId === 'expansorInicial');
     g.useConsumable(t1.id);
     const trasLaPrimera = vistos.length;
-    g.useConsumable(t2.id);
-    const t3 = g.buyStoreItem('expansorT3', 1) as any;
-    g.useConsumable(t3.id);
+    g.useConsumable(t1.id);
+    g.useConsumable(t1.id);
 
     check(
       'logros: un logro anunciado no se vuelve a anunciar aunque amplia despues',

@@ -54,6 +54,7 @@ import { nombreDe } from './nombres';
 // porque `store.ts` no importa nada**: es el fichero más abajo del árbol de datos, y
 // esta es la primera vez que se le pide un número desde las reglas de la forja.
 import { costeDeCaja } from './store';
+import { PIEDRA_APORTA, PIEDRA_PUNTOS } from './constants';
 
 // --------------------------------------------------------------------------
 // Atributos
@@ -712,18 +713,17 @@ export function baseSuccessChance(fromTier: number): number {
   return Math.max(0.30, 0.78 - (fromTier - 1) * 0.05);
 }
 
-/** Lo que aporta cada Piedra de Calibración a la probabilidad. */
-export const PIEDRA_APORTA = 0.12;
+// Re-export para compatibilidad: otros ficheros los importan de aquí.
+export { PIEDRA_APORTA, PIEDRA_PUNTOS };
 
 /**
  * El tope de piedras por fusión.
  *
- * **ERA 5, Y CON 5 NO SE LLEGABA AL 95 % EN LOS TIERS ALTOS.** El tope era una regla
- * antigua escrita cuando las piedras rendían más; ahora, con un 12 % por piedra, cinco
- * piedras son exactamente un 60 %, y el T10 parte de una base de 0,33: se queda en
- * **0,93**. Es decir, el tope no era una protección, era un muro puesto delante del
- * objetivo: el jugador con cinco piedras en la mano pagaba cinco por una tirada que
- * sabía que no iba a llegar.
+ * **ERAN 5 DE 12 PUNTOS, Y CON ESO SOBRABA LA MITAD DE LA MANO.** Cinco piedras
+ * eran un 60 % fijo: en tiers bajos sobraban (la base ya llega) y en el T10 se
+ * quedaban en 0,93 sin que hubiera forma de poner más. Ahora son diez de 7
+ * puntos: el 95 % se alcanza en todos los tiers (el T11+ lo pide justo con 10,
+ * que es lo que hace que la pila entera importe) y el techo sube de 60 a 70.
  *
  * El tope nuevo es **el necesario para llegar al 95 %**, redondeado hacia arriba, con un
  * suelo de 5 para no quitarle a nadie el gesto de gastar cinco por costumbre y un techo de

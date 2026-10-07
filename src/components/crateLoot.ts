@@ -14,7 +14,7 @@
 import { TIER_SYSTEM } from '../data/tiers';
 import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal } from '../data/crafting';
 import { generateCollectorByTier } from '../data/generators';
-import { EXPANSOR_TIERS, CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, textoDeExpansor, type ExpansorTier } from '../data/store';
+import { CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, textoDeExpansor, expansorDeCaja } from '../data/store';
 import type { CrateType } from '../data/store';
 import { crateCosmetics, type CrateCosmeticSource } from '../data/cosmetics';
 import { CRISTAL_NOMBRE, CRISTAL_RAREZA } from '../data/items';
@@ -120,46 +120,42 @@ export const RARITY_RANK: Record<string, number> = {
 };
 
 /**
- * F31 · LA CARA DE LAS DIEZ CAJAS, GENERADA POR SU RAREZA.
+ * F72 · LA CARA DE LAS DIEZ CAJAS, UNA POR TIER.
  *
- * Antes eran cuatro líneas escritas a mano con el nombre, el icono, el color y
- * el precio dentro —cuatro copias del mismo dato que ya estaba en `CRATE_TYPES`
- * y en `STORE_ITEMS`—. Con diez cajas, diez líneas escritas a mano son diez
- * oportunidades de que una se quede sin precio o con el color de la vecina.
+ * Antes salía de la rareza: Común y Raro eran el mismo 'crate', así que la T1
+ * y la T2 tenían la misma cara, y Mítico y Divino el mismo 'trophy'. Con diez
+ * cajas, dos iguales seguidas hacen que abrir la siguiente no se sienta
+ * distinto. Ahora cada tier tiene su pareja (icono, acento): la forma sube con
+ * la rareza (caja → cristal → gema → trofeo → corona → medalla) y el color
+ * sube dentro de la rareza (del pizarra al azul, del violeta al rojo), con
+ * tonos brillantes 300/400 para que se lean sobre el fondo oscuro.
  *
- * Ahora sale de la rareza, y la rareza sale de `CRATE_TYPES`. Un solo dato por
- * caja, y lo que se pinta sale de él.
- *
- * EL ICONO Y EL COLOR SUBEN CON LA RAREZA, no con el tier: una caja T10 es Divina
- * y tiene que leerse como tal en la carta, aunque su botín incluya al T10. Que
- * la carta muestre el nivel y no la rareza es lo que hace que el jugador sepa si
- * abrir le va a servir para algo antes de gastar la llave.
+ * Sigue saliendo de UNA tabla y no de diez líneas: añadir una undécima caja es
+ * añadir una fila, y el banco ata que no haya dos caras iguales ni un icono
+ * que no exista en el set.
  */
-const CRATE_ACCENT: Record<string, string> = {
-  'Común': 'text-slate-300',
-  'Raro': 'text-blue-400',
-  'Épico': 'text-purple-400',
-  'Legendario': 'text-amber-400',
-  'Mítico': 'text-fuchsia-400',
-  'Divino': 'text-rose-400'
+const ICONO_POR_TIER: Record<CrateType, string> = {
+  1: 'crate', 2: 'crate',
+  3: 'crystal', 4: 'crystal',
+  5: 'gem', 6: 'gem',
+  7: 'trophy', 8: 'trophy',
+  9: 'crown', 10: 'medal'
 };
 
-const CRATE_ICON: Record<string, string> = {
-  'Común': 'crate',
-  'Raro': 'crate',
-  'Épico': 'crate',
-  'Legendario': 'crystal',
-  'Mítico': 'trophy',
-  'Divino': 'trophy'
+const ACENTO_POR_TIER: Record<CrateType, string> = {
+  1: 'text-slate-300', 2: 'text-sky-300',
+  3: 'text-blue-400', 4: 'text-cyan-300',
+  5: 'text-violet-400', 6: 'text-purple-300',
+  7: 'text-amber-400', 8: 'text-red-400',
+  9: 'text-fuchsia-400', 10: 'text-rose-400'
 };
 
 export const CRATE_META: Record<CrateType, { name: string; icon: string; accent: string; cost: number }> =
   Object.fromEntries(CRATE_TIERS.map(t => {
-    const rar = CRATE_TYPES[t].rarity;
     return [t, {
       name: CRATE_TYPES[t].name,
-      icon: CRATE_ICON[rar] ?? 'crate',
-      accent: CRATE_ACCENT[rar] ?? 'text-slate-300',
+      icon: ICONO_POR_TIER[t] ?? 'crate',
+      accent: ACENTO_POR_TIER[t] ?? 'text-slate-300',
       // El precio sale de `store.ts`, que es el fichero de los precios. Estaba
       // duplicado aquí y en `STORE_ITEMS`, y eran dos números que nadie comparaba.
       cost: costeDeCaja(t)
@@ -611,26 +607,21 @@ export interface LootBuildContext {
 const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 /**
- * EL EXPANSOR DE CADA CAJA: EL DE SU MISMO TIER.
+ * EL EXPANSOR DE CADA CAJA: EL DE SU TRAMO.
  *
- * **ANTES LO DABA EL `Math.min(3, tier)`, Y ESO ERA UNA TAPA.** La caja T4 a la
- * T10 soltaban todas el expansor T3, que es el último de la lista. Con la regla
- * del techo —cada expansor sirve hasta un máximo y después necesitas uno de un
- * tier superior— un expansor T3 **solo sirve hasta 30 ranuras**, así que en la
- * caja T7 era un item muerto: salía, se usaba y no pasaba nada.
- *
- * Ahora la caja T{n} suelta el expansor T{n}, y el expansor es exactamente la
- * llave del siguiente peldaño del almacén. Es la regla de F31 aplicada a un
- * objeto más: "la caja N suelta el cristal N, la llave N, el expansor N y la
- * caja N+1".
+ * **ANTES ERA EL DE SU MISMO TIER, Y ESO ERA LA TRAMPA DE LOS DIEZ.** La caja
+ * T{n} soltaba el expansor T{n}, y con +1 por uso convenía saltarse los
+ * primeros e ir al último: los de abajo eran irrelevantes. Ahora cada caja
+ * suelta el expansor de su tramo —T1-T2 el Inicial, T3-T6 el Intermedio, T7-T9
+ * el Avanzado y T10 el Supremo—, y el reparto vive en `expansorDeCaja()`, que
+ * es la única que lo decide.
  *
  * El nombre, las ranuras, el techo y la reventa salen de `EXPANSOR_TIERS`, que
- * los genera para los diez tiers. Si se escribieran a mano aquí, la tabla de la
- * tienda y la del botín se separarían en el primer rebalanceo (D4).
+ * es la misma tabla de la tienda. Si se escribieran a mano aquí, la tabla del
+ * botín y la de la tienda se separarían en el primer rebalanceo (D4).
  */
 function buildExpansorLoot(tier: number, rarezaDeCaja: string, caja: CrateType): LootEntry {
-  const def = EXPANSOR_TIERS.find(t => t.tier === tier);
-  if (!def) throw new Error(`No hay expansor T${tier}: la escalera de expansores y la de cajas se han separado.`);
+  const def = expansorDeCaja(tier);
   return {
     id: 'expansor',
     weight: 6,
@@ -1167,9 +1158,8 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     tabla.push(buildUpLoot(tier));
   }
 
-  // El expansor. Sale de `EXPANSOR_TIERS` y el tipo decide la caja: la T1 da el
-  // expansor T1, la T2 el T2, y de la T3 en adelante el T3, que es el único que
-  // llega al tope de 600 y por eso es el que tiene que venir de las cajas altas.
+  // El expansor. Sale de `expansorDeCaja()`: T1-T2 el Inicial, T3-T6 el
+  // Intermedio, T7-T9 el Avanzado y T10 el Supremo.
 tabla.push(buildExpansorLoot(tier, rareza, tier));
 
   if (tier >= 8) {

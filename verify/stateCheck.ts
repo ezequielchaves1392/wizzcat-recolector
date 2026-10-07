@@ -1682,7 +1682,7 @@ async function main() {
       nanites: 500_000, warehouseCapacity: 15, maxCompanionSlots: 1
     }));
     const antes = wh(g).length;
-    const e1 = g.buyStoreItem('expansorT1') as any;
+    const e1 = g.buyStoreItem('expansorInicial') as any;
     check('tienda: el expansor mete un item',
       !!e1 && wh(g).length === antes + 1, `items=${wh(g).length}`);
     const r = g.useConsumable(e1.id);
@@ -1698,30 +1698,32 @@ async function main() {
       s(g2).warehouseCapacity === 16, `cap=${s(g2).warehouseCapacity}`);
   }
   {
-    // Cada expansor vale hasta SU techo: el T1 sirve hasta 25 y en 25 deja de servir
-    // y pide el T2. Los números salen de `techoDeExpansor()`, no de aquí, porque una
-    // escalera escrita a mano en cuatro bancos es una escalera que se descuadra.
+    // Cada expansor vale hasta SU techo: el Inicial sirve hasta 60 y en 60 deja
+    // de servir y pide el Intermedio. Los números salen de `techoDeExpansor()`,
+    // no de aquí, porque una escalera escrita a mano en cuatro bancos es una
+    // escalera que se descuadra.
     const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoDeExpansor(1) - 1 }));
-    const e1 = g.buyStoreItem('expansorT1') as any;
-    check('tipos: el T1 sirve por debajo de su techo', g.useConsumable(e1.id).ok === true,
+    const e1 = g.buyStoreItem('expansorInicial') as any;
+    check('tipos: el Inicial sirve por debajo de su techo', g.useConsumable(e1.id).ok === true,
       `cap=${s(g).warehouseCapacity}`);
 const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoDeExpansor(1) }));
-    const e2 = gB.buyStoreItem('expansorT1') as any;
+    const e2 = gB.buyStoreItem('expansorInicial') as any;
     const r2 = gB.useConsumable(e2.id);
-    check('tipos: en su techo el T1 pide el T2 y no gasta',
-      r2.ok === false && /T2/.test(r2.msg ?? '')
+    check('tipos: en su techo el Inicial pide el Intermedio y no gasta',
+      r2.ok === false && /Intermedio/.test(r2.msg ?? '')
       && s(gB).warehouseCapacity === techoDeExpansor(1),
       `msg=${r2.msg ?? ''} cap=${s(gB).warehouseCapacity}`);
     const gC = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoDeExpansor(2) - 1 }));
-    const e3 = gC.buyStoreItem('expansorT2') as any;
-    check('tipos: el T2 sirve por debajo de su techo y da +1',
-      gC.useConsumable(e3.id).ok === true && s(gC).warehouseCapacity === techoDeExpansor(2),
+    const e3 = gC.buyStoreItem('expansorInicial') as any;
+    check('tipos: el Inicial NO sirve donde toca el Intermedio y no gasta',
+      gC.useConsumable(e3.id).ok === false && s(gC).warehouseCapacity === techoDeExpansor(2) - 1,
       `cap=${s(gC).warehouseCapacity}`);
   }
   {
-    // El tope es 600 y frena, no recorta: lo comprado se conserva.
+    // El tope es 600 y frena, no recorta: lo comprado se conserva. Con el
+    // almacén al tope, ni el Inicial sirve: no hay tramo por encima.
     const g = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: 600 }));
-    const e = g.buyStoreItem('expansorT2') as any;
+    const e = g.buyStoreItem('expansorInicial') as any;
     const r = g.useConsumable(e.id);
     check('tope: en 600 no se usa nada más',
       r.ok === false && s(g).warehouseCapacity === 600, `msg=${r.msg ?? ''} cap=${s(g).warehouseCapacity}`);

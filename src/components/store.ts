@@ -35,6 +35,8 @@ import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
 import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, WAREHOUSE_BASE_CAP, costeDeCaja, type CrateType } from '../data/store';
+import { PIEDRA_PUNTOS } from '../data/constants';
+import { MAX_PIEDRAS_POR_FUSION } from '../data/crafting';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
 import { showConfirmModal } from '../utils/modal';
@@ -179,8 +181,8 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   },
 
   calibrationStone: {
-    what: 'Sube 12 puntos la probabilidad de la próxima fusión.',
-    detail: 'Se usa en la Forja y se puede gastar más de una por intento, hasta 5. Cuantas más gastes en una tirada, más riesgo que asumes.'
+    what: `Sube ${PIEDRA_PUNTOS} puntos la probabilidad de la próxima fusión.`,
+    detail: `Se usa en la Forja y se puede gastar más de una por intento, hasta ${MAX_PIEDRAS_POR_FUSION}. Cuantas más gastes en una tirada, más riesgo que asumes.`
   },
   stabilityNano: {
     what: 'Sube 8 puntos la probabilidad y garantiza un afijo extra.',
@@ -208,7 +210,7 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
  * debajo del techo.
  *
  * Por eso el texto dice **qué hace falta para que sirva**, no solo cuántas
- * ranuras da: "si tu almacén ya está en N o más, necesitas el Expansor T{n+1}".
+ * ranuras da: "si tu almacén ya está en N o más, necesitas el tramo siguiente".
  * Con eso la tarjeta contesta la pregunta sin que haya que abrir nada.
  */
 function descDeExpansor(e: typeof EXPANSOR_TIERS[number]): { what: string; detail: string } {
@@ -315,10 +317,11 @@ function rarityOf(itemKey: string): string | null {
   if (itemKey === 'crateT1') return CRATE_TYPES[1].rarity;
   const map: Record<string, string> = {
     upgradeCrystal: 'Raro',
-    // La rareza de un expansor es la de su caja: es un item de caja T{n}. Antes
-    // eran dos números escritos y el expansor T2 ponía "Épico" cuando su caja es
-    // Común, que es lo que hace que un rebalance de rarezas se note aquí.
-    ...Object.fromEntries(EXPANSOR_TIERS.map(e => [e.buffId, CRATE_TYPES[e.tier as CrateType].rarity])),
+    // La rareza de un expansor es la de su tramo, que vive en la tabla: es un
+    // item del tramo que lo suelta. Antes salía de la caja T{n}, que con cuatro
+    // tramos daría dos Comunes seguidos y el Intermedio no se distinguiría del
+    // Inicial. Dos sitios con dos rarezas para lo mismo es D4.
+    ...Object.fromEntries(EXPANSOR_TIERS.map(e => [e.buffId, e.rareza])),
     // F4 · Sin `clickBuff` ni `passiveBuff`: no hay carta, no hay rareza.
     afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
     calibrationStone: 'Raro', stabilityNano: 'Legendario',
@@ -361,7 +364,7 @@ function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; 
   // está el número de verdad— y **el botón sigue enseñando el precio**, como los demás. El
   // aviso de que no va a hacer nada va en la descripción de la tarjeta, no en el botón: el
   // botón es el precio, y taparlo para poner una frase larga es peor que no avisar.
-  const expansor = EXPANSOR_TIERS.find(t => `expansorT${t.tier}` === itemKey);
+  const expansor = expansorDeCarta(itemKey);
   void expansor;
   // "¿Cabe esta compra?" lo contesta el game loop, que es quien cobra. Preguntar
   // aquí solo por el fullness del almacén apagaba el botón de una caja que sí
@@ -403,19 +406,22 @@ export function renderStoreTab(
 
     // Nota contextual: el número que cambia con la partida
     let note = '';
-    const expansorNota = EXPANSOR_TIERS.find(t => `expansorT${t.tier}` === itemKey);
+    const expansorNota = expansorDeCarta(itemKey);
     if (expansorNota) {
       // **Y SI YA NO HACE FALTA, SE DICE AQUÍ Y NO EN EL BOTÓN.** El botón lleva el precio y
       // sigue encendido —se compra siempre—, así que el aviso va en la descripción, que es
       // donde se lee antes de decidir. Ponerlo en el botón es taparle el precio.
       const tope = state.warehouseCapacity >= expansorNota.maxCap;
+      const siguiente = EXPANSOR_TIERS.find(t => t.maxCap > expansorNota.maxCap);
       // **TEXTO PLANO, SIN NADA DE MARCA.** Aquí no se pone `**`: esta nota se pinta con
       // textContent y un asterisco sale tal cual, que es lo que pasaba — se leía "**Ya no hace
       // nada**" con los dos asteriscos dentro—. Las negritas de verdad usan <strong>.
       note = tope
         ? `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}. `
-          + `Ya no hace nada: se puede comprar, pero para que sirva habría que ampliar `
-          + `hasta el Expansor T${expansorNota.tier + 1}, y hasta entonces no se usa.`
+          + (siguiente
+            ? `Ya no hace nada: se puede comprar, pero para que sirva habría que ampliar `
+              + `hasta el ${siguiente.name}, y hasta entonces no se usa.`
+            : `Ya no hace nada: es el último tramo y no hay nada por encima.`)
         : `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
     } else if (itemKey === 'afkCard') {
       // **LA DURACIÓN Y EL STOCK, LAS DOS.** Esta rama ponía solo "10 min cada una"
