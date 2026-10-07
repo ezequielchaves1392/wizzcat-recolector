@@ -678,8 +678,15 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > **Causa raíz: la página pasaba su propia píldora en `actions` y la
       > cabecera ya los enseña en su franja.** Dos cifras del mismo saldo en la
       > misma fila. Se quita la píldora; la cabecera es la fuente única.
-- [ ] **B15 · El buscador del almacén pierde el foco.**
+- [x] **B15 · El buscador del almacén pierde el foco.** Hecho en v1.7.2.
       > "El buscador en el almacen tiene un placeholder cortado que sea 'buscar...' y al poner la primera letra pierde el foco del input"
+      > **Causa raíz: el `focus()` se pedía al `root` viejo.** `redraw()` sustituye
+      > ese nodo vía `mountInto`, así que el foco caía en el input desmontado y no
+      > hacía nada. Se pregunta al contenedor (`#app`), que sobrevive a los
+      > renders. Medido en `preview.html?vista=almacen` a 390×844: antes foco a
+      > `BODY` tras la primera letra, ahora foco en `wh-buscar` con "a" y "ak".
+      > Sin banco: es DOM real y en el stub pasaría en verde sin comprobar nada
+      > (precedente A5).
 - [ ] **B16 · El daño crítico no funciona.**
       > "Ver el daño critico, no esta funcionando"
 - [ ] **B17 · Los ajustes de ruleta y notas se resetean solos.**
@@ -690,6 +697,14 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > ella.
 - [ ] **B18 · "Ojo de Caja" no dice el 10% de qué.**
       > "'Ojo de caja' que hace puntualmente? 10% de que? especificar"
+- [ ] **B19 · Con tarjeta AFK viva se sigue mostrando el cartel de pausa.** (para después)
+      > "para despues, estoy afk y se sigue mostrando el cartel... la carta afk lo que hace es permitir que los pasivos de ingreso por segundo puedan continuar hasta que se termine el tiempo de la tarjeta"
+      > Medido en captura: con AFK 28:54 restante en el HUD, la base enseña "En
+      > pausa — vuelve a la ventana para cobrar" y "En pausa por inactividad —
+      > pulsa para seguir cobrando", mientras el ingreso SÍ entra (+308 flotando).
+      > **Pista sin verificar:** la vista apaga con `isAfk && !hasPassiveBuff` pero
+      > el tick corta con `isEffectivelyAfk`, que además descuenta `hasAfkBuff`
+      > (divergencia ya anotada en Ideas sueltas). Verificar antes de tocar.
 
 **Features (después de los bugs que elijas):**
 
@@ -700,6 +715,12 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > "En la forja considerar la rareza y los afijos para la combinación final, dos comunes probablemente hagan uno común, dos objetos con 'baluarte' por ejemplo tiene altas chances de salir con ese afijo... hagamos esto para que el jugador pueda 'forzar' por probabilidades un afijo"
 - [ ] **F61 · Apilar cajas, no solo consumibles.**
       > "el apilar debe apilar cajas, no solo los consumibles."
+- [ ] **F62 · Ver el árbol pagado de cada jugador en su perfil.**
+      > "cuando termines : en la parte del perfil del jugador me gustaría que se pueda ver el arbol de pasivas que tiene 'pagado' para ver que build se está armando cada jugador"
+      > **Dato previo:** el dato ya viaja en la tarjeta pública (`nodos` con nivel y
+      > categoría) y `bloqueDeNodos()` ya existe en `tarjetaAjena.ts`, pero
+      > `cuerpoDeTarjeta()` no lo llama: la build ajena no se ve por un cable
+      > suelto, no por falta de datos.
 
 **Hecho y commiteado en v1.7.0:**
 paginador de cosméticos/logros de a 10 con las flechas arriba, stock en cartas

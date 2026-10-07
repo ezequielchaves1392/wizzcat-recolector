@@ -362,7 +362,7 @@ function draw(
           <label class="relative flex-1 min-w-[9rem]" for="wh-buscar">
             <span class="sr-only">Buscar en el almacen</span>
             <input id="wh-buscar" type="search" data-wh-search autocomplete="off"
-                   placeholder="Buscar por nombre, tier o rareza"
+                   placeholder="Buscar..." title="Buscar por nombre, tier o rareza"
                    value="${ui.buscar}"
                    class="h-10 w-full pl-3 pr-8 rounded-lg btn-ghost text-[11px] font-mono
                           placeholder:text-[var(--text-muted)] placeholder:opacity-70
@@ -1135,11 +1135,14 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
   root.querySelector<HTMLInputElement>('#wh-buscar')?.addEventListener('input', (e) => {
     ui.buscar = (e.target as HTMLInputElement).value;
     redraw();
-    // **EL CURSOR VUELVE AL FINAL, Y POR QUÉ HAY QUE HASTERLO.** El repintado recrea
-    // el input, así que el foco se pierde y con él el cursor: sin esto, escribir la
-    // segunda letra deja el campo en medio de la palabra y a partir de la tercera ya no
-    // se escribe nada. Por eso se devuelve el foco al nodo nuevo, no al viejo.
-    const campo = root.querySelector<HTMLInputElement>('#wh-buscar');
+    // **EL FOCO SE BUSCA EN EL CONTENEDOR, NO EN `root`.** `redraw()` sustituye el
+    // `root` de este cierre por uno nuevo vía `mountInto`, así que preguntar al `root`
+    // viejo devuelve el input DESMONTADO y el `focus()` no hace nada: se escribe la
+    // primera letra y el foco se pierde. El contenedor (`#app`) sobrevive a todos los
+    // renders y siempre contiene el nodo nuevo.
+    // **Y EL CURSOR VUELVE AL FINAL.** Sin esto, escribir la segunda letra deja el
+    // campo en medio de la palabra y a partir de la tercera ya no se escribe nada.
+    const campo = container.querySelector<HTMLInputElement>('#wh-buscar');
     if (campo) {
       campo.focus();
       const fin = campo.value.length;

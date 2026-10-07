@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.7.2',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Buscador que no pierde el foco',
+    lineas: [
+      'El buscador del almacén decía una frase larga que no cabía: ahora dice Buscar y la explicación va en su ayuda.',
+      'Al escribir la primera letra el campo ya no pierde el foco: se puede seguir escribiendo sin volver a tocarlo.',
+      'El cursor se queda al final del texto en cada letra, como en cualquier buscador.'
+    ]
+  },
+  {
     version: '1.7.1',
     fecha: '7 de octubre de 2026',
     titulo: 'Núcleos sin duplicar',
