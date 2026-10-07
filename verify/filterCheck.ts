@@ -22,7 +22,7 @@
 
 import {
   visibleStacksFor, matchesFilter, matchesSearch, pasaElFiltro,
-  terminosDeBusqueda, normalizaBusqueda
+  terminosDeBusqueda, normalizaBusqueda, ordenesParaFiltro, ordenValidoParaFiltro
 } from '../src/components/warehouse';
 import { materialesDeForja } from '../src/ui/forgePage';
 import { bandaDeProbabilidad, CORTE_PROBABILIDAD_ALTA, CORTE_PROBABILIDAD_MEDIA } from '../src/data/items';
@@ -726,6 +726,61 @@ async function main() {
         ? rejilla('ak', 'all', 'value')
         : 'x',
       'orden=' + rejilla('ak', 'all', 'value'));
+  }
+
+  // =========================================================================
+  //  F59 · El selector enseña lo que se puede ordenar, y hay orden por tipo
+  // =========================================================================
+  //
+  //  "Recolección por segundo" con recolectores delante no ordena nada: ningún
+  //  recolector tiene cifra en ese eje. Antes la opción salía igual y la rejilla
+  //  se quedaba quieta, que se lee como rota. Ahora cada eje sale donde tiene
+  //  cifras, y al cambiar de filtro el orden que deja de aplicar vuelve a
+  //  Default en vez de quedarse puesto sin aparecer en el selector.
+  {
+    const ids = (filtro: string) => ordenesParaFiltro(filtro).map(o => o.id);
+    check('ordenes: con recolectores sale el por clic y no el por segundo',
+      ids('collector').includes('stat') && !ids('collector').includes('statSeg'),
+      ids('collector').join(','));
+    check('ordenes: con compañeros sale el por segundo y no el por clic',
+      ids('companion').includes('statSeg') && !ids('companion').includes('stat'),
+      ids('companion').join(','));
+    check('ordenes: con cajas no sale ningún eje de stat',
+      !ids('crate').includes('stat') && !ids('crate').includes('statSeg'),
+      ids('crate').join(','));
+    check('ordenes: en Todo salen los dos ejes y el orden por tipo',
+      ids('all').includes('stat') && ids('all').includes('statSeg') && ids('all').includes('tipo'),
+      ids('all').join(','));
+    check('ordenes: el orden por tipo solo sale en Todo, que es donde agrupa',
+      !ids('collector').includes('tipo') && !ids('companion').includes('tipo')
+        && !ids('crate').includes('tipo') && !ids('otros').includes('tipo'),
+      'sale fuera de Todo');
+    check('ordenes: un orden que deja de aplicar no vale, y Default vale siempre',
+      !ordenValidoParaFiltro('statSeg', 'collector')
+        && ordenValidoParaFiltro('stat', 'collector')
+        && ordenValidoParaFiltro('default', 'crate'),
+      'statSeg+collector sigue valiendo');
+    check('ordenes: un orden que no existe tampoco vale',
+      !ordenValidoParaFiltro('invento', 'all'), 'invento vale');
+  }
+  {
+    // **POR TIPO: COMPAÑEROS, RECOLECTORES, CAJAS Y EL RESTO.** Es decisión del
+    // jugador, y dentro de cada tipo no se mueve nada: el sort es estable y
+    // conserva la llegada. Dos recolectores seguidos salen en el mismo orden
+    // en que entraron.
+    const g = await boot(baseSave([
+      crate('c1', 1, 1),
+      collector('r1'), collector('r2'),
+      companion('m1'),
+      consumable('u1', 'afk', 1),
+      companion('m2'),
+      collector('r3')
+    ]));
+    const porTipo = celdas(g, 'all', 'tipo');
+    check('orden tipo: compañeros, recolectores, cajas y el resto',
+      porTipo.join(',') === 'm1,m2,r1,r2,r3,c1,u1', porTipo.join(','));
+    check('orden tipo: no se pierde ningún item al agrupar',
+      porTipo.length === 7, porTipo.join(','));
   }
 
 

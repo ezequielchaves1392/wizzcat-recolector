@@ -100,6 +100,59 @@ const FILTROS = [
   { id: 'otros', label: 'Otros' }
 ];
 
+/**
+ * LAS ORDENACIONES DEL SELECTOR, Y EN QUÉ FILTROS SALE CADA UNA.
+ *
+ * **EL SELECTOR ENSEÑA LO QUE SE PUEDE ORDENAR, NO TODO.** "Recolección por
+ * segundo" con recolectores delante es una opción que no ordena nada: ningún
+ * recolector tiene cifra en ese eje y la rejilla queda igual que estaba, así
+ * que el jugador la elige, no pasa nada y parece rota. Cada eje sale donde
+ * tiene cifras: el por clic con recolectores (y en Todo, donde los pone
+ * delante), el por segundo con compañeros, y "Tipo" solo en Todo, que es el
+ * único filtro donde agrupar por tipo cambia algo.
+ *
+ * Exportadas para que el banco las lea: la regla es qué sale dónde, y una
+ * prueba que la escribiera a mano sería la segunda copia de esta lista.
+ */
+export interface OrdenAlmacen { id: string; label: string; filtros: string[] }
+export const ORDENES_ALMACEN: OrdenAlmacen[] = [
+  { id: 'default', label: 'Default', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
+  { id: 'value', label: 'Mayor valor', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
+  { id: 'stat', label: 'Recolección por clic', filtros: ['all', 'collector'] },
+  { id: 'statSeg', label: 'Recolección por segundo', filtros: ['all', 'companion'] },
+  { id: 'tipo', label: 'Tipo', filtros: ['all'] },
+  { id: 'rarity', label: 'Rareza', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
+  { id: 'tier', label: 'Tier', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
+  { id: 'name', label: 'Nombre', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] }
+];
+
+/** Las ordenaciones que salen en el selector con este filtro. */
+export function ordenesParaFiltro(filtro: string): OrdenAlmacen[] {
+  return ORDENES_ALMACEN.filter(o => o.filtros.includes(filtro));
+}
+
+/**
+ * Si este orden sigue valiendo con este filtro.
+ *
+ * Al cambiar de filtro, un orden que ya no sale se quedaría puesto sin
+ * aparecer en el selector: la rejilla ordenaría por algo que no se ve y no
+ * habría forma de quitarlo salvo volver a Todo. Por eso el cambio de filtro
+ * vuelve a Default cuando el orden deja de aplicar.
+ */
+export function ordenValidoParaFiltro(sort: string, filtro: string): boolean {
+  return ordenesParaFiltro(filtro).some(o => o.id === sort);
+}
+
+/**
+ * EL ORDEN DE LOS TIPOS, Y POR QUÉ LOS COMPAÑEROS VAN PRIMERO.
+ *
+ * Es decisión del jugador: primero los compañeros, después los recolectores y
+ * después las cajas; lo demás (cristales, consumibles) al final, en el orden
+ * en que llegaron. Dentro de cada tipo no se mueve nada: el sort es estable y
+ * conserva la llegada.
+ */
+const ORDEN_POR_TIPO: Record<string, number> = { companion: 0, collector: 1, crate: 2 };
+
 // Estado de la pantalla. Sobrevive a los re-render.
 const ui = {
   selectedId: null as string | null,
@@ -312,6 +365,16 @@ function draw(
     cells.push(emptyCell(celdas.length + n));
   }
 
+  // **LA OPCIÓN DEL SELECTOR, Y SOLO SI APLICA AL FILTRO.** El selector enseña
+  // lo que se puede ordenar con el filtro puesto: una opción que no aplica no
+  // se pinta, en vez de pintarse apagada. Una opción apagada se lee como "esto
+  // existe pero no puedes", y aquí no es que no puedas: es que con este filtro
+  // no hay nada que ordenar en ese eje.
+  const opcionOrden = (id: string) => {
+    const o = ordenesParaFiltro(ui.filter).find(x => x.id === id);
+    return o ? `<option value="${o.id}" ${ui.sort === o.id ? 'selected' : ''}>${o.label}</option>` : '';
+  };
+
   const body = `
     <!--
       Dos columnas a partir de lg. Antes el panel de detalle era un overlay
@@ -396,8 +459,8 @@ function draw(
               botones usan palabras inglesas, y una opción en medio de "Mayor valor" y
               "Mayor nivel" era la única que traducía una etiqueta de software.
             -->
-            <option value="default" ${ui.sort === 'default' ? 'selected' : ''}>Default</option>
-            <option value="value" ${ui.sort === 'value' ? 'selected' : ''}>Mayor valor</option>
+            ${opcionOrden('default')}
+            ${opcionOrden('value')}
             <!--
               LOS DOS EJES DEL STAT, Y POR QUÉ NO ES UNO.
 
@@ -410,12 +473,16 @@ function draw(
               El multiplicador tampoco entra en el de por segundo: su 1,75 no son unidades
               por segundo, son 1,75 veces lo de los demás. Queda al final, no en cero: cero
               es una cifra y el multiplicador no tiene ninguna en ese eje.
+
+              Y cada eje sale donde tiene cifras: el por clic con
+              recolectores, el por segundo con compañeros, y "Tipo" solo en Todo.
             -->
-            <option value="stat" ${ui.sort === 'stat' ? 'selected' : ''}>Recolección por clic</option>
-            <option value="statSeg" ${ui.sort === 'statSeg' ? 'selected' : ''}>Recolección por segundo</option>
-            <option value="rarity" ${ui.sort === 'rarity' ? 'selected' : ''}>Rareza</option>
-            <option value="tier" ${ui.sort === 'tier' ? 'selected' : ''}>Tier</option>
-            <option value="name" ${ui.sort === 'name' ? 'selected' : ''}>Nombre</option>
+            ${opcionOrden('stat')}
+            ${opcionOrden('statSeg')}
+            ${opcionOrden('tipo')}
+            ${opcionOrden('rarity')}
+            ${opcionOrden('tier')}
+            ${opcionOrden('name')}
           </select>
 
           <!--
@@ -1109,6 +1176,10 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
     btn.addEventListener('click', () => {
       sfx.nav();
       ui.filter = btn.dataset.filter!;
+      // Al cambiar de filtro, un orden que ya no sale se quedaría puesto sin
+      // aparecer en el selector: la rejilla ordenaría por algo invisible. Se
+      // vuelve a Default, que es el estado natural del almacén.
+      if (!ordenValidoParaFiltro(ui.sort, ui.filter)) ui.sort = 'default';
       redraw();
     });
   });
@@ -1554,6 +1625,10 @@ export function visibleStacksFor(
   if (sort === 'name') items = [...items].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   else if (sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
   else if (sort === 'tier') items = [...items].sort((a, b) => (b.tier || 0) - (a.tier || 0));
+  // **POR TIPO: COMPAÑEROS, RECOLECTORES, CAJAS Y EL RESTO.** El orden sale de
+  // `ORDEN_POR_TIPO` y dentro de cada tipo no se mueve nada, porque el sort es
+  // estable: agrupar no es reordenar lo agrupado.
+  else if (sort === 'tipo') items = [...items].sort((a, b) => (ORDEN_POR_TIPO[a.type] ?? 3) - (ORDEN_POR_TIPO[b.type] ?? 3));
   // **EL NIVEL, QUE EN LA FORJA ES LA MITAD DEL NÚMERO Y EN EL ALMACÉN NO SE VE.**
   // El nivel multiplica el daño entero del item, así que dos recolectores del mismo tier y
   // el mismo potencial dan muy distinto. Es el eje que más se echa de menos en la rejilla de

@@ -719,9 +719,15 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
 
 **Features (después de los bugs que elijas):**
 
-- [ ] **F59 · Filtros del almacén que solo enseñan lo aplicable, más filtro por tipo.**
+- [x] **F59 · Filtros del almacén que solo enseñan lo aplicable, más filtro por tipo.** Hecho en v1.9.0.
       > "En el filtro, mostrar los filtros que puedo realizar ej: si tengo recolectores seleccionado no mostrar ordenar por click por segundo porque es un valor único de los compañeros."
       > "Falta un filtro por tipo --- es decir primero los compañeros dsp los recolectores etc..."
+      > **Causa raíz: el selector era fijo y el orden por tipo no existía.** Las
+      > ocho opciones salían siempre, así que elegir "por segundo" con
+      > recolectores no ordenaba nada y parecía roto. Ahora cada eje sale donde
+      > tiene cifras (`ORDENES_ALMACEN`), el orden por tipo agrupa compañeros,
+      > recolectores, cajas y resto, y cambiar de filtro devuelve a Default si
+      > el orden deja de aplicar. Lo cubre `filterCheck` (+9).
 - [ ] **F60 · La forja hereda rareza y afijos por probabilidad.**
       > "En la forja considerar la rareza y los afijos para la combinación final, dos comunes probablemente hagan uno común, dos objetos con 'baluarte' por ejemplo tiene altas chances de salir con ese afijo... hagamos esto para que el jugador pueda 'forzar' por probabilidades un afijo"
 - [ ] **F61 · Apilar cajas, no solo consumibles.**

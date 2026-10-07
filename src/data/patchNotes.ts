@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.9.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Ordenar por tipo en el almacén',
+    lineas: [
+      'El almacén tiene un orden nuevo: por tipo, con los compañeros primero, después los recolectores y después las cajas.',
+      'El selector de orden ahora enseña solo lo que sirve con el filtro puesto: con recolectores no sale el por segundo, y al revés.',
+      'Si cambias de filtro y el orden deja de valer, vuelve solo al orden de llegada.'
+    ]
+  },
+  {
     version: '1.8.2',
     fecha: '7 de octubre de 2026',
     titulo: 'Con tarjeta no hay pausa',
