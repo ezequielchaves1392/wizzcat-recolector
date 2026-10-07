@@ -282,7 +282,7 @@ export function renderPrestigePage(
  * LA HOJA DE UN NODO, Y POR QUÉ DEJA DE SER UNA FRASE.
  *
  * Antes el diálogo del árbol llevaba **una línea de texto**: "Instinto de Forja — nivel
- * 1/5. +6 % a la probabilidad de crafteo." Con veintitrés nodos en pantalla y cinco
+ * 1/5. +6 % a la probabilidad de crafteo." Con veintidós nodos en pantalla y cinco
  * niveles en cada uno, esa línea responde a "¿cuánto cuesta?" y a nada más. Y las dos
  * preguntas que un jugador tiene al mirar un nodo son otras: **qué hace esto** y
  * **para qué me sirve**.

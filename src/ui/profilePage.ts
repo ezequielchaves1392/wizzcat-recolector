@@ -119,7 +119,16 @@ export function identityCard(opts: {
 }
 
 /** Estado de la pantalla. Sobrevive a los re-render. */
-const ui = { tab: 'title' as 'title' | 'frame' | 'banner' };
+const ui = {
+  tab: 'title' as 'title' | 'frame' | 'banner',
+  // Índice de página de cada lista larga, para no bajar en scroll infinito. La
+  // página es 0-based; `PAGINA` dice cuántos caben.
+  cosPage: 0,
+  achPage: 0
+};
+
+/** Cuántos elementos se enseñan por página en las listas largas. */
+const PAGINA = 10;
 
 export function renderProfilePage(
   container: HTMLElement,
@@ -234,11 +243,52 @@ export function renderProfilePage(
     `;
   };
 
-  const cosGrid = (type: 'title' | 'frame' | 'banner') => `
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-      ${COSMETICS_BY_TYPE(type).map(cosCard).join('')}
-    </div>
-  `;
+  /**
+   * PAGINADOR DE LAS LISTAS LARGAS.
+   *
+   * El perfil tenía dos listas que crecen con el contenido —los cosméticos de cada
+   * pestaña y los 27 logros— y las dos se pintaban enteras. Con trece marcos y veinte
+   * y tantos logros la pantalla era un scroll larguísimo para llegar a la última
+   * tarjeta, y el jugador no tenía forma de saber cuánto quedaba.
+   *
+   * Aquí se enseña de a `PAGINA` y se navega con flechas. La página vive en `ui` (como
+   * la pestaña) porque sobrevive al re-render: sin eso, pulsar "siguiente" repintaba y
+   * volvía a la página 0.
+   */
+  const paginador = (pagina: number, total: number, attr: string) => {
+    const paginas = Math.max(1, Math.ceil(total / PAGINA));
+    if (paginas <= 1) return '';
+    const p = Math.min(Math.max(0, pagina), paginas - 1);
+    const desde = p * PAGINA + 1;
+    const hasta = Math.min(total, (p + 1) * PAGINA);
+    const flecha = (destino: number, deshabilitado: boolean, icono: string, etiqueta: string, giro = '') => `
+      <button class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer
+                     ${deshabilitado ? 'opacity-40 pointer-events-none' : ''}"
+              data-page="${attr}" data-page-to="${destino}" aria-label="${etiqueta}">
+        <span class="${giro} [&>span>svg]:w-4 [&>span>svg]:h-4">${ic(icono as any)}</span>
+      </button>`;
+    return `
+      <div class="flex items-center justify-center gap-3 mb-3">
+        ${flecha(p - 1, p === 0, 'back', 'Página anterior')}
+        <span class="text-[10px] font-mono text-[var(--text-muted)] tabular">
+          ${desde}–${hasta} de ${total} · pág. ${p + 1}/${paginas}
+        </span>
+        ${flecha(p + 1, p >= paginas - 1, 'back', 'Página siguiente', 'rotate-180')}
+      </div>`;
+  };
+
+  const cosGrid = (type: 'title' | 'frame' | 'banner') => {
+    const todos = COSMETICS_BY_TYPE(type);
+    const paginas = Math.max(1, Math.ceil(todos.length / PAGINA));
+    const p = Math.min(ui.cosPage, paginas - 1);
+    const visibles = todos.slice(p * PAGINA, p * PAGINA + PAGINA);
+    return `
+      ${paginador(p, todos.length, 'cos')}
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        ${visibles.map(cosCard).join('')}
+      </div>
+    `;
+  };
 
   // --- Logros ---
   const achRow = (a: any) => {
@@ -372,8 +422,13 @@ export function renderProfilePage(
       ${sectionHead('Logros', 'achievement', `
         <span class="text-[10px] font-mono text-[var(--text-muted)]">${unlocked.length}/${achievements.length}</span>
       `)}
+      ${paginador(Math.min(ui.achPage, Math.max(0, Math.ceil(achievements.length / PAGINA) - 1)), achievements.length, 'ach')}
       <div class="flex flex-col gap-2">
-        ${achievements.map(achRow).join('')}
+        ${(() => {
+          const paginas = Math.max(1, Math.ceil(achievements.length / PAGINA));
+          const p = Math.min(ui.achPage, paginas - 1);
+          return achievements.slice(p * PAGINA, p * PAGINA + PAGINA).map(achRow).join('');
+        })()}
       </div>
       ${secrets.length > 0 ? `
         <p class="text-[9px] text-[var(--text-muted)] mt-3 text-center leading-relaxed">
@@ -397,8 +452,25 @@ export function renderProfilePage(
   root.querySelector('[data-go-prestige]')?.addEventListener('click', onGoPrestige);
   root.querySelectorAll<HTMLElement>('[data-cos-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.cosTab === ui.tab) return;
       sfx.nav();
       ui.tab = btn.dataset.cosTab as 'title' | 'frame' | 'banner';
+      // Cambiar de pestaña vuelve a la primera página: cada tipo tiene su propio
+      // total, y quedarse en la página 3 de los títulos al pasar a banners, que
+      // puede tener menos, dejaría la lista vacía.
+      ui.cosPage = 0;
+      renderProfilePage(container, game, onGoPrestige, go);
+    });
+  });
+
+  // La paginación de las dos listas. `data-page` dice cuál y `data-page-to` a qué
+  // página. Se repinta solo la página; el resto del perfil no se toca.
+  root.querySelectorAll<HTMLElement>('[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sfx.pick();
+      const destino = Math.max(0, Number(btn.dataset.pageTo) || 0);
+      if (btn.dataset.page === 'cos') ui.cosPage = destino;
+      else ui.achPage = destino;
       renderProfilePage(container, game, onGoPrestige, go);
     });
   });

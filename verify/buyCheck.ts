@@ -158,6 +158,48 @@ async function main() {
     check('tienda: y sigue contando tras recargar', s(g2).afkCards === 1, 'afkCards=' + s(g2).afkCards);
   }
   {
+    // **LO QUE ENSEÑA LA TARJETA ("En almacén: N") SALE DE AQUÍ.**
+    //
+    // La tarjeta AFK enseñaba su duración pero no su stock: su rama hacía sombra a
+    // la genérica que cuenta lo guardado. Estas pruebas atan el número que enseña
+    // la vista (`getOwnedCount`) al que cuenta el motor, carta por carta.
+    //
+    // Y la AFK se cuenta con el contador derivado (`state.afkCards`), no con un
+    // segundo escaneo: dos criterios para el mismo número es como se separan.
+    const g = await boot(baseSave([], { nanites: 200_000 }));
+    g.buyStoreItem('afkCard');
+    g.buyStoreItem('afkCard');
+    check('stock: la AFK cuenta lo mismo que el contador derivado',
+      g.getOwnedCount('afkCard') === s(g).afkCards && s(g).afkCards === 2,
+      `owned=${g.getOwnedCount('afkCard')} afkCards=${s(g).afkCards}`);
+    g.buyStoreItem('clickX2Card');
+    check('stock: la de x2 cuenta la pila del almacén',
+      g.getOwnedCount('clickX2Card') === 1, `owned=${g.getOwnedCount('clickX2Card')}`);
+    g.buyStoreItem('crateT1');
+    g.buyStoreItem('crateT1');
+    check('stock: la caja T1 cuenta sus unidades',
+      g.getOwnedCount('crateT1') === 2, `owned=${g.getOwnedCount('crateT1')}`);
+    check('stock: una ranura no es un objeto contable, y devuelve null en vez de 0',
+      g.getOwnedCount('companionSlot1') === null, `owned=${g.getOwnedCount('companionSlot1')}`);
+  }
+  {
+    // La caja T1 cuenta SOLO sus cajas: una T2 al lado no suma, porque el
+    // `crateType` se deduce del nombre y no del `type`, que las metería a todas
+    // en el mismo saco.
+    const g = await boot(baseSave([crate('c1', 1, 3), crate('c2', 2, 5)], { nanites: 200_000 }));
+    check('stock: la T1 no suma las cajas de otros tiers',
+      g.getOwnedCount('crateT1') === 3, `owned=${g.getOwnedCount('crateT1')}`);
+  }
+  {
+    // Y un consumible viejo sin `buffId` se sigue contando por el nombre, con el
+    // mismo fallback que usa el resto del motor: si no, una partida vieja vería
+    // "En almacén: 0" con la pila delante.
+    const viejo = { id: 'v1', name: 'Tarjeta Click x2', type: 'consumable', details: 'x', rarity: 'Raro', tier: 0, stackable: true, stackCount: 4 };
+    const g = await boot(baseSave([viejo], { nanites: 200_000 }));
+    check('stock: un consumible sin buffId se cuenta por su nombre',
+      g.getOwnedCount('clickX2Card') === 4, `owned=${g.getOwnedCount('clickX2Card')}`);
+  }
+  {
     // F31 · UN COMPAÑERO TIENE QUE EXISTIR EN LOS DOS SITIOS, Y YA NO SE COMPRA.
     //
     // El caso era "el compañero comprado". Con las veinte cartas de tier fuera de

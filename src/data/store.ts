@@ -648,7 +648,11 @@ export const RANURA_POR_CARTA: Record<string, { da: number; etiqueta: string }> 
  * (R3).
  */
 export const STORE_ITEMS = {
-  upgradeCrystal: { cost: 200, label: 'Cristal de Mejora' },
+  // **"PACK DE CRISTAL", Y POR QUÉ.** La carta cuesta 200 y entrega `valorDeUnCristal(1)`
+  // = 675 cristales de golpe. Llamarla "Cristal de Mejora" hacía que el jugador creyera
+  // que compraba UN cristal por 200; el nombre tiene que decir que es un lote, y su
+  // cantidad va en la nota de la tarjeta ("Pack de 675 cristales").
+  upgradeCrystal: { cost: 200, label: 'Pack de Cristal de Mejora' },
   crateT1: { cost: CRATE_COSTS[0], label: CRATE_TYPES[1].name },
   // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).
   // Se han retirado de la tienda; ver el comentario en `CONSUMABLES` para el porqué

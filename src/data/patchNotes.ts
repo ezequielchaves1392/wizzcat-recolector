@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.7.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Stock en el mercado y packs de cristal',
+    lineas: [
+      'Las cartas del mercado dicen cuántas tienes guardadas: cajas, tarjetas y piedras enseñan su stock antes de comprar.',
+      'La carta de cristal ahora se llama pack y dice cuántos cristales trae cada uno, y al comprar varios el diálogo dice el total que te llevas.',
+      'Los cosméticos y los logros del perfil van de diez en diez, con las flechas arriba de cada lista.',
+      'El nodo de operaciones offline sale del árbol: prometía clics al volver y no hacía nada.'
+    ]
+  },
+  {
     version: '1.6.0',
     fecha: '6 de octubre de 2026',
     titulo: 'El banner es el fondo y el marco es tu icono',

@@ -159,13 +159,26 @@ export const TREE_NODES: TreeNode[] = [
   },
 
   // ---------------------------------------------------------------- TIER 3
-  {
-    id: 'offline_ops', name: 'Operaciones Offline', description: 'Los clics automáticos siguen funcionando 2 min al volver.',
-    lore: 'La base no duerme, pero tampoco rinde. Estos dos minutos son los que aguanta hasta que vuelves.',
-    icon: 'clock', category: 'automatizacion', tier: 3, requires: ['auto_clicker2'],
-    baseCost: 25, costGrowth: 1.8, maxLevel: 5,
-    bonus: { offlineClicks: 120 }, x: 3, y: 0
-  },
+  //
+  // ---------------------------------------------------------------------------
+  //  `offline_ops` YA NO ESTA, Y EL PORQUE ESTA AQUI
+  // ---------------------------------------------------------------------------
+  //
+  // Era "Operaciones Offline": +2 min de clics automaticos al volver, con
+  // `bonus: { offlineClicks: 120 }`. **Era una promesa de ingreso sin mirar**, que es
+  // justo lo que R10 prohibe, y ademas nunca se consumia: el campo `offlineClicks`
+  // existia en el estado y en `PassiveBonuses` y no lo leia el motor. Un nodo que
+  // cobra nucleos por una bonificacion que no hace nada es una trampa.
+  //
+  // Se borra el nodo, no el campo: las partidas viejas que lo tuvieran comprado
+  // conservan su nivel guardado (igual que con `blueprint`), y el campo
+  // `offlineClicks` se queda en el tipo para no romper su carga. Lo que desaparece es
+  // la forma de comprarlo.
+  //
+  // **`full_automation` NO SE QUEDA HUERFANO.** Lo tenia en `requires`, asi que se le
+  // cambia la puerta por la que tenia `offline_ops` (`auto_clicker2`), que es su rama:
+  // sin eso, el nodo seria inalcanzable para quien no lo tuviera ya comprado.
+  // ---------------------------------------------------------------------------
   {
     id: 'quantum_amp', name: 'Amplificador Cuántico', description: '+10% a todos los multiplicadores.',
     lore: 'La misma idea del amplificador, pero medida en otro sitio: aqui no hay midiendo nada.',
@@ -206,7 +219,7 @@ export const TREE_NODES: TreeNode[] = [
   {
     id: 'full_automation', name: 'Automatización Total', description: '+4 clics automáticos por segundo.',
     lore: 'Que la base juegue sola. Se ha arreglado todo lo que hacia falta para dejarlo.',
-    icon: 'bolt', category: 'automatizacion', tier: 4, requires: ['offline_ops', 'multiplier_amp'],
+    icon: 'bolt', category: 'automatizacion', tier: 4, requires: ['auto_clicker2', 'multiplier_amp'],
     baseCost: 180, costGrowth: 1.9, maxLevel: 5,
     bonus: { autoClick: 4 }, x: 4, y: 0
   },

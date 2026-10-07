@@ -104,7 +104,7 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 | **Afijos** | 14 afijos en 6 rarezas. Modifican daño, pasivo y suerte de forja. | `data/crafting.ts:42-71` |
 | **Valoración** | El precio es dinámico: tier × nivel × rareza × potencial × afijos × fama × antigüedad. El jugador se queda el 42 %. | `data/valuation.ts` |
 | **Ascensión** | Reinicia progreso a cambio de núcleos. Umbral: 1 M de producción. Curva `(produccion / 1e6)^0.6`. | `data/prestige.ts`, `ui/prestigePage.ts` |
-| **Árbol de pasivas** | 23 nodos, 5 columnas, requisitos cruzados. Se paga con núcleos. Cada nodo tiene lore propio y la hoja lo enseña. | `data/tree.ts`, `ui/prestigePage.ts` |
+| **Árbol de pasivas** | 22 nodos, 5 columnas, requisitos cruzados. Se paga con núcleos. Cada nodo tiene lore propio y la hoja lo enseña. | `data/tree.ts`, `ui/prestigePage.ts` |
 | **Logros** | 15 (13 públicos + 2 secretos). Recompensa pasiva de click y pasivo. | `achievements.ts`, `data/achievements.ts` |
 | **Cosméticos** | 34: 10 títulos, 7 marcos, 8 banners y 9 de caja. Casi nada se vende: se obtiene con logros, núcleos, ranking o cajas. | `data/cosmetics.ts` |
 | **Ranking** | 4 tablas. Puntuación = nanitas + logros×50 000 + secretos×250 000 + firmas×20 000. Se reordena en cliente. | `services/rankingService.ts`, `components/rankings.ts` |

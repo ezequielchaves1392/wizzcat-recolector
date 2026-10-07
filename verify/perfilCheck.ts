@@ -357,4 +357,4 @@ async function main() {
   resumen('la tarjeta pública de otro jugador');
 }
 
-main();
+export default main();

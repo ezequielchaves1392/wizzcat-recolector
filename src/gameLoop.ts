@@ -853,7 +853,10 @@ function esCartaEnLote(itemKey: string): boolean {
 
 /** Cómo llama la vista a una unidad de esta carta: "elige cuántas **cajas**". */
 function nombreDeUnidad(itemKey: string): string {
-  if (itemKey === 'upgradeCrystal') return 'cristal';
+  // El cristal se compra por PACKS (la carta cuesta 200 y entrega `valorDeUnCristal(1)`
+  // unidades, o sea 675). Llamar "cristal" a la unidad de compra hacía que el diálogo
+  // dijera "2 × cristal", como si compraras dos cristales. Es un pack, y se llama pack.
+  if (itemKey === 'upgradeCrystal') return 'pack';
   if (itemKey === 'crateT1') return 'caja';
   return 'unidad';
 }
@@ -6361,6 +6364,66 @@ const RITMO_GUARDADO_MS = 30_000;
       const item: any = state.warehouse.find((w: any) => w.id === itemId);
       if (!item || item.type !== 'collector') return 0;
       return collectorValue(item, { sellMult: 1 + state.bonus.sellMult });
+    },
+
+    /**
+     * CUÁNTAS UNIDADES DE ESTA CARTA TIENE EL JUGADOR EN EL ALMACÉN.
+     *
+     * ## POR QUÉ LO CUENTA EL MOTOR
+     *
+     * La tienda enseñaba "En almacén: N" a mano y solo para las dos piedras de
+     * forja: el resto de cartas —la caja, la tarjeta AFK, la de x2, los
+     * expansores— no decían cuántas tenías. El jugador miraba la carta sin saber
+     * si ya tenía tres cajas guardadas o ninguna, y esa es justo la pregunta que
+     * se hace antes de comprar.
+     *
+     * Y lo cuenta el motor y no la vista porque el almacén es del motor (R1): la
+     * vista leería `state.warehouse` a mano y cada carta con su criterio —caja por
+     * nombre, consumible por `buffId`, cristal por `state.crystals`—, que es la
+     * forma de que dos cartas cuenten distinto. Aquí hay un criterio y un sitio.
+     *
+     * Devuelve `null` para las cartas que no son un objeto contable del almacén
+     * —una ranura, un expansor aplicado—, para que la vista no enseñe "Tienes 0"
+     * donde no hay un contador. El cero de una caja SÍ es un dato; el cero de una
+     * ranura es ruido.
+     */
+    getOwnedCount: (itemKey: string): number | null => {
+      // El cristal es un recurso, no un item: vive en `state.crystals` y el número
+      // ya lo enseña su propia nota.
+      if (itemKey === 'upgradeCrystal') return state.crystals ?? 0;
+      // Las ranuras no son objetos: se poseen o no, y la tarjeta ya lo dice con
+      // "Comprado". Devolver 0 sería contar algo que no está en el almacén.
+      if (RANURA_POR_CARTA[itemKey]) return null;
+
+      const def = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
+      if (itemKey === 'crateT1') {
+        // La caja se cuenta por su nombre: el `crateType` no vive en el item, el
+        // tipo se deduce del nombre (`getCrateTypeFromName`), que es lo mismo que
+        // hace el abridor. Contar por `type === 'crate'` sumaría las diez cajas.
+        return countCratesInWarehouse()[1];
+      }
+      if (def) {
+        // La tarjeta AFK tiene su propio contador derivado (`state.afkCards`, que
+        // mantiene `refreshAfkCardCount()`): NO se re-escanea aquí, porque serían dos
+        // criterios para el mismo número (R2) y el escaneo no sabría de partidas
+        // viejas sin `buffId`.
+        if (def.buffId === 'afk') return state.afkCards ?? 0;
+        // Un consumible se cuenta por su `buffId`, que es el identificador estable
+        // —los nombres ya han cambiado varias veces y el efecto se decide por él—,
+        // con el mismo fallback a `inferBuffIdFromName` que usa el resto del motor
+        // para las partidas viejas que no lo traen guardado.
+        let total = 0;
+        for (const w of state.warehouse as any[]) {
+          if (w.type !== 'consumable') continue;
+          const buffId = (w as any).buffId ?? inferBuffIdFromName(w.name || '');
+          if (buffId !== def.buffId) continue;
+          total += w.stackable ? (w.stackCount || 1) : 1;
+        }
+        return total;
+      }
+      // Una carta que no es objeto del almacén (una ranura de compañero, por
+      // ejemplo) no tiene contador. `null` y no 0: la vista los distingue.
+      return null;
     },
 
     // ======================================================================

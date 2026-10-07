@@ -111,6 +111,16 @@ const CATEGORIES: Category[] = [
  * que `data/store.ts` ya había proibido para las cajas, y nadie lo vio porque
  * nadie la leía con la tabla al lado.
  */
+/**
+ * Cuántos cristales entrega un pack, que es `valorDeUnCristal(1)`.
+ *
+ * **NO ES UN NÚMERO ESCRITO Y POR ESO NO MIENTE.** El pack entrega exactamente lo que
+ * vale un cristal de T1, que es `costeDeCaja(1)`. Escribir "675" aquí y en la lógica
+ * serían dos fuentes del mismo número, y el día que la curva cambie el texto seguiría
+ * diciendo 675. Se lee de la tabla que usan la compra y el botín.
+ */
+const CRISTALES_POR_PACK = costeDeCaja(1);
+
 export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   crateT1: {
     what: 'La caja básica, y la única que se vende.',
@@ -135,7 +145,7 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     // que la casilla se para. Ese es el trompo, y es lo único que esta tarjeta
     // tiene que contar.
   upgradeCrystal: {
-    what: 'El recurso que sube de nivel a recolectores y a compañeros.',
+    what: `Un pack de cristales: ${formatNumber(CRISTALES_POR_PACK)} de golpe, que suben de nivel a recolectores y compañeros.`,
     // **ESTE TEXTO YA NO HABLA DE NIVELES PORQUE NO LOS HAY.** Antes decía "cada
     // recolector se sintoniza con el cristal de SU MISMO tier" y enumeraba de dónde
     // salían los otros nueve: eso era F26, que era una regla del sistema de las
@@ -144,7 +154,7 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     // Y hay una regla nueva que sí hay que decir, porque no se deduce solo: **un
     // T10 cuesta mucho más que un T1**, y eso es lo que hace que subir un item
     // alto sea una decisión y no un trámite.
-    detail: 'Sube el nivel de un recolector o un compañero. Cuanto mayor es el nivel del item, más cuesta cada nivel, y el coste sube en cada subida. La probabilidad de acierto baja con el nivel y no hay forma de comprarse más suerte.'
+    detail: `La carta se compra por packs: cada pack entrega ${formatNumber(CRISTALES_POR_PACK)} cristales de una vez. Sube el nivel de un recolector o un compañero; cuanto mayor es el nivel del item, más cuesta cada nivel, y el coste sube en cada subida. La probabilidad de acierto baja con el nivel y no hay forma de comprarse más suerte.`
   },
 
   afkCard: {
@@ -272,6 +282,32 @@ function iconFor(itemKey: string): IconName {
   return map[itemKey] ?? 'store';
 }
 
+/**
+ * Cómo se llama una unidad de esta carta en el almacén, en singular y en plural.
+ *
+ * "En almacén: 1 caja" y "En almacén: 3 cajas" tienen que concordar, y con una sola
+ * forma salía "1 cajas". El número sale del motor (`getOwnedCount`); la palabra, de
+ * aquí, que es la vista.
+ */
+function singularDeUnidad(itemKey: string): string {
+  if (itemKey === 'crateT1') return 'caja';
+  return 'unidad';
+}
+function pluralDeUnidad(itemKey: string): string {
+  if (itemKey === 'crateT1') return 'cajas';
+  return 'unidades';
+}
+
+/**
+ * El nombre en plural del cristal.
+ *
+ * "Cristal de Mejora" en plural no se forma añadiendo una ese a la última palabra
+ * ("Cristal de Mejoras" suena mal): el plural es del núcleo, "cristales". Como el
+ * singular del item vive en `data/items.ts`, aquí se dice solo el plural y un
+ * renombrado no lo deja mintiendo.
+ */
+const CRISTAL_PLURAL = 'cristales';
+
 function rarityOf(itemKey: string): string | null {
   // F31 · Y la de la caja sale de ``CRATE_TYPES``, que es donde vive su nombre.
   // Antes era un objeto de cuatro pares en línea, aquí, que con diez cajas solo
@@ -382,13 +418,21 @@ export function renderStoreTab(
           + `hasta el Expansor T${expansorNota.tier + 1}, y hasta entonces no se usa.`
         : `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
     } else if (itemKey === 'afkCard') {
-      note = `${Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000)} min cada una · acumulable ×3`;
+      // **LA DURACIÓN Y EL STOCK, LAS DOS.** Esta rama ponía solo "10 min cada una"
+      // y hacía sombra a la genérica de "En almacén: N": la tarjeta decía cuánto dura
+      // cada una pero no cuántas tienes guardadas, que es justo la pregunta antes de
+      // comprar otra. El número sale del motor, como en el resto de cartas.
+      const duracion = `${Math.round((game.getAfkDurationMs?.() ?? 600_000) / 60_000)} min cada una · acumulable ×3`;
+      const tieneAfk = game.getOwnedCount?.(itemKey);
+      note = typeof tieneAfk === 'number'
+        ? `${duracion} · En almacén: ${formatNumber(tieneAfk)} ${tieneAfk === 1 ? 'unidad' : 'unidades'}`
+        : duracion;
     } else if (itemKey === 'upgradeCrystal') {
-      // **EL SALDO ES UN NÚMERO DEL ESTADO, Y LA UNIDAD ES UN INTENTO.** La carta
-      // entrega `valorDeUnCristal(1)` unidades por unidad comprada, que es exactamente
-      // un intento de subir de nivel un item de T1 —lo mismo que entregaba antes—.
-      // Decir "Tienes 4.050" no dice nada; decir "te da 6 subidas" sí.
-      note = `Tienes ${formatNumber(state.crystals ?? 0)} · ${Math.floor((state.crystals ?? 0) / costeDeCaja(1))} subidas de T1`;
+      // **LA CARTA ES UN PACK, NO UN CRISTAL, Y HAY QUE DECIRLO.** El botón pone 200 y el
+      // jugador veía "Tienes 4.050 · 6 subidas de T1", sin entender que la carta entrega
+      // 675 cristales de golpe. Ahora lo primero es el tamaño del pack: "Pack de 675".
+      const porPack = game.getStoreItemYield?.(itemKey)?.unidades ?? 0;
+      note = `Pack de ${formatNumber(porPack)} ${CRISTAL_PLURAL} · tienes ${formatNumber(state.crystals ?? 0)}`;
     } else if (RANURA_POR_CARTA[itemKey]) {
       // F7/F11 · CUÁNTAS RANURAS ABRE ESTA CARTA, EN EL NÚMERO.
       //
@@ -408,9 +452,17 @@ export function renderStoreTab(
         ? 'Abre 1 ranura más de escuadrón'
         : `Abre ${anade} ranuras más de escuadrón`;
       note = `${detalle} · Tienes ${actual}`;
-    } else if (itemKey === 'calibrationStone' || itemKey === 'stabilityNano') {
-      const inStore = (state.warehouse as any[]).find(w => w.buffId === (itemKey === 'calibrationStone' ? 'calibrationStone' : 'stabilityNano'));
-      note = `En almacén: ${inStore?.stackCount || 0}`;
+    } else {
+      // **"EN ALMACÉN: N" PARA TODO LO QUE SE GUARDA.** Antes solo lo decían las dos
+      // piedras de forja, y el jugador miraba la caja o la tarjeta AFK sin saber si
+      // ya tenía tres guardadas. El número sale del motor (`getOwnedCount`), que es
+      // quien tiene el almacén; `null` significa "esta carta no es un objeto
+      // contable" y entonces no se enseña nada, que es distinto de un cero.
+      const tiene = game.getOwnedCount?.(itemKey);
+      if (typeof tiene === 'number') {
+        const unidad = tiene === 1 ? singularDeUnidad(itemKey) : pluralDeUnidad(itemKey);
+        note = `En almacén: ${formatNumber(tiene)} ${unidad}`;
+      }
     }
 
     return `
@@ -615,6 +667,10 @@ function comprarFlujo(game: any, itemKey: string, container: HTMLElement, go?: (
   // `endsWith('Crate')` que ya había fallado una vez en el motor— y con la caja
   // de F31 pasó a decir "elige cuántas **unidad**".
   const unitName = game.getBulkUnitName?.(itemKey) ?? 'unidad';
+  // Las unidades totales que entrega el lote, solo para las cartas que dan un recurso
+  // (el pack de cristales). Lo dice el motor: 1 unidad entrega `getStoreItemYield`.
+  const porUnidad = game.getStoreItemYield?.(itemKey)?.unidades ?? 0;
+  const recurso = game.getStoreItemYield?.(itemKey)?.recurso;
   showConfirmModal(
     `Te alcanza para ${max}. Elige cuántas comprar.`,
     (units) => {
@@ -630,7 +686,10 @@ function comprarFlujo(game: any, itemKey: string, container: HTMLElement, go?: (
         unitName,
         amount: (n) => formatNumber(game.getBulkCost?.(itemKey, n) ?? 0),
         verbo: 'comprar',
-        sufijoImporte: ' ◆'
+        sufijoImporte: ' ◆',
+        resumen: porUnidad > 0
+          ? (n) => `${n} ${n === 1 ? 'unidad' : 'unidades'} · ${formatNumber(porUnidad * n)} ${recurso ?? 'unidades'}`
+          : undefined
       }
     }
   );

@@ -60,6 +60,18 @@ export interface QuantityPrompt {
   verbo?: string;
   /** Lo que sigue al importe (" ◆" en la venta, "" al abrir cajas). */
   sufijoImporte?: string;
+  /**
+   * Una línea de resumen ADICIONAL para el total elegido, o `null` si no hay nada
+   * que añadir.
+   *
+   * **POR QUÉ NO SIRVE `amount` PARA ESTO.** `amount` es el importe en nanitas y sale
+   * pegado al botón ("Comprar · 400 ◆"). El comprador de cristales necesita además
+   * saber **cuántas unidades** lleva en total —"2 unidades · 1350 cristales"—, que es
+   * lo que se lleva de verdad y no lo que paga: 2 packs de 675 son 1350 cristales, y
+   * sin esa cifra el jugador ve "2 × pack" y no sabe qué compró. Sale como callback
+   * porque el total depende de lo que entrega cada unidad, que lo sabe el motor.
+   */
+  resumen?: (units: number) => string | null;
 }
 
 export interface ConfirmOptions {
@@ -176,6 +188,7 @@ export function showConfirmModal(
    */
   let input: HTMLInputElement | null = null;
   let totalEl: HTMLElement | null = null;
+  let resumenEl: HTMLElement | null = null;
   let unidades = quantity ? quantity.max : 0;
 
   /**
@@ -195,6 +208,13 @@ export function showConfirmModal(
     const importe = q.amount(unidades);
     if (totalEl) totalEl.textContent = `${unidades} × ${q.unitName} · ${importe}${sufijo}`;
     confirmBtn.textContent = `${confirmText} · ${importe}${sufijo}`;
+    // La línea extra —las unidades totales que se llevan— solo aparece si la carta
+    // tiene algo que resumir (el pack de cristales) y solo cambia con la cantidad.
+    if (resumenEl) {
+      const linea = q.resumen?.(unidades) ?? null;
+      resumenEl.textContent = linea ?? '';
+      resumenEl.style.display = linea ? '' : 'none';
+    }
   }
 
   if (quantity) {
@@ -251,6 +271,14 @@ export function showConfirmModal(
     foot.appendChild(todoBtn);
     foot.appendChild(live);
     wrap.appendChild(foot);
+
+    // La línea de unidades totales, debajo del pie. Nace oculta: solo la enciende
+    // `fijar()` si la carta trae `resumen` y dice algo.
+    resumenEl = document.createElement('span');
+    resumenEl.className = 'font-mono text-[10px] tabular text-[var(--text-muted)] text-right';
+    resumenEl.style.display = 'none';
+    wrap.appendChild(resumenEl);
+
     content.appendChild(wrap);
 
     // `repintarCampo=false` al teclear: el campo ya tiene lo que se ha escrito

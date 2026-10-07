@@ -3,11 +3,11 @@
 //
 //  El hallazgo: la hoja de un nodo era **una frase**. "Instinto de Forja — nivel
 //  1/5. +6 % a la probabilidad de crafteo" responde a cuánto cuesta y a nada más,
-//  con veintitrés nodos en pantalla y cinco niveles en cada uno. Las dos
+//  con veintidós nodos en pantalla y cinco niveles en cada uno. Las dos
 //  preguntas que un jugador tiene al mirar un nodo son otras: qué hace esto y
 //  para qué me sirve.
 //
-//  Lo que se comprueba aquí son las dos mitades: que **los 23 nodos tienen
+//  Lo que se comprueba aquí son las dos mitades: que **los 22 nodos tienen
 //  lore** y que el lore habla del nodo, y que la hoja lo enseña junto al
 //  efecto y el motivo del veto.
 // ==========================================================================
@@ -27,9 +27,21 @@ async function main() {
     // para qué sirve, y un hueco en la hoja es peor que no tener el bloque: el resto
     // sube y parece un fallo de maquetación.
     const sinLore = TREE_NODES.filter((n: any) => !n.lore || !String(n.lore).trim());
-    check('arbol: los 23 nodos tienen lore, ninguno se dejo sin escribir',
+    check('arbol: los 22 nodos tienen lore, ninguno se dejo sin escribir',
       sinLore.length === 0,
       sinLore.map((n: any) => n.id).join(',') || `nodos=${TREE_NODES.length}`);
+
+    // **`offline_ops` YA NO ESTÁ, Y `full_automation` SIGUE TENIENDO PUERTA.**
+    // El nodo de Operaciones Offline se sacó del árbol (prometía ingreso sin
+    // mirar y nunca se consumía), y `full_automation` lo tenía como requisito:
+    // sin cambiarle la puerta quedaba inalcanzable para quien no lo tuviera.
+    check('arbol: offline_ops ya no está en el árbol',
+      !TREE_NODES.some((n: any) => n.id === 'offline_ops') && TREE_BY_ID.offline_ops === undefined,
+      'sigue en el catálogo');
+    check('arbol: full_automation se abre sin offline_ops, por su propia rama',
+      (TREE_BY_ID.full_automation?.requires ?? []).includes('auto_clicker2')
+        && !(TREE_BY_ID.full_automation?.requires ?? []).includes('offline_ops'),
+      `requires=${JSON.stringify(TREE_BY_ID.full_automation?.requires)}`);
 
     // Y que **no sean todos el mismo texto**, que es como se cumple un campo a base de
     // copiar y pegar sin mirar. Es la comprobación que hace la ley de un campo
@@ -57,7 +69,7 @@ async function main() {
       `cortos=${cortos.map((n: any) => n.id).join(',')} largos=${largos.map((n: any) => n.id).join(',')}`);
 
     // **LO QUE ESTE BANCO NO PUEDE AFIRMAR, Y NO AFIRMA:** que el lore "hable de lo que
-    // hace el nodo". Eso es un juicio editorial sobre veintitres frases escritas a mano,
+    // hace el nodo". Eso es un juicio editorial sobre veintidós frases escritas a mano,
     // y una prueba que lo exigiera seria una prueba que estropea las frases para poder
     // comprobarlas: obligaria a repetir la mecanica dentro del sabor. Lo que si se
     // comprueba es lo de arriba --que existe, que es de cada nodo, que no repite la

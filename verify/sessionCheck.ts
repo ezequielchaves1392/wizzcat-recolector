@@ -253,4 +253,4 @@ async function main() {
   resumen('sesion: una sola sesion por jugador');
 }
 
-main();
+export default main();

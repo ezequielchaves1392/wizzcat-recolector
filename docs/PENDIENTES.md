@@ -665,6 +665,52 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
       — **no está claro qué quieres decir** y es lo más caro de deshacer. Es pregunta tuya.
 - [ ] [x] **F58 · Lista consolidada y agrupable.** Hecho en `loteCheck`.
 
+### Lote C · ENCARGO DEL 7 DE OCTUBRE
+
+*Lo pedido, con tus palabras. Sin tocar todavía: se escribe aquí antes de
+programarlo, para que no viva solo en una conversación. Los bugs van primero
+(criterio 1 del GDD): un número que se ve mal es peor que una feature que falta.*
+
+**Bugs (se elige uno y se reproduce antes de arreglar):**
+
+- [ ] **B14 · Núcleos duplicados en el nav.**
+      > "Los nucleos se muestran dos veces en el nav (sector ascensión)"
+- [ ] **B15 · El buscador del almacén pierde el foco.**
+      > "El buscador en el almacen tiene un placeholder cortado que sea 'buscar...' y al poner la primera letra pierde el foco del input"
+- [ ] **B16 · El daño crítico no funciona.**
+      > "Ver el daño critico, no esta funcionando"
+- [ ] **B17 · Los ajustes de ruleta y notas se resetean solos.**
+      > "Al deshabilitar los settings de ruleta y notas, se vuelven por default al hacer un tiro de ruleta."
+      > **Decisión tuya pendiente:** además pediste "Quitar la ruleta". No se toca
+      > hasta que digas si es quitar la ruleta entera o quitar el bug que resetea
+      > los ajustes.
+- [ ] **B18 · "Ojo de Caja" no dice el 10% de qué.**
+      > "'Ojo de caja' que hace puntualmente? 10% de que? especificar"
+
+**Features (después de los bugs que elijas):**
+
+- [ ] **F59 · Filtros del almacén que solo enseñan lo aplicable, más filtro por tipo.**
+      > "En el filtro, mostrar los filtros que puedo realizar ej: si tengo recolectores seleccionado no mostrar ordenar por click por segundo porque es un valor único de los compañeros."
+      > "Falta un filtro por tipo --- es decir primero los compañeros dsp los recolectores etc..."
+- [ ] **F60 · La forja hereda rareza y afijos por probabilidad.**
+      > "En la forja considerar la rareza y los afijos para la combinación final, dos comunes probablemente hagan uno común, dos objetos con 'baluarte' por ejemplo tiene altas chances de salir con ese afijo... hagamos esto para que el jugador pueda 'forzar' por probabilidades un afijo"
+- [ ] **F61 · Apilar cajas, no solo consumibles.**
+      > "el apilar debe apilar cajas, no solo los consumibles."
+
+**Hecho y commiteado en v1.7.0:**
+paginador de cosméticos/logros de a 10 con las flechas arriba, stock en cartas
+del mercado (`getOwnedCount`, incluida la AFK que hacía sombra con su nota de
+duración), pack de cristal de 675 con unidades totales en el lote, y nodo
+`offline_ops` fuera del árbol. `buyCheck` +6, `arbolLoreCheck` +2.
+**Consecuencia aceptada:** quien tuviera niveles de `offline_ops` comprados los
+conserva guardados pero sin bonus (el agregador ignora nodos fuera del catálogo).
+
+**Descubierto haciendo esto (arreglado en el mismo commit):** `sessionCheck` y
+`perfilCheck` eran los únicos dos bancos sin `export default main()`, y el runner
+hace `await` sobre ese `default`: sin export el banco corría en fondo mezclando
+sus filas con los vecinos, y el conteo de sesión variaba entre corridas (11, 4,
+50) sin fallar nunca. Ahora los 34 bancos dan 2184 dos veces seguidas.
+
 ---
 
 ### Las dos decisiones que necesito de ti

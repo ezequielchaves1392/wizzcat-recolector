@@ -77,9 +77,13 @@ async function main() {
     // Y no se mira una carta de llave porque **ya no hay ninguna**: la lista de
     // cartas en lote son el cristal, la caja y los consumibles, y una carta que
     // no existe devolvería "unidad" sin decir por qué.
+    //
+    // **EL CRISTAL SE COMPRA POR PACKS, NO POR CRISTALES.** La carta cuesta 200 y
+    // entrega 675 de golpe, así que el diálogo dice "2 × pack" y no "2 × cristal":
+    // "cristal" haría creer que se compran dos cristales.
     check('compra: el nombre de unidad sale del motor y la caja dice "caja"',
       g.getBulkUnitName('crateT1') === 'caja'
-        && g.getBulkUnitName('upgradeCrystal') === 'cristal'
+        && g.getBulkUnitName('upgradeCrystal') === 'pack'
         && g.getBulkUnitName('companionSlot1') === 'unidad',
       `caja=${g.getBulkUnitName('crateT1')} ` +
       `cristal=${g.getBulkUnitName('upgradeCrystal')} ranura=${g.getBulkUnitName('companionSlot1')}`);
