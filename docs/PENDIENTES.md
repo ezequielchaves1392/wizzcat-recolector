@@ -750,8 +750,11 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > con etiqueta (Entran, Tiradas, Sobran, Piedras, Nano) y lo que avisa va
       > en el subtítulo. Los números siguen saliendo del preview del motor.
       > Sin banco: estructura de diálogo sobre números ya comprobados.
-- [ ] **F64 · El potencial en el resumen de apertura.** (para después)
+- [x] **F64 · El potencial en el resumen de apertura.** Hecho en v1.13.0.
       > "para despues : aca me gustaria que en los drones y los recolectores salga el potencial"
+      > **Las filas de objeto enseñan sus estrellas.** Salen de `estrellasDe()`,
+      > la misma de la rejilla, y solo si el premio trae el campo. Lo cubre
+      > `loteCheck` (+4, vía `estrellasDeFila()`).
 - [ ] **F65 · Elegir si la serie usa consumibles.** (para después)
       > "para despues, aca poder tener un check para usar o no consumibles... piedras de mejora y nanoparticulas"
 

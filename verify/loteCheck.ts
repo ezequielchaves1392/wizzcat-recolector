@@ -23,7 +23,7 @@ import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, dis
 import { STORE_ITEMS, costeDeCaja, CRATE_TYPES, type CrateType } from '../src/data/store';
 import { CRISTAL_NOMBRE } from '../src/data/items';
 import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
-import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura } from '../src/components/crateSummary';
+import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura, estrellasDeFila } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
 
 async function main() {
@@ -414,6 +414,22 @@ async function main() {
     const vecesNanitas = reales.filter(r => r.kind === 'nanites').length;
     check('resumen: veinte cajas reales dan menos filas que premios',
       filas.length <= reales.length, `filas=${filas.length} de ${reales.length}`);
+
+    // **LAS ESTRELLAS EN LA FILA DEL OBJETO (F64).** Un recolector o un
+    // compañero sin su potencial es una fila a medias. Salen de la misma
+    // función que pinta la rejilla, y la regla es qué fila las lleva.
+    const arma3: any = { kind: 'collector', name: 'X', label: 'X', details: '', rarity: 'Común', icon: 'collector', tier: 1, potential: 3, exclusive: false };
+    const dron5: any = { kind: 'companion', name: 'Y', label: 'Y', details: '', rarity: 'Común', icon: 'companion', tier: 1, potential: 5, exclusive: false };
+    const moneda: any = { kind: 'nanites', amount: 1, name: 'Nanitas', label: '+1', details: '', rarity: 'Común', icon: 'bolt', exclusive: false };
+    const sinCampo: any = { kind: 'collector', name: 'Z', label: 'Z', details: '', rarity: 'Común', icon: 'collector', tier: 1, exclusive: false };
+    check('resumen: el recolector enseña sus tres estrellas',
+      estrellasDeFila(arma3) === '★★★', estrellasDeFila(arma3));
+    check('resumen: y el compañero sus cinco',
+      estrellasDeFila(dron5) === '★★★★★', estrellasDeFila(dron5));
+    check('resumen: las nanitas no llevan estrellas',
+      estrellasDeFila(moneda) === '', 'llevan');
+    check('resumen: y sin el campo no se inventa ninguna',
+      estrellasDeFila(sinCampo) === '', 'inventa');
   }
 
   // -------------------------------------------------------------------------

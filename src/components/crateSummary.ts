@@ -26,6 +26,7 @@ import {
   type CrateReward
 } from './crateLoot';
 import { formatNumber } from '../utils/format';
+import { estrellasDe } from '../data/crafting';
 import type { CrateType } from '../data/store';
 import { TOPE_PILA } from '../data/stacking';
 
@@ -124,6 +125,24 @@ export interface ResumenFila {
   total: number;
   /** Cuántas veces salió. */
   veces: number;
+}
+
+/**
+ * LAS ESTRELLAS DE UNA FILA DEL RESUMEN, Y SOLO DE LA FILA DEL OBJETO.
+ *
+ * Un recolector o un compañero sin su potencial es una fila a medias: el
+ * jugador abre, ve el nombre y tiene que ir al almacén a ver qué le tocó.
+ * Salen de `estrellasDe()`, la misma que pinta la rejilla, así que una
+ * estrella aquí y en la ficha no pueden discrepar. Y solo si el premio trae
+ * el campo: sin él no se inventa nada.
+ *
+ * Exportada para que el banco la lea: la regla es qué fila lleva estrellas,
+ * y una prueba que la escribiera a mano sería la segunda copia de esta lista.
+ */
+export function estrellasDeFila(reward: CrateReward): string {
+  const esObjeto = reward.kind === 'collector' || reward.kind === 'companion';
+  if (!esObjeto || typeof reward.potential !== 'number') return '';
+  return estrellasDe(reward.potential);
 }
 
 /**
@@ -232,11 +251,12 @@ export function showCrateSummary(
     // "×3" solo cuando el mismo material salió más de una vez. Con un uno, el
     // asterisco sería ruido en todas las filas.
     const veces = f.veces > 1 ? `<span class="text-[9px] font-mono opacity-70 ml-1">×${f.veces}</span>` : '';
+    const estrellas = estrellasDeFila(r);
     return `
       <div class="flex items-center gap-3 rounded-xl border ${rarityColor} px-3 ${esNanitas ? 'py-3' : 'py-2'} ${glow}" style="background: color-mix(in srgb, var(--accent) ${esNanitas ? 14 : 6}%, transparent)">
         <span class="flex-shrink-0 ${RARITY_TEXT[r.rarity] || ''} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(r.icon as IconName)}</span>
         <span class="min-w-0 flex-1">
-          <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${r.name}${veces}</span>
+          <span class="block text-[12px] font-bold text-[var(--text-main)] truncate">${r.name}${veces}${estrellas ? ` <span class="text-amber-300">${estrellas}</span>` : ''}</span>
           <span class="block text-[9px] font-mono text-[var(--text-muted)] truncate">${r.rarity}${unit ? ` · ${unit}` : ''}</span>
         </span>
         <span class="text-right flex-shrink-0">

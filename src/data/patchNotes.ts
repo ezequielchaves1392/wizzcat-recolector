@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.13.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Estrellas al abrir cajas',
+    lineas: [
+      'Al abrir cajas, los recolectores y los compañeros enseñan sus estrellas en la misma fila.',
+      'Ya no hace falta ir al almacén para ver qué potencial te tocó.',
+      'Las filas de monedas y materiales siguen igual: solo los objetos llevan estrellas.'
+    ]
+  },
+  {
     version: '1.12.0',
     fecha: '7 de octubre de 2026',
     titulo: 'La forja en serie se lee mejor',

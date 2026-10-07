@@ -36,6 +36,12 @@ export interface CrateReward {
   /** Relleno si el drop se materializó como item del almacén */
   item?: any;
   /**
+   * Potencial del premio cuando es un recolector o un compañero. Lo traen las
+   * cuatro entradas que los construyen, y la fila del resumen lo enseña: un
+   * objeto sin estrellas es un objeto a medias.
+   */
+  potential?: number;
+  /**
    * Cosmético que se desbloquea con este botín.
    *
    * Viaja aparte de `name`/`rarity` porque el cosmético NO es un item: no ocupa
