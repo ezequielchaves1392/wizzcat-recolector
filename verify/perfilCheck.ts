@@ -354,6 +354,46 @@ async function main() {
     );
   }
 
+  // =========================================================================
+  //  8. La build ajena se ve: sus pasivas pagadas (F62)
+  // =========================================================================
+  //
+  //  El dato viajaba en la tarjeta (`nodos` con nivel y categoría) y el bloque
+  //  existía, pero `cuerpoDeTarjeta` no lo llamaba: la build del otro no se
+  //  veía por un cable suelto. Se renderiza el cuerpo con una tarjeta que trae
+  //  nodos y se mira lo que sale.
+  {
+    const { cuerpoDeTarjeta } = await import('../src/ui/tarjetaAjena');
+    const conBuild: any = {
+      ...TARJETA_VACIA,
+      username: 'Rival',
+      nodosComprados: 2,
+      nodosTotales: 22,
+      nivelesDeArbol: 5,
+      nodos: [
+        { id: 'core_sink', name: 'Sumidero de Núcleos', nivel: 3, maxLevel: 10, categoria: 'multiplicador' },
+        { id: 'auto_clicker', name: 'Autómata de Clicks', nivel: 2, maxLevel: 10, categoria: 'automatizacion' }
+      ]
+    };
+    const html = cuerpoDeTarjeta(conBuild);
+    check(
+      'tarjeta: la build ajena enseña sus pasivas pagadas',
+      html.includes('Pasivas pagadas') && html.includes('Sumidero de Núcleos') && html.includes('Autómata de Clicks'),
+      html.slice(html.indexOf('Pasivas'), html.indexOf('Pasivas') + 60)
+    );
+    check(
+      'tarjeta: y dice cuántos nodos y niveles lleva',
+      html.includes('2/22') && html.includes('5 niveles'),
+      'sin la cuenta'
+    );
+    const sinNodos = cuerpoDeTarjeta({ ...TARJETA_VACIA, username: 'Nuevo' } as any);
+    check(
+      'tarjeta: sin nodos lo dice en vez de esconder el bloque',
+      sinNodos.includes('Sin nodos comprados'),
+      'sin el aviso'
+    );
+  }
+
   resumen('la tarjeta pública de otro jugador');
 }
 

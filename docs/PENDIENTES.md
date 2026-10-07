@@ -738,12 +738,12 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
 - [-] **F61 · Apilar cajas, no solo consumibles.** Descartada: probado con sonda
       (dos pilas sueltas del mismo tier se funden al cargar y el botón las
       cuenta); el motor apila cajas en carga, alta y botón. Confusión del jugador.
-- [ ] **F62 · Ver el árbol pagado de cada jugador en su perfil.**
+- [x] **F62 · Ver el árbol pagado de cada jugador en su perfil.** Hecho en v1.11.0.
       > "cuando termines : en la parte del perfil del jugador me gustaría que se pueda ver el arbol de pasivas que tiene 'pagado' para ver que build se está armando cada jugador"
-      > **Dato previo:** el dato ya viaja en la tarjeta pública (`nodos` con nivel y
-      > categoría) y `bloqueDeNodos()` ya existe en `tarjetaAjena.ts`, pero
-      > `cuerpoDeTarjeta()` no lo llama: la build ajena no se ve por un cable
-      > suelto, no por falta de datos.
+      > **Causa raíz: cable suelto.** El dato viajaba y `bloqueDeNodos()` existía,
+      > pero `cuerpoDeTarjeta()` no lo llamaba. Ahora la tarjeta ajena enseña
+      > "Pasivas pagadas" agrupadas por categoría, entre compañeros y logros. Lo
+      > cubre `perfilCheck` (+3, a través del cuerpo renderizado).
 - [ ] **F63 · Dar formato al cartel de forja en serie.** (para después)
       > "para despues: este cartel ordenarlo un poco darle identacion, colores, formato, esta todo muy plano"
 - [ ] **F64 · El potencial en el resumen de apertura.** (para después)

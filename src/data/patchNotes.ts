@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.11.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'La build ajena se ve',
+    lineas: [
+      'Al ver el perfil de otro jugador ahora se ven sus pasivas pagadas, agrupadas por lo que hacen.',
+      'Con la cuenta de nodos y niveles se lee qué build se está armando sin abrir su árbol.',
+      'Si todavía no pagó ninguna, la tarjeta lo dice en vez de esconder el bloque.'
+    ]
+  },
+  {
     version: '1.10.0',
     fecha: '7 de octubre de 2026',
     titulo: 'Forzar afijos en la forja',

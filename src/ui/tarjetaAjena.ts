@@ -186,16 +186,20 @@ async function carga(
   overlay.scrollTop = 0;
 }
 
-/** El cuerpo entero de la tarjeta. */
-function cuerpoDeTarjeta(t: TarjetaPublica): string {
+/** El cuerpo entero de la tarjeta. Exportado para que el banco lo lea: lo que
+ * no pasa por aquí no sale en la tarjeta aunque el dato viaje. */
+export function cuerpoDeTarjeta(t: TarjetaPublica): string {
   const banner = t.cosmetics.banner ? COSMETICS_BY_ID[t.cosmetics.banner] : undefined;
 
   // **UNA SOLA SECCIÓN, "LO QUE TIENE PUESTO".** Antes eran dos —recolectores y
   // compañeros— con el mismo nombre, y el mismo nombre en los dos es una señal de que la
   // separación no aportaba nada: es una persona con un recolector y tres compañeros.
+  // Los nodos van entre los compañeros y los logros: primero la build (qué tiene
+  // puesto y pagado) y después qué ha conseguido.
   const puesto = [
     t.completa === false ? '' : bloqueDeRecolectores(t),
     t.completa === false ? '' : bloqueDeCompaneros(t),
+    t.completa === false ? '' : bloqueDeNodos(t),
     t.completa === false ? '' : bloqueDeLogros(t)
   ];
 
