@@ -31,7 +31,7 @@ import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } fro
 import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
-import { showConfirmModal } from '../utils/modal';
+import { showConfirmModal, htmlToNode } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from '../components/crateLoot';
 import { esEquipado, statCelda, visibleStacksFor } from '../components/warehouse';
@@ -1013,28 +1013,44 @@ function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void)
 
   const N = NOMBRES[ui.tipo];
 
-  const partes = [
-    `Se forjarán los ${plan.disponibles} ${N.muchos} del tier ${ui.tier},`,
-    `de dos en dos y por potencial: ${plan.tiradas} ${plan.tiradas === 1 ? 'tirada' : 'tiradas'}.`
+  // **EL CONTENIDO VA ESTRUCTURADO, NO EN UN PÁRRAFO.** Antes eran frases
+  // seguidas en un solo párrafo y todo se leía plano: qué entra, cuántas
+  // tiradas, qué sobra y qué se gasta, sin jerarquía. Ahora cada dato va en su
+  // fila con su etiqueta, y lo que advierte (el consumo por tirada) va en el
+  // `sublabel`, que es donde se lee antes de decidir.
+  //
+  // Los números salen del preview del motor, como antes: aquí no se calcula
+  // nada, solo se ordena lo que ya se decía.
+  const filas: Array<{ etiqueta: string; valor: string; tono?: string }> = [
+    { etiqueta: 'Entran', valor: `${plan.disponibles} ${N.muchos} del tier ${ui.tier}, de dos en dos y por potencial` },
+    { etiqueta: 'Tiradas', valor: `${plan.tiradas}`, tono: 'accent-text' }
   ];
   if (plan.sobrantes > 0) {
-    partes.push(`Sobrarán ${plan.sobrantes}, que se quedan en el almacén.`);
+    filas.push({ etiqueta: 'Sobran', valor: `${plan.sobrantes}, se quedan en el almacén` });
   }
   // **EL TOTAL DE PIEDRAS ES EL DEL PREVIEW, NO UNA CUENTA DE AQUÍ.** Cada par gasta un
   // número distinto según los afijos que tenga, y la suma la hace el motor. Calcularlo
   // aquí con un afix luck de cero daría el número **más alto** de los posibles —el de una
   // pareja sin afijos—, o sea que el modal prometería más de lo que va a cobrar.
   if ((plan.stonesTotal ?? 0) > 0) {
-    partes.push(`Gastarás ${plan.stonesTotal} piedras en total, lo que haga falta para el 95 % en cada tirada.`);
+    filas.push({ etiqueta: 'Piedras', valor: `${plan.stonesTotal} en total, lo justo para el 95 % en cada tirada` });
   } else {
-    partes.push('No gastas piedras: no tienes o no hacen falta.');
+    filas.push({ etiqueta: 'Piedras', valor: 'no gastas: no tienes o no hacen falta' });
   }
   if (ui.nano) {
-    partes.push(`Se usará una nanopartícula en cada tirada.`);
+    filas.push({ etiqueta: 'Nano', valor: 'una por tirada', tono: 'accent-text' });
   }
 
   showConfirmModal(
-    partes.join(' '),
+    htmlToNode(`
+      <div class="flex flex-col gap-0 rounded-xl border border-[var(--border-color)] divide-y divide-[var(--border-color)] text-left">
+        ${filas.map(f => `
+          <div class="flex items-baseline gap-3 px-3 py-1.5">
+            <span class="text-[10px] font-mono text-[var(--text-muted)] w-[86px] flex-shrink-0">${f.etiqueta}</span>
+            <span class="text-[11px] font-mono text-[var(--text-main)] min-w-0 ${f.tono ?? ''}">${f.valor}</span>
+          </div>`).join('')}
+      </div>
+    `),
     () => runAutoForge(game, redraw),
     {
       sublabel: 'Cada tirada consume sus materiales acierte o falle',

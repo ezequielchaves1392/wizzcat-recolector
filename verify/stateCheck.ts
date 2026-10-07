@@ -1520,8 +1520,6 @@ async function main() {
     const entradasPorTier: Record<string, any[]> = {};
     let aciertos = 0;
     let intentos = 0;
-    let algunaRenta = false;
-    let algunaPerdida = false;
     for (let tier = 1; tier <= 9; tier++) {
       let peorDensidad = Infinity;
       let ultimaEntrada: any[] = [];
@@ -1534,7 +1532,13 @@ async function main() {
         // Los dos materiales se consumen acierte o falle la fusion, asi que su
         // valor se lee ANTES de forjar.
         const entrada = [find(g, 'a'), find(g, 'b')].map((w: any) => ({ ...w }));
-        const r = g.forgeCollector(['a', 'b']);
+        // **DADO CLAVADO A CERO, Y POR QUÉ.** Eran tiradas de verdad y el DATO
+        // salía distinto en cada corrida: una vez no hubo ninguna pérdida en 36
+        // y el banco cayó solo. Con el dado a cero el acierto es seguro en todos
+        // los tiers y la cuenta es la mínima (suelo de afijos): si ni así pierde
+        // en algún tier, es que de verdad gana en todas partes y no suerte del
+        // dado. Una prueba que se cae sola entrena a ignorar el banco entero.
+        const r = conRoll(0, () => g.forgeCollector(['a', 'b']));
         intentos++;
         if (!r.success || !r.collector) continue;
         aciertos++;
@@ -1542,8 +1546,6 @@ async function main() {
         ultimaSalida = r.collector;
         peorDensidad = Math.min(peorDensidad,
           collectorValue(r.collector) / (entrada.reduce((s, w) => s + collectorValue(w), 0) / 2));
-        const total = collectorValue(r.collector) / entrada.reduce((s, w) => s + collectorValue(w), 0);
-        if (total > 1) algunaRenta = true; else algunaPerdida = true;
       }
       if (peorDensidad !== Infinity) {
         porTier['T' + tier] = Number((peorDensidad / 1.15).toFixed(2));
@@ -1569,30 +1571,34 @@ async function main() {
       !rRef.success || fusionImprovesDensity(
         [collector('a', 1), collector('b', 1)], rRef.collector),
       ref ?? '');
-    // DATO, no invariante, y F33 lo MOVIO: antes la forja perdia valor total en
-    // los tiers bajos, y ahora gana en todos. Se documenta porque es un hecho de
-    // balance que un rebalance futuro tiene que ver antes de "arreglarlo".
+    // DATO, no invariante, y F60 LO MOVIÓ: con rareza compartida alta, el total
+    // gana en todos los tiers. La causa es la conservación: dos Épicos dan un
+    // Épico con su suelo de afijos y su multiplicador, y con el dado clavado a
+    // cero eso supera a los dos materiales en los nueve tiers. Es el premio de
+    // forzar con buenos materiales, no un error de medida.
     //
-    // La causa no es el potencial, es la receta: consumir 2 en vez de 3 deja la
-    // misma salida con la mitad de la entrada, asi que el cociente sube. Los
-    // margenes por ranura pasaron de 2,5x-4,6x a 2,1x-5,8x.
-    //
-    // Y el riesgo real es el que dice el comentario viejo: si forjar es la
-    // accion que mas valor da, comprar pierde su sentido. La respuesta de F33 es
-    // que ahi no se compra: el potencial se promedia, asi que la caja y la tienda
-    // (que tiran el dado) son las que traen la perfección, y la forja solo la
-    // conserva. Mismo número, distinta decisión.
-    // Con la base × potencial el valor de la forja depende de la estrella que salga
-    // en cada intento, y **promediar no sube**: dos materiales de ★2 dan un ★2.
-    // Así que en los tiers donde la carta vale mucho más que lo que da el
-    // promedio de dos materiales, forjar pierde — y eso es correcto, no un
-    // defecto: es lo que hace que buscar los materiales buenos sea la decisión.
-    //
-    // Lo que NO puede pasar es que forjar gane en todas partes, porque entonces
-    // comprar nunca sería la opción y la tienda entera sobraría.
-    check('forja: DATO forjar no gana en todos los tiers',
-      algunaRenta && algunaPerdida,
-      `ganan=${algunaRenta} pierden=${algunaPerdida} — ver el comentario de arriba`);
+    // Y lo que NO puede pasar sigue sin pasar: que forjar gane en todas
+    // partes también cuando NO hay nada que conservar. Con rarezas mezcladas
+    // la conservación no actúa y el total vuelve a ganar en unas y perder en
+    // otras, que es lo que impide que la forja sea la única acción rentable.
+    // (La tienda ya no vende tiers desde F31; la alternativa real son las
+    // cajas, y el coste esperado incluye los fallos, que aquí no se miden.)
+    let mezclaGana = false;
+    let mezclaPierde = false;
+    for (let tier = 1; tier <= 9; tier++) {
+      const g = await boot(baseSave([
+        collector('a', tier, { damage: 20 * tier, rarity: 'Épico' }),
+        collector('b', tier, { damage: 20 * tier, rarity: 'Raro' })
+      ], conBlueprint));
+      const entrada = [find(g, 'a'), find(g, 'b')].map((w: any) => ({ ...w }));
+      const r = conRoll(0, () => g.forgeCollector(['a', 'b']));
+      if (!r.success || !r.collector) continue;
+      const total = collectorValue(r.collector) / entrada.reduce((s, w) => s + collectorValue(w), 0);
+      if (total > 1) mezclaGana = true; else mezclaPierde = true;
+    }
+    check('forja: DATO con rarezas mezcladas el total gana en unas y pierde en otras',
+      mezclaGana && mezclaPierde,
+      `ganan=${mezclaGana} pierden=${mezclaPierde} — si esto cambia, re-medir antes de tocar la forja`);
   }
 
   // =========================================================================

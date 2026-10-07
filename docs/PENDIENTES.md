@@ -744,10 +744,16 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > pero `cuerpoDeTarjeta()` no lo llamaba. Ahora la tarjeta ajena enseña
       > "Pasivas pagadas" agrupadas por categoría, entre compañeros y logros. Lo
       > cubre `perfilCheck` (+3, a través del cuerpo renderizado).
-- [ ] **F63 · Dar formato al cartel de forja en serie.** (para después)
+- [x] **F63 · Dar formato al cartel de forja en serie.** Hecho en v1.12.0.
       > "para despues: este cartel ordenarlo un poco darle identacion, colores, formato, esta todo muy plano"
+      > **Era un párrafo plano con cinco datos.** Ahora cada dato va en su fila
+      > con etiqueta (Entran, Tiradas, Sobran, Piedras, Nano) y lo que avisa va
+      > en el subtítulo. Los números siguen saliendo del preview del motor.
+      > Sin banco: estructura de diálogo sobre números ya comprobados.
 - [ ] **F64 · El potencial en el resumen de apertura.** (para después)
       > "para despues : aca me gustaria que en los drones y los recolectores salga el potencial"
+- [ ] **F65 · Elegir si la serie usa consumibles.** (para después)
+      > "para despues, aca poder tener un check para usar o no consumibles... piedras de mejora y nanoparticulas"
 
 **Hecho y commiteado en v1.7.0:**
 paginador de cosméticos/logros de a 10 con las flechas arriba, stock en cartas

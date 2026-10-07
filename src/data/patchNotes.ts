@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.12.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'La forja en serie se lee mejor',
+    lineas: [
+      'La confirmación de forjar en serie ahora enseña cada dato en su fila: qué entra, cuántas tiradas, qué sobra y qué se gasta.',
+      'Lo que advierte —que cada tirada consume sus materiales— va arriba del todo.',
+      'Los números son los mismos de siempre: solo cambia cómo se leen.'
+    ]
+  },
+  {
     version: '1.11.0',
     fecha: '7 de octubre de 2026',
     titulo: 'La build ajena se ve',
