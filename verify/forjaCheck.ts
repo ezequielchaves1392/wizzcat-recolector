@@ -42,6 +42,7 @@
 
 import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll, reload, recargar } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
+import { filaDeSerie } from '../src/ui/forgePage';
 import { successChance, baseSuccessChance } from '../src/data/crafting';
 import { poderDeCompanero } from '../src/data/crafting';
 
@@ -1254,4 +1255,82 @@ const falloCon = async () => {
   resumen('la forja: dos del mismo tier, potencial medio y afijos por linaje');
 }
 
-export default main();
+// =========================================================================
+//  F81 · LA FILA DE LA SERIE ENSEÑA EL ITEM ENTERO
+// =========================================================================
+//
+//  Se pasa de "una línea con un sparkle y un nombre" a las cuatro cosas que el motor
+//  ya devolvía por resultado y que la vista no leía: el icono del tipo, las
+//  estrellas, el tier y los afijos como tag.
+//
+//  **LO QUE SE COMPRUEBA AQUÍ ES LA REGLA DE QUÉ SE PINTA Y QUÉ NO**, que es la
+//  parte que puede mentir en silencio: una fila de acierto con los cuatro datos, y
+//  una de fallo con **ninguno** —porque el fallo no tiene item, y pintarle un "T2"
+//  sería inventar el dato. Es el mismo criterio que `tierDeFila()` en el resumen de
+//  apertura, y por el mismo motivo.
+//
+//  **LO QUE NO SE COMPRUEBA Y HAY QUE DECIR:** que no se desborde. Eso es layout, y
+//  `domStub` no tiene medidas: una prueba escrita ahí daría verde sin mirar nada. Es
+//  `preview.html`, y con el mock de `preview.ts` **no se puede** porque el mock no
+//  trae la serie —solo `forgeCollector` y `forgeCompanion`—.
+const fila = (x: any): string => filaDeSerie(x, 0, 'collector');
+
+async function main2() {
+  const item = {
+    name: 'Herencia de Éclipsis', type: 'collector', rarity: 'Mítico',
+    tier: 8, potential: 4, affixes: ['aff_sharp', 'aff_bulwark']
+  };
+  const acierto = fila({ exito: true, nombre: item.name, item, msg: 'x forjada' });
+  const fallo = fila({ exito: false, nombre: null, item: null, msg: 'Fallo en la forja' });
+
+  check('F81: la fila de acierto enseña las estrellas del item',
+    acierto.includes('★★★★'), 'no hay estrellas');
+  check('F81: y el tier, que es la otra mitad de la calidad',
+    /\bT8\b/.test(acierto), 'no hay T8');
+  check('F81: y el icono del tipo, no uno generico para todos',
+    /data-ico="collector"/.test(acierto), 'no hay data-ico del tipo');
+  check('F81: los afijos salen por su nombre, como tags',
+    acierto.includes('Afilado') && acierto.includes('Baluarte'),
+    'faltan afijos');
+  check('F81: y el tag lleva la rareza del afijo, que es la que lo tiñe',
+    /rarity-\w+/.test(acierto) && acierto.includes('style="border-color: currentColor"'),
+    'el tag no tiene el estilo de la ficha');
+  check('F81: el nombre del item sale entero',
+    acierto.includes('Herencia de Éclipsis'), 'no sale el nombre');
+
+  // **LA MITAD IMPORTANTE: LO QUE NO TIENE QUE SALIR.**
+  check('F81: la fila de fallo NO enseña estrellas',
+    !fallo.includes('★'), 'sale una estrella en un fallo');
+  check('F81: ni tier',
+    !/\bT\d+\b/.test(fallo), 'sale un T en un fallo');
+  check('F81: ni afijos',
+    !fallo.includes('Afilado') && !fallo.includes('Baluarte'), 'salen afijos en un fallo');
+  check('F81: ni el icono del objeto, sino el de fallo',
+    !fallo.includes('data-ico="collector"') && /data-ico="close"/.test(fallo),
+    'icono equivocado en un fallo');
+  check('F81: y el fallo sí dice por qué',
+    fallo.includes('Fallo en la forja'), 'no sale el motivo');
+
+  // **UN ACIERTO CON UN ITEM CORRUPTO NO ROMPE LA FILA.** El item viene del guardado
+  // de otro jugador y del motor, y un campo ausente tiene que salir vacío en vez de
+  // pintar `undefined` o `TNaN`.
+  const sinNada = fila({ exito: true, nombre: 'X', item: { name: 'X', rarity: 'Común' } });
+  // El `undefined` se busca en el texto *pintado*, no en el HTML entero: la función
+  // lleva su comentario en un comentario HTML, y el comentario habla de `undefined`.
+  // Una comprobación que lo busca en todo el HTML se pasa por el comentario y se
+  // acaba mirando su propia documentación —que es lo que pasó con la primera versión.
+  const pintado = sinNada.replace(/<!--[\s\S]*?-->/g, '');
+  const conEstrella = pintado.match(/.{40}★.{40}/);
+  const conT = pintado.match(/\bT\d+\b/);
+  const conUndef = pintado.includes('undefined');
+  check('F81: un item sin potencial ni tier no inventa ninguno',
+    !conEstrella && !conT && !conUndef,
+    `estrella=${JSON.stringify(conEstrella)} tier=${conT ? conT[0] : 'no'} undef=${conUndef}`);
+  check('F81: y un tier imposible cae a nada, no a T0',
+    !fila({ exito: true, nombre: 'Y', item: { name: 'Y', rarity: 'Común', tier: 0, potential: 3 } }).includes('T0'),
+    'sale T0');
+
+  resumen('la fila de la serie enseña el item entero');
+}
+
+export default (async () => { await main(); await main2(); })();

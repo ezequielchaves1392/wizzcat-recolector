@@ -2471,6 +2471,42 @@ function sePuedeGuardar(): boolean {
     return state.warehouseCapacity + state.bonus.storageSlots;
   }
 
+  /**
+   * LA CAPACIDAD DEL ALMACÉN, DESGLOSADA EN SUS DOS PARTES.
+   *
+   * **POR QUÉ HACE FALTA, Y POR QUÉ ES UN BUG DE LO QUE SE VE Y NO DE LA CUENTA.**
+   * La capacidad total son **dos sumandos que vienen de sitios distintos**: los
+   * expansores suben `warehouseCapacity` y el árbol sube `bonus.storageSlots`. El
+   * número grande de la pantalla y el texto de la carta hablan de cosas distintas —la
+   * carta dice "vale hasta 60" y el expansor llega hasta 60, pero el contador grande
+   * marcaba 69— y **nadie decía de dónde salía la diferencia**, así que se leía como
+   * que el expansor estaba roto: si su techo es 60 y el contador dice 69, la conclusión
+   * del jugador es que el expansor hizo más de lo que promete, que es justo lo
+   * contrario de lo que pasó.
+   *
+   * **Y NO ES QUE EL EXPANSOR SUBIERA DE MÁS: EL TOTAL ES CORRECTO.** El expansor
+   * leading hasta 60 y el árbol aportó 9. Los dos son reglas del juego y los dos
+   * cuentan. Lo que faltaba era el signo `+` que separa las dos mitades.
+   *
+   * **VIVE AQUÍ Y NO EN LA VISTA PORQUE ES UNA REGLA DEL MOTOR** (R1): `aggregateBonuses`
+   * es quien decide cuánto da el árbol, y una cuenta de la suma en la pantalla se
+   * separaría de ella en cuanto cambiara un número del nodo. La vista solo pinta lo
+   * que devuelve esto.
+   *
+   * **Y LAS DOS PARTES NO SON DEL MISMO TIPO, Y POR QUÉ SE ENSEÑAN LAS DOS.**
+   * `delExpansor` es lo que depende de un consumible y por eso se topa en un tramo;
+   * `delArbol` sube con los niveles de `storage_rack` y `void_hoard` y **no tiene
+   * techo**. Un jugador con la capacidad llena tiene que poder ver de las dos mitadas
+   * cuánto le queda, y solo una de ellas tiene final.
+   */
+  function desgloseDeCapacidad(): { delExpansor: number; delArbol: number; total: number } {
+    return {
+      delExpansor: state.warehouseCapacity,
+      delArbol: state.bonus.storageSlots,
+      total: effectiveWarehouseCapacity(),
+    };
+  }
+
   /** Slots de compañero reales: base del save + cuadrilla. */
   function effectiveCompanionSlots(): number {
     return state.maxCompanionSlots + state.bonus.companionSlots;
@@ -6550,6 +6586,7 @@ const RITMO_GUARDADO_MS = 30_000;
     // ======================================================================
 
     getCapacity: () => effectiveWarehouseCapacity(),
+    getCapacityBreakdown: () => desgloseDeCapacidad(),
     /**
      * ¿Cabe este producto en el almacén?
      *

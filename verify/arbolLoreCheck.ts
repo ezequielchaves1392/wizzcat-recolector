@@ -13,6 +13,7 @@
 // ==========================================================================
 
 import { TREE_NODES, TREE_BY_ID, nodeCost } from '../src/data/tree';
+import { aggregateBonuses } from '../src/data/prestige';
 import { nodeSheetHTML } from '../src/ui/prestigePage';
 import { check, resumen } from './kit';
 
@@ -102,6 +103,12 @@ async function main() {
     check('arbol hoja: el efecto sale con su cifra, no solo el nombre',
       /forja/i.test(comprable),
       'busca "forja" en ' + (comprable.includes('forja') ? 'la hoja' : 'la hoja: NO'));
+    // **Y QUE DIGA QUE ES POR NIVEL, QUE ES LO QUE FALTABA.** El número que sale del
+    // `bonus` del catálogo es el de UN nivel, y sin decirlo la hoja parece prometer el
+    // total: un nodo en 7 con "+8 %" se lee como 8 y son 56.
+    check('arbol hoja: el efecto dice que es por nivel',
+      /por nivel/i.test(comprable),
+      /por nivel/i.test(comprable) ? 'lo dice' : 'no lo dice: el +N se lee como el total');
 
     // El coste y el nivel, cada uno en su pastilla: son las dos preguntas que se
     // hacen al mirar, y una frase larga las mezcla con el resto.
@@ -150,6 +157,45 @@ async function main() {
     check('arbol hoja: un nodo sin lore sale sin el bloque, no con undefined',
       !hojaVacia.includes('undefined') && !/[“”]/.test(hojaVacia),
       hojaVacia.includes('undefined') ? 'SALTA: undefined en la hoja' : 'ok');
+
+    // **LO ACUMULADO, Y LA INVARIENTE QUE LO SOSTIENE.**
+    //
+    // El número de un nivel salía de `bonusLabel(k, v)` sobre el `bonus` del catálogo,
+    // y con el nodo en 7 eso pinchaba el +8 % del nivel 1. La hoja ahora enseña las tres
+    // cifras —un nivel, ahora, y al siguiente— y lo que hay que atar es que **la del
+    // medio sea la que da el motor**, no una multiplicación hecha en la vista.
+    //
+    // Y por qué importa tanto atarlo: la hoja es donde el jugador decide si sube. Si
+    // el "ahora" no es el número que el agregador aplica, la pantalla está prometen-
+    // do un efecto que la partida no cobra — y eso es la clase de bug que R3 dice que
+    // no puede pasar, en la pantalla donde más caro sale equivocarse.
+    const conNivel = nodeSheetHTML(TREE_BY_ID['core_sink'], 7, { ok: true, coste: 0, cores: 999 });
+    const bonusNodo: any = TREE_BY_ID['core_sink'].bonus;
+    // El agregado REAL del motor con ese nodo a nivel 7 y nada más comprado. El nodo
+    // es `Sumidero de Núcleos`, que da `passiveMult` — y la primera versión de esta
+    // comprobación preguntó por `coreGain` y comparó dos ceros: una prueba que pasa
+    // porque mira un campo que el nodo no tiene.
+    const agregado: any = aggregateBonuses({ core_sink: 7 });
+    const aportaNodo: number = agregado.passiveMult ?? 0;
+    const esperado = Math.round((bonusNodo.passiveMult ?? 0) * 7 * 100);
+
+    check('arbol hoja: con nivel comprado sale la fila "Ahora (nivel N)"',
+      /Ahora \(nivel 7\)/.test(conNivel),
+      /Ahora \(nivel 7\)/.test(conNivel) ? 'sale' : 'no sale la fila del acumulado');
+    check('arbol hoja: el acumulado no es cero, que sería una prueba que no mira nada',
+      esperado > 0 && aportaNodo > 0,
+      `esperado=${esperado} motor=${aportaNodo * 100} bonus=${JSON.stringify(bonusNodo)}`);
+    check('arbol hoja: y el acumulado es el que aporta el motor, no la vista',
+      conNivel.includes(`+${esperado}%`) && Math.round(aportaNodo * 100) === esperado,
+      `hoja=+${esperado}% motor=${aportaNodo * 100}%`);
+    check('arbol hoja: y el siguiente nivel se enseña tambien',
+      /Al nivel 8/.test(conNivel),
+      /Al nivel 8/.test(conNivel) ? 'sale' : 'no sale');
+    // Con nivel 0 no hay "ahora": sería "+0", que es ruido en un nodo sin comprar.
+    const sinNivel = nodeSheetHTML(TREE_BY_ID['core_sink'], 0, { ok: true, coste: 1, cores: 0 });
+    check('arbol hoja: sin nivel no hay fila "Ahora", que seria un +0',
+      !/Ahora \(/.test(sinNivel),
+      /Ahora \(/.test(sinNivel) ? 'SALTA: la fila sale con nivel 0' : 'ok');
   }
 
   resumen('lore del arbol y su hoja');

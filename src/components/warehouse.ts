@@ -213,6 +213,15 @@ function draw(
   // Cuenta grupos, con la misma regla que usa el agrupado de abajo.
   const occupied = countOccupiedSlots(warehouse);
 
+  // **EL DESGLOSE DE LA CAPACIDAD EN SUS DOS PARTES, PARA QUE EL "+" NO MIENTA.**
+  // Sale del motor (`getCapacityBreakdown`), no de restar aquí: `aggregateBonuses` es
+  // quien decide cuánto da el árbol, y una resta en la vista se separa de ella en
+  // cuanto cambie un número de un nodo. El `getCapacity()` de arriba se queda como
+  // total, que es lo que usan todas las reglas de "¿cabe?".
+  const desglose = game.getCapacityBreakdown?.();
+  const delArbol = desglose?.delArbol ?? 0;
+  const delExpansor = desglose?.delExpansor ?? capacity;
+
   // --- Filtrado y orden --------------------------------------------------
   // La rejilla sale de `visibleStacks()`, la MISMA función que usa el arrastre
   // para saber qué hay detrás de cada celda. Con dos criterios de agrupado
@@ -408,9 +417,32 @@ function draw(
               única cifra que queda en la cabecera de esta pantalla y es la que dice si
               cabe algo. Lo que cambia de color cuando el almacén se llena es la misma
               cifra, así que tiene que poder leerse de un vistazo a 390 px.
+
+              **Y EL "+" DEL ÁRBOL, QUE ESTE NÚMERO NO TENÍA Y SÍ NECESITA.**
+              La capacidad son **dos sumandos de sitios distintos**: los expansores
+              suben una parte y el árbol (storage_rack, void_hoard) sube otra. Se
+              pintaba el total y nada más, así que un expansor Inicial —que promete
+              "hasta 60" y llega hasta 60— se veía contra un contador que ponía 69. La
+              conclusión del jugador era que el expansor había hecho más de lo que
+              promete, que es justo lo contrario de lo que pasó: el expansor cumplió y
+              el árbol dio las 9 de más.
+
+              **Y EL DESGLOSE VA ENTRE PARÉNTESIS, QUE ES LO QUE LA PRIMERA
+              VERSIÓN HIZO MAL.** Pegado al total salía "59/7160+11", y eso se lee
+              como un almacén de 7160 ranuras: **dos números distintos pegados se
+              vuelven uno**, y el que se lee es un número que no existe. Los paréntesis
+              son los que dicen "esto que va detrás es de dónde sale el de delante", y
+              el juego ya los usa para lo mismo.
+              //
+              // **Y SOLO SALE CUANDO HAY ÁRBOL.** Con 0, un "(60+0)" sería ruido en
+              // todas las partidas nuevas, que son la mayoría.
+              //
+              // **EL DESGLOSE LO DA EL MOTOR** (getCapacityBreakdown), no la suma de
+              // aquí: aggregateBonuses es quien decide cuánto da el árbol, y una suma
+              // en la pantalla se separa de ella en cuanto cambie un número del nodo.
             -->
             <span class="text-[12px] font-mono tabular ${occupied >= capacity ? 'text-rose-400' : 'text-[var(--text-muted)]'}">
-              ${occupied}/${capacity} ranuras
+              ${occupied}/${capacity}${delArbol > 0 ? ` (${delExpansor}+${delArbol})` : ''} ranuras
             </span>
           </div>
         `)}

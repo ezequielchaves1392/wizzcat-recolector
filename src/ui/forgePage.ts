@@ -1267,19 +1267,7 @@ function showAutoForgeResults(r: any, onClose: () => void) {
         </div>
 
         <div class="rounded-xl border border-[var(--border-color)] divide-y divide-[var(--border-color)] mt-2">
-          ${r.resultados.map((x: any, i: number) => `
-            <div class="flex items-center gap-2.5 px-3 py-2">
-              <span class="text-[10px] font-mono text-[var(--text-muted)] w-[22px] flex-shrink-0">${i + 1}</span>
-              <span class="w-7 h-7 rounded-lg grid place-items-center flex-shrink-0 border
-                           ${x.exito ? rarityClass(x.item?.rarity ?? '') + ' accent-bg text-slate-950'
-                                     : 'border-rose-500/40 text-rose-400'}">
-                <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(x.exito ? 'sparkle' : 'close')}</span>
-              </span>
-              <span class="text-[11px] font-mono min-w-0 flex-1
-                           ${x.exito ? 'text-[var(--text-main)]' : 'text-rose-400'} break-words">
-                ${x.exito ? x.nombre : x.msg || 'La fusión falló'}
-              </span>
-            </div>`).join('')}
+          ${r.resultados.map((x: any, i: number) => filaDeSerie(x, i)).join('')}
         </div>
 
         <button class="w-full py-2.5 mt-3 accent-bg text-slate-950 font-['Orbitron'] font-bold
@@ -1292,6 +1280,101 @@ function showAutoForgeResults(r: any, onClose: () => void) {
   document.body.appendChild(cont);
   const cerrar = () => { cont.remove(); onClose(); };
   cont.querySelector('[data-forge-cerrar]')?.addEventListener('click', cerrar);
+}
+
+/**
+ * UNA FILA DEL RESUMEN DE LA SERIE, Y POR QUÉ NO ERA UNA LÍNEA.
+ *
+ * **LO QUE HABÍA:** el número, una casilla con `sparkle`, y el nombre. Tres cosas de
+ * un objeto que tiene seis. Y lo peor no era lo que faltaba: era que **la fila tenía
+ * el COLOR de la rareza del item y no su FORMA**, o sea media ficha. Un recolector y
+ * un compañero salían con la misma cara y solo se distinguían por el color del borde.
+ *
+ * **LO QUE TRAE AHORA, Y DE DÓNDE SALE CADA COSA.** Todo del `item` que el motor ya
+ * devolvía entero por resultado —`r.collector`/`r.companion`, con su `potential`, su
+ * `tier` y su `affixes`—. **La vista no calculaba nada: leía.** Eso es lo que hace que
+ * esta fila pueda ser la mitad de la ficha sin ser la regla de la mitad de la ficha:
+ * las cuatro cosas que faltan son **lectura**, y si algún día el motor deja de traer
+ * un campo, esta fila lo enseña vacío en vez de inventarlo.
+ *
+ * **LAS CUATRO SON LAS MISMAS QUE EN EL RESUMEN DE APERTURA, Y POR QUÉ.** Las
+ * estrellas y el tier son **las dos dimensiones del objeto**: dónde cayó dentro de su
+ * tier, y cuál es el tier. Sin las dos, dos filas del mismo nombre de la misma serie
+ * no se distinguen, y el jugador no puede elegir cuál se forja mejor — que es la
+ * pregunta más cara de la serie entera.
+ *
+ * **LOS AFIJOS VAN COMO TAG Y NO COMO TEXTO, PORQUE SON HASTA SEIS.** En texto se
+ * comen la fila entera y el nombre del item deja de leerse; como tags caben en dos
+ * líneas y son justo lo que se compara entre las dos filas. El estilo es el mismo de
+ * la ficha del almacén —`rarity-${slug}` y `currentColor` en el borde— para que un
+ * afijo se vea igual en los dos sitios.
+ *
+ * **EL FALLO NO TIENE ITEM Y NO PONE NADA DE ESTO.** Ni estrellas, ni tier, ni afijos,
+ * ni iconos de objeto: solo la cruz y el motivo. Es la misma regla que `tierDeFila()`
+ * en el resumen de apertura, y por el mismo motivo: un `undefined` pintado es un dato
+ * inventado, y una fila de fallo con un "T2" al lado sería mentira.
+ *
+ * **Y EL ICONO ES EL DEL TIPO, Y EL TIPO ES UN ARGUMENTO Y NO EL ESTADO DE LA
+ * PÁGINA.** `ui.tipo` es estado de módulo, y una función que lo lee no se puede
+ * examinar desde un banco: hay que montar la página entera para ver qué pinta. Pasarlo
+ * como argumento la hace comprobable sin DOM, que es lo único que hay para esto —
+ * `preview.ts` no trae la serie en su mock, así que el banco visual no la puede
+ * abrir. Y el que llama pasa `ui.tipo`, que es el mismo interruptor que decide a qué
+ * motor llama la serie: los dos leen la misma variable, así que una fila de compañero
+ * no puede pintar el icono de recolector.
+ */
+export function filaDeSerie(x: any, i: number, tipo: 'collector' | 'companion' = 'collector'): string {
+  if (!x.exito) {
+    return `
+      <div class="flex items-center gap-2.5 px-3 py-2">
+        <span class="text-[10px] font-mono text-[var(--text-muted)] w-[22px] flex-shrink-0">${i + 1}</span>
+        <span class="w-7 h-7 rounded-lg grid place-items-center flex-shrink-0 border border-rose-500/40 text-rose-400"
+              data-ico="close">
+          <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('close')}</span>
+        </span>
+        <span class="text-[11px] font-mono min-w-0 flex-1 text-rose-400 break-words">
+          ${x.msg || 'La fusión falló'}
+        </span>
+      </div>`;
+  }
+
+  const it = x.item || {};
+  // **EL POTENCIAL SE COMPRUEBA, Y NO ES PARANOIA.** `estrellasDe(undefined)` devuelve
+  // `★★★`: la función tiene un valor por defecto para lo que no trae el campo, y ese
+  // valor es tres. Pintarla sin mirar es **el bug de G4 otra vez**, el de "un item sin
+  // potencial sale con tres estrellas": el resumen estaría prometiendo una calidad que
+  // el item no tiene, y el jugador compararía dos filas por un número inventado.
+  // La regla es la misma que en la rejilla: **estrellas solo si el campo es un número.**
+  const estrellas = typeof it.potential === 'number' ? estrellasDe(it.potential) : '';
+  const tier = typeof it.tier === 'number' && it.tier >= 1 ? `T${it.tier}` : '';
+  const afijos: string[] = Array.isArray(it.affixes) ? it.affixes : [];
+
+  return `
+    <div class="px-3 py-2">
+      <div class="flex items-center gap-2.5">
+        <span class="text-[10px] font-mono text-[var(--text-muted)] w-[22px] flex-shrink-0">${i + 1}</span>
+        <span class="w-7 h-7 rounded-lg grid place-items-center flex-shrink-0 border
+                     ${rarityClass(it.rarity ?? '')} accent-bg text-slate-950"
+              data-ico="${ui.tipo === 'companion' ? 'companion' : 'collector'}">
+          <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(ui.tipo === 'companion' ? 'companion' : 'collector')}</span>
+        </span>
+        <span class="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span class="text-[11px] font-mono text-[var(--text-main)] break-words">${x.nombre ?? ''}</span>
+          ${estrellas ? `<span class="text-[10px] text-amber-300 flex-shrink-0">${estrellas}</span>` : ''}
+          ${tier ? `<span class="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">${tier}</span>` : ''}
+        </span>
+      </div>
+      ${afijos.length ? `
+        <div class="flex items-center gap-1 flex-wrap mt-1.5 pl-[38px]">
+          ${afijos.map(id => {
+            const a = AFFIX_BY_ID[id];
+            return a
+              ? `<span class="text-[9px] font-mono px-1 py-[1px] rounded border rarity-${raritySlug(a.rarity)}"
+                         style="border-color: currentColor" title="${a.description}">${a.name}</span>`
+              : '';
+          }).join('')}
+        </div>` : ''}
+    </div>`;
 }
 
 /**

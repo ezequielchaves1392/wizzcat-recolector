@@ -917,7 +917,7 @@ Con F74 hay **diez bases por tier y por lado** —200 en total—, y cada base l
 | Número | Qué es | Para qué |
 |---|---|---|
 | **Peso de stat** | Cuánta recolección trae (daño por clic / ingreso por segundo) | **La caza.** Es lo que el jugador busca |
-| **Peso de drop** | Qué tan rara sale de la caja | La hacen罕见的 sin que nadie lo diga |
+| **Peso de drop** | Qué tan rara sale de la caja | La hacen rara sin que nadie lo diga |
 
 **El mejor stat es el de menor probabilidad**, que es lo que se pidió: el premio de
 la caja es una base buena, y nadie la compra porque no se vende.
@@ -1103,6 +1103,39 @@ feature que falta):**
       `CONSUMABLES`, y `consumableCheck` tiene que afirmar que **los cuatro
       `buffId` nuevos resuelven** (con la invariante "toda carta de expansor
       comprable tiene efecto conocido").
+- [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
+      > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
+      **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un
+      tope que debería ser de 30 min más. **O sea, casi el doble de lo prometido**, y
+      en el peor sitio posible: la tarjeta AFK es **la única forma de que haya ingreso
+      sin mirar la pantalla**, que es justo lo que R10 prohíbe. Un tope que no se
+      respeta no es un descuadre de la barra, es la regla del juego rota.
+      **POR QUÉ HAY QUE MEDIRLO ANTES DE ARREGLAR Y NO DESPUÉS.** La duración de un
+      buff **acumula** (B13 lo dejó escrito: `pasoDeConsumible()` × unidades, con el
+      total concedido en `afkTotalMs`), así que hay **tres sumandos posibles** y cada
+      uno es un bug distinto:
+      - **El tope no mira la tarjeta.** Si el tope duro de 30 min está sobre el
+        acumulado en vez de sobre el paso, tres tarjetas dan 30 min y una sola con
+        nivel da 30, y el HUD mente sobre el que se está mirando.
+      - **El `+30 min` del nodo se aplica dos veces.** `afkCardDurationMs()` es
+        `10 min base + extra del árbol`, y si el extra está en el paso **y** en el
+        tope, se suma en los dos sitios.
+      - **El nodo cuenta un nivel que no tiene.** Si `afk_extend` da +30 por nivel y
+        el jugador lo tiene en nivel 2, son 60 de extra, no 30: y entonces la hora y
+        media es **la cuenta correcta con el multiplicador mal**. Esta es la más
+        probable, porque **1:55 es casi 2 h y el pase no puede ser de dos horas** con
+        un tope de 30: hay un multiplicador que se está contando dos veces o un nivel
+        de más.
+      **Lo que hay que leer primero:** `afkCardDurationMs()` (`gameLoop.ts`) y el nodo
+      `afk_extend` de `data/tree.ts`, **los dos con sus números puestos**, porque un
+      tope que se respeta a medias y un tope que se aplica dos veces se diferencian en
+      el orden de las multiplicaciones y no en el resultado final.
+      **`tarjetaCheck` es el banco que lo ata**, y ya tiene la invariante de duración
+      de la parte comprable; falta la del **tope del acumulado**: con N tarjetas de
+      nivel 1, el tiempo total no puede pasar del tope, ni aunque el nodo lo suba. Y
+      **con el HUD en la captura**: la barra se pinta con `afkTotalMs`, así que si el
+      número grande y la barra no coinciden, es que el denominador es otro caso del
+      mismo bug.
 - [ ] **B25 · Los clics pasivos no critican.**
       > "Los clicks pasivos también deberían hacer críticos"
       **Hoy solo `click()` tira el dado de crítico** (B16), y se dejó fuera a
@@ -1177,6 +1210,93 @@ feature que falta):**
       `showConfirmModal`. A 390 px, "Entran / 7 recolectores del tier 1, de dos en dos
       y por potencial" no cabe en una línea y **un modal que se parte en tres es peor
       que el párrafo**.
+- [ ] **F80 · La tarjeta ajena enseña el perfil entero, y sustituye a los bloques
+      que ya tiene.**
+      > "quiero que eso se vea en el perfil del jugador cuando otro lo abre desde el ranking asi tal cual con los mismos datos, deberias solo reemplazar lo que esta por esas vistas"
+      *Con tus tres capturas: el bloque del RECOLECTOR con su desglose entero, el de
+      COMPAÑEROS con su ingreso, y el ÁRBOL DE PASIVAS completo con sus niveles.*
+
+      **LO QUE HAY HOY, Y POR QUÉ ESTE ENCARGO ES "SUSTITUIR" Y NO "AÑADIR".**
+      `cuerpoDeTarjeta()` ya monta cuatro bloques dentro de una sola sección, "Lo que
+      tiene puesto": `bloqueDeRecolectores`, `bloqueDeCompaneros`, `bloqueDeNodos` y
+      `bloqueDeLogros`. **Los tres primeros son precisamente las capturas**, pero en
+      versión corta: una tarjeta con nombre, rareza y cifra, en vez del bloque entero.
+      O sea que **esto no es enseñar datos nuevos: es pintar con la misma forma los
+      datos que ya viajan**, y por eso el encargo dice sustituir.
+
+      **EL ÁRBOL ES LA ÚNICA PARTE QUE HAY QUE PENSAR DE VERDAD, Y ES LO MÁS
+      CARO.** En el perfil el árbol es un `svg` con las líneas de dependencia
+      dibujadas y los niveles como puntos de un color. En la tarjeta **no hay a qué
+      colgar las líneas**: es una columna con scroll, no una rejilla de 5 columnas, y
+      las líneas son geometría de una rejilla. O sea que hay **tres salidas** y cada
+      una es una decisión:
+      - **La rejilla entera dentro de la tarjeta**, con su `svg` de líneas. Es lo que
+        pediste "tal cual", pero son cinco columnas en un `max-w-md` de móvil: **a
+        390 px sale ilegible**, y una rejilla ilegible es peor que no tenerla.
+      - **Las columnas en fila y scroll horizontal.** Keeps la forma, gasta el ancho.
+      - **La lista que ya hay, pero con los niveles.** Hoy `bloqueDeNodos()` agrupa por
+        categoría y enseña lo pagado. Añadir el nivel es barato.
+      **Y HAY UNA CUARTA COSA QUE NO ES ESTÉTICA:** el árbol tiene **requisitos
+      cruzados**, así que ver los niveles sueltos enseña una partida que no se puede
+      leer. Sin las líneas, el jugador ve "tiene Chatarra 2 y Estantería 1" y no puede
+      deducir que el segundo depende del primero.
+
+      **LO QUE HAY QUE PUBLICAR, Y ES EL RIESGO REAL DE ESTE ENCARGO.** La tarjeta
+      es `perfiles/{uid}`, un documento que el dueño publica con lo que decide enseñar,
+      y hoy **`cifrasDeTarjeta()` y los cuatro bloques ya funcionan**. Añadir el
+      desglose del click significa publicar **la cuenta completa de por qué ese
+      jugador pega lo que pega**: base del item, potencial, nivel, afijos, logros,
+      árbol y buff.
+      - **Lo que NO es problema:** nada de eso es dinero guardado ni inventario. El
+        **nivel del recolector** y sus afijos son públicos por definición —los llevas
+        puestos—, y el árbol ya se publica. La privacidad ya está resuelta y bien.
+      - **Lo que SÍ es un problema, y es el buff:** la fila "Buff de click · temporal"
+        vale **+106.931 K**, y **los buffs caducan**. Publicar el buff es publicar
+        un número que **se queda en la tarjeta después de caducar**, o sea un número
+        que miente a quien la mire mañana. Hay que decidir: o no se publica, o se
+        publica **con la fecha de caducidad y la tarjeta avisa de que es al guardar**.
+      - **Y el desglose se puede RECALCULAR o PUBLICAR.** Si se publica el item con
+        su potencial y su nivel, la vista puede componer el desglose con las mismas
+        funciones del perfil —y entonces el número que ve el otro **es el número que
+        cobra la partida**. Si se publica el desglose hecho, es una foto y se queda
+        vieja en cuanto el otro suba de nivel. **La segunda es una partida desincronizada
+        esperando a pasarle mal.**
+
+      **LO QUE NO SE TOCA.** `cifrasDeTarjeta()` y `bloqueDeLogros()` se quedan:
+      el encargo dice sustituir los tres bloques, no borrar el resto, y los logros no
+      tienen versión "corta" que arreglar.
+
+      **Banco:** `perfilCheck` mide qué se publica y qué no. Si esto se hace, la
+      invariante que hay que añadir es **que lo que la tarjeta muestra se puede
+      recomponer con las funciones del perfil**, no que coincida por suerte. Es la
+      diferencia entre una tarjeta y una foto.
+
+      **Y EL ORDEN.** Va **después de F74**, porque con las bases las tres capturas
+      enseñan un stat más cada una, y si esto se programa antes se programa dos
+      veces.
+- [ ] **F81 · El resumen de la forja en serie enseña el item entero.**
+      > "aca tambien mostrar bien los iconos , el potencial y el tier que sale el arma y si tiene afijos poner el tag"
+      Hoy cada fila de la serie es **una sola línea**: el número, una casilla con un
+      icono `sparkle` genérico, y el nombre. Todo lo demás está en el `item` que el
+      motor ya trae entero por resultado —`r.collector`/`r.companion`, con su
+      `potential`, su `tier` y su `affixes`— y **la vista no lo lee**.
+      **Lo que le falta a la fila, y por qué cada cosa está pedida:**
+      - **El icono de verdad.** Es `sparkle` en todos los acierto, así que un
+        recolector y un compañero salen con la misma cara. Y el color sí sale de la
+        rareza (`rarityClass`), o sea que la fila tiene el color del objeto y no su
+        forma: es media ficha.
+      - **Las estrellas.** Son el potencial, y son **la mitad de la calidad** del
+        item: sin ellas, dos filas del mismo nombre no se distinguen.
+      - **El tier.** Es la otra mitad, y es lo mismo que se acaba de pedir en el
+        resumen de apertura (F73): **las dos dimensiones del objeto**, y esta fila
+        no tenía ninguna.
+      - **Los afijos como tag**, y no como texto: son hasta seis, y en texto se
+        comen la fila entera. Como tags se leen de un vistazo y son los que el
+        jugador va a comparar entre las dos filas de la serie.
+      **El fallo NO cambia**, y es lo que hay que tener cuidado: una fila de fallo no
+      tiene item, y las cuatro cosas de arriba tienen que salir vacías sin dejar
+      separadores sueltos. Lo dice el mismo criterio que `tierDeFila()` en el resumen
+      de apertura.
 - [ ] **F75 · Los expansores viejos se convierten en Inicial.**
       > "Converti las antiguas t1 , t2 , t3 y t4 que posean los usuarios a iniciales."
       **Cuidado, que "convertir" tiene dos lecturas y la mala rompe partidas:**

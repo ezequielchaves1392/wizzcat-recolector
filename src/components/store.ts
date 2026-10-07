@@ -416,13 +416,26 @@ export function renderStoreTab(
       // **TEXTO PLANO, SIN NADA DE MARCA.** Aquí no se pone `**`: esta nota se pinta con
       // textContent y un asterisco sale tal cual, que es lo que pasaba — se leía "**Ya no hace
       // nada**" con los dos asteriscos dentro—. Las negritas de verdad usan <strong>.
+      //
+      // **Y LA CAPACIDAD VA DESGLOSADA, QUE ES LO QUE FALTA Y ES LO QUE SE REPORTÓ.**
+      // Decía `Capacidad ${state.warehouseCapacity}` y el almacén enseña el **total**, que
+      // incluye lo que da el árbol: un expansor Inicial —"vale hasta 60", y llega hasta
+      // 60— se leía contra un contador de 69 y la conclusión era que el expansor hacía
+      // más de lo que promete. Los dos números son ciertos y son de sumandos distintos.
+      // **El desglose sale del motor** (`getCapacityBreakdown`), no de restar aquí:
+      // `aggregateBonuses` es quien decide cuánto da el árbol.
+      const desglose = game.getCapacityBreakdown?.();
+      const delArbol = desglose?.delArbol ?? 0;
+      const capacidad = delArbol > 0
+        ? `${desglose!.delExpansor}+${delArbol}`
+        : `${state.warehouseCapacity}`;
       note = tope
-        ? `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}. `
+        ? `Capacidad ${capacidad} · vale hasta ${expansorNota.maxCap}. `
           + (siguiente
             ? `Ya no hace nada: se puede comprar, pero para que sirva habría que ampliar `
               + `hasta el ${siguiente.name}, y hasta entonces no se usa.`
             : `Ya no hace nada: es el último tramo y no hay nada por encima.`)
-        : `Capacidad ${state.warehouseCapacity} · vale hasta ${expansorNota.maxCap}`;
+        : `Capacidad ${capacidad} · vale hasta ${expansorNota.maxCap}`;
     } else if (itemKey === 'afkCard') {
       // **LA DURACIÓN Y EL STOCK, LAS DOS.** Esta rama ponía solo "10 min cada una"
       // y hacía sombra a la genérica de "En almacén: N": la tarjeta decía cuánto dura

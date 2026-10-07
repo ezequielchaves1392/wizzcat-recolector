@@ -191,6 +191,33 @@ async function main() {
     check('expansor: con la base en 28 y slots del arbol se aplica', r.ok, r.msg ?? '');
     check('expansor: y sube solo la BASE, no el total',
       s(g).warehouseCapacity === 29, 'base=' + s(g).warehouseCapacity);
+
+    // **EL DESGLOSE QUE FALTA EN PANTALLA, Y POR QUÉ ES UN BUG DE LO QUE SE VE.**
+    // Lo reportado fue: "tengo 69 de capacidad y lo subí con el expansor inicial, me
+    // debería dejar solo hasta 60". Y el expansor **cumplió**: su techo es 60 y llegó
+    // a 60. Los 9 de más son de `storage_rack` en nivel 2 (+3 cada uno), que es una
+    // regla del juego y cuenta igual. Lo que no decía nadie era de dónde salía la
+    // diferencia, así que los dos números ciertos se leían como un expansor roto: si
+    // su techo es 60 y el contador dice 69, la conclusión del jugador es que hizo más
+    // de lo que promete.
+    // **Lo que se ata es que el desglose SUME el total.** Si las dos partes no dieran
+    // el número grande, el "+" estaría pintando una cuenta que no es la del juego, que
+    // es peor que no pintar nada.
+    const bd: any = (g as any).getCapacityBreakdown?.();
+    check('capacidad: el desglose existe y sus dos partes suman el total',
+      !!bd && bd.delExpansor + bd.delArbol === (g as any).getCapacity(),
+      bd ? `exp=${bd.delExpansor} arbol=${bd.delArbol} total=${bd.total}` : 'no existe');
+    check('capacidad: la parte del expansor es la base GUARDADA, sin lo del arbol',
+      bd?.delExpansor === s(g).warehouseCapacity,
+      `delExpansor=${bd?.delExpansor} base=${s(g).warehouseCapacity}`);
+    check('capacidad: y la del arbol son los slots del nodo, sin el expansor',
+      bd?.delArbol === 6, `delArbol=${bd?.delArbol} (storage_rack nivel 2 son +6)`);
+    // Y el caso del reporte, que es el que el jugador vio: 60 del expansor + 9 del árbol.
+    const g69 = await boot(baseSave([], { warehouseCapacity: 60, nodeLevels: { storage_rack: 3 } }));
+    const b69: any = (g69 as any).getCapacityBreakdown?.();
+    check('capacidad: el caso reportado da 60+9 y el total 69, no un expansor roto',
+      b69?.delExpansor === 60 && b69?.delArbol === 9 && (g69 as any).getCapacity() === 69,
+      b69 ? `exp=${b69.delExpansor} arbol=${b69.delArbol} total=${b69.total}` : 'no existe');
   }
   {
     // Una pila de expansores: usar uno baja el contador, no borra la celda.

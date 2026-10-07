@@ -306,10 +306,41 @@ export function nodeSheetHTML(node: any, level: number, opts: {
   categoria?: { label?: string } | null;
   requiere?: string[];
 }): string {
-  const efectos = Object.entries(node.bonus)
-    .map(([k, v]) => bonusLabel(k as keyof PassiveBonuses, v as number))
+  const entradas = Object.entries(node.bonus) as Array<[keyof PassiveBonuses, number]>;
+  const efectos = entradas
+    .map(([k, v]) => bonusLabel(k, v))
     .join(' · ') || 'Desbloquea una función';
   const alMaximo = level >= (node.maxLevel ?? 1);
+
+  /**
+   * LO QUE EL NODO APORTA **AHORA**, Y POR QUÉ FALTABA.
+   *
+   * `efectos` dice "+8 % daño de click" y es el **aporte de un nivel**, no el del
+   * nodo: el texto sale de `bonusLabel(k, v)` sobre el `bonus` del catálogo, que es
+   * el valor de un nivel. Con el nodo en **7/10**, ese +8 % es el del nivel 1 y un
+   * jugador que tiene 56 % se queda con la cifra de uno. **Y el nivel ya está en la
+   * hoja, en la píldora de abajo** —o sea que las dos cosas que hacen falta para
+   * multiplicar están en la misma pantalla y en el orden equivocado: primero el 8,
+   * después el 7. El jugador tiene que hacer la cuenta de cabeza para saber cuánto
+   * tiene, y es la cuenta más fácil del juego.
+   *
+   * **LO QUE SE AÑADE ES LA SUMA, Y EL NÚMERO LO PONE `aggregateBonuses`**, no una
+   * multiplicación en la vista: la regla es `bonificación × nivel`, y el mismo motor
+   * que la aplica es el que la enseña. Si algún día un nodo tuviera un efecto que no
+   * escala linealmente, esta fila mentiría —y por eso el banco comprueba que lo que
+   * dice la hoja sea lo que el agregador da.
+   *
+   * **SOLO CUANDO HAY NIVEL.** Con el nodo en 0, "ahora" sería "+0", que es ruido y
+   * además invites a comprar. En cuanto compras uno, la fila aparece.
+   */
+  const acumulado = level > 0
+    ? entradas
+        .map(([k, v]) => bonusLabel(k, v * level))
+        .join(' · ')
+    : '';
+  const siguiente = !alMaximo && level > 0
+    ? entradas.map(([k, v]) => bonusLabel(k, v * (level + 1))).join(' · ')
+    : '';
 
   return `
     <div class="flex flex-col gap-3 text-left" style="max-width:22rem">
@@ -319,7 +350,16 @@ export function nodeSheetHTML(node: any, level: number, opts: {
         </div>
         <div class="text-[11px] font-mono leading-relaxed mt-1" style="color:var(--text-main)">
           ${efectos}
+          <span class="opacity-50"> por nivel</span>
         </div>
+        ${acumulado ? `
+          <div class="text-[11px] font-mono leading-relaxed mt-1 accent-text">
+            Ahora (nivel ${level}): ${acumulado}
+          </div>` : ''}
+        ${siguiente ? `
+          <div class="text-[10px] font-mono leading-relaxed mt-0.5 opacity-60">
+            Al nivel ${level + 1}: ${siguiente}
+          </div>` : ''}
       </div>
 
       ${node.lore ? `
