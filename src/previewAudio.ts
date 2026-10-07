@@ -15,7 +15,6 @@ import {
   onAudioStateChange, primeAudio
 } from './utils/audio';
 import { ic } from './ui/icons';
-import { setSkipRoulette } from './roulettePrefs';
 
 export function wirePreviewAudio(app: HTMLElement) {
   const pintar = () => {
@@ -78,22 +77,6 @@ export function wirePreviewAudio(app: HTMLElement) {
       if (btn.dataset.audio === 'music') toggleMusic();
       else toggleMute();
     }
-  });
-
-  /**
-   * LA CASILLA DE SALTAR LA RULETA, Y POR QUÉ ESTÁ AQUÍ CON SU PROPIO `change`.
-   *
-   * El juego la atiende en `instalaDelegacionDeAjustes()`, en `main.ts`. El preview no
-   * monta esa delegación, así que sin esto la casilla se veía marcada o desmarcada
-   * correctamente y no guardaba nada —y en el producto tampoco, hasta que se arregló.
-   *
-   * Va en `change` y no en el `click` de arriba por lo mismo que va allí: el espacio
-   * sobre una casilla no produce `click`.
-   */
-  app.addEventListener('change', (e) => {
-    const mark = (e.target as HTMLElement).closest?.('[data-setting]') as HTMLElement | null;
-    if (!mark || mark.dataset.setting !== 'skip-roulette') return;
-    setSkipRoulette((mark as HTMLInputElement).checked);
   });
 
   onAudioStateChange(pintar);

@@ -269,8 +269,6 @@ export const sfx = {
     blip(146.83, 0.2, 'sawtooth', 0.4);
     blip(110, 0.3, 'sawtooth', 0.35, 0.14);
   },
-  // Motor de la ruleta de forja: chasquido metálico, más grave que el de cajas.
-  forgeTick: (progress = 0) => blip(900 - progress * 420, 0.03, 'square', 0.2 * (1 - progress * 0.55)),
 
   // --- Navegación ---
   nav: () => blip(660, 0.035, 'sine', 0.22),

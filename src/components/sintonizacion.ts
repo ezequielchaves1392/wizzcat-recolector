@@ -11,12 +11,12 @@
 //
 //  Ahora los dos botones abren esto. Lo que cambia entre un objetivo y otro son **tres
 //  cosas y solo tres**: de dónde sale el item, cuál es su techo de niveles y a qué
-//  método del motor se llama. El resto —el coste, la probabilidad, el saldo, la ruleta,
+//  método del motor se llama. El resto —el coste, la probabilidad, el saldo, el cartel,
 //  los mensajes— es literalmente el mismo código, y por eso no puede desincronizarse.
 //
-//  Y el motivo de que la ruleta sea la misma no es pereza: es que **el resultado ya
-//  está decidido cuando se llama al motor**. La ruleta no elige el premio, lo enseña. Si
-//  un caminoAnimase el premio, el jugador descubriría en veinte tiradas que la ruleta no
+//  Y el motivo de que el cartel sea el mismo no es pereza: es que **el resultado ya
+//  está decidido cuando se llama al motor**. El cartel no elige el premio, lo enseña. Si
+//  un camino animase el premio, el jugador descubriría en veinte tiradas que el cartel no
 //  es la fuente de verdad, y a partir de ahí ninguna otra cifra del juego le creería.
 // ==========================================================================
 //  POR QUÉ ESTE FICHERO SE LLAMA ASÍ Y NO COMO EL ANTERIOR.
@@ -189,9 +189,9 @@ export function showSintonizacion(
     // **EL QUE ESTÁ AL TECHO, Y NO SIEMPRE "EL RECOLECTOR".** La frase estaba escrita
     // con la palabra del recolector porque el camino del recolector se escribió primero,
     // y el del compañero se añadió encima sin tocarla: sintonizar un compañero al máximo
-    // decía "El recolector ya está al nivel máximo". Es el mismo fallo del subtítulo de
-    // la ruleta, en un sitio donde el jugador ya ha leido todo lo demas y solo le queda
-    // leer esto: y si dice la palabra equivocada, parece que el boton va al objeto equivocado.
+    // decía "El recolector ya está al nivel máximo". Es el mismo fallo de poner la
+    // palabra equivocada en un sitio donde el jugador ya ha leido todo lo demas y solo le
+    // queda leer esto: y si dice la palabra equivocada, parece que el boton va al objeto equivocado.
     showToast(`El ${esCompanero ? 'compañero' : 'recolector'} ya está al nivel máximo.`, 'info');
     return;
   }
@@ -364,7 +364,7 @@ export function showSintonizacion(
       sfx.use();
       // POR QUÉ EL NIVEL SE LEE ANTES DE TIRAR EL DADO. El game loop sube
       // `item.level` en el mismo objeto del almacén, así que leerlo después
-      // devolvería el nivel nuevo en los dos casos y la ruleta no podría
+      // devolvería el nivel nuevo en los dos casos y el cartel no podría
       // pintar "4 → 5": enseñaría "5 → 5" en el acierto, que es un número que
       // no existe. `equipo` es la referencia viva al item, no una copia.
       const nivelAntes = equipo.level || 0;
@@ -372,7 +372,7 @@ export function showSintonizacion(
       // estado, así que esta vista no puede proponer un gasto que no vaya a
       // pasar (R3).
       // **LA TERCERA Y ÚLTIMA DIFERENCIA ENTRE LOS DOS CAMINOS.** Todo lo de arriba —el
-      // texto, el saldo, la ruleta, los mensajes— es el mismo código; aquí solo se decide
+      // texto, el saldo, el cartel, los mensajes— es el mismo código; aquí solo se decide
       // a quién se llama. Y se decide con una condición y no con dos manejadores, para
       // que un cambio futuro en la hoja llegue a los dos sin poder olvidarse del segundo.
       const res = esCompanero
@@ -381,7 +381,7 @@ export function showSintonizacion(
         // "mejorar el que sea": sin esto la hoja muestra el coste y la probabilidad del
         // item que tiene delante y el motor sube el equipado.
         : (game.upgradeCollector?.(equipo.id) ?? game.upgradeEquippedCollector());
-      // `tuningRoll()` decide qué niveles enseña la ruleta, y el porqué de que
+      // `tuningRoll()` decide qué niveles enseña el cartel, y el porqué de que
       // el de antes se lea ANTES de la llamada está en su JSDoc.
       // **EL NIVEL DE DESPUÉS VIENE DE `res.level`, NO DE VOLVER A LEER `equipo`.**
       //
@@ -402,9 +402,10 @@ export function showSintonizacion(
         ? Number(res.level)
         : nivelAntes;
       const roll = tuningRoll(res, nivelAntes, levelDespues);
-      // Y SI EL MOTOR NO TIRÓ EL DADO, NO HAY RULETA. Un rechazo —no hay saldo, ya
+      // Y SI EL MOTOR NO TIRÓ EL DADO, NO HAY CARTEL. Un rechazo —no hay saldo, ya
       // está en el techo, no hay item— no es un fallo de la tirada: no se ha gastado
-      // nada y no ha pasado nada. Girar igualmente sería una ruleta mintiendo.
+      // nada y no ha pasado nada. Enseñarlo sería mentir sobre un resultado que
+      // nadie tiró.
       //
       // Es un camino raro —la hoja desactiva el botón cuando no llega, y el
       // techo se comprueba al abrir—, pero "raro" no es "imposible": el estado
@@ -433,11 +434,11 @@ export function showSintonizacion(
   });
   overlay.querySelectorAll('[data-sintonizar-todo]:not([disabled])').forEach(b => {
     b.addEventListener('click', () => {
-      // F49 · EL AUTOMÁTICO NO TIENE RULETA, Y POR QUÉ NO.
+      // F49 · EL AUTOMÁTICO NO TIENE CARTEL POR INTENTO, Y POR QUÉ NO.
       //
-      // Un intento se enseña con la ruleta porque es **un evento**: pasó algo y hay que
+      // Un intento se enseña con su cartel porque es **un evento**: pasó algo y hay que
       // verlo pasar. Setenta y nueve intentos no son setenta y nueve eventos, son un
-      // resultado, y setenta y nueve ruletas encadenadas serían setenta y nueve pantallas
+      // resultado, y setenta y nueve carteles encadenados serían setenta y nueve pantallas
       // para un número que el jugador va a leer igual. Por eso el automático enseña **un
       // aviso con el resumen** —intentos, aciertos, fallos y nivel— y se queda ahí.
       //

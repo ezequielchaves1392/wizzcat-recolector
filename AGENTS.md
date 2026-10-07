@@ -163,7 +163,6 @@ Para lo que `verify/` **no** cubre (render y navegación):
 | Cualquier pantalla con datos de ejemplo, viewport real | `preview.html?vista=almacen&w=390&h=844` |
 | La pantalla de acceso | `auth-preview.html` |
 | Recorrido automático de navegación | `nav-test.html` |
-| La ruleta aislada | `ruleta-preview.html` |
 
 ---
 

@@ -230,14 +230,10 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 ### Lote 6 · RULETA, CRISTALES Y NÚMEROS
 
 - [x] **F48 · El check de saltar animaciones va en la ruleta**, no en el perfil. Ya
-      estaba, y en el sitio correcto: `getSkipRoulette()` lo leen **las tres** ruletas —
-      la de cajas, la de sintonización y la de la forja—, y el conmutador está en Ajustes
-      de la cabecera, o sea fuera del perfil. No estaba marcado porque el banco solo
-      llegaba a la mitad: `rouletteCheck` comprueba que la preferencia exista, **persista,
-      sobreviva a la recarga y coaccione** —un valor raro es "no saltar", nunca un trompo
-      a medias—, que es lo que se puede comprobar sin DOM. Lo que no comprueba es que las
-      tres ruletas la lean, porque eso es leer código y una prueba que lee código no lo
-      comprueba: lo lee. Anotado abajo como pendiente de banco.
+      estaba, y en el sitio correcto... **y ya no existe, con la ruleta (B17).**
+      Sin giro no hay nada que saltar: el conmutador se ha ido de Ajustes con
+      ella, y el banco que lo comprobaba también. Lo que queda es el check de
+      notas, que ahora sí guarda (antes tampoco guardaba nada: B17).
 - [x] **F49 · Mejora automática de cristales** hasta agotarlos. Hecho, y lo que salió es
       que **no es una ruleta más**: es el mismo intento repetido, y esa es toda la
       diferencia que importa.
@@ -695,12 +691,17 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > del equipado y paga ×2, y devuelve `{ cantidad, critico }` para que la
       > vista lo pinte distinto ("¡CRÍT!" dorado). El crítico es del click del
       > jugador: los automáticos del árbol no critican.
-- [ ] **B17 · Los ajustes de ruleta y notas se resetean solos.**
-      > "Al deshabilitar los settings de ruleta y notas, se vuelven por default al hacer un tiro de ruleta."
-      > **Decisión tuya (7 de octubre de 2026): FUERA LA RULETA ENTERA.** Se elimina
-      > la animación de la ruleta: abrir cajas y forjar dan el resultado directo,
-      > sin girar nada. Incluye el bug del reseteo de ajustes, que desaparece con
-      > ella.
+- [x] **B17 · Fuera la ruleta entera.** Hecho en v1.8.0.
+      > "Al deshabilitar los settings de ruleta y notas, se vuelven por default al hacer un tiro de ruleta." + "Quitar la ruleta"
+      > **Causa raíz doble.** El reseteo: los dos checks se importaban pero nadie
+      > los llamaba —no había manejador `change` en ningún sitio—, así que la
+      > casilla se pintaba, no se guardaba, y el primer re-render la repintaba
+      > con el valor viejo. La ruleta: sobraba entera, y con ella su ajuste, su
+      > banco, sus dos previews y su sonido. Ahora abrir, sintonizar y forjar van
+      > directo al cartel (era el camino del "saltar", ahora el único), el check
+      > de notas sí guarda, y los tests del contrato del cartel viven en
+      > `potencialCheck`. Se borran `rouletteSpin`, `rouletteStrip`,
+      > `roulettePrefs`, `ruletaPreview`, `rouletteCheck` y `forgeTick`.
 - [ ] **B18 · "Ojo de Caja" no dice el 10% de qué.**
       > "'Ojo de caja' que hace puntualmente? 10% de que? especificar"
 - [ ] **B19 · Con tarjeta AFK viva se sigue mostrando el cartel de pausa.** (para después)
@@ -727,6 +728,10 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > categoría) y `bloqueDeNodos()` ya existe en `tarjetaAjena.ts`, pero
       > `cuerpoDeTarjeta()` no lo llama: la build ajena no se ve por un cable
       > suelto, no por falta de datos.
+- [ ] **F63 · Dar formato al cartel de forja en serie.** (para después)
+      > "para despues: este cartel ordenarlo un poco darle identacion, colores, formato, esta todo muy plano"
+- [ ] **F64 · El potencial en el resumen de apertura.** (para después)
+      > "para despues : aca me gustaria que en los drones y los recolectores salga el potencial"
 
 **Hecho y commiteado en v1.7.0:**
 paginador de cosméticos/logros de a 10 con las flechas arriba, stock en cartas

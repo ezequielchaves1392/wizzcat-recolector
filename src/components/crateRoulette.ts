@@ -1,52 +1,27 @@
-// Ruleta horizontal de apertura de cajas.
+// Cartel del premio de las cajas.
 //
-// Importante: la ruleta NO decide el premio. `reward` llega ya decidido por el
-// game loop y la animación se limita a enseñarlo. Si se invirtiera el orden,
-// la ruleta estaría mintiendo sobre las probabilidades reales.
+// Antes esto era una ruleta: el premio llegaba decidido por el game loop y una
+// cinta lo enseñaba girando. La ruleta se ha quitado del juego entero (B17) y
+// lo que queda es lo que la ruleta enseñaba al final: el cartel del premio,
+// directo y sin giro. El premio sigue llegando decidido y aplicado por el
+// motor, como siempre: aquí solo se enseña.
 //
-// La mecánica del carril —la ventana, las casillas y el giro— vive en
-// `rouletteStrip.ts`, que la comparte con la ruleta del sintonizador. Aquí solo
-// queda lo que es de las cajas: qué se anuncia arriba, cómo se pinta el cartel
-// del premio y qué suena al ganarlo.
+// Importante, y no ha cambiado: este cartel NO decide nada. Si se invirtiera el
+// orden, se estaría mintiendo sobre las probabilidades reales.
 
 import { sfx } from '../utils/audio';
 import { ic, type IconName } from '../ui/icons';
 import {
-  buildRouletteStrip, makeRouletteTile,
   lootAmountText, isCountedLoot, rarityClass,
   RARITY_GLOW, RARITY_TEXT, RARITY_RANK, CRATE_META,
   type CrateReward
 } from './crateLoot';
-import { mountStrip, spinTrack } from './rouletteStrip';
-import { getSkipRoulette } from '../roulettePrefs';
 import type { CrateType } from '../data/store';
-
-/**
- * Cuánto dura el trompo de las cajas.
- *
- * POR QUÉ 5200 Y NO MÁS. Lo que da emoción a una tirada no es el tiempo: es el
- * FRENADO. Con la curva de antes (`0.16, 1, 0.3, 1`) el 90% del camino se
- * recorría en el primer 25% del tiempo, así que cuatro segundos eran un segundo
- * de trompo y tres de arrastre: el ojo abandona la tirada mucho antes de que
- * termine y el final se lee como "esto que dura tanto no está pasando nada".
- * Ahora la curva es la de `FRENADO` (`rouletteSpin.ts`), que es una deceleración
- * constante, y el último medio segundo va casilla a casilla. Eso es
- * anticipación: el jugador mira a dónde se acerca.
- *
- * Y con la cuenta de vueltas de `rouletteSpin.ts` el desplazamiento son unas
- * tres vueltas de la ventana, de modo que 5200 ms salen a una velocidad punta
- * de ~20 casillas por segundo: rápida de verdad al principio y lenta de verdad
- * al final. Subirlo a 7000 no buyería nada más de tensión, solo más espera.
- *
- * El sintonizador usa 2400 ms y dos vueltas a propósito (`tuningRoulette.ts`):
- * se tira docenas de veces por partida y ahí el volteo largo no compra nada.
- */
-const SPIN_MS = 5200;
 
 /**
  * Cómo se llama la unidad de cada botín, para el rótulo bajo la cifra.
  *
- * Vive aquí y no en la tabla porque solo la ruleta lo necesita, pero tiene que
+ * Vive aquí y no en la tabla porque solo el cartel lo necesita, pero tiene que
  * ser el MISMO diccionario para todos: si las nanitas se anunciaran como
  * "Nanitas" en un sitio y como "Monedas" en otro, el jugador leería dos juegos
  * distintos en la misma pantalla.
@@ -60,7 +35,7 @@ const LOOT_UNITS: Record<string, string> = {
 };
 
 /**
- * Muestra la ruleta y al terminar el cartel del objeto.
+ * Muestra el cartel del premio.
  * `onClose` se llama cuando el jugador acepta el premio.
  */
 export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onClose: () => void) {
@@ -87,25 +62,12 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
       <h2 class="font-['Orbitron'] font-black text-lg tracking-wider" style="color: var(--accent)">${meta.name.toUpperCase()}</h2>
       <p class="text-[10px] font-mono mt-1" style="color: var(--text-muted)">DESBLOQUEANDO CARGA…</p>
     </div>
-
-    <!-- SIN BACKTICKS EN ESTE COMENTARIO. Va dentro de un template literal, así que
-         un identificador marcado cerraría la cadena en ese punto y el resto
-         del HTML se leería como código. Los identificadores van sin marcar y el
-         porqué vive en el comentario de TypeScript de mountStrip. -->
-    <div data-role="strip" class="contents"></div>
   `;
   document.body.appendChild(overlay);
 
-  // El cartel se cuelga ANTES de montar la cinta, a propósito. El destino del
-  // trompo sale de una medición, y medir con medio overlay puesto es medir una
-  // ventana que luego no es la que hay: el overlay lleva `overflow-y-auto`, así
-  // que si el cartel hace la pantalla demasiado alta, aparece la barra de scroll,
-  // la ventana se estrecha y la aguja se mueve de sitio. Con el cartel ya
-  // dentro, la medición lo tiene en cuenta y la casilla para clavada sin
-  // necesitar la pasada de corrección final.
   const result = document.createElement('div');
   result.dataset.role = 'result';
-  result.className = 'opacity-0 transition-opacity duration-300 flex flex-col items-center gap-3 flex-shrink-0 pb-2';
+  result.className = 'flex flex-col items-center gap-3 flex-shrink-0 pb-2';
   result.innerHTML = `
     <div class="card-glass-elevated border ${rarityColor} rounded-2xl px-6 py-5 flex flex-col items-center gap-2 ${rarityGlow} max-w-sm text-center">
       <div class="mb-1 [&>span>svg]:w-12 [&>span>svg]:h-12 ${RARITY_TEXT[reward.rarity] || ''}">${ic(reward.icon as IconName)}</div>
@@ -125,35 +87,7 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
     </button>`;
   overlay.appendChild(result);
 
-  const finished = { value: false };
-  const revelarCartel = () => {
-    finished.value = true;
-    if (isJackpot) sfx.jackpot(); else sfx.reward((RARITY_RANK[reward.rarity] ?? 0) >= 2);
-    result.classList.remove('opacity-0');
-    result.classList.add('opacity-100');
-  };
-
-  // F17: saltar es ir directo al cartel, sin montar la cinta. El premio ya
-  // está decidido y aplicado, así que no hay transición que "terminar": el
-  // final del trompo ES el cartel. Cada premio sigue teniendo su propio
-  // overlay y su CONTINUAR, así que saltar uno no se come los de debajo.
-  if (getSkipRoulette()) {
-    revelarCartel();
-  } else {
-    // La cinta se mide antes de pintarse, porque cuántas casillas hacen falta
-    // depende de cuántas caben en la ventana. Eso lo decide `geometria()`.
-    const mount = mountStrip(overlay.querySelector('[data-role="strip"]') as HTMLElement, (giro) => {
-      const { tiles } = buildRouletteStrip(crateType, giro.casillas);
-      // Insertamos el premio en su posicion. La casilla usa el mismo constructor
-      // que las distracciones: si la ganadora se escribiera a mano, cualquier
-      // cambio en cómo se enseña una cifra (el "+", el separador de millares)
-      // llegaría a una casilla y no a la otra, y el jugador vería dos verdades
-      // distintas en la misma pantalla.
-      tiles[giro.winIndex] = makeRouletteTile(reward);
-      return tiles;
-    });
-    spinTrack(mount, SPIN_MS, revelarCartel);
-  }
+  if (isJackpot) sfx.jackpot(); else sfx.reward((RARITY_RANK[reward.rarity] ?? 0) >= 2);
 
   const finish = () => {
     document.removeEventListener('keydown', onKey);
@@ -161,10 +95,10 @@ export function showCrateRoulette(reward: CrateReward, crateType: CrateType, onC
     onClose();
   };
   result.querySelector('[data-role="close"]')?.addEventListener('click', finish);
-  // Escape cierra, pero solo cuando el premio ya está revelado: si se cerrara
-  // durante el giro el jugador se quedaría sin ver lo que ha ganado
+  // Escape cierra: como ya no hay giro, el premio está revelado desde el
+  // primer instante y no hay momento en el que cerrar deje sin verlo.
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && finished.value) finish();
+    if (e.key === 'Escape') finish();
   };
   document.addEventListener('keydown', onKey);
 }

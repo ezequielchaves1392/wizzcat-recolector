@@ -20,8 +20,8 @@
 //  mismo peso da cuatro porcentajes distintos. Un banco que mirase el peso
 //  estaría midiendo un número que no es el que ve el jugador.
 //
-//  LO QUE NO CUBRE, A PROPÓSITO: que la ruleta pinte bien el salto. Eso es
-//  `ruleta-preview.html`.
+//  LO QUE NO CUBRE, A PROPÓSITO: que el cartel pinte bien el salto. Eso es
+//  `preview.html`, con viewport real.
 // ==========================================================================
 
 import { check, resumen } from './kit';

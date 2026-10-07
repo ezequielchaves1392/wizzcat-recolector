@@ -98,8 +98,8 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 | **Recolectores** | Clickers equipables. Daño × nivel. Se afinan con cristales (sube el nivel, puede fallar). T1-T10. | `gameLoop.ts`, `data/tiers.ts` |
 | **Compañeros** | Aportan ingreso. Tipos `click` / `passive` / `multiplier`. 1 ranura de base, 5 de tope. | `gameLoop.ts`, `data/tiers.ts` |
 | **Cajas** | 4 tipos (común/rara/épica/legendaria). Necesita llave de nivel igual o superior. Tabla de botín con pesos en `crateLoot.ts`. | `components/crateLoot.ts` |
-| **Ruleta de cajas** | 21-31 casillas según la ventana, 5.2 s. **Solo muestra**: el premio ya está decidido antes de girar. | `components/rouletteSpin.ts` (los números), `rouletteStrip.ts` (el carril), `crateRoulette.ts` (el cartel) |
-| **Sintonizador** | 17-25 casillas, 2.4 s, 2 vueltas. **También solo muestra**: el motor tira el dado y la ruleta enseña el `success` que ya vino. | `components/tuningRoulette.ts`, `crystalPicker.ts` |
+| **Cartel de cajas** | El premio decidido por el motor va directo al cartel, sin giro (la ruleta se ha quitado en B17). | `components/crateRoulette.ts` (el cartel) |
+| **Sintonizador** | El motor tira el dado y el cartel enseña el `success` que ya vino, con la flecha de niveles. | `components/tuningRoulette.ts` |
 | **Forja** | 3 recolectores del mismo tier → 1 del siguiente. Potencial 1-5, afijos heredados, autor, fecha. | `data/crafting.ts`, `ui/forgePage.ts` |
 | **Afijos** | 14 afijos en 6 rarezas. Modifican daño, pasivo y suerte de forja. | `data/crafting.ts:42-71` |
 | **Valoración** | El precio es dinámico: tier × nivel × rareza × potencial × afijos × fama × antigüedad. El jugador se queda el 42 %. | `data/valuation.ts` |
@@ -422,15 +422,14 @@ devuelve ahora `{ success, rolled, level, msg }`, que es *más* campos que antes
 sobre una convención que sigue siendo distinta de `{ ok, msg }`. La entrada nueva
 no unifica nada: la hace más difícil de unificar de lo que estaba.
 
-Cubierto por `rouletteCheck`, que además comprueba la geometría del giro. Esa
-parte salió de otra sesión: `rouletteSpin.ts` (los números del trompo, sin un
-solo import para poder comprobarlos en Node) y `rouletteStrip.ts` (el DOM que
-comparten las dos ruletas).
+Cubierto por `potencialCheck`, que comprueba el contrato entre el motor y el
+cartel: que un rechazo no se presente como tirada (`rolled`), y que la flecha
+del acierto sea `4 → 5` y no el `5 → 5` que sale de releer el item después del
+sorteo. Antes lo cubría `rouletteCheck`, que además comprobaba la geometría
+del giro; el giro se ha quitado con la ruleta (B17) y el banco se ha ido con él.
 
-Lo que `verify/` **no** cubre, y se miró a mano en `ruleta-preview.html`: que la
-casilla que gana se pare **exactamente** bajo la aguja. Esa comprobación no se
-puede escribir en el banco porque necesita medir píxeles. Se midió, y el
-desfase es de 0 px.
+Lo que `verify/` **no** cubre: el pintado de los carteles. Eso se mira a mano
+en `preview.html`, con viewport real.
 
 ### 22. Las fichas de compañero enseñaban un número que nadie cobraba — ARREGLADA
 
@@ -557,8 +556,7 @@ depende del botín. Queda fuera a propósito:
 
 Esos huecos se cubren con bancos de pruebas visuales, no automáticos:
 `preview.html` (monta cualquier pantalla con datos de ejemplo y viewport real),
-`nav-test.html` (recorrido automático de navegación),
-`auth-preview.html`, `ruleta-preview.html`.
+`nav-test.html` (recorrido automático de navegación) y `auth-preview.html`.
 
 ## 8. Antes de tocar nada
 

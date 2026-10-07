@@ -1,5 +1,4 @@
 import { renderBuffHud, resetBuffHud, buffLabel } from './ui/buffHud';
-import { setSkipRoulette } from './roulettePrefs';
 import { setPatchNotes } from './patchNotesPrefs';
 import { showPatchNotes, montarNotas } from './ui/patchNotes';
 import { renderPanel } from './ui/playerPanel';
@@ -840,6 +839,19 @@ function instalaDelegacionDeAjustes() {
       sfx.nav();
       document.querySelector('[data-ajustes]')?.classList.add('hidden');
       montarNotas();
+      return;
+    }
+
+    // **EL CHECK DE NOTAS SÍ GUARDA, Y ANTES NO GUARDABA NADA.** Los dos checks de la
+    // hoja (`skip-roulette` y `patch-notes`) se importaban (`setSkipRoulette`,
+    // `setPatchNotes`) pero nadie los llamaba: no había manejador `change` en
+    // ningún sitio. La casilla se pintaba, no se guardaba, y el primer re-render
+    // la repintaba con el valor viejo: "se vuelve por default" (B17). El de la
+    // ruleta se ha ido con la ruleta; el de notas se cablea aquí, por delegación
+    // como el resto de la hoja: en el `click` el `checked` ya viene toggled.
+    const ajuste = target.closest('[data-setting]') as HTMLInputElement | null;
+    if (ajuste && ajuste.dataset.setting === 'patch-notes') {
+      setPatchNotes(ajuste.checked);
       return;
     }
 

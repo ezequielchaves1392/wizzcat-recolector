@@ -66,11 +66,9 @@ aliases ni formatos raros — está escrito así a propósito en la cabecera.
 | `preview.html` | `src/preview.ts` | No | Monta cualquier pantalla con datos de ejemplo. |
 | `auth-preview.html` | `src/authPreview.ts` | No | Escena de la pantalla de acceso. |
 | `nav-test.html` | `src/navTest.ts` | No | Recorrido automático de navegación. |
-| `ruleta-preview.html` | `src/ruletaPreview.ts` | No | Las dos ruletas, aisladas: la de las cajas y la del sintonizador. `?sintonizador=1` y `?sintonizador=0` abren la segunda con cada desenlace. |
 
-De estos cuatro últimos, `.gitignore` recoge **los cuatro enteros**, HTML y script:
-`preview.html`, `auth-preview.html`, `nav-test.html` y
-`ruleta-preview.html` con sus `src/`. Antes dejaban cuatro fuera
+De estos tres últimos, `.gitignore` recoge **los tres enteros**, HTML y script:
+`preview.html`, `auth-preview.html` y `nav-test.html` con sus `src/`. Antes dejaban cuatro fuera
 (`ruleta-preview.html`, `src/ruletaPreview.ts`),
 que quedaban **sin seguimiento pero no ignorados** — la peor de las dos
 situaciones: `git status` los anunciaba como código nuevo cada vez que alguien
@@ -80,8 +78,8 @@ fichero es la que manda:
 > O el utillaje está ignorado entero, o se versiona entero.
 
 **Consecuencia práctica:** nada de lo que sirve para mirar la pantalla está en
-el historial. Si hace falta revisar el render de la ruleta hay que montarlo con
-`npx vite ruleta-preview.html`; no se puede leer del `git show`.
+el historial. Si hace falta revisar un render que ya no tiene preview, hay que
+montarlo de nuevo; no se puede leer del `git show`.
 
 > `admin.html` se construye porque es útil, pero **construido ≠ publicado**. La
 > seguridad la ponen las reglas de Firestore, no el HTML.
@@ -152,7 +150,7 @@ llamar "pila que no se pisa" y estar contando una lista siempre vacía. Ampliar 
 stub cuando aparece el primer banco que lo necesita es más barato que descubrirlo
 en producción.
 
-### Los 32 bancos
+### Los 33 bancos
 
 | Banco | Qué verifica | Pruebas |
 |---|---|---|
@@ -165,12 +163,11 @@ en producción.
 | `consumableCheck` | `useConsumable`, la operación más condicional. Tres fallos con nombre: gastar sin aplicar, aplicar sin gastar, romper el tope. Y F27: expansores por tipo hasta su techo —**+1 ranura por uso y diez usos hasta el techo**, que es donde se comprueba que un peldaño son diez—, tope 600 sobre la base, y el +1 viejo con el tope nuevo. Y F43: el lote de consumibles, con el tope en el plan y no en el gasto. Y B13: el total concedido de cada buff, que es el denominador de la barra del HUD, con la partida vieja sin el campo coaccionada a 0. Y que el AFK **no** se puede cancelar: la misma regla leen el boton y el motor, y por eso la prueba va contra `cancelBuff()`, no contra el markup. | 136 |
 | `stateCheck` | Lo que no se rompe en una partida de 2 minutos: defaults, guardado, migraciones, trim por prioridad, precio mostrado == precio cobrado, **sintonización del recolector** (el acierto, el fallo que no retrocede, y los tres rechazos), prestige, forja, ciclo mixto de 20 operaciones. **Cada comprobación acaba en `reload()`.** El lote de F18: tres aperturas seguidas consumen lo suyo, el contador sube 3 y todo sobrevive a la recarga. F27: expansores por tipo hasta su techo, tope 600 que no recorta, y el +1 viejo con el tope nuevo. Y forja infinita: T10→T11 y T11→T12 con poder, nombre y valor de verdad, y las tres fórmulas continuas con la tabla. Y F24: el mismo id tres veces se rechaza antes de gastar piedras, y nada se consume. | 235 |
 | `gapCheck` | Los huecos del almacén. El ancla es el **id del item**, nunca un índice de celda. Reimplementa el criterio del pintor a propósito, para que el test no sea tautológico. | 65 |
-| `lootCheck` | **Que la ruleta no mienta**: la cifra que enseña la casilla y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
+| `lootCheck` | **Que el cartel no mienta**: la cifra que enseña el cartel y la que entra en la cuenta son la misma. Y que los cosméticos de caja entren sin perderse (un cosmético no es un item: no ocupa ranura, no se vende, y repetir uno que ya tienes no puede ser el premio). | 19 |
 | `tickCheck` | El ritmo del ingreso pasivo: entra **entero y de una vez**, una vez por segundo, aunque el tick sea de 500 ms. Con ingreso impar (7/s daba +3 y +4). Todos los orígenes, incluido el compañero de tipo `click`. Nada sin mirar. Y sobre todo que **el ingreso por segundo no cambia**: diez ticks son cinco cobros. |
 | `queueCheck` | La cola de nanitas pendientes: se anota antes de la red, se vacía al confirmar, sobrevive a la caída, y **no se aplica cuando no debe** (reinicio de prestigio —saldo Y núcleos—, segundo dispositivo, registro corrupto, cuenta ajena). | 42 |
-| `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y ruleta, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. Y F27: un solo camino de ampliación (comprar expansor y usarlo). | 105 |
+| `playthroughCheck` | **La partida entera de un jugador nuevo**, de principio a fin y sin reiniciar en medio: nacer, clickear, comprar, equipar recolector y compañero, almacén y apilado, ampliar, vender, cajas y sus carteles, buffs, curva de poder entre tiers y Ascensión. Cada apartado acaba en `reload()`. Mide el CAMINO, no el equilibrio: un camino que pasa no dice que el juego esté bien de balance. Y F27: un solo camino de ampliación (comprar expansor y usarlo). | 105 |
 | `toastCheck` | **La pila de avisos flotantes.** `showToast` es el overlay más llamado del juego (71 llamadas entre las siete pantallas, la terminal y el propio `gameLoop`) y no estaba cubierto por nada. Que no haya un nodo por aviso, que lo repetido se cuente (`×5`) en vez de apilar cinco iguales, el tope de cuatro vivos, que se coloque midiendo la cabecera y no con una constante, y que lo retirado no se quede apuntado en la lista. **Y los logros (B3-B4)**, que son un aviso más y compartían el mismo fallo silencioso: que `useConsumable` con un expansor emita el logro (es la vía nueva tras F27: comprar mete el item y ampliar es usarlo), que no lo emita dos veces, y que la pista mida la capacidad real con el árbol en vez de la base sola. La pista se compara **alcanzando el tope**, no igualando cifras: va topeada a 20 y la capacidad no, y comparar `20 === 26` fallaría con un bug inexistente. Ver abajo, porque necesita un stub con DOM de verdad. | 32 |
-| `rouletteCheck` | **La matemática del trompo.** Que la curva frene de verdad —es el ajuste de `2t - t²`, deceleración constante— y no un `ease-out` cualquiera, que `instante()` la deshaga, que **la casilla ganadora para en el marcador**, que las vueltas se cuenten en ventanas visibles para que el trompo dure igual en móvil y en escritorio, y que **cada chasquido caiga en una frontera de casilla** con los intervalos espaciándose al frenar. Es la otra mitad de "que la ruleta no mienta": `lootCheck` comprueba que el número de la casilla sea el que entra en la cuenta, este que el desplazamiento deje esa casilla bajo la aguja. Y una segunda mitad, la **ruleta del sintonizador**: que el motor distinga *el dado salió mal* de *no se llegó a tirar* (`rolled`), que un rechazo no gaste cristal ni mueva el nivel, y que la flecha del acierto sea `4 → 5` y no el `5 → 5` que sale de releer el item después del sorteo. Y **el check de F17**: que saltar vaya directo al cartel, con la preferencia persistiendo, coaccionando y sobreviviendo a la recarga. | 63 |
 
 | `tickCheck` | **El ritmo del cobro pasivo.** Que el ingreso entre ENTERO y de una vez, no la mitad del tick: el HUD anuncia "+5 / segundo" y con un tick de 500 ms el saldo subía 2,5, así que el entero alternaba +2 y +3. Y la que no se puede perder de vista: **el ingreso por segundo NO cambia** —diez ticks son cinco segundos y tienen que haber dado cinco cobros—, porque un arreglo de ritmo visual que de paso inflara o recortara la economía se vería igual de bonito y sería un desastre. También que un compañero de tipo `click` cuente igual, y que con la pestaña oculta no entre nada ni se acumule para después. **Y el AFK solo (B9)**: mirando la pantalla y sin hacer nada, el ingreso se corta al pasar el umbral, sin que ningún evento de presencia se dispare; que los clicks del árbol **no** lo despierten, y que el corte los alcance a ellos también. La del árbol se mide por el saldo quieto con el árbol tirando, no por "el árbol produjo": con el árbol dormido el AFK entraría igual y la prueba pasaría sin comprobar lo que dice comprobar. | 28 |
 | `senalCheck` | **Que lo que se enseña sea lo que se cobra.** El `tickCheck` ata el ritmo del bloque entero; este ata **el reparto dentro de ese bloque**. Que las fichas sumen EXACTAMENTE `state.passiveIncome` —ni un nanita de más ni de menos— y que no se pueda deshacer repartiendo `floor(power × multiplicadores)` por separado, porque los floors no suman: con dos compañeros de 3 y ×1,5 el ingreso es 9 y los floors son 4 y 4. Que el `+N` flotante y la ficha digan 9 y no el `power` desnudo. Y que los **clics del árbol tengan señal**, que no la tenían: entran en la cuenta, suman `totalClicks` y no se veían por ningún lado, así que de las tres fuentes del contador solo dos tenían cartel. | 26 |
@@ -200,7 +197,7 @@ en producción.
   —"si no, se sabría que faltan sin saber cuáles"—, **el recorte: solo lo que el jugador tiene
   puesto, y ni el resto de su almacén ni su colección entera**, la coerción de un documento
   corrupto, y el contador: **el dueño no se cuenta y una persona cuenta una vez**. | 27 |
-| `saltoCheck` | **La probabilidad baja de botín de arriba (F6) y el compañero que faltaba (D1).** Que el salto esté **en la tabla de botín con su peso** y no en un `if` al abrir, por la primera regla del fichero: la ruleta tiene que poder pintar lo que entra, y un salto hecho con un `if` sería un premio que la cinta no puede mostrar. Y por eso el banco mide la probabilidad **real** (`peso / suma`) y **por tiradas de verdad**, no el número de la tabla: las sumas son distintas en las cuatro cajas, así que el mismo peso da cuatro porcentajes distintos, y un banco que mirase el peso estaría midiendo un número que el jugador nunca ve. Los límites están justificados: 8% por arriba porque a partir de ahí la caja común es una legendaria con más pasos, y 1% por abajo porque es decorativo. Que suba **un solo peldaño** y que el anuncio y el item sean del mismo tier (si el cartel dice T8 y el item es T5, el jugador cobra por una cosa y tiene otra). Y D1: que el **Espectro Azulado** (índice 5 de `CRATE_ONLY_COMPANIONS`) salga de la legendaria, salga poco para seguir siendo exclusivo, y **que los índices 0 a 4 no se hayan movido**, que es lo que rompe un guardado antiguo. | 42 |
+| `saltoCheck` | **La probabilidad baja de botín de arriba (F6) y el compañero que faltaba (D1).** Que el salto esté **en la tabla de botín con su peso** y no en un `if` al abrir, por la primera regla del fichero: el cartel tiene que enseñar lo que entra, y un salto hecho con un `if` sería un premio que ningún cartel enseña. Y por eso el banco mide la probabilidad **real** (`peso / suma`) y **por tiradas de verdad**, no el número de la tabla: las sumas son distintas en las cuatro cajas, así que el mismo peso da cuatro porcentajes distintos, y un banco que mirase el peso estaría midiendo un número que el jugador nunca ve. Los límites están justificados: 8% por arriba porque a partir de ahí la caja común es una legendaria con más pasos, y 1% por abajo porque es decorativo. Que suba **un solo peldaño** y que el anuncio y el item sean del mismo tier (si el cartel dice T8 y el item es T5, el jugador cobra por una cosa y tiene otra). Y D1: que el **Espectro Azulado** (índice 5 de `CRATE_ONLY_COMPANIONS`) salga de la legendaria, salga poco para seguir siendo exclusivo, y **que los índices 0 a 4 no se hayan movido**, que es lo que rompe un guardado antiguo. | 42 |
 | `llaveCheck` | **Que el sistema de llaves cerrara.** Tres mitades que fallaban a la vez: la **cadena** (la del Vacío no salía de ninguna parte y la caja legendaria era imposible de abrir; la Rúnica solo salía de la legendaria; la épica no soltaba llave ninguna — tres peldaños y faltaban los tres), el **texto** (los cuatro `details` mentían) y la **tienda** (una carta que entregaba otra llave, con el precio en un tercer sitio). Comprueba que cada caja suelte la llave que la abre, por **las dos vías**: botín y tienda, porque una llave que solo existe en la tienda y una que solo sale de cajas dejan de ser el mismo sistema. Que el texto no prometa ninguna caja que la llave no abra, en las dos direcciones. Que cada carta entregue la llave que dice. Y que el botín no anuncie una llave que no entrega, con el **plural entero**: una versión anterior miraba `includes('Llaves')` y daba por buena una etiqueta que decía "+2 Llaves Rúnica". | 92 |
 | `identidadCheck` | **Que lo equipado llegue al ranking.** El documento `rankings/{uid}` solo escribía `title`: el marco y el banner se quedaban en `users/{uid}` y la fila no los veía nunca, aunque `LeaderboardEntry.cosmetics` declaraba los tres. Comprueba que equipar marco y banner por la API del motor llegue al documento (planos + objeto `cosmetics`), que el título siga viajando como antes y que todo sobreviva a la recarga. El pintado de la fila (avatar de 32 px con marco y halo del banner) queda fuera a propósito: necesita DOM de verdad y es `preview.html`. Y el helper `miniIdentity()` que comparten cabecera y ranking (F16): iniciales, título, marco, halo, defecto escondido e ids desconocidos. Y los **doce logros difíciles**: que estén en el catálogo y en su tabla, que cada uno explique su dificultad, que **no den bonificación numérica** (el premio es el cosmético y el equilibrio es del jugador), que no los complete una partida vacía, que su progreso no se pase del objetivo ni con un estado imposible, que una partida los complete **a los doce a la vez**, y que cada premio se abra de verdad al desbloquear el logro. | 79 |
 | `loreCheck` | **Que cada nombre tenga su lore y ninguno sobre (F12-F13).** Las dos mitades de D4 sobre el contenido: los 60 nombres de tier, los 6 exclusivos de caja y el Artillero Táctico tienen lore, y ningún lore es de un nombre que no existe. Que el SOBRECARGADO herede el de su base y que la línea de tipo diga lo que se cobra (el `multiplier` enseña su ×, no un +N). El pintado del modal y la ficha queda fuera: es `preview.html`. Con F52 la lista de nombres **no está escrita a mano**: sale de `store.ts` y de `data/items`, así que un objeto nuevo que el juego produzca y nadie bautice sale en rojo; y una comprobación propia exige que los 29 objetos tengan lore y que ninguno esté repetido en la lista. | 15 |
@@ -628,7 +625,6 @@ visuales:
 |---|---|
 | Layout y overflow | `preview.html` con viewport real (390×844 y 1440×900), en varios temas |
 | Navegación | `nav-test.html` |
-| La ruleta | `ruleta-preview.html` |
 | La pantalla de acceso | `auth-preview.html` |
 
 El render en un iframe es la única forma fiable de comprobar los breakpoints de
@@ -692,10 +688,8 @@ src/
   components/                   Pantallas y sus helpers puros.
     warehouse.ts                   El más grande. Rejilla, arrastre, huecos, venta, cajas.
     store.ts / crateLoot.ts / crateRoulette.ts / tuningRoulette.ts
-     rouletteStrip.ts            La mecánica del trompo, compartida por las dos
-     rouletteSpin.ts             ruletas: ventana, casillas, chasquidos y frenado.
-                                SIN imports a propósito: es lo que lo hace
-                                comprobable sin navegador (`rouletteCheck`).
+                                   Los carteles directos del premio y del sintonizador
+                                   (la ruleta se ha quitado en B17).
     rankings.ts / auth.ts / blocked.ts
     crates.ts / upgrades.ts        HUÉRFANAS. No las importa nadie.
 
@@ -752,8 +746,7 @@ docs/                           Este directorio.
 > total. Un documento con cifras que no cuadran entre sí enseña a no fiarte de
 > las que sí importan. Si añades pruebas, actualiza la fila **y** comprueba que
 > la suma da el total.
-6. Para lo que `verify/` no cubre: `preview.html`, `nav-test.html`,
-   `ruleta-preview.html`.
+6. Para lo que `verify/` no cubre: `preview.html`, `nav-test.html`.
 
 **Al terminar una sesión:** `npm run build` + `npm run verify`, y si el cambio
 toca la economía o el guardado, **una prueba nueva en el banco que corresponda**

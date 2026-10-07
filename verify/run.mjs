@@ -36,7 +36,6 @@ for (const banco of [
   'perfilCheck',
   'playthroughCheck',
   'toastCheck',
-  'rouletteCheck',
   'tickCheck',
   'senalCheck',
   'balanceCheck',

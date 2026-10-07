@@ -3,11 +3,11 @@
 //
 //  Lo que se comprueba aquí
 //  -----------------------
-//  Que la ruleta no mienta. Es la única regla que sostiene el módulo entero: el
-//  premio se decide antes de girar y la animación solo lo enseña, así que la
-//  cifra que enseña la casilla y la que entra en la cuenta tienen que ser la
-//  misma. No había banco para esto, y por eso una casilla podía prometer
-//  "+350 nanitas" mientras el saldo subía 11.667.
+//  Que el cartel no mienta. Es la única regla que sostiene el módulo entero:
+//  el premio se decide antes de enseñarse, así que la cifra que enseña el
+//  cartel y la que entra en la cuenta tienen que ser la misma. No había banco
+//  para esto, y por eso un cartel podía prometer "+350 nanitas" mientras el
+//  saldo subía 11.667.
 //
 //  Y que los cosméticos de caja entren sin perderse. Un cosmético no es un
 //  item: no ocupa ranura y no se vende. Por eso no puede pasar por la
@@ -16,7 +16,7 @@
 // ==========================================================================
 
 import {
-  CRATE_LOOT, CRATE_META, rollCrateReward, buildRouletteStrip, makeRouletteTile,
+  CRATE_LOOT, CRATE_META, rollCrateReward,
   isCountedLoot, lootAmountText, type CrateReward, type LootApplier
 } from '../src/components/crateLoot';
 import { COSMETICS_BY_ID, crateCosmetics } from '../src/data/cosmetics';
@@ -97,31 +97,36 @@ async function main() {
         if (pagado === null) continue;
 
         const esperado = `+${formatNumber(pagado)}`;
-        if (makeRouletteTile(premio).amount !== esperado) {
-          fallos.push(`${caja}: casilla ${makeRouletteTile(premio).amount}, cobrado ${pagado}`);
+        // **LA CIFRA DEL CARTEL, NO LA DE UNA CASILLA.** Antes se comparaba
+        // `makeRouletteTile(premio).amount`, que era la casilla de la cinta; sin
+        // cinta, lo que se enseña es `lootAmountText(premio)`, que es lo que pinta
+        // el cartel. Para botín contado las dos eran la misma cadena, así que la
+        // regla no cambia: cambia el sitio donde se lee.
+        if (lootAmountText(premio) !== esperado) {
+          fallos.push(`${caja}: cartel ${lootAmountText(premio)}, cobrado ${pagado}`);
         }
         // `label` es el otro sitio donde se escribe la cifra, y la usa el
-        // almacén. Si divergiera de la casilla, el jugador vería dos números.
+        // almacén. Si divergiera del cartel, el jugador vería dos números.
         //
-        // **SE COMPARA CONTRA LA MISMA CADENA QUE LA CASILLA, NO CONTRA EL
-        // NÚMERO CRUDE.** La etiqueta de las nanitas pasó a usar `formatNumber`
+        // **SE COMPARA CONTRA LA MISMA CADENA QUE EL CARTEL, NO CONTRA EL
+        // NÚMERO CRUDO.** La etiqueta de las nanitas pasó a usar `formatNumber`
         // —"+1.49 K Nanitas"— cuando el premio se reescaló, y la prueba pedía el
-        // número entero. Las dos cosas que esta comprobación quiere son "la
-        // casilla dice lo que se cobra" y "la etiqueta dice lo mismo que la
-        // casilla", y comparar contra `esperado` dice las dos sin depender de
-        // qué formato decida cada etiqueta.
+        // número entero. Las dos cosas que esta comprobación quiere son "el cartel
+        // dice lo que se cobra" y "la etiqueta dice lo mismo que el cartel", y
+        // comparar contra `esperado` dice las dos sin depender de qué formato
+        // decida cada etiqueta.
         if (!premio.label.includes(esperado)) {
           fallos.push(`${caja}: la etiqueta "${premio.label}" no dice ${esperado}`);
         }
         if (fallos.length > 4) break;
       }
     }
-    check('botín: la casilla enseña la cifra exacta que entra en la cuenta',
+    check('botín: el cartel enseña la cifra exacta que entra en la cuenta',
       fallos.length === 0, fallos.slice(0, 3).join(' | '));
   }
   {
     // La cifra se escribe con el mismo formato que los contadores del juego. Si
-    // la ruleta dijera "8.332" y el saldo "8.33 K", serían dos números.
+    // el cartel dijera "8.332" y el saldo "8.33 K", serían dos números.
     const uno = lootAmountText({ amount: 999 } as CrateReward);
     const otro = lootAmountText({ amount: 10833 } as CrateReward);
     check('botín: la cifra usa el formato de los contadores',
@@ -219,25 +224,7 @@ async function main() {
   }
 
   // =========================================================================
-  //  2. La tira de la ruleta
-  // =========================================================================
-  {
-    // Ninguna casilla se queda sin texto. Una casilla vacía es un hueco en la
-    // cinta, y el jugador ve un hueco donde debería haber un premio.
-    let tirasMalas = 0;
-    for (const caja of CAJAS) {
-      for (let i = 0; i < 200; i++) {
-        const { tiles } = buildRouletteStrip(caja, 26);
-        if (tiles.length !== 26) tirasMalas++;
-        if (tiles.some(t => !t.label || !t.rarity || !t.icon)) tirasMalas++;
-      }
-    }
-    check('ruleta: la tira se llena entera y ninguna casilla queda sin texto',
-      tirasMalas === 0, 'tiras con huecos=' + tirasMalas);
-  }
-
-  // =========================================================================
-  //  3. Cosméticos de caja
+  //  2. Cosméticos de caja
   // =========================================================================
   {
     // Catálogo y tablas no se desincronizan: si un cosmético declara

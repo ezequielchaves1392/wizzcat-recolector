@@ -444,37 +444,6 @@
 
 .forge-slot:active { transform: scale(0.95); }
 
-/* Ruleta de forja: la banda se desplaza hasta clavar la aguja central */
-.forge-roulette {
-  display: flex;
-  gap: 0.375rem;
-  overflow: hidden;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border-color);
-  padding: 0.5rem 0;
-  position: relative;
-  background: color-mix(in srgb, var(--text-main) 3%, transparent);
-}
-
-.forge-roulette::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent);
-  pointer-events: none;
-  z-index: 2;
-}
-
-@keyframes forgeSpin {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(calc(-1 * var(--forge-travel, 0px)), 0, 0); }
-}
-
 /* Barra de probabilidad: la parte "a favor" y la parte "en contra" */
 .chance-bar {
   height: 8px;

@@ -548,29 +548,6 @@ function rollCrateCosmetic(crate: CrateType, owned: string[]) {
 // en vez de rebajar a mano una entrada que alguien ajustó a su gusto.
 // ---------------------------------------------------------------------------
 
-/**
- * Una casilla de la ruleta. `amount` solo viene en los premios que se cuentan
- * (nanitas, cristales, llaves): es la cifra que el jugador se lleva, no un
- * adorno, y por eso se enseña en la casilla y no solo en el cartel final.
- */
-export interface RouletteTile {
-  label: string;
-  amount?: string;
-  sub: string;
-  rarity: string;
-  icon: string;
-  /**
-   * Tinte de la casilla para las ruletas que NO son de botín.
-   *
-   * La ruleta del sintonizador tiene dos casillas —mejora o fallo— y ninguna de
-   * las dos es un premio con rareza. Prestarle una ("Legendario" sobre un fallo)
-   * haría que el jugador leyera que fallar es un premio. Cuando está, el tinte
-   * sustituye a la rareza y el campo `rarity` se rellena igual para que
-   * `makeRouletteTile` siga siendo la única constructora de casillas.
-   */
-  tone?: 'good' | 'bad';
-}
-
 interface LootEntry {
   id: string;
   weight: number;
@@ -1493,51 +1470,5 @@ function naniteCompensation(crateType: CrateType, details: string): CrateReward 
     rarity: 'Común',
     icon: 'bolt',
     exclusive: false
-  };
-}
-
-/**
- * Tira de casillas para la ruleta. El premio real va en `winIndex`; el resto son
- * distracciones sacadas de la misma tabla, con los exclusivos diluidos para que
- * el jackpot se sienta ganado y no regalado.
- */
-export function buildRouletteStrip(crateType: CrateType, length = 26) {
-  const table = CRATE_LOOT[crateType];
-  const tiles: RouletteTile[] = [];
-
-  // Las distracciones no son premios: se muestran con la lista de cosméticos
-  // VACÍA a propósito, para que aparezcan y el jackpot se lea como "ha estado a
-  // punto". Una casilla de adorno no puede saber qué tiene el jugador.
-  const ctx: LootBuildContext = { ownedCosmetics: [] };
-
-  // Sesgo hacia lo común: los exclusivos aparecen menos en la tira que en la
-  // probabilidad real, así el final se lee como "ha estado a punto"
-  const exclusiveIds = ['ghost', 'phoenix', 'avatar', 'oracle', 'sentinel', 'collector_oc6', 'collector_oc8', 'collector_t4'];
-  const exclusiveEntries = table.filter(e => exclusiveIds.includes(e.id));
-
-  for (let i = 0; i < length; i++) {
-    // Muy bajo a proposito: si la tira muestra muchos exclusivos, el jackpot
-    // deja de sentirse raro y el "casi me toca" se pierde
-    const useExclusive = exclusiveEntries.length > 0 && Math.random() < 0.07;
-    const src = useExclusive
-      ? exclusiveEntries[Math.floor(Math.random() * exclusiveEntries.length)]
-      : table[Math.floor(Math.random() * table.length)];
-    // `null` solo si la entrada sorteada no tiene nada que dar, y con la lista
-    // vacía eso no ocurre. Aun así se salta: una casilla de adorno no puede
-    // quedarse sin contenido y dejar un hueco en la tira.
-    const preview = src.build(ctx);
-    if (preview) tiles.push(makeRouletteTile(resolveLootAmount(crateType, preview)));
-  }
-  return { tiles };
-}
-
-/** Casilla de la ruleta: nombre, cifra si el botín se cuenta, y rareza. */
-export function makeRouletteTile(reward: CrateReward): RouletteTile {
-  return {
-    label: reward.name.length > 16 ? reward.name.slice(0, 15) + '…' : reward.name,
-    amount: isCountedLoot(reward) ? lootAmountText(reward) : undefined,
-    sub: reward.rarity,
-    rarity: reward.rarity,
-    icon: reward.icon
   };
 }

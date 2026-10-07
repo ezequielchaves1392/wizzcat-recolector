@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.8.0',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Sin ruleta: directo al premio',
+    lineas: [
+      'Abrir cajas, sintonizar y forjar ya no giran nada: el resultado sale directo en su cartel.',
+      'El premio es el mismo de siempre y sale igual que antes, solo que sin la espera.',
+      'El ajuste de saltar la animación desaparece con ella, porque ya no hay nada que saltar.',
+      'El ajuste de notas ahora sí guarda lo que eliges: antes se desmarcaba solo al volver a pintar la pantalla.'
+    ]
+  },
+  {
     version: '1.7.3',
     fecha: '7 de octubre de 2026',
     titulo: 'El crítico ya pega',

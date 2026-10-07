@@ -29,7 +29,7 @@ Lista de comprobación, en este orden:
    corresponda, y cada comprobación acaba en `reload()`.
 6. `npm run build` + `npm run verify`.
 7. Lo que `verify/` no cubre, míralo a mano en `preview.html` (con viewport real,
-   390×844 y 1440×900). Si toca el render de una ruleta, en `ruleta-preview.html`.
+   390×844 y 1440×900).
 8. Mueve la feature a **Hecho** en `PENDIENTES.md` con su commit, y **añade al
    final** lo que descubrieras por el camino.
 9. Commit con el estilo del proyecto y `git push`.

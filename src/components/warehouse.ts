@@ -2050,8 +2050,8 @@ function abrirCajas(
     redraw();
   };
 
-  // Una sola caja conserva la ruleta: es un momento y el trompo es el premio de
-  // abrir. El lote es lo que cambia, porque veinte trompos no son veinte datos.
+  // Cada apertura enseña su cartel de premio directo, sin giro: la ruleta se ha
+  // quitado del juego (B17). El lote enseña el resumen agrupado.
   if (premios.length === 1) {
     showCrateRoulette(premios[0], crateType, cerrar);
     return;

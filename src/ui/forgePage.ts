@@ -27,7 +27,6 @@
 // ==========================================================================
 
 import { ic } from './icons';
-import { getSkipRoulette } from '../roulettePrefs';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
 import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos } from '../data/crafting';
 import { formatNumber } from '../utils/format';
@@ -1191,7 +1190,7 @@ function runForge(game: any, materials: any[], stones: number, nano: boolean, re
     : game.forgeCollector(ids, stones, nano ? 1 : 0);
   const hecho = result.collector || result.companion;
 
-  showForgeRoulette(result, () => {
+  showForgeResult(result, () => {
     if (result.success && hecho) {
       sfx.forgeSuccess();
       showToast(`${hecho.name} — ${NOMBRES[ui.tipo].verbo} por ti`, 'success');
@@ -1291,37 +1290,15 @@ function cardDeResultado(
 }
 
 /**
- * EL TROMPO DE LA FORJA, Y LAS TRES COSAS QUE ESTABAN MAL.
+ * EL RESULTADO DE LA FORJA, DIRECTO Y SIN TROMPO.
  *
- * Las tres son de la misma familia: **el CSS estaba escrito y el markup no lo usaba**, o
- * al revés. Se lee bien el código y no se ve nada, porque lo que falla es una conexión
- * entre dos sitios que no están uno al lado del otro.
- *
- * · **`reel` era siempre `null`.** La función hacía
- *   `overlay.querySelector('.forge-roulette')`, y el `div` de la cinta llevaba
- *   `id="forge-track"` y ningún clase. Como el elemento no existía, `place()` salía en su
- *   primera línea y **la cinta no se colocaba nunca**: el desplazamiento no se calculaba,
- *   la celda ganadora no llegaba a la aguja y la tira se salía por la derecha. El CSS de
- *   `.forge-roulette` —el recorte, la aguja, el fondo— llevaba tiempo en el fichero sin que
- *   nadie lo notara, porque una regla que no se aplica no falla: no hace nada.
- * · **Había dos temporizadores idénticos**, y los dos llamaban a `onDone()`. Con el trompo
- *   saltado pasaban los dos —900 ms y 2200 ms— así que el resultado se pasaba de redibujar
- *   y a guardar dos veces. Con el trompo puesto, el segundo ya no hacía falta para nada.
- * · **`pl-8` en la cinta y `BASE_PAD` en el cálculo.** El padding venía dos veces: una del
- *   markup y otra del script. Con la runway encima, la celda quedaba desplazada.
+ * Antes esto era una cinta con su aguja: dieciocho casillas que se desplazaban
+ * hasta clavar la ganadora. La ruleta se ha quitado del juego entero (B17) y lo
+ * que queda es lo que ya se enseñaba con el ajuste de saltar: la card del
+ * resultado, directa. El resultado lo decidió el motor antes de montar nada.
  */
-function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean) {
-  // F17 · LA PREFERENCIA SE MIRA UNA VEZ Y ANTES DE PINTAR NADA, Y AHORA SÍ SE USA.
-  //
-  // El trompo de la forja es el único de los tres que no miraba la preferencia, y no por
-  // una regla propia: se escribió antes de que existiera y nadie volvió a ella. Con el
-  // ajuste apagado **no se pinta la cinta**: se enseña directamente la card del
-  // resultado, que es lo que significa "saltar la ruleta" en las otras dos.
-  const saltar = getSkipRoulette();
-
-  const exito = !!result.success;
+function showForgeResult(result: any, onDone: () => void, esCompanion: boolean) {
   const cerrar = () => {
-    window.clearInterval(tickTimer);
     onDone();
     overlay.style.transition = 'opacity 320ms ease';
     overlay.style.opacity = '0';
@@ -1333,113 +1310,12 @@ function showForgeRoulette(result: any, onDone: () => void, esCompanion: boolean
   overlay.style.cssText = 'background: rgb(0 0 0 / 0.82); backdrop-filter: blur(8px);';
   overlay.style.animation = 'riseIn 240ms ease both';
 
-  // El sonido del trompo girando, y **solo con el trompo**: con el ajuste apagado sonaría
-  // veinte veces por forja sin que hubiera cinta.
-  let ticks = 0;
-  const maxTicks = 22;
-  let tickTimer = 0;
-  if (!saltar) {
-    tickTimer = window.setInterval(() => {
-      ticks++;
-      sfx.forgeTick(ticks / maxTicks);
-      if (ticks >= maxTicks) window.clearInterval(tickTimer);
-    }, 70);
-  }
-
-  // **LA CINTA, DENTRO DE LA CLASE QUE YA EXISTÍA.** El `overflow: hidden` y la aguja son
-  // de esa clase: sin ella la tira no se recorta y se ve entera —que es lo que pasaba— y
-  // la aguja no aparece, que es lo que hace falta para entender dónde va a parar.
-  const CELLS = 18;
-  const WIN = 9;
-  const cells = Array.from({ length: CELLS }, (_, i) => {
-    const isWin = i === WIN;
-    return `
-      <div class="w-11 h-11 rounded-lg grid place-items-center flex-shrink-0 border sm:w-12 sm:h-12
-                  ${isWin ? (exito ? 'border-amber-400 text-amber-300' : 'border-rose-500 text-rose-400')
-                          : 'border-[var(--border-color)] text-[var(--text-muted)] opacity-35'}"
-           style="${isWin ? 'box-shadow: 0 0 24px -6px currentColor' : ''}">
-        <span class="[&>span>svg]:w-4 [&>span>svg]:h-4 sm:[&>span>svg]:w-5 sm:[&>span>svg]:h-5">
-          ${ic(isWin ? (exito ? 'sparkle' : 'close') : 'core')}
-        </span>
-      </div>`;
-  }).join('');
-
   overlay.innerHTML = `
     <div class="w-full max-w-md flex flex-col gap-4">
-      ${saltar ? '' : `
-        <div class="forge-roulette">
-          <div class="flex gap-1.5" id="forge-track" style="will-change:transform">${cells}</div>
-        </div>`}
       ${cardDeResultado(result, esCompanion, () => {})}
     </div>`;
 
   document.body.appendChild(overlay);
   overlay.querySelectorAll('[data-forge-cerrar]').forEach(el =>
     el.addEventListener('click', () => { cerrar(); }));
-
-  const track = overlay.querySelector('#forge-track') as HTMLElement | null;
-  const reel = overlay.querySelector('.forge-roulette') as HTMLElement | null;
-
-  // Posicionamiento de la ruleta.
-  //
-  // El desplazamiento NO se mide: se calcula con valores del estilo calculado
-  // (`getComputedStyle`), que no depende del layout ni de las transformaciones
-  // y por tanto nunca devuelve un dato obsoleto. Medir con
-  // `getBoundingClientRect` en la misma tarea en la que se acaba de insertar el
-  // DOM daba posiciones viejas, y la celda objetivo acababa 500px
-  // desviada, es decir fuera de la ventana de la ruleta.
-  //
-  //   travel = pista + WIN·(celda + hueco) + celda/2 - aguja
-  //
-  // La pista de despegue (una vuelta y media del ancho visible) va como margen
-  // izquierdo de la cinta y NUNCA se suma al desplazamiento: sumarla haría que
-  // la celda pasara de largo.
-  //
-  // `rAF` no se dispara en una pestaña oculta, así que hay dos disparos y una
-  // pasada de corrección: si la celda no queda clavada en la aguja, se ajusta.
-  const GAP = 6;      // gap-1.5 en Tailwind
-  const BASE_PAD = 32; // el margen del script, y no el del markup
-  let positioned = false;
-
-  const place = () => {
-    if (positioned) return;
-    // **SIN CINTA NO HAY NADA QUE COLOCAR, Y POR ESO LA COMPROBACIÓN DE LOS DOS.** La
-    // celda sale de la pista y la aguja sale del carrete: con el trompo saltado no existe
-    // ninguna de las dos, y `children[9]` de un `null` es un fallo de ejecución en el
-    // momento del resultado, que es el peor sitio posible para uno.
-    const cell = track?.children[WIN] as HTMLElement | undefined;
-    if (!cell || !track || !reel) return;
-    positioned = true;
-
-    const cellW = parseFloat(getComputedStyle(cell).width) || 56;
-    const needle = reel.clientWidth / 2;
-    const runway = Math.round(reel.clientWidth * 1.5);
-    track.style.paddingLeft = `${BASE_PAD + runway}px`;
-
-    const travel = BASE_PAD + runway + WIN * (cellW + GAP) + cellW / 2 - needle;
-    track.style.setProperty('--forge-travel', `${travel.toFixed(1)}px`);
-    track.style.animation = 'forgeSpin 1.9s cubic-bezier(0.12, 0.85, 0.2, 1) both';
-  };
-
-  // Comprobación: mide dónde quedó la celda y corrige la diferencia
-  const verify = () => {
-    const cell = track?.children[WIN] as HTMLElement | undefined;
-    if (!cell || !reel) return;
-    const cr = cell.getBoundingClientRect();
-    const rr = reel.getBoundingClientRect();
-    const needle = rr.left + reel.clientLeft + rr.width / 2;
-    const delta = (cr.left + cr.width / 2) - needle;
-    if (Math.abs(delta) < 1 || !track) return;
-    const current = parseFloat(track.style.getPropertyValue('--forge-travel')) || 0;
-    track.style.setProperty('--forge-travel', `${(current + delta).toFixed(1)}px`);
-  };
-
-  if (!saltar) {
-    requestAnimationFrame(() => { place(); verify(); });
-    window.setTimeout(() => { place(); verify(); }, 60);
-    window.setTimeout(verify, 220);
-    // Un solo cierre, y con la card ya en pantalla debajo. Antes había dos
-    // temporizadores iguales y los dos llamaban a onDone.
-    window.setTimeout(cerrar, 2200);
-  }
 }

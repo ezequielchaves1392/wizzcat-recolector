@@ -21,7 +21,7 @@
 //  sigue leyéndose bien y describe algo que el juego ya no hace.**
 // ==========================================================================
 
-import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, collector, companion, ficha, consumable, conRoll } from './kit';
+import { boot, bootNew, reload, check, resumen, s, wh, ids, baseSave, crate, collector, companion, ficha, consumable, conRoll, find } from './kit';
 import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_TYPES, EXPANSOR_TIERS, CONSUMABLES } from '../src/data/store';
 import {
@@ -32,9 +32,10 @@ import { CRATE_TIERS } from '../src/data/store';
 import { generateCompanionByTier } from '../src/data/generators';
 
 import { rangoDePoder } from '../src/data/tiers';
-import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
+import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivel, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
 import { chanceDeSintonizacion } from '../src/data/items';
 import { previewUpgradeChance } from '../src/gameLoop';
+import { tuningRoll } from '../src/components/tuningRoulette';
 
 
 /** ¿Coincide el ★3 con el punto medio del rango en los diez tiers? */
@@ -45,6 +46,16 @@ function medioCoincide(): boolean {
   }
   return true;
 }
+
+/** Las partidas del cartel del sintonizador usan un T3 en nivel 4, y el saldo se
+ * escribe con la regla delante: si `costeDeNivel()` cambia, siguen pagando lo
+ * que cuesta subir. */
+const TIER_CARTEL = 3;
+const NIVEL_CARTEL = 4;
+/** Lo que cuesta pasar del nivel 4 al 5 en un T3. */
+const COSTE_CARTEL = costeDeNivel(TIER_CARTEL, NIVEL_CARTEL);
+/** Lo que cuestan las dos subidas seguidas del mismo item, del 4 al 6. */
+const COSTE_DOS_CARTEL = COSTE_CARTEL + costeDeNivel(TIER_CARTEL, NIVEL_CARTEL + 1);
 
 async function main() {
   // -------------------------------------------------------------------------
@@ -979,6 +990,200 @@ async function main() {
     check('sintonizacion: en el techo el motor no tira, y lo dice',
       (cFinal.level || 0) < 29 || (g.upgradeCompanion(idForjado) as any).rolled === false,
       `nivel=${cFinal.level} maxLevel=${cFinal.maxLevel}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  EL CARTEL DEL SINTONIZADOR NO ENSEÑA UNA TIRADA QUE NO HUBO
+  //
+  //  Esta sección no mira ninguna animación: mira el CONTRATO entre el motor y
+  //  el cartel. Y nace de un fallo de razón que es fácil de cometer y que ningún
+  //  banco habría visto: `upgradeEquippedCollector` devuelve `{ success: false }`
+  //  tanto cuando el dado falla como cuando la operación se RECHAZA antes de
+  //  tirar (faltan cristales, ya está en el techo, no hay recolector equipado).
+  //  Los dos casos son `false`, pero son cosas opuestas para el jugador: uno
+  //  gastó los cristales y hay que enseñarle el fallo, el otro no gastó nada y
+  //  lo que corresponde es un aviso.
+  //
+  //  Sin `rolled`, un rechazo enseñaría un cartel de "FALLO" por una operación
+  //  que no ocurrió, con un mensaje que habla de otra cosa. Y no habría ningún
+  //  error: el cartel saldría bien, con su cifra y su botón.
+  // -------------------------------------------------------------------------
+  {
+    // EL ACIERTO: el dado salió, y el cartel lo tiene que enseñar como tal.
+    const g = await boot(baseSave([
+      collector('r1', TIER_CARTEL, { damage: 60, level: NIVEL_CARTEL })
+    ], { nanites: 0, crystals: COSTE_CARTEL }));
+    g.equipCollector('r1');
+    const nivelAntes = find(g, 'r1').level;
+    const res = conRoll(0, () => g.upgradeEquippedCollector());
+    const roll = tuningRoll(res, nivelAntes, find(g, 'r1').level);
+
+    check('cartel: en el acierto se tira el dado', res.rolled === true,
+      `rolled=${res.rolled}`);
+    check('cartel: y lo enseña como acierto',
+      roll.rolled === true && roll.success === true,
+      `rolled=${roll.rolled} success=${roll.success}`);
+    // Y la flecha. El motor sube el nivel en el mismo objeto del almacén, así
+    // que si `levelBefore` se leyera después de la llamada daría el nivel nuevo
+    // en los dos casos y el cartel pintaría "5 -> 5", un número que no existe.
+    check('cartel: la flecha del acierto es "4 -> 5"',
+      roll.levelBefore === NIVEL_CARTEL && roll.levelAfter === NIVEL_CARTEL + 1,
+      `${roll.levelBefore} -> ${roll.levelAfter}`);
+
+    const g2 = await reload();
+    check('cartel: el acierto sobrevive a la recarga', find(g2, 'r1')?.level === 5,
+      'nivel=' + find(g2, 'r1')?.level);
+  }
+  {
+    // EL FALLO DEL DADO: se gastaron los cristales, y hay que decirlo.
+    const g = await boot(baseSave([
+      collector('r1', TIER_CARTEL, { damage: 60, level: NIVEL_CARTEL })
+    ], { nanites: 0, crystals: COSTE_CARTEL }));
+    g.equipCollector('r1');
+    const nivelAntes = find(g, 'r1').level;
+    const crystalsAntes = s(g).crystals;
+    const res = conRoll(0.999, () => g.upgradeEquippedCollector());
+    const roll = tuningRoll(res, nivelAntes, find(g, 'r1').level);
+
+    check('cartel: el fallo del dado tambien es una tirada', res.rolled === true,
+      `rolled=${res.rolled}`);
+    check('cartel: y lo enseña como fallo',
+      roll.rolled === true && roll.success === false,
+      `rolled=${roll.rolled} success=${roll.success}`);
+    check('cartel: el fallo deja el nivel donde estaba',
+      roll.levelAfter === roll.levelBefore && find(g, 'r1').level === NIVEL_CARTEL,
+      `${roll.levelBefore} -> ${roll.levelAfter}, el item esta en ${find(g, 'r1').level}`);
+    // Y se paga. Un fallo que no costara nada sería un fallo que no es un
+    // fallo: sería el cartel echando el premio.
+    check('cartel: el fallo se paga con los cristales',
+      s(g).crystals === crystalsAntes - COSTE_CARTEL,
+      `antes=${crystalsAntes} despues=${s(g).crystals}, y subir el nivel ${NIVEL_CARTEL} cuesta ${COSTE_CARTEL}`);
+  }
+  {
+    // LOS RECHAZOS, que es lo que el cartel tiene que NO representar.
+    //
+    // Cada uno se monta con la partida que lo provoca y se mira lo mismo: que el
+    // motor diga `rolled: false`, que el cartel se entere, y que no se haya
+    // gastado nada. La última es la que de verdad lo demuestra: si el saldo sigue
+    // entero, no hubo tirada que mostrar.
+    const rechazos: Array<{ nombre: string; save: any; equipo?: string }> = [
+      {
+        nombre: 'sin cristales en el saldo',
+        save: baseSave([collector('r1', TIER_CARTEL, { damage: 60, level: NIVEL_CARTEL })], { nanites: 0, crystals: 0 })
+      },
+      {
+        nombre: 'con menos cristales de los necesarios',
+        save: baseSave([collector('r1', TIER_CARTEL, { damage: 60, level: 10 })], { nanites: 0, crystals: 1 })
+      },
+      {
+        // **EL TECHO SE COMPRUEBA CON SALDO DE SOBRA, A PROPÓSITO.** Si el saldo se
+        // quedara corto, el motor rechazaría por falta de cristales y no por el
+        // techo, y el caso demostraría otra cosa sin que nadie lo notara: el
+        // rechazo seguiría siendo `false` y el banco daría verde. Con el saldo
+        // justo para subir este nivel, la única razón posible del rechazo es el
+        // tope.
+        nombre: 'en el techo de niveles',
+        save: baseSave([collector('r1', TIER_CARTEL, { damage: 60, level: 20, maxLevel: 20 })],
+          { nanites: 0, crystals: costeDeNivel(TIER_CARTEL, 20) })
+      },
+      {
+        // Almacén VACÍO a propósito: este caso se provoca por no tener recolector
+        // equipado, y `baseSave([])` no trae ninguno.
+        nombre: 'sin recolector equipado',
+        save: baseSave([], { nanites: 0, crystals: COSTE_CARTEL })
+      }
+    ];
+
+    for (const caso of rechazos) {
+      const g = await boot(caso.save);
+      if (caso.equipo !== null) g.equipCollector('r1');
+      const crystalsAntes = s(g).crystals;
+
+      const nivelAntes = find(g, 'r1')?.level;
+      const res = g.upgradeEquippedCollector();
+      const roll = tuningRoll(res, nivelAntes ?? 0, find(g, 'r1')?.level ?? 0);
+      const crystalsDespues = s(g).crystals;
+
+      check(`rechazo (${caso.nombre}): el motor dice que no se tiro el dado`,
+        res.success === false && res.rolled === false,
+        `success=${res.success} rolled=${res.rolled} msg=${res.msg ?? ''}`);
+      check(`rechazo (${caso.nombre}): y el cartel no lo presenta como tirada`,
+        roll.rolled === false,
+        `rolled=${roll.rolled}: con esto el selector avisa por toast y no enseña nada`);
+      check(`rechazo (${caso.nombre}): no se gasta ni un cristal`,
+        crystalsDespues === crystalsAntes,
+        `antes=${crystalsAntes} despues=${crystalsDespues}`);
+      check(`rechazo (${caso.nombre}): el nivel no se mueve`,
+        (find(g, 'r1')?.level ?? 0) === (nivelAntes ?? 0),
+        `antes=${nivelAntes} ahora=${find(g, 'r1')?.level}`);
+    }
+  }
+  {
+    // Y el caso degenerado: un motor viejo, o un mock sin `rolled`. Se trata
+    // como "no hay cartel", que es la salida que no le enseña al jugador un
+    // resultado que nadie ha tirado. Mismo criterio que R11 con los saves.
+    const viejo = tuningRoll({ success: true, msg: 'x' } as any, 4, 5);
+    check('cartel: sin `rolled` no se enseña nada',
+      viejo.rolled === false && viejo.success === false,
+      `rolled=${viejo.rolled} success=${viejo.success}`);
+
+    // Y el motor da siempre el nivel con el que se queda. El cartel lo usa
+    // para la flecha, y sin él tendría que releer el item, que es el error del
+    // "5 -> 5" que esta sección existe para cerrar.
+    //
+    // **AQUÍ HAY QUE PAGAR LAS DOS SUBIDAS, Y CADA UNA A SU PRECIO.** El acierto
+    // gasta el coste del nivel 4 y el fallo el del nivel 5, que ya no es el mismo
+    // —crece con `1,26^nivel`—, así que el saldo se pone con la suma de los dos y
+    // no con un número que haya que adivinar.
+    const g = await boot(baseSave([
+      collector('r1', TIER_CARTEL, { damage: 60, level: NIVEL_CARTEL })
+    ], { nanites: 0, crystals: COSTE_DOS_CARTEL }));
+    g.equipCollector('r1');
+    const ok = conRoll(0, () => g.upgradeEquippedCollector());
+    const mal = conRoll(0.999, () => g.upgradeEquippedCollector());
+    check('cartel: el motor devuelve el nivel con el que se queda',
+      ok.level === NIVEL_CARTEL + 1 && mal.level === NIVEL_CARTEL + 1,
+      `acierto=${ok.level} fallo=${mal.level}: el fallo no retrocede, asi que los dos suben`);
+  }
+  {
+    // LA REGLA DEL FALLO QUE SE CONTRADECÍA A SÍ MISMO.
+    //
+    // **LO QUE SE VEÍA EN PANTALLA:** un cartel con **FALLO** en grande, la línea
+    // "Nivel 7 · sin cambio" y, debajo, el mensaje del motor diciendo "¡Mejora
+    // exitosa!". Las dos cosas ciertas y contradictorias en la misma tarjeta, y
+    // la grande es la que miente.
+    //
+    // **LA CAUSA: LEER EL NIVEL POR SEGUNDA VEZ, Y EL MOTOR REESCRIBE EL OBJETO.**
+    // El motor sube el nivel reescribiendo el array, o sea con objetos nuevos. Si
+    // se lee dos veces, la segunda dice lo nuevo en los dos casos y el cartel
+    // concluye que no hubo subida mientras el motor subía de verdad.
+    const subio = tuningRoll({ success: true, rolled: true, level: 8, msg: 'x' }, 7, 7);
+    check(
+      'cartel: el motor dice que subio y no se pinta FALLO aunque las cifras no cuadren',
+      subio.success === true,
+      `success=${subio.success} ${subio.levelBefore}->${subio.levelAfter}`
+    );
+    check(
+      'cartel: y el nivel que se ensena es una subida, no un numero que no existe',
+      subio.levelAfter > subio.levelBefore,
+      `${subio.levelBefore}->${subio.levelAfter}`
+    );
+  }
+  {
+    // Y el caso normal: el nivel de después sale del propio motor, no de releer
+    // el item.
+    const bien = tuningRoll({ success: true, rolled: true, level: 8, msg: 'x' }, 7, 8);
+    check(
+      'cartel: cuando el motor da el numero bueno, se pinta la flecha 7 -> 8',
+      bien.success === true && bien.levelBefore === 7 && bien.levelAfter === 8,
+      `${bien.levelBefore}->${bien.levelAfter}`
+    );
+    const fallo = tuningRoll({ success: false, rolled: true, level: 7, msg: 'x' }, 7, 7);
+    check(
+      'cartel: un fallo de verdad sigue siendo fallo y no inventa una subida',
+      fallo.success === false && fallo.levelAfter === 7,
+      `success=${fallo.success} ${fallo.levelBefore}->${fallo.levelAfter}`
+    );
   }
 
 resumen('la escala de calidad: el potencial y solo el potencial');

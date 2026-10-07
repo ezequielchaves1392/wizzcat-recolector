@@ -1,61 +1,37 @@
 // ==========================================================================
-//  La ruleta del sintonizador: ¿sube el nivel o no?
+//  El cartel del sintonizador: ¿sube el nivel o no?
 //
 //  Sintonizar un recolector es la única acción del juego donde el jugador
-//  apuesta un recurso por una tirada. Antes de esto la pantalla le devolvía un
-//  toast —"¡Mejora exitosa!" o "Fallo en el sintonizador"— y con eso tenía que
-//  decidir si había ganado algo. Una tirada que solo se comunica con una línea
-//  de texto no se siente como una tirada: el jugador no ve el canto de la
-//  aguja, que es justo la parte por la que se disfruta un juego de rizos.
+//  apuesta un recurso por una tirada. Antes de que hubiera cartel, la pantalla
+//  devolvía un toast —"¡Mejora exitosa!" o "Fallo en el sintonizador"— y con
+//  eso tenía que decidir si había ganado algo. Una tirada que solo se comunica
+//  con una línea de texto no se siente como una tirada.
 //
-//  POR QUÉ UNA RULETA DE DOS CASILLAS Y NO UN CARTEL. Porque el juego ya tiene
-//  una ruleta —la de las cajas— y el jugador sabe leerla: entra girando, para
-//  y se queda quieta en el premio. Reutilizar ese lenguaje para el
-//  sintonizador hace que la segunda ruleta no sea un objeto nuevo sino el
-//  mismo, y por eso no se ha querido inventar una animación nueva que habría
-//  que aprender aparte.
+//  Antes esto era una ruleta de dos casillas, con el mismo lenguaje que la de
+//  las cajas. La ruleta se ha quitado del juego entero (B17) y lo que queda es
+//  lo que la ruleta enseñaba al final: el cartel del resultado, directo y sin
+//  giro. El motor ya tiró el dado y el nivel ya se movió antes de montar nada.
 //
-//  Y POR QUÉ NO LA RESUELVE ESTE FICHERO. La ruleta de las cajas sortea el
-//  botín antes de girar, en `rollCrateReward`, y aquí se mantiene la misma
-//  regla: quien llama ya tiene el resultado del dado —`success`— y lo coloca
-//  en la casilla ganadora. Si esta función sacara un `Math.random`, la ruleta
-//  estaría enseñando un resultado que el motor no aplicó: el jugador vería
-//  "ÉXITO" y se quedaría en el mismo nivel. La animación enseña; el motor tira.
+//  Y POR QUÉ NO RESUELVE NADA ESTE FICHERO. La regla es la misma que con las
+//  cajas: quien llama ya tiene el resultado del dado —`success`— y aquí solo
+//  se enseña. Si este fichero sacara un `Math.random`, estaría enseñando un
+//  resultado que el motor no aplicó: el jugador vería "¡MEJORA!" y se quedaría
+//  en el mismo nivel. La animación enseñaba; el motor tira.
 // ==========================================================================
 
 import { sfx } from '../utils/audio';
 import { ic } from '../ui/icons';
-import type { RouletteTile } from './crateLoot';
-import { mountStrip, spinTrack } from './rouletteStrip';
-import { getSkipRoulette } from '../roulettePrefs';
 
-/** Vueltas que da el trompo. Las de la caja son 3; aquí basta con 2. */
-const VUELTAS = 2;
-/**
- * El giro dura menos que el de las cajas (4200 ms).
- *
- * POR QUÉ. El sintonizador se usa docenas de veces por partida —cada cristal
- * es un intento— y 4,2 s por cristal convierte una acción de un segundo en una
- * de cinco. El juego ya sabe que la tirada está decidida, así que el volteo
- * largo no compra tensión: solo hace esperar. Sigue siendo un trompo, con sus
- * chasquidos, para que se vea correr la aguja.
- *
- * Y las vueltas son dos y no tres por la misma razón: el jugador va a ver
- * estas casillas cientos de veces, y la diferencia entre dos y tres vueltas es
- * justo la que se nota como "esto tarda".
- */
-const SPIN_MS = 2400;
-
-/** Lo que la ruleta necesita saber, y que ya está decidido antes de girar. */
+/** Lo que el cartel necesita saber, y que ya está decidido antes de enseñarlo. */
 export interface TuningRoll {
   /**
    * Hubo tirada.
    *
    * Separate de `success` a propósito, porque son dos cosas distintas y
-   * confundirlas produce una ruleta mintiendo. Un rechazo del motor —no hay
+   * confundirlas produce un cartel mintiendo. Un rechazo del motor —no hay
    * cristales, ya está en el techo— devuelve `success: false` SIN tirar el
-   * dado: no se gastó nada y el nivel no se movió. Si eso llegara a la ruleta,
-   * el jugador vería un trompo por una operación que no ocurrió.
+   * dado: no se gastó nada y el nivel no se movió. Si eso llegara al cartel,
+   * el jugador vería un "FALLO" por una operación que no ocurrió.
    */
   rolled: boolean;
   /** El motor ya tiró el dado y salió bueno. */
@@ -69,10 +45,10 @@ export interface TuningRoll {
 }
 
 /**
- * Monta lo que la ruleta va a enseñar, a partir de lo que el motor devolvió.
+ * Monta lo que el cartel va a enseñar, a partir de lo que el motor devolvió.
  *
  * POR QUÉ ESTA FUNCIÓN EXISTE Y NO ESTÁ INLINEADA EN EL SELECTOR. Porque es la
- * regla de la que depende toda la honestidad de la ruleta, y estaba escrita en
+ * regla de la que depende toda la honestidad del cartel, y estaba escrita en
  * el manejador del botón, donde no se puede comprobar: `verify/` no arranca
  * pantallas. Con la regla aquí, el banco la monta contra el game loop de verdad
  * y mira que la flecha "4 → 5" no pueda convertirse en "5 → 5".
@@ -81,9 +57,8 @@ export interface TuningRoll {
  * El game loop sube `item.level` en el mismo objeto del almacén, así que leer el
  * nivel DESPUÉS de la llamada devuelve el nivel nuevo en los dos casos. Con
  * `levelBefore` también leído después, el acierto pintaba "5 → 5": un número que
- * no existe, sobre una ruleta que el jugador acaba de ver girar. El fallo
- * parecería correcto por casualidad, porque ahí los dos niveles coinciden de
- * verdad.
+ * no existe. El fallo parecería correcto por casualidad, porque ahí los dos
+ * niveles coinciden de verdad.
  *
  * Por eso `levelBefore` se lee ANTES de llamar al motor y se pasa como dato, y
  * por eso el nivel de después sale de una relación y no de una segunda lectura.
@@ -102,7 +77,7 @@ export function tuningRoll(
 ): TuningRoll {
   // `=== true` y no truthy: un `rolled` que venga `undefined` (una partida
   // guardada por un motor viejo, un mock que no se ha actualizado) se trata
-  // como "no hay ruleta", que es la salida que no le enseña nada falso al
+  // como "no hay cartel", que es la salida que no le enseña nada falso al
   // jugador. Es el mismo criterio que R11 con los saves.
   const rolled = res.rolled === true;
   const subio = rolled && res.success === true && levelAfter > levelBefore;
@@ -122,14 +97,14 @@ export function tuningRoll(
     // En un fallo, el nivel con el que se queda es el de antes. Se pone
     // explícito y no se copia `levelAfter` porque el motor, en un fallo, no
     // toca el campo: leerlo daría el mismo número por casualidad, y el día que
-    // el motor cambiara esa parte la ruleta mentiría sin que nada se encendiera.
+    // el motor cambiara esa parte el cartel mentiría sin que nada se encendiera.
     levelAfter: nivelFinal,
     msg: res.msg || ''
   };
 }
 
 /**
- * Muestra la ruleta del sintonizador y, al terminar, el cartel del resultado.
+ * Muestra el cartel del sintonizador.
  * `onClose` se llama cuando el jugador acepta.
  */
 export function showTuningRoulette(roll: TuningRoll, onClose: () => void) {
@@ -149,7 +124,7 @@ export function showTuningRoulette(roll: TuningRoll, onClose: () => void) {
 
   const result = document.createElement('div');
   result.dataset.role = 'result';
-  result.className = 'opacity-0 transition-opacity duration-300 flex flex-col items-center gap-3 flex-shrink-0 pb-2';
+  result.className = 'flex flex-col items-center gap-3 flex-shrink-0 pb-2';
   result.innerHTML = `
     <div class="card-glass-elevated border ${gano ? 'border-cyan-400/40' : 'border-rose-500/40'} rounded-2xl px-6 py-5 flex flex-col items-center gap-2 max-w-sm text-center">
       <div class="mb-1 [&>span>svg]:w-12 [&>span>svg]:h-12 ${tono}">${ic(gano ? 'sparkle' : 'close')}</div>
@@ -164,44 +139,7 @@ export function showTuningRoulette(roll: TuningRoll, onClose: () => void) {
     </button>`;
   overlay.appendChild(result);
 
-  const finished = { value: false };
-  const revelarCartel = () => {
-    finished.value = true;
-    if (gano) sfx.levelUp(); else sfx.error();
-    result.classList.remove('opacity-0');
-    result.classList.add('opacity-100');
-  };
-
-  // F17, igual que en la de las cajas: con el check puesto no hay cinta, solo
-  // el cartel con el "Nivel 4 → 5" y el mensaje del motor. El cristal ya se
-  // gastó y el nivel ya se movió antes de montar nada. La cinta ni se monta:
-  // `mountStrip` la cuelga del overlay al medir, y una cinta quieta encima
-  // del cartel se leería como un trompo roto.
-  if (getSkipRoulette()) {
-    revelarCartel();
-  } else {
-    // POR QUÉ LAS CASILLAS ALTERNAN Y NO SORTEAN. Hay dos desenlaces posibles
-    // y la tira los alterna sin azar. Con `Math.random` dos sintonizaciones
-    // del mismo nivel se verían distintas sin que nada hubiera cambiado, y al
-    // comparar dos capturas no se sabría si se ve otra cosa o es la misma.
-    //
-    // Y por qué la casilla que gana la pone este fichero y no el que la pinta:
-    // es el resultado, y el resultado lo decidió el motor. Si saliera de un
-    // dado de aquí, la ruleta estaría mintiendo sobre el que el motor aplicó
-    // de verdad, y el motor ya cobró el cristal.
-    const mount = mountStrip(overlay, (giro) => {
-      const tiles: RouletteTile[] = Array.from({ length: giro.casillas }, (_, i) => (
-        i % 2 === 0
-          ? { label: 'MEJORA', sub: `NIVEL ${roll.levelBefore + 1}`, rarity: 'Legendario', icon: 'sparkle', tone: 'good' }
-          : { label: 'FALLO', sub: `NIVEL ${roll.levelBefore}`, rarity: 'Común', icon: 'close', tone: 'bad' }
-      ));
-      tiles[giro.winIndex] = gano
-        ? { label: 'MEJORA', sub: `NIVEL ${roll.levelAfter}`, rarity: 'Legendario', icon: 'sparkle', tone: 'good' }
-        : { label: 'FALLO', sub: `NIVEL ${roll.levelAfter}`, rarity: 'Común', icon: 'close', tone: 'bad' };
-      return tiles;
-    }, VUELTAS);
-    spinTrack(mount, SPIN_MS, revelarCartel);
-  }
+  if (gano) sfx.levelUp(); else sfx.error();
 
   const finish = () => {
     document.removeEventListener('keydown', onKey);
@@ -209,11 +147,10 @@ export function showTuningRoulette(roll: TuningRoll, onClose: () => void) {
     onClose();
   };
   result.querySelector('[data-role="close"]')?.addEventListener('click', finish);
-  // Escape cierra, pero solo con el resultado ya revelado: si se cerrara durante
-  // el giro el jugador se quedaría sin ver si su cristal sirvió de algo. Es el
-  // mismo criterio que la ruleta de las cajas.
+  // Escape cierra: como ya no hay giro, el resultado está revelado desde el
+  // primer instante y no hay momento en el que cerrar deje sin verlo.
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && finished.value) finish();
+    if (e.key === 'Escape') finish();
   };
   document.addEventListener('keydown', onKey);
 }

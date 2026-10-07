@@ -51,7 +51,6 @@ export default defineConfig({
         perfilCheck: resolve(here, 'perfilCheck.ts'),
         playthroughCheck: resolve(here, 'playthroughCheck.ts'),
         toastCheck: resolve(here, 'toastCheck.ts'),
-        rouletteCheck: resolve(here, 'rouletteCheck.ts'),
         tickCheck: resolve(here, 'tickCheck.ts'),
         senalCheck: resolve(here, 'senalCheck.ts'),
         balanceCheck: resolve(here, 'balanceCheck.ts'),
