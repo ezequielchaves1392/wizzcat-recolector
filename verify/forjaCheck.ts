@@ -1169,6 +1169,88 @@ const falloCon = async () => {
       afijos[0] === 'aff_bulwark' && afijos[1] === 'aff_sharp',
       afijos.join(','));
   }
+
+  // =========================================================================
+  //  B22 · UN FALLO NO ES UN RECHAZO, Y LA CARD LOS CONDECÍA EN UNO
+  // =========================================================================
+  //
+  //  Lo que se reportó: "a veces la forja falla y sin embargo da el item", y la
+  //  versión con más detalle es "vi el cartel de fallo y luego me dio el item".
+  //
+  //  **LO QUE NO ERA.** Ni el motor entrega un item en un fallo, ni la vista forja
+  //  dos veces. Eso está medido: el dado fijado a fallar da `success:false` sin
+  //  collector, y un click produce un cartel y un aviso, no dos.
+  //
+  //  **LO QUE ERA.** El motor devuelve `success:false` en **tres** casos que para el
+  //  jugador son uno, y solo uno es un fallo de forja:
+  //
+  //    · Materiales que no valen, o piedras/nano que no hay → **no se tira nada y los
+  //      materiales NO se gastan.** El motor no pone `chance` en la respuesta.
+  //    · La tirada sale mal → se gastan los dos materiales y deja el consuelo. El
+  //      motor sí pone `chance`.
+  //
+  //  Los tres pintaban la misma card, y en los dos primeros esa card afirmaba
+  //  **"Los materiales se gastan igual"**, que es falso. El jugador ve un fallo rojo,
+  //  cierra, y sus dos materiales siguen ahí: de ahí la lectura de que la forja le dio
+  //  algo. Y `msg`, que traía el motivo exacto, **no lo leía nadie**.
+  //
+  //  Lo que se ata aquí es la parte del motor, que es donde el juego cobra y entrega:
+  //  un rechazo no gasta materiales, no crea item y **no trae `chance`**, y un fallo sí
+  //  lo trae. Que la card lo distinga es de la vista, y lo que se comprueba aquí es que
+  //  el discriminante existe y no se puede confundir.
+  // =========================================================================
+
+  /** La respuesta del motor tal cual la devuelve el juego, para leerla sin opinion. */
+  const porElMotor = async (items: any[], stones = 0, ids2?: [string, string]) => {
+    const g = await boot(baseSave(items));
+    const w: any[] = g.getState().warehouse;
+    const par = (ids2 ?? ['m1', 'm2']) as [string, string];
+    return await conRoll(0.999, () => (g as any).forgeCollector(
+      [w.find((x) => x.id === par[0])?.id, w.find((x) => x.id === par[1])?.id], stones, 0));
+  };
+
+  {
+    // El fallo de verdad: hubo tirada, y el motor lo dice trayendo `chance`.
+    const r = await porElMotor([collector('m1', 1, { potential: 3 }), collector('m2', 1, { potential: 3 })]);
+    check('B22: el fallo de forja trae la probabilidad usada', typeof r.chance === 'number',
+      `chance=${r.chance}`);
+    check('B22: y no trae item', !r.collector, `collector=${!!r.collector}`);
+  }
+  {
+    // El rechazo: no hay piedras y las pide. No hubo tirada, así que NO puede
+    // traer `chance` — ese campo es el discriminante entero del arreglo.
+    const r = await porElMotor([
+      collector('m1', 1, { potential: 3 }),
+      collector('m2', 1, { potential: 3 })
+    ], 5);
+    check('B22: el rechazo por consumibles NO trae probabilidad, o sea que no hubo tirada',
+      typeof r.chance !== 'number', `chance=${r.chance}`);
+    check('B22: y dice por qué', typeof r.msg === 'string' && r.msg.length > 0, `msg=${r.msg}`);
+    check('B22: y no trae item', !r.collector, `collector=${!!r.collector}`);
+  }
+  {
+    // Y el motivo: es la información que la card tiraba a la basura, así que se
+    // ata que existe y que nombra lo que falta.
+    const r = await porElMotor([
+      collector('m1', 1, { potential: 3 }),
+      collector('m2', 1, { potential: 3 })
+    ], 5);
+    check('B22: el motivo nombra las piedras', /piedra/i.test(r.msg ?? ''), `msg=${r.msg}`);
+  }
+  {
+    // La regla que hace que el rechazo no cueste materiales. Sin esto, el jugador
+    // pierde los dos por un botón que no teníastones, y el "fallo" sí sería de verdad.
+    const items = [collector('m1', 1, { potential: 3 }), collector('m2', 1, { potential: 3 })];
+    const g = await boot(baseSave(items));
+    const w: any[] = g.getState().warehouse;
+    const antes = w.length;
+    const r = await conRoll(0.999, () => (g as any).forgeCollector(
+      [w.find((x) => x.id === 'm1')!.id, w.find((x) => x.id === 'm2')!.id], 5, 0));
+    const despues: any[] = g.getState().warehouse;
+    check('B22: el rechazo NO gasta los materiales', despues.length === antes,
+      `antes=${antes} despues=${despues.length} msg=${r.msg}`);
+  }
+
   resumen('la forja: dos del mismo tier, potencial medio y afijos por linaje');
 }
 

@@ -877,6 +877,266 @@ programarlo, para que no viva solo en una conversación.*
       compañero/recolector tiene su `tier`); falta pintarlo en la fila
       (`crateSummary.ts`, al lado de `estrellasDeFila()`), p. ej. "Común · T1".
 
+### Lote G · ENCARGO DEL 7 DE OCTUBRE (quinta parte)
+
+*Lo pedido, con tus palabras. **El diseño está cerrado en conversación y esto es
+su transcripción**: una decisión que solo vive en un mensaje no existe dentro de
+tres meses, y esta toca la economía entera.*
+
+- [ ] **F74 · Diez bases por tier, ocultas, con más cuanto más raras.**
+      > "podremos hacer que para cada Tier existan 10 bases distintas tanto de compañeros como de recolectores... y entre ellas algunas mas dificiles de conseguir porque tienen mejores bases? entre uno de ellos va estar el mejor de ellos con la menor probabilidad , cosa de hacer divertido que los jugadores busquen las bases... de paso esto va a modificar la forja... cada Base de cada tier va a tener un peso y depende lo que combine va a dar mejor o menor resultado"
+      > "primero calculamos la base y dsp le aplicamos potencia y niveles"
+      > "creería que si fijate que nada se desbalancee... y me gustaría que un tier inferior mejorado pueda llegar a superar una base superior... si no el jugador tiene a esperar el siguiente tier y listo"
+      > "no hace falta mostrarlo , que quede oculto esta bien para que los jugadores se den cuenta solos"
+      > "y si , seria lo mismo para los compañeros"
+
+#### EL MODELO, QUE SON TRES COSAS DISTINTAS Y UNA DE ELLAS YA EXISTÍA
+
+**LA BASE DEJA DE SER EL NOMBRE.** Hoy `nombreDeArriba()` elige entre **tres** nombres
+del tier **parejo** (`rand(0, lista.length - 1)`), y el nombre no cambia nada del
+item: el daño sale de `danioDeRango(tier, potencial)` y el poder del compañero de
+`poderDeCompanero(tier, potencial)`. O sea que **dos T1 con el mismo potencial son el
+mismo objeto con dos nombres distintos**, y eso es la mitad de B10.
+
+Con F74 hay **diez bases por tier y por lado** —200 en total—, y cada base lleva
+**dos números que no son el mismo**:
+
+| Número | Qué es | Para qué |
+|---|---|---|
+| **Peso de stat** | Cuánta recolección trae (daño por clic / ingreso por segundo) | **La caza.** Es lo que el jugador busca |
+| **Peso de drop** | Qué tan rara sale de la caja | La hacen罕见的 sin que nadie lo diga |
+
+**El mejor stat es el de menor probabilidad**, que es lo que se pidió: el premio de
+la caja es una base buena, y nadie la compra porque no se vende.
+
+#### EL POTENCIAL SIGUE SIENDO UN STAT APARTE, Y MULTIPLICA
+
+> "quiero que la potencia siga siendo un stat aparte que multiplica para hacer mas variado los items"
+
+Esto es lo que **resuelve B10 en limpio**: el problema viejo era que el potencial
+**decía ser** el stat y la posición en el rango también lo era, y los dos no
+pueden serlo. Aquí cada uno tiene su rol y ninguno pisa al otro.
+
+```
+1.  baseDelTier × multiplicadorDeBase(base oculta)      →  la caza
+2.  × multiplicadorDePotencial(★1..★5)                  →  lo que se ve
+3.  × multiplicadorDeNivel(nivel)                       →  los cristales, al final
+```
+
+**El orden lo pidió el jugador** ("primero calculamos la base y dsp le aplicamos
+potencia y niveles"), y el nivel **al final** es lo que hace que la caza premie dos
+veces: un god-roll no solo pega más, es que **aprovecha más cada nivel**. Con el
+nivel antes, los dos ejes se mezclarían y no se sabría cuál de los dos premia.
+
+**Escala del potencial (decidida):** ★1 ×1,0 · ★2 ×1,25 · ★3 ×1,5 · ★4 ×1,75 ·
+★5 ×2,0. Abanico **×2,0** dentro del tier.
+
+**Y LA BASE ES ±10% ALREDEDOR:** de ×0,92 a ×1,10. Suficiente para que dos T1 ★3
+se noten distintos al pegarlos, sin destronar a las estrellas. Si la base moviera
+mucho, el potencial dejaría de importar y volvemos al problema de "dos stats".
+
+#### LA FORJA: PROMEDIO, Y DE LAS DOS COSAS
+
+Lo que el jugador escribió: *"supongamos que tenemos dos T1 cuya ponderacion es 5
+porque son los de la mitad del tier... en ese caso va a salir un tier 2 con
+ponderacion 5 o a mitad de base"*.
+
+**La respuesta es ponderación 5**, porque 5 es el medio de 1..10: la base media es
+media de base, no "media del tier". Y **el potencial se promedia aparte**, cada uno
+en su escala, porque son dos ejes distintos y promediar los dos juntos daría un
+número que no es ninguno de los dos.
+
+```
+baseForjada       = media(baseDeLosDosMateriales)          → 1..10
+potencialForjado  = potencialFusionado([p1, p2])           → ya existe, no se toca
+```
+
+**Y CON SECUENCIA, PORQUE ES LA CONSECUENCIA DE LA REGLA.** La ea de la base es
+**media, y sin bonus**: dos bases 10 dan un 10, y dos 5 dan un 5. Es coherente con
+la regla del potencial (`promediar nunca sube`, documentada en `potencialFusionado`)
+y con lo que la forja es: **conservar lo que ya tienes**, no mejorarlo. Si algún día
+quiere un plus de forja, es una decisión aparte y **tiene que poder compensar un
+material flojo**, que es lo que hace que la pregunta sea "¿me vale esto o busco
+otro?" en vez de "nunca rechazo nada".
+
+**Y ROMPE EL TECHO DE NIVEL DE LOS MATERIALES.** `collectorMaxLevel()` es
+`20 + potencial × 3`, así que un ★5 se más bricks arriba. Con la base como segundo
+eje, el techo debería pasar a depender de los dos, y **eso es una decisión de
+equilibrio** que está sin tomar: hoy un 10/10 con ★1 subiría mucho menos que un 5/5
+con ★5.
+
+#### EL BALANCE: MEDIDO ANTES DE PROGRAMAR
+
+**Tu condición —"un tier inferior mejorado pueda superar una base superior"— se
+cumple con holgura, y era lo que había que comprobar antes de escribir nada.**
+
+Medido con las fórmulas reales (`danioDeRango`, `multiplicadorDeNivel`,
+`rangoDePoder`) y la fórmula nueva. El número que lo hace posible es que **el
+abanico por tier (×2,4 con base) es mayor que el salto entre tiers (×1,62)**, y por
+eso el solape es de **exactamente un tier**:
+
+| Caso | Resultado | Por qué |
+|---|---|---|
+| **T1 god-roll fresco (10/★5) vs T2 flojo (1/★1)** | 13,2 vs 9,2 — **gana el T1** | La caza decide entre vecinos |
+| **T1 god-roll fresco vs T3 flojo** | 13,2 vs 14,7 — **gana el T3** | **No salta dos tiers** |
+| **T1 maxeado (10/★5/nivel 35) vs T2 recién salido** | 59 vs 9 — gana ×6 | La inversión premia |
+| **T1 maxeado vs T6 flojo** | 59 vs ~85 — gana el T6 | La escalera se conserva arriba |
+| **Medio vs medio (5/★3)** | **el tier de arriba siempre gana** | La escalera no se rompe |
+
+**Y ESTO YA ERA ASÍ HOY.** Con la fórmula actual, un T1 ★5 al techo (45) también
+aplasta a un T2 flojo (13): era la mitad de B9 que sí se cumplía y la otra mitad
+—the gap vs el potencial— la que no. **F74 no inventa la propiedad: la conserva y
+le suma la caza de bases.** Es importante decirlo porque significa que el riesgo
+de desbalance de F74 es **menor** que el de abrir el abanico del potencial, y ese es
+el que hay que vigilar.
+
+#### LO QUE TIENE QUE FIJAR EL BANCO
+
+`balanceCheck` se reescribe con **tres invariantes**, y las tres son lo contrario de
+"el tier manda":
+
+- **Medio contra medio, el tier de arriba gana.** La escalera no se deshace.
+- **Maxeado contra flojo, el de abajo gana.** Invertir tiene que seguir valiendo.
+- **God fresco contra flojo, decide como mucho un tier vecino.** El cazador no
+  puede saltarse el peldaño.
+
+**Y DOS MÁS QUE SON DEL SISTEMA NUEVO, no del rebalanceo:**
+
+- **La mejor base sale menos que la peor**, y por un margen medido, no por
+ дельность. Es la invariante de la caza.
+- **La base y el potencial son ejes independientes**: dos items con la misma base y
+  distinto potencial tienen que pegarle distinto, y dos con el mismo potencial y
+  distinta base también. Si alguna vez coinciden los dos, la base **no se está
+  aplicando** y el banco lo canta.
+
+#### LO QUE FALTA DECIDIR ANTES DE EMPEZAR
+
+| # | Qué | Por qué bloquea |
+|---|---|---|
+| **1** | **El techo de nivel con la base como segundo eje.** Hoy es `20 + potencial × 3`. Con dos ejes, ¿suben los dos? | Es el número que decide cuánto rinde invertir en un god-roll, y va justo en la mitad del "el nivel va al final" |
+| **2** | **Curva de peso de drop.** `11 − posición` sale lineal; también cabe una exponencial que haga la mejor casi mítica | Es la diferencia entre "buscar" y "cazar" |
+| **3** | **Fases.** 200 nombres + 200 lores es el lote de contenido más grande del proyecto, y `loreCheck` exige lore de cada uno | T1–T3 primero permitiría medir la caza en partida antes de escribir el resto |
+
+#### LO QUE HAY QUE MIRAR JUGANDO
+
+**`balanceCheck` comprueba que los números encajen entre sí, no que la partida
+dura lo que tiene que durar** (P4). Y F74 cambia las dos cosas de las que la partida
+depende: **qué se compra** (ahora hay una caza dentro de cada tier) y **qué se
+forja** (ahora importa la base de los padres). La cuenta de arriba dice que no se
+rompe el equilibrio; el ritmo de partida no lo dice nadie y solo se mide jugando.
+
+---
+
+### Lote H · ENCARGO DEL 7 DE OCTUBRE (sexta parte)
+
+*Lo pedido, con tus palabras. **Va después de F74**, que está ya en marcha: las
+tres primeras piezas del expansor tocan el mismo código que F66 dejó escrito, y
+mezclarlas con el cambio de bases haría imposible atribuir un fallo.*
+
+**Bugs primero (criterio 1 del GDD: un número que se ve mal es peor que una
+feature que falta):**
+
+- [x] **B22 · La forja falla y aun así entrega el item.** Hecho en v1.15.1. **No
+      era un bug del motor: era un rechazo pintado como un fallo.**
+      > "A veces la forja falla y sin embargo me da el item… ver por favor es un gran bug.(Cuando lo hago manualmente)"
+      > "cuando forjo manualmente me aparece un cartel de fallo pero dsp un flash verde y en el almacen se crea el item"
+      **Lo que se midió antes de tocar nada, porque "a veces" en un bug de dado
+      significa que la prueba pasa sola:** con el dado fijado a fallar, ni
+      `attemptForge` ni `forgeCollector` entregan item —`success:false` sin
+      collector, materiales fuera y consuelo—; en el navegador un click da **un**
+      cartel y **un** aviso, no dos; y `root` no acumula listeners (un aviso tras
+      tres redraws). **Ninguna de las tres hipótesis de la lista cabía.**
+      **LA CAUSA RAÍZ: EL MOTOR DEVOLVE `success:false` EN TRES CASOS Y LOS TRES
+      PINTABAN LO MISMO.**
+
+      | Caso | ¿Hubo tirada? | ¿Materiales? | Qué pintaba la card |
+      |---|---|---|---|
+      | Materiales que no valen / no hay piedras | **No** | **No se gastan** | "Forja fallida · los materiales se gastan igual" |
+      | La tirada salió mal | Sí | Se gastan | "Forja fallida · los materiales se gastan igual" |
+      | Acierto | Sí | Se gastan | "Forja completada" + item |
+
+      **LA CARD AFIRMABA UNA COSA FALSA EN DOS DE LOS TRES, Y `msg` —EL MOTIVO
+      EXACTO— NO LO LEÍA NADIE.** El jugador ve el fallo rojo, cierra, y sus dos
+      materiales siguen en el almacén: su lectura es que la forja le dio algo.
+      **El discriminante ya existía en el contrato y no se usaba:** el motor pone
+      `chance` cuando hubo tirada y no lo pone cuando el rechazo fue anterior, así
+      que `typeof result.chance === 'number'` separa los dos sin un campo nuevo.
+      **La card del rechazo dice el motivo y que el yunque quedó intacto**, y suena
+      el error de botón y no el golpe de forja (un rechazo no ha tocado el yunque).
+      `forjaCheck` (+7): que el fallo trae `chance` y el rechazo no, que ninguno
+      trae item, que el motivo nombra lo que falta y que **el rechazo no gasta los
+      materiales**.
+      **Lo que sigue sin poder comprobarse aquí:** el pintado de la card es DOM, y
+      lo que se mira es la fila que dice "Intacto. No se gastó ningún material".
+- [ ] **B23 · La Tarjeta AFK no desactiva todo lo que el AFK activa.**
+      > "La tarjeta afk no esta funcionando correctamente , debería deshabilitar todas las funciones que habilita el afk. El cartel que muestra el afk , el bloqueo de la ganancia pasiva , el bloqueo por espera , el bloqueo por pestaña , el bloqueo por ventan y todo lo demás que habilite el afk."
+      **Ojo al nombre: B9 y B19 ya arreglaron la mitad de esto** (el cartel y el
+      botón parado leen `estaPausado()`, la misma pregunta del tick). Lo que queda es
+      que la tarjeta **anula el corte** y con ella todo lo que el corte frenaba.
+      La lista del jugador es la lista de cosas que hay que comprobar una por una,
+      y **`tarjetaCheck` es el banco que las tiene que recorrer todas** —no solo la
+      duración (F71)—: con la tarjeta puesta, ninguna de esas siete puede cortar el
+      ingreso, y sin ella, todas cortan.
+- [ ] **B24 · Los expansores nuevos dicen "no tiene efecto conocido".**
+      > "me dice este consumible no tiene efecto conocido lo podríamos arreglar?"
+      **Causa raíz casi segura: `EXPANSOR_CONSUMABLES` se construye con
+      `Object.fromEntries` sobre `EXPANSOR_TIERS`, y F66 cambió los `buffId` a
+      `expansorInicial` / `expansorIntermedio` / … mientras el `switch` de
+      `useConsumable` y `expansorPorBuff()` siguen hablando de `expansorT{n}`.**
+      `expansorPorBuff()` sí tiene la rama de legado, pero si algún camino pide el
+      expansor por el `buffId` **sin pasar por ahí**, la carta no encuentra su regla
+      y cae al mensaje genérico. **Hay que encontrar el camino, no adivinarlo**: el
+      mensaje "efecto desconocido" es la señal de un `buffId` que no está en
+      `CONSUMABLES`, y `consumableCheck` tiene que afirmar que **los cuatro
+      `buffId` nuevos resuelven** (con la invariante "toda carta de expansor
+      comprable tiene efecto conocido").
+- [ ] **B25 · Los clics pasivos no critican.**
+      > "Los clicks pasivos también deberían hacer críticos"
+      **Hoy solo `click()` tira el dado de crítico** (B16), y se dejó fuera a
+      propósito para los automáticos del árbol. Pero un compañero de tipo `click`
+      **sí cobra por clic** y **no puede criticar nunca**, que es el mismo tipo de
+      cosa que B1 (los `passive` que no anunciaban su ingreso): la señal existe para
+      unos y no para otros. Hay que decidir **qué automáticos quedan fuera**: la propuesta
+      es que critiquen **los compañeros de tipo `click`** —porque el jugador los
+      ve cobrar— y **no** los nodos de `auto_clicker` del árbol, porque esos no
+      tienen a nadie mirándolos. **`senalCheck` lo ata por los dos lados.**
+
+**Features:**
+
+- [ ] **F75 · Los expansores viejos se convierten en Inicial.**
+      > "Converti las antiguas t1 , t2 , t3 y t4 que posean los usuarios a iniciales."
+      **Cuidado, que "convertir" tiene dos lecturas y la mala rompe partidas:**
+      (a) que a partir de ahora el expansor T1 sea el Inicial, y (b) **reescribir
+      el item guardado** de quien tiene `expansorT1..T4`. **(a) es lo que pidió el
+      jugador**, y además es lo que evita el problema: si el expansor viejo queda
+      con su techo de 25-55 y el Inicial llega a 60, los tres primeros se vuelven
+      irrelevantes, que es exactamente la trampa que F66 cerró. O sea: **`expansorT1..T4`
+      se pasan a resolver como el Inicial** (mismo `buffId` efectivo, techo 60), y
+      `TECHOS_VIEJOS` queda solo para `expansorT5..T10`, que sí son de tramo
+      distinto. **Un banco:** un item `expansorT3` guardado sube hasta 60, no hasta 45.
+- [ ] **F76 · En la forja se ve el potencial y la rareza de lo crafteado.**
+      > "En la forja también se tiene que ver el potencial y la rareza de lo crafteado"
+      **Medido primero, porque puede que ya se vea y no se note.** Si ya sale, la
+      feature es de formato (que el potencial vaya **al lado de la rareza** y no
+      escondido tras un `details`), y eso es media hora. Si no sale, hay que tener
+      en cuenta que **con F74 la rareza y el potencial ya no son la mitad de la
+      historia**: la base también tiene que estar, y sin ella el jugador no puede
+      decidir si forjar. **O sea que esta piece es parte de F74, no un extra.**
+- [ ] **F77 · El compañero enseña su potencial y su rareza en la descripción.**
+      > "Los compañeros también deben dar una descripción de donde sale el daño: Potencial / Rareza en su descripción"
+      **Y F76 y F77 son la misma línea de código en dos sitios** (forja y ficha),
+      así que se hacen juntos. Ojo a una cosa que sale de aquí: **la rareza del
+      compañero no es la del item**, es la del tier —un T7 de caja es Legendario—, y
+      **con la base oculta la rareza pasa a ser información falsa por partida**:
+      dos T7 con base distinta y la misma rareza no son el mismo objeto. **Hay que
+      decidir si la rareza del compañero pasa a derivarse de la base**, y eso ya es
+      economy, no texto.
+
+### Ya encargo y repetido
+
+- [ ] **F72 · Iconos de caja distintos por tier, con brillo y color.** *(Ya estaba en
+      el lote F, aquí solo porque lo volviste a pedir: es el mismo encargo.)*
+
 ---
 
 ### Las dos decisiones que necesito de ti

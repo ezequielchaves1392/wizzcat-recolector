@@ -1313,12 +1313,39 @@ function runForge(game: any, materials: any[], stones: number, nano: boolean, re
     ? game.forgeCompanion(ids, stones, nano ? 1 : 0)
     : game.forgeCollector(ids, stones, nano ? 1 : 0);
   const hecho = result.collector || result.companion;
+  // **B22 · `chance` DICE SI HUBO TIRADA, Y ES LO QUE SEPARA UN FALLO DE UN RECHAZO.**
+  //
+  // El motor devuelve `success: false` en **tres** casos que el jugador vive como
+  // uno, y **solo uno es un fallo de forja**:
+  //
+  //   · Materiales que no valen, o piedras que no hay: `chance` NO viene. No se
+  //     tiró nada y **los materiales NO se gastaron**.
+  //   · La tirada salió mal: `chance` viene. Se gastaron los dos materiales.
+  //
+  // Antes los tres pintaban la MISMA card —"Forja fallida · El yunque se enfrió ·
+  // Los materiales se gastan igual"—, y en los dos primeros **esa última línea es
+  // falsa**: el yunque no se gastó. El jugador ve un fallo rojo, cierra, mira el
+  // almacén y ve sus dos materiales intactos: su lectura es que la forja le devolvió
+  // el item, o que le dio algo sin shouldnarlo.
+  //
+  // Y no es que el mensaje fuera ambiguo: `msg` traía el motivo real y **la card lo
+  // tiraba a la basura**, porque solo leía `success` y `crystals`. El motivo era
+  // exactamente la información que hacía falta y estaba en el mismo objeto.
+  const huboTirada = typeof result.chance === 'number';
 
   showForgeResult(result, () => {
     if (result.success && hecho) {
       sfx.forgeSuccess();
       showToast(`${hecho.name} — ${NOMBRES[ui.tipo].verbo} por ti`, 'success');
       // La selección se vacía: los materiales ya se consumieron
+      ui.selected = [];
+    } else if (!huboTirada) {
+      // **NO FUE UN FALLO, Y EL SONIDO LO CONFIRMA.** El de fallo es el golpe seco
+      // del yunque frío; un rechazo no ha tocado el yunque, así que suena el error
+      // de botón y no el de forja. Con el mismo sonido, el jugador creekía que había
+      // perdido los dos materiales cuando no se ha gastado nada.
+      sfx.error();
+      showToast(result.msg ?? 'No se pudo forjar.', 'error');
       ui.selected = [];
     } else {
       sfx.forgeFail();
@@ -1357,7 +1384,36 @@ function cardDeResultado(
 ): string {
   const exito = !!result.success;
   const w = result.collector || result.companion;
-  const nombre = exito ? (w?.name ?? 'Forja completada') : 'El yunque se enfrió';
+
+  /**
+   * B22 · TRES ESTADOS, Y EL TERCERO ES EL QUE FALTAVA.
+   *
+   * El motor devuelve `success: false` para **un fallo** y para **un rechazo**, y no
+   * son lo mismo ni para el motor ni para el jugador:
+   *
+   *   · **Rechazo** (`chance` no viene): materiales que no valen, o piedras/nano que
+   *     no hay. **No se tiró nada y los materiales siguen en el almacén.** Es lo que
+   *     dice `msg`, y es la información que el jugador necesita para arreglarlo.
+   *   · **Fallo** (`chance` viene): la tirada salió mal. Se gastaron los dos
+   *     materiales y deja el consuelo.
+   *
+   * Antes los dos pintaban "Forja fallida · El yunque se enfrió · Los materiales se
+   * gastan igual". En el rechazo **las dos últimas líneas son falsas**, y el jugador
+   * ve un fallo rojo y después sus dos materiales intactos en el almacén. De ahí la
+   * lectura de "falló pero me dio el item", que es lo que se reportó.
+   *
+   * **Y EL MOTIVO SE TIRABA A LA BASURA.** `msg` lo traía el motor en el mismo
+   * objeto, y la card solo leía `success` y `crystals`. No era un dato que faltara:
+   * era un dato que ya estaba y no se leía.
+   */
+  const huboTirada = typeof result.chance === 'number';
+  const rechazo = !exito && !huboTirada;
+
+  const nombre = exito
+    ? (w?.name ?? 'Forja completada')
+    : rechazo
+      ? 'No se forjó nada'
+      : 'El yunque se enfrió';
   const tono = exito ? rarityClass(w?.rarity ?? '') : 'text-rose-400';
 
   // Las tres líneas de abajo. La del medio es la única que cambia por tipo, y por eso
@@ -1374,6 +1430,9 @@ function cardDeResultado(
           : 'Ninguno heredado')
     },
     { etiqueta: esCompanion ? 'Forja' : 'Forjada por', valor: esCompanion ? 'Por ti' : (w.forgedBy ?? '-') }
+  ] : rechazo ? [
+    { etiqueta: 'Motivo', valor: result.msg ?? 'No se pudo forjar.' },
+    { etiqueta: 'Yunque', valor: 'Intacto. No se gastó ningún material.' }
   ] : [
     { etiqueta: 'Consuelo', valor: `+${formatNumber(result.crystals ?? 0)} cristales` },
     { etiqueta: 'Yunque', valor: 'Sigue frío. Los materiales se gastan igual.' }
@@ -1389,7 +1448,7 @@ function cardDeResultado(
         </span>
         <div class="min-w-0 flex-1">
           <div class="label-caps ${exito ? 'accent-text' : 'text-rose-400'}">
-            ${exito ? 'Forja completada' : 'Forja fallida'}
+            ${exito ? 'Forja completada' : rechazo ? 'Forja no realizada' : 'Forja fallida'}
           </div>
           <div class="font-['Orbitron'] font-bold text-[14px] ${tono} leading-tight mt-0.5 break-words">
             ${nombre}
