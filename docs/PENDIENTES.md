@@ -709,14 +709,13 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > la tabla: +10% de probabilidad de que la caja dé un tier más, por nivel.
       > Sin nodo el sorteo no cambia ni un decimal (la caché sigue siendo la
       > tabla base y la suerte no se cachea). Lo cubre `saltoCheck` (+6).
-- [ ] **B19 · Con tarjeta AFK viva se sigue mostrando el cartel de pausa.** (para después)
+- [x] **B19 · Con tarjeta AFK viva se sigue mostrando el cartel de pausa.** Hecho en v1.8.2.
       > "para despues, estoy afk y se sigue mostrando el cartel... la carta afk lo que hace es permitir que los pasivos de ingreso por segundo puedan continuar hasta que se termine el tiempo de la tarjeta"
-      > Medido en captura: con AFK 28:54 restante en el HUD, la base enseña "En
-      > pausa — vuelve a la ventana para cobrar" y "En pausa por inactividad —
-      > pulsa para seguir cobrando", mientras el ingreso SÍ entra (+308 flotando).
-      > **Pista sin verificar:** la vista apaga con `isAfk && !hasPassiveBuff` pero
-      > el tick corta con `isEffectivelyAfk`, que además descuenta `hasAfkBuff`
-      > (divergencia ya anotada en Ideas sueltas). Verificar antes de tocar.
+      > **Causa raíz: la vista preguntaba otra cosa que el tick.** El tick corta
+      > con `isEffectivelyAfk` (descuenta la tarjeta) y la vista con `isAfk &&
+      > !hasPassiveBuff` (no la descuenta): cartel, botón parado y cero con el
+      > ingreso entrando. Ahora la vista lee `estaPausado()` del motor, la misma
+      > pregunta del tick. Lo cubre `tickCheck` (+5).
 
 **Features (después de los bugs que elijas):**
 

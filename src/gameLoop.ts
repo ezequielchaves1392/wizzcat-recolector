@@ -3853,6 +3853,17 @@ const RITMO_GUARDADO_MS = 30_000;
     getDisplayName: () => displayName,
     isAfk: () => isAfk,
     isPresent: () => isPlayerPresent(),
+    /**
+     * SI EL JUEGO ESTÁ PARADO AHORA MISMO, CON TARJETA Y TODO.
+     *
+     * Es la misma pregunta que hacen el tick (`isEffectivelyAfk`) y el manejador
+     * de presencia, y la vista TIENE que hacerla aquí y no con su propia cuenta:
+     * la vista la hacía con `isAfk && !hasPassiveBuff`, que no descuenta la
+     * tarjeta AFK, y con la tarjeta viva enseñaba el cartel de pausa y el
+     * contador a cero mientras el ingreso seguía entrando (B19). Tres
+     * expresiones para una pregunta son dos divergencias esperando turno.
+     */
+    estaPausado: () => estaPausado(),
     // Daño por click ya con nivel, multiplicador de compañeros y buffs aplicados.
     // La UI debe usar esta función para no mostrar un valor distinto al real.
     getClickDamage: () => Math.floor(calculateClickDamage() * calculateMultiplier()),

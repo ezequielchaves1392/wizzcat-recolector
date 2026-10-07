@@ -330,6 +330,57 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  //  B19 · CON TARJETA VIVA NO HAY PAUSA, NI CARTEL NI CERO.
+  //
+  //  La vista enseñaba el cartel de pausa y el contador a cero con la tarjeta
+  //  puesta, porque preguntaba `isAfk && !hasPassiveBuff` en vez de la pregunta
+  //  del tick. El tick sí cobraba: cartel diciendo "en pausa" con el número
+  //  entrando. Lo que se ata aquí es que la pregunta que la vista va a leer
+  //  (`estaPausado()`) dice lo mismo que el tick, con tarjeta viva y caducada.
+  // -----------------------------------------------------------------------
+  {
+    const { lista, restaurar } = capturarIntervalos();
+    try {
+      const g = await boot(partidaConPasivo(5));
+      const tick = tickDe(lista);
+
+      const realNow = Date.now;
+      let falso = realNow();
+      Date.now = () => falso;
+      try {
+        // La tarjeta viva se pone a mano: lo que se comprueba es la decisión
+        // (pausa o no), no la plomería de la tarjeta, que ya cubren
+        // `tarjetaCheck` y `consumableCheck`.
+        s(g).afkExpiresAt = falso + 600_000;
+        // Se cruza el umbral de inactividad como en B9: el jugador no mira.
+        falso = realNow() + 61_000;
+        for (let i = 0; i < 4; i++) tick();
+
+        check('B19: con tarjeta viva el ingreso sigue entrando',
+          nanites(g) > 0, 'saldo=' + nanites(g));
+        check('B19: y el estado sigue diciendo AFK (el jugador no mira)',
+          g.isAfk() === true, 'isAfk=' + g.isAfk());
+        check('B19: pero no hay pausa: es lo que la vista tiene que leer',
+          g.estaPausado() === false, 'estaPausado=' + g.estaPausado());
+
+        // Y al caducar la tarjeta, la pausa vuelve y el ingreso se corta: la
+        // tarjeta compra tiempo, no una exención permanente.
+        s(g).afkExpiresAt = falso - 1_000;
+        const antesDeCaducar = nanites(g);
+        for (let i = 0; i < 4; i++) tick();
+        check('B19: caducada la tarjeta sí hay pausa',
+          g.estaPausado() === true, 'estaPausado=' + g.estaPausado());
+        check('B19: y el ingreso se vuelve a cortar',
+          nanites(g) === antesDeCaducar, `antes=${antesDeCaducar} despues=${nanites(g)}`);
+      } finally {
+        Date.now = realNow;
+      }
+    } finally {
+      restaurar();
+    }
+  }
+
+  // -----------------------------------------------------------------------
   //  Sin mirar, no se cobra. Y como el tick se detiene ANTES de acumular, el
   //  tiempo ausente no vuelve como un segundo entero de golpe al volver.
   // -----------------------------------------------------------------------

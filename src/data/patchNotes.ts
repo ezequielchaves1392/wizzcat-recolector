@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.8.2',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Con tarjeta no hay pausa',
+    lineas: [
+      'Con una tarjeta AFK puesta ya no sale el cartel de pausa ni el contador se pone a cero: el juego sigue cobrando hasta que se acaba la tarjeta.',
+      'El botón tampoco se para mientras la tarjeta siga viva.',
+      'Sin tarjeta todo sigue igual: al dejar de mirar, el juego se detiene y te espera.'
+    ]
+  },
+  {
     version: '1.8.1',
     fecha: '7 de octubre de 2026',
     titulo: 'Ojo de Caja con efecto',

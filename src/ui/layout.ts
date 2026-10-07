@@ -173,9 +173,11 @@ export function renderLayoutHTML(
               Cuando el AFK salta solo, lo único que cambiaba era el "+0 /s" de
               arriba: el jugador volvía a la pantalla y no sabía por qué no
               entraba nada. El cartel lo dice y dice qué hacer (pulsar), que es
-              justo lo que saca del AFK. Lo enciende el repintado con la misma
-              expresión que deja el contador en +0/s, así que cartel y número
-              no pueden contradecirse.
+              justo lo que saca del AFK. Lo enciende el repintado con parado,
+              que es la misma pregunta del motor que deja el contador en +0/s y
+              para el botón, así que cartel, botón y número no pueden
+              contradecirse. Con tarjeta AFK viva no sale: el juego sigue
+              cobrando (B19).
             -->
             <div id="afk-banner"
                  role="status" aria-live="polite"

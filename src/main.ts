@@ -1176,11 +1176,20 @@ function updateUI(state: any, isAfk: boolean = false) {
   const passiveBuffRemaining = Math.max(0, state.buffs.passiveBoostExpiresAt - now);
   const hasPassiveBuff = passiveBuffRemaining > 0;
 
-  // B10 · La pausa se ve y el botón se para, con la MISMA expresión que deja
-  // el contador en +0/s (más abajo). Si el cartel usara otra cuenta, habría
-  // dos verdades: cartel diciendo "en pausa" con el número cobrando, o número
-  // a cero sin cartel. Así cartel, botón y número van siempre juntos.
-  const parado = isAfk && !hasPassiveBuff;
+  const isPresent = typeof activeGameInstance?.isPresent === 'function'
+    ? activeGameInstance.isPresent()
+    : true;
+
+  // B10/B19 · La pausa se ve y el botón se para, con LA MISMA pregunta que el
+  // tick. Antes era `isAfk && !hasPassiveBuff` escrita aquí, que no descuenta
+  // la tarjeta AFK: con la tarjeta viva el cartel decía "en pausa", el botón
+  // se paraba y el contador iba a cero mientras el ingreso seguía entrando.
+  // Ahora se pregunta al motor (`estaPausado()`), que es quien ya decide si el
+  // tick cobra. Si el cartel usara otra cuenta, habría dos verdades. Con la
+  // tarjeta viva no hay cartel, ni botón parado, ni cero.
+  const parado = typeof activeGameInstance?.estaPausado === 'function'
+    ? activeGameInstance.estaPausado()
+    : (isAfk && !hasPassiveBuff);
   const afkBanner = document.querySelector('#afk-banner');
   if (afkBanner) {
     afkBanner.classList.toggle('hidden', !parado);
@@ -1193,16 +1202,15 @@ function updateUI(state: any, isAfk: boolean = false) {
   // desincronizado: el atributo siempre dice lo mismo que el cartel.
   app.dataset.afk = parado ? 'true' : 'false';
 
-  const isPresent = typeof activeGameInstance?.isPresent === 'function'
-    ? activeGameInstance.isPresent()
-    : true;
-
   if (passiveIncomeDisplay) {
-    if (!isPresent) {
+    // Con la tarjeta viva el ingreso entra aunque no se mire: se enseña lo
+    // que entra, no "en pausa". Sin tarjeta, ausente dice que vuelva y
+    // presente-inactivo dice +0 con el cartel de abajo.
+    if (parado && !isPresent) {
       passiveIncomeDisplay.innerHTML =
         `<span class="text-amber-500">En pausa — vuelve a la ventana para cobrar</span>`;
     } else {
-      const displayValue = (isAfk && !hasPassiveBuff) ? 0 : state.passiveIncome;
+      const displayValue = parado ? 0 : state.passiveIncome;
       passiveIncomeDisplay.textContent = `+${formatNumber(displayValue)} Nanitas / segundo`;
     }
   }
