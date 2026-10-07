@@ -40,7 +40,7 @@ function bonusLabel(key: keyof PassiveBonuses, value: number): string {
     case 'autoClick': return `+${value} clics/s automáticos`;
     case 'afkHours': return `+${value * 60} min de AFK`;
     case 'offlineClicks': return `+${value} clics al volver`;
-    case 'crateLuck': return `${pct(value)} suerte en cajas`;
+    case 'crateLuck': return `${pct(value)} salto de caja`;
     case 'coreGain': return `${pct(value)} núcleos por reinicio`;
     case 'storageSlots': return `+${value} slots de almacén`;
     case 'companionSlots': return `+${value} slots de compañero`;

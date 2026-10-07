@@ -5527,6 +5527,9 @@ const RITMO_GUARDADO_MS = 30_000;
 
       // El botín lo decide la tabla (crateLoot) y se aplica aquí. La ruleta solo
       // lo muestra: si la animación decidiera, mentiría sobre las probabilidades.
+      // **Y LA SUERTE DEL OJO DE CAJA ENTRA AQUÍ.** `state.bonus.crateLuck` (0,10
+      // por nivel) multiplica la parte del salto en la tabla. Sin nodo es 0 y el
+      // sorteo es el de siempre: el camino sin bonus no cambia ni un decimal.
       const premio = rollCrateReward(crateType, {
         nanites: (n) => { state.nanites += n; state.totalNanitesProduced += n; },
         // El segundo argumento es el NIVEL que anuncia el botín, y se respetaba antes.
@@ -5618,7 +5621,7 @@ const RITMO_GUARDADO_MS = 30_000;
           }
           return { ok: true };
         }
-      });
+      }, state.bonus.crateLuck ?? 0);
 
       // Los contadores se recalculan DESPUÉS de aplicar el botín, para que
       // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el

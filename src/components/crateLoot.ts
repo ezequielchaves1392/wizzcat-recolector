@@ -365,9 +365,12 @@ export function rarezaDeTabla(crateType: CrateType): string[] {
 const PESOS_CACHE: Partial<Record<CrateType, number[]>> = {};
 const RARIDAD_CACHE: Partial<Record<CrateType, string[]>> = {};
 
-export function tablaDePesos(crateType: CrateType): number[] {
-  const guardado = PESOS_CACHE[crateType];
-  if (guardado) return guardado;
+export function tablaDePesos(crateType: CrateType, suerte = 0): number[] {
+  const conSuerte = suerte > 0;
+  if (!conSuerte) {
+    const guardado = PESOS_CACHE[crateType];
+    if (guardado) return guardado;
+  }
   const tabla = CRATE_LOOT[crateType];
   const pesos = new Array<number>(tabla.length).fill(0);
 
@@ -410,8 +413,16 @@ export function tablaDePesos(crateType: CrateType): number[] {
   // a un peso de referencia de 100. Con los valores de `upWeight()` —de 6 en la
   // T1 a 2 en la T9— eso da del 5,7% al 1,9%: la banda de siempre, sin tocar el
   // `pesoDeRareza`, que ya no hacía falta para sujetarlo.
+  //
+  // **Y LA SUERTE MULTIPLICA ESA PARTE, NADA MÁS.** `suerte` es
+  // `state.bonus.crateLuck` (0,10 por nivel del Ojo de Caja): la parte del salto
+  // se multiplica por (1 + suerte) y la parte normal se recalcula sola, porque
+  // sale de restar. Con suerte 0 el número es el de siempre, así que el camino
+  // sin bonus no cambia ni un decimal. Y no pasa por la caché: la caché es por
+  // tier y la suerte es por jugador; cachearla mezclaría partidas.
   const ref = 100;
-  const pesoSalto = tabla.some(e => e.id === 'up') ? upWeight(crateType) / (ref + upWeight(crateType)) : 0;
+  const pesoSaltoBase = tabla.some(e => e.id === 'up') ? upWeight(crateType) / (ref + upWeight(crateType)) : 0;
+  const pesoSalto = pesoSaltoBase * (conSuerte ? 1 + suerte : 1);
 
   // Los exclusivos se reparten la bolsa de los exclusivos. Sigue siendo el 2,5%
   // que se calibró contra el salto del banco, y ahora hay hasta DOS por caja en
@@ -439,7 +450,7 @@ export function tablaDePesos(crateType: CrateType): number[] {
     for (let i = 0; i < pesos.length; i++) pesos[i] /= total;
   }
 
-  PESOS_CACHE[crateType] = pesos;
+  if (!conSuerte) PESOS_CACHE[crateType] = pesos;
   return pesos;
 }
 
@@ -717,8 +728,8 @@ function upWeight(tier: number): number {
  * tiene que enseñar lo que entra, y eso obliga a que el premio sea una entrada de la
  * tabla que la cinta puede pintar.
  */
-export function probabilidadDeSalto(crateType: CrateType): number {
-  const pesos = tablaDePesos(crateType);
+export function probabilidadDeSalto(crateType: CrateType, suerte = 0): number {
+  const pesos = tablaDePesos(crateType, suerte);
   const tabla = CRATE_LOOT[crateType];
   const total = pesos.reduce((s, w) => s + w, 0);
   return (pesos[tabla.findIndex(e => e.id === 'up')] ?? 0) / total;
@@ -1377,8 +1388,8 @@ export function lootAmountText(reward: CrateReward): string {
  * Decide el premio y lo aplica. Si el almacén está lleno y el drop es un item,
  * se compensa en nanitas para no perderlo nunca.
  */
-export function rollCrateReward(crateType: CrateType, applier: LootApplier): CrateReward {
-  const entry = pickLoot(crateType);
+export function rollCrateReward(crateType: CrateType, applier: LootApplier, suerte = 0): CrateReward {
+  const entry = pickLoot(crateType, tablaDePesos(crateType, suerte));
   const ctx: LootBuildContext = { ownedCosmetics: applier.ownedCosmetics() };
   const built = entry.build(ctx);
 

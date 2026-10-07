@@ -226,8 +226,13 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
    cristales del fallo. El documento viejo pierde el campo con
    `shards: deleteField()`, que se ejecuta en el guardado de cargar, así que nadie
    lo arrastra. Lo cubre `stateCheck`.
-8. **Bonificaciones que no se consumen:** `crateLuck`, `offlineClicks`, y el
+8. **Bonificaciones que no se consumían:** `crateLuck`, `offlineClicks`, y el
    `critChance` / `passiveMult` de los afijos en el ingreso pasivo.
+   **Parcialmente arreglado (B16, B18):** el `critChance` ya tira su dado en el
+   click del jugador (lo cubre `senalCheck`), y `crateLuck` ya multiplica
+   la parte del salto (lo cubre `saltoCheck`). Quedan `offlineClicks` —el nodo se sacó
+   del árbol y el campo solo sobrevive en partidas viejas— y el `passiveMult` de
+   afijos en el pasivo, que `recalculatePassiveIncome` sigue sin leer.
 9. **Código muerto:** `state.totalInfraestructure`, `COLLECTOR_BASE_COSTS`,
    `TIER_POWER`, `types.ts` (`GameState`, `defaultState`), `ProfileState`,
    `UserProfile`, y las pantallas `components/crates.ts` y

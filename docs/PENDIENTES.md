@@ -702,8 +702,13 @@ programarlo, para que no viva solo en una conversación. Los bugs van primero
       > de notas sí guarda, y los tests del contrato del cartel viven en
       > `potencialCheck`. Se borran `rouletteSpin`, `rouletteStrip`,
       > `roulettePrefs`, `ruletaPreview`, `rouletteCheck` y `forgeTick`.
-- [ ] **B18 · "Ojo de Caja" no dice el 10% de qué.**
+- [x] **B18 · "Ojo de Caja" no dice el 10% de qué.** Hecho en v1.8.1.
       > "'Ojo de caja' que hace puntualmente? 10% de que? especificar"
+      > **Causa raíz: el bonus no hacía nada.** `crateLuck` se cobraba y ninguna
+      > lógica lo leía (discrepancia 8). Ahora multiplica la parte del salto en
+      > la tabla: +10% de probabilidad de que la caja dé un tier más, por nivel.
+      > Sin nodo el sorteo no cambia ni un decimal (la caché sigue siendo la
+      > tabla base y la suerte no se cachea). Lo cubre `saltoCheck` (+6).
 - [ ] **B19 · Con tarjeta AFK viva se sigue mostrando el cartel de pausa.** (para después)
       > "para despues, estoy afk y se sigue mostrando el cartel... la carta afk lo que hace es permitir que los pasivos de ingreso por segundo puedan continuar hasta que se termine el tiempo de la tarjeta"
       > Medido en captura: con AFK 28:54 restante en el HUD, la base enseña "En

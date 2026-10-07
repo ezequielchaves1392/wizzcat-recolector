@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.8.1',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Ojo de Caja con efecto',
+    lineas: [
+      'El nodo Ojo de Caja ahora hace lo que dice: cada nivel da más probabilidad de que la caja dé un item del tier siguiente.',
+      'El texto del nodo y el resumen de bonificaciones ya dicen ese efecto en vez de una suerte sin explicar.',
+      'Sin el nodo, las cajas dan lo mismo de siempre.'
+    ]
+  },
+  {
     version: '1.8.0',
     fecha: '7 de octubre de 2026',
     titulo: 'Sin ruleta: directo al premio',

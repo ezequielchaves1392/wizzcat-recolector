@@ -24,7 +24,7 @@
 //  `preview.html`, con viewport real.
 // ==========================================================================
 
-import { check, resumen } from './kit';
+import { check, resumen, boot, baseSave, crate, conRoll } from './kit';
 import {
   CRATE_LOOT, CRATE_ONLY_COMPANIONS, makeCrateOnlyCompanion, probabilidadDeSalto, tablaDePesos,
   pickLoot, RARITY_RANK, rarezaDeTabla
@@ -426,6 +426,77 @@ async function main() {
         fuera.length ? `fuera de tope: ${[...new Set(fuera)].join(',')}` :
           [...new Set(rarezas)].join(','));
     }
+  }
+
+  // -------------------------------------------------------------------------
+  //  EL OJO DE CAJA: LA SUERTE MULTIPLICA EL SALTO (B18)
+  //
+  //  `crateLuck` se cobraba (nodo `crate_sight`, +10% por nivel) y ninguna
+  //  lógica lo leía: el afijo se enseñaba en "Bonificaciones activas" y no
+  //  hacía nada en la partida. Ahora multiplica la parte del salto en la tabla,
+  //  y "10%" es de eso: de la probabilidad de que la caja dé un tier más.
+  // -------------------------------------------------------------------------
+  {
+    // Con suerte 0 el camino es el de siempre, decimal a decimal: el bonus
+    // ausente no puede mover ni un premio.
+    let identicas = true;
+    for (const c of CAJAS) {
+      const a = tablaDePesos(c, 0);
+      const b = tablaDePesos(c);
+      if (a.length !== b.length || a.some((w, i) => w !== b[i])) identicas = false;
+    }
+    check('suerte: sin nodo el reparto es el de siempre, sin mover un decimal',
+      identicas, 'difiere en alguna caja');
+
+    // Con el nodo al máximo (+50%), el salto sube en las nueve cajas que lo
+    // tienen, y la T10 —que no salta a nada— sigue en cero.
+    const sube = CAJAS.filter(c => c !== 10).every(c =>
+      probabilidadDeSalto(c, 0.5) > probabilidadDeSalto(c, 0));
+    check('suerte: con el nodo al máximo el salto sube en las nueve cajas',
+      sube, CAJAS.filter(c => c !== 10)
+        .map(c => `T${c}=${(probabilidadDeSalto(c, 0) * 100).toFixed(2)}→${(probabilidadDeSalto(c, 0.5) * 100).toFixed(2)}`)
+        .join(' '));
+    check('suerte: y la T10 sigue sin saltar, con nodo o sin él',
+      probabilidadDeSalto(10, 0.5) === 0 && probabilidadDeSalto(10, 0) === 0,
+      `con=${probabilidadDeSalto(10, 0.5)} sin=${probabilidadDeSalto(10, 0)}`);
+  }
+  {
+    // Y EL BONUS LLEGA AL SORTEO DE VERDAD, no solo a la tabla. Se busca una
+    // tirada que con los pesos base FALLA el salto y con los pesos con suerte
+    // lo TOCA —el hueco existe porque la parte del salto crece y la normal
+    // encoge—, y se abre la misma caja con el mismo dado en las dos partidas.
+    // Leyendo la tabla para elegir el dado, no reimplementando el sorteo: es
+    // el patrón de `rollPara`.
+    const tabla = CRATE_LOOT[1];
+    const k = tabla.findIndex(e => e.id === 'up');
+    const acum = (pesos: number[]) => {
+      let s = 0;
+      const bordes: number[] = [];
+      for (const w of pesos) { s += w; bordes.push(s); }
+      return bordes;
+    };
+    const base = acum(tablaDePesos(1, 0));
+    const con = acum(tablaDePesos(1, 0.5));
+    const finBase = base[k];
+    const finCon = con[k];
+    check('suerte: hay tiradas que solo tocan con el nodo puesto',
+      finCon > finBase, `base=${finBase.toFixed(4)} con=${finCon.toFixed(4)}`);
+    const tiro = (finBase + finCon) / 2;
+
+    const abrirCon = async (nodo: boolean) => {
+      const g = await boot(baseSave([crate('c1', 1, 2)], {
+        nanites: 0,
+        ...(nodo ? { nodeLevels: { crate_sight: 5 } } : {})
+      }));
+      const r = conRoll(tiro, () => g.openCrateBox('c1'));
+      return r.reward;
+    };
+    const sinNodo = await abrirCon(false);
+    const conNodo = await abrirCon(true);
+    check('suerte: sin el nodo esa tirada no salta',
+      sinNodo?.up !== true, `up=${sinNodo?.up} kind=${sinNodo?.kind}`);
+    check('suerte: y con el nodo al máximo la misma tirada sí salta',
+      conNodo?.up === true, `up=${conNodo?.up} kind=${conNodo?.kind}`);
   }
 
   resumen('salto: la probabilidad baja de botín de arriba, y el que faltaba');

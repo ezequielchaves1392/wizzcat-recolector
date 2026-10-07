@@ -137,7 +137,7 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { clickMult: 0.06, passiveMult: 0.06 }, x: 2, y: 1
   },
   {
-    id: 'crate_sight', name: 'Ojo de Caja', description: '+10% de suerte en las cajas por nivel.',
+    id: 'crate_sight', name: 'Ojo de Caja', description: '+10% de probabilidad de que la caja dé un tier más por nivel.',
     lore: 'Ver la costura antes de que se abra. La caja siempre ha dado lo que tenia; ahora lo ves venir.',
     icon: 'crate', category: 'economia', tier: 2, requires: ['shard_sifter'],
     baseCost: 8, costGrowth: G, maxLevel: 5,
