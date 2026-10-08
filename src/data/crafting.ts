@@ -54,7 +54,10 @@ import { nombreDe } from './nombres';
 // porque `store.ts` no importa nada**: es el fichero más abajo del árbol de datos, y
 // esta es la primera vez que se le pide un número desde las reglas de la forja.
 import { costeDeCaja } from './store';
-import { PIEDRA_APORTA, PIEDRA_PUNTOS } from './constants';
+import {
+  PIEDRA_APORTA, PIEDRA_PUNTOS, pctDe,
+  PROB_NANO_SUBE_RAREZA, PROB_SUBE_POTENCIAL, BONO_ETTER
+} from './constants';
 // F74 · LAS BASES OCULTAS: importamos el multiplicador y el buscador.
 import { multiplicadorDeBase, basePorId, BaseOculta } from './bases';
 
@@ -746,15 +749,13 @@ export { PIEDRA_APORTA, PIEDRA_PUNTOS };
 /**
  * El tope de piedras por fusión.
  *
- * **ERAN 5 DE 12 PUNTOS, Y CON ESO SOBRABA LA MITAD DE LA MANO.** Cinco piedras
- * eran un 60 % fijo: en tiers bajos sobraban (la base ya llega) y en el T10 se
- * quedaban en 0,93 sin que hubiera forma de poner más. Ahora son diez de 7
- * puntos: el 95 % se alcanza en todos los tiers (el T11+ lo pide justo con 10,
- * que es lo que hace que la pila entera importe) y el techo sube de 60 a 70.
- *
- * El tope nuevo es **el necesario para llegar al 95 %**, redondeado hacia arriba, con un
- * suelo de 5 para no quitarle a nadie el gesto de gastar cinco por costumbre y un techo de
- * 10 donde ya no aporta nada porque la probabilidad está topada.
+ * **DIEZ DE 1,2 PUNTOS.** El techo de la mano entera es +12 puntos de probabilidad,
+ * que es lo que cabe en una fusión sin que la piedra deje de ser una decisión. Ojo
+ * con lo que esto implica y ya no es un secreto: **en los tiers medios y altos el 95 %
+ * ya no es alcanzable con piedras**, ni con diez ni con veinte. Por eso el botón "las
+ * necesarias" enseña ahora el porcentaje al que llegas de verdad en vez de prometer
+ * el 95 % —ver `previewPiedrasNecesarias()`—, y por eso las piedras son un bonus de
+ * lujo y no la llave del tope.
  */
 export function maximoDePiedras(): number {
   return 10;
@@ -775,21 +776,28 @@ export const MAX_PIEDRAS_POR_FUSION = maximoDePiedras();
  * **Y DEVUELVE 0 CUANDO YA SE LLEGA SIN PIEDRAS.** Con una base alta y las pasivas del
  * árbol, no hace falta gastar ninguna: ofrecer "gastar 2" ahí sería cobrar por nada, que es
  * justo lo que el jugador no perdona en una ruleta.
+ *
+ * **OJO: EL NÚMERO QUE DEVUELVE NO GARANTIZA EL OBJETIVO.** El tope de diez sumado a
+ * 0,012 por piedra es +12 puntos, y con eso el 95 % solo se alcanza en tiers bajos. En
+ * los demás, la función devuelve 10 —las que hacen falta para llegar lo lejos que se
+ * pueda— y quién enseña el resultado es `previewPiedrasNecesarias()`, que calcula la
+ * probabilidad real con esas piedras y la pone en el botón. Si el botón dijera "para el
+ * 95 %" con un tope de 12, mentiría con la cifra que más se mira (R3).
  */
 export function piedrasParaObjetivo(
   fromTier: number,
   craftLuck: number,
   affixLuck: number,
-  nanoUsed = 0,
   objetivo = 0.95
 ): number {
   const base = baseSuccessChance(fromTier);
-  const nano = nanoUsed > 0 ? 0.08 : 0;
-  const yaHay = base + craftLuck + affixLuck + nano;
+  const yaHay = base + craftLuck + affixLuck;
   const faltan = objetivo - yaHay;
   if (faltan <= 0) return 0;
   // `Math.ceil` y no un redondeo: una piedra de menos es una probabilidad de menos, y el
-  // botón se llama "las necesarias" — si no llega, miente por una piedra.
+  // botón se llama "las necesarias" — si no llega, miente por una piedra. Y el `Math.min`
+  // de al lado es el tope de la mano: si el 95 % pide más de diez, se piden diez, que es
+  // lo que se puede gastar.
   return Math.min(MAX_PIEDRAS_POR_FUSION, Math.ceil(faltan / PIEDRA_APORTA));
 }
 
@@ -798,18 +806,13 @@ export function successChance(
   fromTier: number,
   craftLuck: number,
   stonesUsed: number,
-  affixLuck: number,
-  nanoUsed = 0
+  affixLuck: number
 ): number {
   const base = baseSuccessChance(fromTier);
   // Cada piedra aporta lo que dice `PIEDRA_APORTA`, y el tope es el mismo que usa
   // `piedrasParaObjetivo()`: por eso el botón y el motor no pueden separarse.
   const stones = Math.min(MAX_PIEDRAS_POR_FUSION, Math.max(0, stonesUsed)) * PIEDRA_APORTA;
-  // La nanopartícula da +8% y además garantiza un afijo extra. Aporta menos
-  // puntos que una piedra pero hace dos cosas, que es la razón por la que es
-  // un objeto raro y no un consumible más.
-  const nano = nanoUsed > 0 ? 0.08 : 0;
-  const total = base + craftLuck + stones + affixLuck + nano;
+  const total = base + craftLuck + stones + affixLuck;
   return Math.min(0.95, total);
 }
 
@@ -1304,8 +1307,18 @@ interface IntentosDeForja {
   /** Multiplicador del consuelo en cristales, del nodo del árbol. */
   consolationBonus: number;
   stonesUsed: number;
-  /** 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. */
+  /**
+   * 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. Ya **no** toca la
+   * probabilidad: su efecto entero es subir un escalón la rareza del recolector, y en
+   * la fusión de compañeros no hace nada (la rareza del compañero no existe como eje).
+   */
   nanoUsed?: number;
+  /**
+   * 1 si se gasta un Éter de Refinamiento en esta fusión. No toca la probabilidad de
+   * acierto: suma `BONO_ETTER` puntos a la tirada de subida de potencial, que la hace
+   * la fusión haya o no Éter.
+   */
+  eterUsed?: number;
   maxTier?: number;
   /** El dado. Sin él ninguna de las dos reglas se puede comprobar. */
   rng?: () => number;
@@ -1358,8 +1371,7 @@ export function tiraDeForja(
   // Los compañeros no tienen afijos, así que aquí aportan cero. No es que se les
   // dé un trato peor: es que no tienen la entrada que suma esto.
   const afixLuck = materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0);
-  const nanoUsed = options.nanoUsed ?? 0;
-  const chance = successChance(tier, options.craftLuck, options.stonesUsed, afixLuck, nanoUsed);
+  const chance = successChance(tier, options.craftLuck, options.stonesUsed, afixLuck);
   const rng = options.rng ?? Math.random;
   if (rng() <= chance) return { acierto: true, chance, crystals: 0 };
 
@@ -1450,28 +1462,30 @@ export function attemptForge(
     return { success: false, crystals: tira.crystals, chanceUsed: tira.chance };
   }
 
-  // Éxito: construir el recolector
+  // Éxito: construir el recolector.
   // F33 · El potencial es la MEDIA de los dos materiales, y es el potencial lo
   // que decide el daño. Antes salía de `rollPotential`, que lo tiraba de la
   // rareza, y el daño era el punto medio del rango: un item forjado nunca podía
   // salir en el máximo ni con materiales perfectos.
   //
-  // Y ojo con la consecuencia, que es la que hace útil la forja: promediar
-  // NUNCA sube el resultado. Un 5 sale de un 5, y un 4 de un 4 y un 5. O sea
-  // que la perfección se consigue en la tienda o en las cajas, y la forja es la
-  // que **consolida**: te da el potencial que querías sin depender del azar.
-
-  // Éxito: construir el recolector
-  // F33 · El potencial es la MEDIA de los dos materiales, y es el potencial lo
-  // que decide el daño. Antes salía de `rollPotential`, que lo tiraba de la
-  // rareza, y el daño era el punto medio del rango: un item forjado nunca podía
-  // salir en el máximo ni con materiales perfectos.
+  // Y ojo con la consecuencia, que era la que hacía útil la forja: promediar
+  // NUNCA subía el resultado. Un 5 salía de un 5, y un 4 de un 4 y un 5. O sea
+  // que la perfección se conseguía en la tienda o en las cajas, y la forja era
+  // la que **consolidaba**: te daba el potencial que querías sin depender del azar.
   //
-  // Y ojo con la consecuencia, que es la que hace útil la forja: promediar
-  // NUNCA sube el resultado. Un 5 sale de un 5, y un 4 de un 4 y un 5. O sea
-  // que la perfección se consigue en la tienda o en las cajas, y la forja es la
-  // que **consolida**: te da el potencial que querías sin depender del azar.
-  const potential = potencialFusionado(materials.map((m) => potencialDe(m)));
+  // **LA ENMIENDA, Y VA ESCRITA AQUÍ PORQUE ES LA EXCEPCIÓN.** La fusión tira
+  // además por subir ese promedio UNA estrella, con `PROB_SUBE_POTENCIAL` —20 % de
+  // ★1 a ★2, bajando hasta 5 % de ★4 a ★5—, y el Éter de Refinamiento suma
+  // `BONO_ETTER` puntos a esa probabilidad. La media sigue saliendo en la tirada
+  // normal: lo que pasa es que ahora hay una tirada más, y es la única vía con la
+  // que la forja pone algo por encima de lo que ya había. El ★5 no sube —no hay
+  // escalón encima—, y el Éter se gasta aunque la tirada falle, igual que las piedras.
+  let potential = potencialFusionado(materials.map((m) => potencialDe(m)));
+  if (potential < 5) {
+    const probSubida = (PROB_SUBE_POTENCIAL[potential] ?? 0)
+      + ((options.eterUsed ?? 0) > 0 ? BONO_ETTER : 0);
+    if (rng() < probSubida) potential += 1;
+  }
   const newTier = tier + 1;
   const name = forgeCollectorName(potential, newTier, rng);
 
@@ -1485,8 +1499,16 @@ export function attemptForge(
   // **Y LA RAREZA SALE DE LOS MATERIALES, NO SOLO DEL TIER (F60).** Si los dos
   // comparten rareza, el resultado la conserva 3 de cada 4 veces: dos Comunes
   // dan un Común casi siempre. Si no comparten, sale la calculada de siempre.
-  const rarity = rarezaFusionada(materials[0]?.rarity, materials[1]?.rarity, collectorRarity(newTier, potential), rng);
-  const affixes = pickAffixes(materials, rarity, (options.nanoUsed ?? 0) > 0, rng);
+  let rarity = rarezaFusionada(materials[0]?.rarity, materials[1]?.rarity, collectorRarity(newTier, potential), rng);
+  // **LA NANOPARTÍCULA ES ESTA TIRADA, Y SOLO ESTA.** Ya no toca la probabilidad
+  // de acierto ni los afijos: su efecto entero es subir un escalón la rareza del
+  // resultado, la mitad de las veces, topado en Divino. Y va DESPUÉS de la rareza
+  // decidida porque se aplica encima de ella, no en su lugar: conservar la
+  // compartida y subirla después son las dos cosas, en ese orden.
+  if ((options.nanoUsed ?? 0) > 0 && rng() < PROB_NANO_SUBE_RAREZA) {
+    rarity = subirRareza(rarity);
+  }
+  const affixes = pickAffixes(materials, rarity, rng);
 
   const collector: CollectorItem = {
     id: `forged_${Date.now()}_${rng().toString(36).substring(2, 8)}`,
@@ -1519,19 +1541,17 @@ export function attemptForge(
  * RECOLECTOR.** El recolector forjado hereda **afijos** de la rareza de sus
  * materiales. El compañero no tiene afijos: su eje de calidad es el
  * **potencial**, y sale de la media de los dos, con la misma regla que el del
- * recolector —**promediar nunca sube**: un 5 sale de un 5, y un 4 de un 4 y un 5.
+ * recolector —promediar no sube por sí solo—, **más la misma tirada de
+ * potencial** que tira la de recolectores: una estrella más con
+ * `PROB_SUBE_POTENCIAL`, y `BONO_ETTER` puntos si se gasta Éter.
  *
- * **QUÉ HACE LA NANOPARTÍCULA AQUÍ, Y POR QUÉ NO ES LO MISMO QUE EN EL
- * RECOLECTOR.** La nanopartícula "garantiza un afijo extra", y un compañero no
- * tiene afijos, así que copiarla tal cual convertiría un consumible de 90 000
- * nanitas en **el mejor objeto del juego que no hace absolutamente nada**. En vez
- * de dejarlo ahí, su equivalente para un compañero es su propio eje de calidad:
- * **+1 al potencial**, con el tope de siempre.
- *
- * Y es la **única** vía por la que esta fusión puede superar la media. Sin
- * nanopartícula, promediar no sube y punto: la forja de compañeros es igual de
- * ciega que la de recolectores, y el jugador tiene que decidir conscientemente si
- * quiere pagar esa excepción.
+ * **QUÉ PASA AHORA CON LA NANOPARTÍCULA AQUÍ: NO HACE NADA, Y NO SE COBRA.**
+ * Antes su efecto en el compañero era +1 de potencial; con la nanopartícula
+ * pasando a subir la rareza —que en un compañero no existe como eje, la suya la
+ * pone el tier—, no le queda ningún efecto. La vista no la ofrece para esta
+ * fusión y el motor la ignora sin cobrarla: cobrar 90 000 nanitas por nada es
+ * exactamente el engaño que no se perdona. Lo único que sube el potencial por
+ * encima de la media en esta fusión es la tirada, con o sin Éter.
  */
 export function attemptForgeCompanion(
   materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number }>,
@@ -1551,17 +1571,17 @@ export function attemptForgeCompanion(
 
   const newTier = tier + 1;
 
-  // **LA MEDIA, Y LUEGO LA NANOPARTÍCULA.** En ese orden y no al revés: si el +1
-  // entrara antes de promediar, dos 5 y una nanopartícula darían un 6, que es un
-  // potencial que ningún otro camino del juego puede dar. Promediar primero
-  // mantiene la promesa de que la forja **consolida** y no **crea**.
-  // **LA MEDIA PRIMERO Y EL +1 ENCIMA.** Al revés —sumar antes de promediar— el
-  // +1 se colaba dentro del `potencialNormalizado()`, y `potencialNormalizado(6)`
-  // no es un 6: es un 3, que es lo que devuelve fuera del 1..5. Dos 5 con
-  // nanopartícula salían un **3**, peor que no gastarla, sin decir nada.
-  const base = potencialFusionado(materials.map((m) => m.potential));
-  const conNano = (options.nanoUsed ?? 0) > 0 ? 1 : 0;
-  const potential = Math.max(1, Math.min(5, base + conNano));
+  // **LA MEDIA PRIMERO Y LA TIRADA ENCIMA.** El orden es el de siempre: si el
+  // ascenso entrara antes de promediar, dos 5 subirían a 6 y `potencialNormalizado(6)`
+  // no es un 6, es un 3 —dos 5 salían peor que sin Éter, sin decir nada—. Promediar
+  // primero y tirar después mantiene que la media es lo que sale, con el ascenso como
+  // lo único que la puede superar.
+  let potential = potencialFusionado(materials.map((m) => m.potential));
+  if (potential < 5) {
+    const probSubida = (PROB_SUBE_POTENCIAL[potential] ?? 0)
+      + ((options.eterUsed ?? 0) > 0 ? BONO_ETTER : 0);
+    if (rng() < probSubida) potential += 1;
+  }
 
   return { success: true, companion: crearCompanioDeTier(newTier, potential, rng), chanceUsed: tira.chance };
 }
@@ -1608,6 +1628,27 @@ export function rarezaFusionada(
     : null;
   if (compartida && rng() < PROB_CONSERVA_RAREZA) return compartida;
   return calculada;
+}
+
+/**
+ * UN ESCALÓN ARRIBA EN LA ESCALERA DE RAREZAS, TOPADO EN DIVINO.
+ *
+ * Es lo que hace la Nanopartícula de Estabilidad al recolector forjado, la mitad de
+ * las veces (`PROB_NANO_SUBE_RAREZA`). Sube un escalón
+ * en `RARITY_ORDER`, la misma lista que ordena las rarezas en todo el juego, así que
+ * "un escalón" no está escrito en ningún sitio: si mañana se añade una rareza entre
+ * Épico y Legendario, la nanopartícula la atraviesa sin tocar nada.
+ *
+ * **Y EL TOPE ES DIVINO, NO UN NÚMERO.** Un resultado ya Divino se queda donde está:
+ * el índice no pasa del último, y la nanopartícula se gasta igual. Subir de Divino
+ * sería fabricar una rareza que el juego no conoce —sin color, sin precio y sin suelo
+ * de afijos—, que es exactamente lo que ya evita `rarezaFusionada()` al mirar que la
+ * compartida exista en el catálogo.
+ */
+export function subirRareza(rareza: string): Rarity {
+  const i = RARITY_ORDER.indexOf(rareza as Rarity);
+  if (i < 0) return rareza as Rarity;
+  return RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, i + 1)];
 }
 
 /**
@@ -1664,9 +1705,10 @@ export const AFIX_MAX = 6;
  * regla del juego ("más rareza, más afijos") y esta función no la puede desbordar
  * hacia abajo: un Divino no sale con dos afijos porque sus padres fueran pobres.
  *
- * **LA NANOPIRTÍCULA SUMA UNO AL SUELO Y AL TECHO**, porque es su segundo efecto y
- * el que justifica pagar 90.000 por ella: sube lo que se puede llegar, no solo lo
- * que se garantiza.
+ * **Y LA NANOPARTÍCULA YA NO TOCA ESTO.** Antes sumaba uno al suelo y al techo, y
+ * ese efecto se fue con la reescritura de la nanopartícula: ahora su tirada sube la
+ * rareza, y al subir la rareza sube el suelo **desde la tabla**, que es la única
+ * fuente de esta regla. Sumarlo aquí también sería pagar dos veces por lo mismo.
  *
  * **UN `Divino` TIENE EL TECHO PEGADO AL SUELO** —los 6 afijos—, así que el dado
  * no tira nada y el item sale siempre completo. Es lo que hace que "más rareza, más
@@ -1674,9 +1716,9 @@ export const AFIX_MAX = 6;
  * forja, así que un Divino sale de fundir dos materiales con potencial 5.
  */
 export function rangoDeAfijosForjados(
-  materials: CollectorItem[], rarity: string, nanoparticula: boolean
+  materials: CollectorItem[], rarity: string
 ): { minimo: number; maximo: number } {
-  const suelo = (AFIX_MIN_POR_RARIDAD[rarity] ?? 0) + (nanoparticula ? 1 : 0);
+  const suelo = AFIX_MIN_POR_RARIDAD[rarity] ?? 0;
   // Lo que arrastra el linaje: la MEDIA de los dos padres, no el mayor ni la
   // suma. Con la suma, un solo material perfecto bastaría y el otro sería
   // decorativo, que es justo lo que la forja no debe ser: los dos importan.
@@ -1739,6 +1781,22 @@ export function explicacionDeAfijos(): string {
 }
 
 /**
+ * LA TIRADA DE POTENCIAL, EN UNA FRASE QUE SALE DE LOS NÚMEROS.
+ *
+ * Igual que `explicacionDeAfijos()`: **la cifra no está escrita en el texto, se lee de
+ * `PROB_SUBE_POTENCIAL` y de `BONO_ETTER`**, así que el día que cambie la probabilidad
+ * de ★4→5 la frase la dice sola. Con el número escrito a mano, la tienda seguiría
+ * anunciando el valor viejo y el dado tiraría otro, que es R3 con dos semanas de retraso.
+ */
+export function explicacionDePotencial(): string {
+  const filas = [1, 2, 3, 4]
+    .map(st => `★${st}→★${st + 1} un ${pctDe(PROB_SUBE_POTENCIAL[st] ?? 0)} %`)
+    .join(', ');
+  return `La forja sube el potencial una estrella con probabilidad ${filas}; `
+    + `el Éter de Refinamiento suma ${pctDe(BONO_ETTER)} puntos a esa probabilidad.`;
+}
+
+/**
  * Cuántos afijos **aportan** los materiales de una selección, y solo eso.
  *
  * Es la pregunta que el jugador sí puede hacer antes de forjar: sus dos padres traen
@@ -1794,10 +1852,10 @@ export function aporteDeAfijos(materials: Array<{ affixes?: string[] }>): number
  * hace esa cuenta irrelevante.
  */
 function pickAffixes(
-  materials: CollectorItem[], rarity: string, nanoparticula: boolean,
+  materials: CollectorItem[], rarity: string,
   rng: () => number = Math.random
 ): string[] {
-  const { minimo, maximo } = rangoDeAfijosForjados(materials, rarity, nanoparticula);
+  const { minimo, maximo } = rangoDeAfijosForjados(materials, rarity);
 
   // **EL DADO VA ANTES DE ELEGIR CUÁLES, Y POR QUÉ.** Cuántos afijos lleva lo
   // decide el linaje y lo tira el azar; cuáles lleva lo decide la mezcla. Si se

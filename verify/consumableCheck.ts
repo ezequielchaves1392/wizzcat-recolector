@@ -29,7 +29,7 @@ import {
 import { totalConcedidoDe } from '../src/data/buffs';
 import { unidadesDeBuff, matchesFilter } from '../src/components/warehouse';
 import {
-  successChance, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION
+  successChance, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION, PIEDRA_PUNTOS
 } from '../src/data/crafting';
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
@@ -481,17 +481,28 @@ async function main() {
   //  4. Los consumibles de forja NO se usan desde el almacen
   // =========================================================================
   {
+    // Los tres: piedra, nanopartícula y el Éter de Refinamiento nuevo. Si al
+    // Éter le faltara este rechazo, el jugador podría usarlo desde la rejilla y
+    // el efecto —sumar puntos a una tirada— no existiría: se gastaría y no pasaría
+    // nada, que es la clase de error que nadie reporta porque "no hace nada" no
+    // parece un fallo.
     const g = await boot(baseSave([
       consumable('p1', 'calibrationStone', 2, { name: 'Piedra de Calibración' }),
-      consumable('n1', 'stabilityNano', 1, { name: 'Nanopartícula de Estabilidad' })
+      consumable('n1', 'stabilityNano', 1, { name: 'Nanopartícula de Estabilidad' }),
+      consumable('e1', 'refiningEther', 1, { name: 'Éter de Refinamiento' })
     ]));
     const r1 = g.useConsumable('p1');
     const r2 = g.useConsumable('n1');
+    const r3 = g.useConsumable('e1');
     check('forja: la Piedra de Calibracion se rechaza desde el almacen', !r1.ok, r1.msg ?? '');
     check('forja: y avisa de que es para la Forja', /Forja/i.test(r1.msg ?? ''), r1.msg ?? '');
     check('forja: la Nanoparticula se rechaza desde el almacen', !r2.ok, r2.msg ?? '');
     check('forja: y avisa tambien', /Forja/i.test(r2.msg ?? ''), r2.msg ?? '');
-    check('forja: ninguno de los dos se gasta', wh(g).length === 2, ids(g).join(','));
+    check('forja: y el Éter de Refinamiento se rechaza desde el almacen', !r3.ok, r3.msg ?? '');
+    check('forja: ninguno de los tres se gasta', wh(g).length === 3, ids(g).join(','));
+    const plan = g.planUseConsumable('e1');
+    check('forja: y su plan desde el almacen tambien dice que es de la Forja',
+      plan.unidades === 0 && /Forja/i.test(plan.motivo ?? ''), `${plan.unidades} ${plan.motivo}`);
   }
   {
     // Un consumible con un buffId que el juego no conoce. No se gasta y no
@@ -1221,15 +1232,32 @@ async function main() {
   }
 
 // =========================================================================
-  //  3. LAS PIEDRAS HASTA EL 95 %, Y POR QUÉ DIEZ DE SIETE
+  //  3. LAS PIEDRAS: DIEZ QUE SUMAN 12 PUNTOS, Y EL OBJETIVO QUE YA NO ES
+  //     SIEMPRE EL 95 %
   //
-  //  Eran cinco de doce puntos: un 60 % fijo que en tiers bajos sobraba y en el
-  //  T10 se quedaba en 0,93 sin forma de poner más. Ahora son diez de siete: el
-  //  95 % se alcanza en todos los tiers y el techo sube a 70.
+  //  Eran siete puntos por piedra —diez sumaban 70 y cualquier tirada quedaba
+  //  casi segura—. Ahora cada una da 1,2: diez suman exactamente 12, y con eso
+  //  **el 95 % deja de ser alcanzable en ningún tier sin suerte del árbol ni
+  //  afijos**. Por eso el botón "las necesarias" enseña la probabilidad real con
+  //  esas piedras —`previewPiedrasNecesarias()`— y aquí se comprueba la cuenta
+  //  que lo rodea y que el número no promete lo que no se puede pagar (R3).
   // =========================================================================
   {
-    // **Y CON CINCO, LOS TIERS ALTOS NO LLEGAN.** Es la comprobación de la causa, y
-    // es la que fija por qué el tope se cambió en lugar de añadir un botón.
+    // **DIEZ SUMAN DOCE, NI UNA MÁS NI UNA MENOS — Y UNA SUMA 1,2.** Es el
+    // número que anuncian la tienda, la ficha y el botón: si las diez no suman
+    // 12, el "12 %" que ve el jugador no es lo que cobra. Y la coma del texto
+    // sale de `PIEDRA_PUNTOS`, que es la misma constante que usa la vista.
+    const diez = successChance(5, 0, 10, 0) - successChance(5, 0, 0, 0);
+    const una = successChance(5, 0, 1, 0) - successChance(5, 0, 0, 0);
+    check('forja: diez piedras suman exactamente 12 puntos',
+      Math.abs(diez - 0.12) < 1e-9, diez.toFixed(4));
+    check('forja: y una sola suma 1,2, que es la coma del texto que se enseña',
+      Math.abs(una - 0.012) < 1e-9 && PIEDRA_PUNTOS === '1,2',
+      `una=${una.toFixed(4)} texto=${PIEDRA_PUNTOS}`);
+
+    // **Y CON CINCO, LOS TIERS ALTOS SE QUEDAN MUY CORTOS.** Es la comprobación
+    // de la causa: por eso la mano son diez y no cinco, y por eso el botón ya no
+    // puede prometer el 95 % con ellas.
     const sinPiedras = (tier: number) => successChance(tier, 0, 0, 0);
     const conCinco = (tier: number) => successChance(tier, 0, 5, 0);
     const noLlegan = [8, 9, 10].filter(t => conCinco(t) < 0.95);
@@ -1238,15 +1266,32 @@ async function main() {
       'cortos=' + noLlegan.map(t => 'T' + t + '=' + conCinco(t).toFixed(2)).join(' ')
         + ' | base T10=' + sinPiedras(10).toFixed(2));
 
-    // **EL NÚMERO QUE DICE EL BOTÓN ES EL QUE LLEGA, EN TODOS LOS TIERS.**
+    // **EL NÚMERO ES EL DE LA REGLA, Y CON ÉL NO SE PROMETE EL 95 %.** En todos
+    // los tiers sin suerte ni afijos, las necesarias son el tope de la mano —y el
+    // porcentaje real, con esas piedras, se queda por debajo del 95: es donde el
+    // botón tiene que decir "sube al X %" y no "para el 95 %". La comprobación
+    // invierte la de antes a propósito: antes todas llegaban, y el cambio de
+    // siete a 1,2 puntos es justamente el que hizo que ninguna llegara.
     for (const tier of [1, 3, 5, 7, 8, 9, 10]) {
       const n = piedrasParaObjetivo(tier, 0, 0);
       const conN = successChance(tier, 0, n, 0);
       const conUnaMenos = successChance(tier, 0, Math.max(0, n - 1), 0);
-      check('forja: T' + tier + ' — las necesarias llegan al 95 % y una menos no',
-        conN >= 0.95 && (n === 0 || conUnaMenos < 0.95),
-        `n=${n} conN=${conN.toFixed(2)} conUnaMenos=${conUnaMenos.toFixed(2)}`);
+      check('forja: T' + tier + ' — las necesarias son el tope y NO se promete el 95',
+        n === MAX_PIEDRAS_POR_FUSION && conN < 0.95
+          && Math.abs(conN - conUnaMenos - 0.012) < 1e-9,
+        `n=${n} conN=${conN.toFixed(3)} conUnaMenos=${conUnaMenos.toFixed(3)}`);
     }
+
+    // **Y CUANDO DE VERDAD SE LLEGA, LO DICE — CON LA MISMA CUENTA.** Con un 10 %
+    // de suerte del árbol, el T1 parte de 0,88 y le hacen falta seis: con ellas
+    // llega al 95 y con cinco no. Es el otro lado de la honestidad: el botón no
+    // es que nunca diga 95, es que solo lo dice cuando el número lo aguanta.
+    const nOk = piedrasParaObjetivo(1, 0.10, 0);
+    const conOk = successChance(1, 0.10, nOk, 0);
+    const sinOk = successChance(1, 0.10, Math.max(0, nOk - 1), 0);
+    check('forja: con suerte del árbol sí se llega, y una menos no — el botón lo dice',
+      conOk >= 0.95 && nOk > 0 && nOk < MAX_PIEDRAS_POR_FUSION && sinOk < 0.95,
+      `n=${nOk} con=${conOk.toFixed(3)} unaMenos=${sinOk.toFixed(3)}`);
 
     // **CON LAS PASIVAS DEL ÁRBOL, HAY TIERNES DONDE NO HACE FALTA NINGUNA.**
     // Con la base del T1 en 0,78, el árbol puede empujarla por encima de 0,95 y entonces
@@ -1261,24 +1306,34 @@ async function main() {
     // **LOS AFIJOS CUENTAN, Y EL BOTÓN NO PUEDE IGNORARLOS.** Cada afijo de un material
     // da un 2 %, así que dos materiales con afijos bajan el número de piedras. Si el
     // botón no los contara, prometería más de lo necesario —que se puede permitir— o
-    // menos, que no: cobrar de más.
-    const sinAfijos = piedrasParaObjetivo(9, 0, 0);
-    const conAfijos = piedrasParaObjetivo(9, 0, 0.10);
+    // menos, que no: cobrar de más. Se mide en el T1 porque ahí las dos cantidades
+    // son distintas: en los tiers altos ambas se topan en el tope de la mano y la
+    // diferencia no se ve.
+    const sinAfijos = piedrasParaObjetivo(1, 0, 0);
+    const conAfijos = piedrasParaObjetivo(1, 0, 0.10);
     check('forja: los afijos de los materiales bajan las piedras necesarias',
       conAfijos < sinAfijos,
       `sin=${sinAfijos} con=${conAfijos}`);
 
-    // **LA NANO SUME Y SE CUENTA UNA VEZ, COMO ANTES.**
-    //
-    // Se mide en el T10 y no en el T9 a propósito: en el T9, sin afijos, ya hacen
-    // falta cinco piedras y la probabilidad se topa en 0,95 igual —añadir la nano no
-    // baja el número porque el número ya era el mínimo útil—. Medir ahí daría verde
-    // aunque la nano no contara para nada.
-    const nanoSin = piedrasParaObjetivo(10, 0, 0);
-    const nanoCon = piedrasParaObjetivo(10, 0, 0, 1);
-    check('forja: y la nanopartícula reduce lo que hace falta, una sola vez',
-      nanoCon < nanoSin,
-      `conNano=${nanoCon} sin=${nanoSin}`);
+    // **Y QUIEN DICE EL PORCENTAJE DEL BOTÓN ES EL MOTOR, NO LA VISTA.** El
+    // preview trae `chanceConNecesarias` —la probabilidad real con esas piedras—
+    // y la vista la pinta sin recalcularla. Si este número mintiera, el botón
+    // "gastar las necesarias, para el 95 %" prometería algo que la tirada no va
+    // a dar, que era exactamente el fallo que se arregló (R3).
+    const gPrev = await boot(baseSave([
+      consumable('p', 'calibrationStone', 10, { name: 'Piedra de Calibración' })
+    ], {}));
+    const prev = gPrev.previewPiedrasNecesarias(9, 0);
+    check('forja: el preview enseña la probabilidad REAL con las necesarias, y no el 95',
+      prev.necesarias === MAX_PIEDRAS_POR_FUSION && prev.chanceConNecesarias < 0.95
+        && Math.abs(prev.chanceConNecesarias
+          - successChance(9, 0, MAX_PIEDRAS_POR_FUSION, 0)) < 1e-9,
+      `n=${prev.necesarias} chance=${prev.chanceConNecesarias}`);
+    const prevOk = gPrev.previewPiedrasNecesarias(1, 0.10);
+    check('forja: y cuando el 95 se alcanza de verdad, la probabilidad dice 95',
+      prevOk.chanceConNecesarias >= 0.95 && prevOk.necesarias > 0
+        && prevOk.necesarias < MAX_PIEDRAS_POR_FUSION,
+      `n=${prevOk.necesarias} chance=${prevOk.chanceConNecesarias}`);
 
     // **EL NÚMERO NUNCA ES NEGATIVO NI MAYOR QUE EL TOPE.**
     const todos = [1, 5, 10].flatMap(t =>

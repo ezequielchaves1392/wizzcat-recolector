@@ -243,6 +243,7 @@ export const LORE: Record<string, string> = {
   'Tarjeta Click x3': 'Préstamo del doble: se devuelve solo y cobra intereses.',
   'Piedra de Calibración': 'Alguien tuvo que medirlo antes de que lo fusieras.',
   'Nanopartícula de Estabilidad': 'Tan pequeña que decide cómo se rompe lo grande.',
+  'Éter de Refinamiento': 'Le sopla al dado justo antes de que caiga.',
   // --------------------------------------------------------------- EXPANSORES
   // Cuatro tramos (F66). Las frases de los tramos segundo a cuarto vienen de los
   // expansores viejos que cubrían esa zona, para no perder el sabor; las diez

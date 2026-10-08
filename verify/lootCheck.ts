@@ -222,6 +222,55 @@ async function main() {
     check('botín: armas y compañeros salen al menos un 22 % de las veces, en toda caja',
       flojos.length === 0, flojos.join(', ') || porCaja.join(' '));
   }
+  {
+    // --- LAS PUERTAS Y LOS PESOS DE LOS TRES CONSUMIBLES DE FORJA ---------------
+    //
+    //  **CADA UNO EN SU CAJA, Y POR QUÉ.** La piedra desde la T2 —en la T1 aún no
+    //  hay a quién forjar—; la nanopartícula y el Éter desde la T3, que es donde
+    //  la rareza del resultado empieza a importar. Y el Éter con peso `tier - 2`:
+    //  el consumible más reciente es el que menos sale, sin tener que bajar el
+    //  peso de nadie más. Si un `if` se quita, las tres filas de arriba son las
+    //  que lo cantan.
+    const FORJA = ['calibrationStone', 'stabilityNano', 'refiningEther'];
+    const idsDe = (c: CrateType) => CRATE_LOOT[c].map(e => e.id);
+    check('botín: la T1 no suelta ningún consumible de forja, que aún no hay a quién forjar',
+      FORJA.every(id => !idsDe(1).includes(id)),
+      idsDe(1).filter(id => FORJA.includes(id)).join(',') || 'ninguno');
+    check('botín: la T2 suelta solo la piedra, que es la primera que se usa',
+      idsDe(2).includes('calibrationStone')
+        && !idsDe(2).includes('stabilityNano')
+        && !idsDe(2).includes('refiningEther'),
+      idsDe(2).filter(id => FORJA.includes(id)).join(','));
+    const altas = CAJAS.filter(c => c >= 3);
+    check('botín: desde la T3 salen las tres, sin ninguna que se quede fuera',
+      altas.every(c => FORJA.every(id => idsDe(c).includes(id))),
+      altas.filter(c => !FORJA.every(id => idsDe(c).includes(id))).join(',') || 'todas');
+
+    const pesoDe = (c: CrateType, id: string) =>
+      CRATE_LOOT[c].find(e => e.id === id)?.weight;
+    check('botín: piedra y nano pesan la caja entera, y el Éter va dos por detrás',
+      pesoDe(5, 'calibrationStone') === 5 && pesoDe(5, 'stabilityNano') === 5
+        && pesoDe(5, 'refiningEther') === 3 && pesoDe(10, 'refiningEther') === 8,
+      `T5: piedra=${pesoDe(5, 'calibrationStone')} nano=${pesoDe(5, 'stabilityNano')}`
+        + ` éter=${pesoDe(5, 'refiningEther')} · T10 éter=${pesoDe(10, 'refiningEther')}`);
+
+    // **Y PESAN COMO LA CAJA, NO COMO EL ITEM** — la distinción que sostiene la
+    // escalera: la rareza que acota el peso es la de la caja. Se compara contra
+    // la entrada de nanitas, que lleva el mismo `pesoComo` de toda la vida: si
+    // las tres se despegaran de ella, "más rareza, menos probabilidad" dejaría de
+    // cumplirse para los consumibles sin que ninguna otra prueba lo viera.
+    check('botín: las tres llevan pesoComo el de la CAJA, el mismo que las nanitas',
+      altas.every(c => {
+        const deCaja = CRATE_LOOT[c].find(e => e.id === 'nanites')?.pesoComo;
+        return FORJA.every(id =>
+          CRATE_LOOT[c].find(e => e.id === id)?.pesoComo === deCaja);
+      }),
+      altas.filter(c => {
+        const deCaja = CRATE_LOOT[c].find(e => e.id === 'nanites')?.pesoComo;
+        return !FORJA.every(id =>
+          CRATE_LOOT[c].find(e => e.id === id)?.pesoComo === deCaja);
+      }).join(',') || 'todas');
+  }
 
   // =========================================================================
   //  2. Cosméticos de caja

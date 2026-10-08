@@ -20,15 +20,17 @@
 //     antes de que la animación arranque: si la ruleta decidiera, mentiría
 //     sobre las probabilidades y el jugador lo notaría en 20 tiradas.
 //   - F33 · La receta son 2 materiales del mismo tier, y el potencial de la
-//     nueva es la MEDIA de los dos. Promediar nunca sube el resultado: un 5 sale
-//     de un 5. Así que la perfección se consigue en la tienda o en las cajas, y
-//     la forja es la que consolida — te da el potencial que querías sin depender
-//     del azar. Los 2 se consumen aciertes o falles.
+//     nueva es la MEDIA de los dos: la forja consolida. **La enmienda** es la
+//     tirada de potencial que hace la propia fusión —sube una estrella con
+//     probabilidad decreciente y el Éter le suma puntos—, que es la única vía
+//     con la que el resultado puede quedar por encima de la media. Los 2 se
+//     consumen aciertes o falles, y el Éter también.
 // ==========================================================================
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe } from '../data/crafting';
+import { pctDe, PROB_SUBE_POTENCIAL, BONO_ETTER } from '../data/constants';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { showConfirmModal, htmlToNode } from '../utils/modal';
@@ -42,6 +44,19 @@ interface ForgeUIState {
   stones: number;
   nano: boolean;
   /**
+   * EL ÉTER DE REFINAMIENTO, Y POR QUÉ NO COMPARTE LA LÍNEA DE LA NANOPARTÍCULA.
+   *
+   * Es el tercer consumible de la forja y hace otra cosa: no toca la probabilidad
+   * de acierto, suma puntos a la tirada de subida de potencial. Interruptor como
+   * la nanopartícula porque solo se gasta uno por fusión, y aparte porque los dos
+   * se cobran por separado y apagar uno no puede apagar al otro.
+   *
+   * **SE APAGA SOLO EN DOS CASOS**: sin Éter en el almacén, o con el promedio de
+   * los materiales ya en ★5 —no hay escalón encima, y ofrecer gastarlo ahí sería
+   * cobrar por un efecto imposible (R3)—.
+   */
+  eter: boolean;
+  /**
    * LOS CHECKS DE LA SERIE, Y POR QUÉ SON DOS Y VAN APARTE DE LOS DE ARRIBA.
    *
    * La forja de a uno elige piedras con botones 1..N y nano con interruptor;
@@ -53,7 +68,9 @@ interface ForgeUIState {
    * puede gastar nanos abajo sin avisar.
    *
    * **POR DEFECTO, PIEDRAS SÍ Y NANO NO**, que es lo que hacía la serie hasta
-   * ahora: las justas para el 95 % por tirada y ni una nano.
+   * ahora: las necesarias por tirada y ni una nano. Y **ÉTER NO**: la serie no
+   * lo gasta porque decidirlo por pareja —que es cuando tiene sentido, si el
+   * promedio todavía puede subir— es una decisión que este check no puede tomar.
    */
   serieStones: boolean;
   serieNano: boolean;
@@ -80,7 +97,7 @@ interface ForgeUIState {
 }
 
 const ui: ForgeUIState = {
-  selected: [], stones: 0, nano: false, serieStones: true, serieNano: false, tier: 0, tipo: 'collector',
+  selected: [], stones: 0, nano: false, eter: false, serieStones: true, serieNano: false, tier: 0, tipo: 'collector',
   // **'stat' Y NO '': EL VALOR POR DEFECTO ES EL QUE YA HABIA.** La rejilla se ha
   // ordenado siempre por stat final, y por eso el statCelda de la esquina esta a la
   // vista: sin el número, un orden por algo que no se ve no se puede comprobar.
@@ -277,10 +294,31 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   const nanoCount = nanoItem?.stackCount || 0;
   // Si el jugador no tiene ninguna, el interruptor se desactiva solo
   if (nanoCount === 0) ui.nano = false;
+  // Y en compañeros tampoco se ofrece: la nanopartícula sube la rareza, y la del
+  // compañero la pone el tier. Un interruptor que no hace nada sería un interruptor
+  // que miente, así que se apaga en cuanto se cambia de pestaña.
+  if (ui.tipo === 'companion') ui.nano = false;
+
+  const eterItem = ((state.warehouse as any[]) || []).find(w => w.buffId === 'refiningEther');
+  const eterCount = eterItem?.stackCount || 0;
+  if (eterCount === 0) ui.eter = false;
 
   const elegidos = ui.selected
     .map(id => materiales.find(w => w.id === id))
     .filter(Boolean) as any[];
+
+  // **EL PROMEDIO DE POTENCIAL, Y POR QUÉ SE CALCULA AQUÍ CON LAS MISMAS FUNCIONES.**
+  // Es lo que decide si el Éter tiene algo que subir: el motor lo promedia dentro de
+  // `attemptForge` con `potencialFusionado()` y `potencialDe()`, y aquí se usan las
+  // mismas dos funciones con los mismos materiales, para que no haya una segunda
+  // cuenta que pueda decir ★4 mientras la tirada sale ★5 (R2/R3).
+  const potMedio = elegidos.length === MATERIALES_POR_FUSION
+    ? potencialFusionado(elegidos.map((w: any) => ui.tipo === 'collector' ? potencialDe(w) : w.potential))
+    : 0;
+  // ★5 no tiene escalón encima: sin eso, el Éter solo cobraría. Y con el promedio
+  // aún sin cerrar —faltan materiales— tampoco se apaga, porque el ★5 se puede
+  // descartar al elegir y una casilla que se enciende sola sin saber es ruido.
+  if (potMedio >= 5) ui.eter = false;
 
   const matTier = elegidos[0]?.tier ?? 0;
   // **LOS COMPAÑEROS NO SUMAN `affixLuck` PORQUE NO TIENEN AFIJOS.** No es un trato
@@ -290,19 +328,23 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     ? elegidos.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0)
     : 0;
   const chance = elegidos.length === MATERIALES_POR_FUSION && matTier
-    ? successChance(matTier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0)
+    ? successChance(matTier, info.craftLuck, ui.stones, affixLuck)
     : 0;
   const ready = elegidos.length === MATERIALES_POR_FUSION;
 
-  // **LO QUE HACE FALTA PARA LLEGAR AL 95 %, Y LO PIDE EL MOTOR.**
+  // **LO QUE HACE FALTA PARA LLEGAR AL OBJETIVO, Y LO PIDE EL MOTOR.**
   //
   // El número depende de tres cosas —el tier, el árbol y los afijos de los materiales
   // elegidos—, y el cobro ocurre en `gastaConsumiblesDeForja()`. Si la cuenta la hiciera
   // esta pantalla, el botón prometería un número y el motor cobraría otro, que es el peor
   // sitio posible para una diferencia de uno. Se le pasa el `affixLuck` que **esta misma
   // pantalla ya calculaba** para no meter una segunda copia de esa cuenta.
+  //
+  // Y trae también `chanceConNecesarias`: con diez piedras de 1,2 puntos el 95 % ya no
+  // llega en todos los tiers, así que el botón enseña **el porcentaje al que llega de
+  // verdad** y solo dice "95 %" cuando de verdad se alcanza.
   const piedrasNecesarias = ready && matTier
-    ? game.previewPiedrasNecesarias?.(matTier, ui.nano ? 1 : 0, affixLuck) ?? null
+    ? game.previewPiedrasNecesarias?.(matTier, affixLuck) ?? null
     : null;
   // F51 · CUÁNTOS AFIJOS APORTAN TUS MATERIALES. Lo único de la regla que depende de
   // ti, y lo único que se puede decir **antes** de tirar el dado.
@@ -428,7 +470,7 @@ function nivelDe(w: any): number {
     <p class="text-[9px] text-[var(--text-muted)] mb-3 leading-relaxed">
       ${ui.tipo === 'collector'
         ? 'El recolector forjado hereda los afijos de sus materiales; cuántos lleva los decide la rareza que le toca.'
-        : 'El compañero forjado hereda el potencial, y la nanopartícula se lo sube +1.'}
+        : 'El compañero forjado hereda el potencial por media, con la misma tirada de subida que el recolector.'}
       Misma probabilidad, mismas piedras y mismo fallo en las dos.
     </p>
 
@@ -472,8 +514,7 @@ function nivelDe(w: any): number {
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
             base T${matTier} ${Math.round(baseSuccessChance(matTier) * 100)}%
             ${info.craftLuck > 0 ? ` · árbol +${Math.round(info.craftLuck * 100)}%` : ''}
-            ${ui.stones > 0 ? ` · piedras +${Math.round(ui.stones * PIEDRA_APORTA * 100)}%` : ''}
-            ${ui.nano ? ' · nanopartícula +8%' : ''}
+            ${ui.stones > 0 ? ` · piedras +${pctDe(ui.stones * PIEDRA_APORTA)}%` : ''}
             · tope 95%
           </p>
         ` : `
@@ -516,6 +557,19 @@ function nivelDe(w: any): number {
             Compartidos: ${nombresCompartidos.join(' · ')} (entran primero)
           </p>
         ` : ''}
+        <!-- **LA OTRA TIRADA, LA DEL POTENCIAL, EN LA MISMA LÍNEA QUE LOS DEMÁS NÚMEROS.**
+             La forja tira dos: la de acierto —que es la cifra grande de arriba— y la de
+             subir el potencial una ★. Sin esta línea, el Éter se compra sin saber qué
+             probabilidad añade, y con ella el jugador ve la media que va a salir, la
+             probabilidad base y la que alcanza con Éter. Los tres números salen de
+             potencialFusionado() y de la tabla de probabilidades, no de una copia de aquí. -->
+        ${ready && potMedio > 0 ? `
+          <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            Potencial promedio ${estrellasDe(potMedio)}${potMedio < 5
+              ? ` · sube una ★ con un ${pctDe(PROB_SUBE_POTENCIAL[potMedio] ?? 0)} %${ui.eter ? `, con Éter un ${pctDe((PROB_SUBE_POTENCIAL[potMedio] ?? 0) + BONO_ETTER)} %` : ''}`
+              : ' · ya está en ★5: no puede subir más'}
+          </p>
+        ` : ''}
       </div>
 
       <div class="mt-3 pt-3 border-t border-[var(--border-color)]">
@@ -538,7 +592,7 @@ function nivelDe(w: any): number {
                </span>`
             : `<button class="ml-1 px-2.5 h-9 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
                       data-act="stones" data-n="0">Quitar</button>`}
-          ${ui.stones > 0 ? `<span class="ml-auto text-[10px] font-mono accent-text">+${Math.round(ui.stones * PIEDRA_APORTA * 100)}%</span>` : ''}
+          ${ui.stones > 0 ? `<span class="ml-auto text-[10px] font-mono accent-text">+${pctDe(ui.stones * PIEDRA_APORTA)}%</span>` : ''}
         </div>
 
         <!--
@@ -546,9 +600,15 @@ function nivelDe(w: any): number {
 
           Antes las piedras eran cinco botones y poco más: quien quería subir la
           probabilidad tenía que contar de dos en dos cuántas le hacían falta y pulsar
-          hasta acertar. Con el tope viejo de cinco eso no acababa nunca, porque en los
-          tiers altos **cinco piedras se quedan en el 93 %**: el tope estaba puesto justo
-          delante del objetivo.
+          hasta acertar.
+
+          **EL OBJETIVO YA NO ES SIEMPRE EL 95 %, Y EL BOTÓN LO DICE.** Diez piedras
+          suman 12 puntos, y en los tiers medios y altos con eso no se llega al 95 %:
+          por eso el motor devuelve además la probabilidad **real** con esas piedras
+          —chanceConNecesarias, que sale de successChance(), la misma que cobra— y
+          el botón enseña esa. Solo pone "para el 95 %" cuando de verdad se alcanza.
+          Prometer el tope con un tope de 12 sería mentir con el número que más se
+          mira justo cuando peor va (R3).
 
           **EL BOTÓN SE APAGA CUANDO NO LLEGA, Y LO DICE.** Si no hay piedras suficientes no
           se ofrece un "gastar 7" que al pulsarlo devolvería un error: se enseña cuántas
@@ -561,6 +621,8 @@ function nivelDe(w: any): number {
         ${(() => {
           const p = piedrasNecesarias;
           if (!p) return '';
+          const objetivo = Math.round((p.chanceConNecesarias ?? 0) * 100);
+          const llegaAl95 = objetivo >= 95;
           if (p.necesarias === 0) {
             return `<p class="text-[10px] font-mono text-emerald-400/90 mt-1.5">
                       Ya llegas al 95 % sin gastar ninguna piedra.
@@ -568,20 +630,37 @@ function nivelDe(w: any): number {
           }
           if (!p.suficientes) {
             return `<p class="text-[10px] font-mono text-amber-400/90 mt-1.5 leading-relaxed">
-                      Para el 95 % harían falta ${p.necesarias} y tienes ${p.disponibles}.
+                      ${llegaAl95 ? 'Para el 95 %' : `Para llegar al ${objetivo} %`}
+                      harían falta ${p.necesarias} y tienes ${p.disponibles}.
                     </p>`;
           }
+          const donde = llegaAl95 ? 'para el 95 %' : `— sube al ${objetivo} %`;
           return `<button data-act="stones-auto" data-n="${p.necesarias}"
                     class="w-full mt-2 px-2.5 h-9 rounded-lg btn-ghost text-[11px] font-mono
                            cursor-pointer transition active:scale-[0.99] flex items-center
                            justify-center gap-2"
-                    title="Gasta exactamente las ${p.necesarias} piedras que hacen falta para llegar al 95 % de probabilidad">
+                    title="Gasta exactamente las ${p.necesarias} piedras que hacen falta para llegar al ${objetivo} % de probabilidad">
                     <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('bolt')}</span>
-                    Gastar las ${p.necesarias} necesarias para el 95 %
+                    Gastar las ${p.necesarias} necesarias ${donde}
                   </button>`;
         })()}
 
-        <!-- Nanopartícula: interruptor, porque solo se puede gastar una -->
+        <!--
+          LOS DOS CONSUMIBLES QUE NO SON PIEDRAS, Y POR QUÉ CADA UNO EN SU FILA.
+
+          Nanopartícula y Éter son interruptores porque solo se gasta uno por fusión,
+          pero **no comparten fila ni párrafo**: tocan cosas distintas —la rareza y el
+          potencial— y apagar uno no puede apagar al otro.
+
+          **LA NANOPARTÍCULA NO SE OFRECE EN COMPAÑEROS.** Su efecto es subir la rareza
+          y la del compañero la pone el tier, así que un interruptor ahí sería un
+          interruptor que no hace nada: se oculta entero en cuanto se cambia de pestaña
+          (y el motor, además, no la cobra).
+
+          **Y EL ÉTER SE APAGA SOLO EN DOS CASOS**, decididos arriba: sin Éter, o con
+          el promedio ya en ★5 —no hay escalón encima, y cobrarlo sería R3—.
+        -->
+        ${ui.tipo === 'collector' ? `
         <div class="mt-2 pt-2 border-t border-[var(--border-color)] flex items-center gap-2.5">
           <button class="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
                   data-act="nano" ${nanoCount > 0 ? '' : 'disabled style="opacity:.4;cursor:not-allowed"'}>
@@ -596,14 +675,38 @@ function nivelDe(w: any): number {
               </span>
               <span class="block text-[9px] font-mono text-[var(--text-muted)] leading-tight">
                 ${nanoCount > 0
-                  ? (ui.tipo === 'collector'
-                    ? `${nanoCount} en almacén · +8% y un afijo garantizado`
-                    : `${nanoCount} en almacén · +8% y +1 de potencial`)
+                  ? `${nanoCount} en almacén · sube la rareza un escalón, 50 %`
                   : 'No tienes ninguna'}
               </span>
             </span>
           </button>
           ${ui.nano ? `<span class="text-[10px] font-mono accent-text flex-shrink-0">activa</span>` : ''}
+        </div>` : ''}
+        <div class="mt-2 ${ui.tipo === 'collector' ? '' : 'pt-2 border-t border-[var(--border-color)]'} flex items-center gap-2.5">
+          <button class="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                  data-act="eter" ${eterCount > 0 && potMedio > 0 && potMedio < 5 ? '' : 'disabled style="opacity:.4;cursor:not-allowed"'}
+                  title="${potMedio >= 5 ? 'El promedio ya está en ★5: no puede subir más'
+                        : potMedio > 0 && eterCount === 0 ? 'No tienes Éter de Refinamiento'
+                        : `Añade ${pctDe(BONO_ETTER)} puntos a la probabilidad de subir el potencial una ★`}">
+            <span class="w-5 h-5 rounded-md grid place-items-center flex-shrink-0 border transition
+                         ${ui.eter ? 'accent-bg text-slate-950 border-transparent' : 'btn-ghost text-[var(--text-muted)]'}"
+                  aria-hidden="true">
+              <span class="[&>span>svg]:w-3 [&>span>svg]:h-3">${ic('check')}</span>
+            </span>
+            <span class="min-w-0">
+              <span class="block text-[10px] font-bold text-[var(--text-main)] leading-tight">
+                Éter de Refinamiento
+              </span>
+              <span class="block text-[9px] font-mono text-[var(--text-muted)] leading-tight">
+                ${potMedio >= 5 && potMedio > 0
+                  ? 'Promedio ★5: ya no puede subir'
+                  : eterCount > 0
+                    ? `${eterCount} en almacén · +${pctDe(BONO_ETTER)} puntos a subir la ★`
+                    : 'No tienes ninguno'}
+              </span>
+            </span>
+          </button>
+          ${ui.eter ? `<span class="text-[10px] font-mono accent-text flex-shrink-0">activa</span>` : ''}
         </div>
       </div>
 
@@ -614,8 +717,9 @@ function nivelDe(w: any): number {
         ${ready ? `FORJAR ${N.uno.toUpperCase()}` : `FALTA ${MATERIALES_POR_FUSION - elegidos.length} ${MATERIALES_POR_FUSION - elegidos.length === 1 ? 'MATERIAL' : 'MATERIALES'}`}
       </button>
       <p class="text-[9px] text-[var(--text-muted)] text-center mt-2 leading-relaxed">
-        El nuevo sale con el potencial promedio de los dos.
-        Los ${MATERIALES_POR_FUSION} se consumen, aciertes o falles.
+        El nuevo sale con el potencial promedio de los dos; la propia fusión puede
+        subirlo una ★, y el Éter suma puntos a esa tirada.
+        Los ${MATERIALES_POR_FUSION} se consumen, aciertes o falles, y el Éter también.
       </p>
 
       <!--
@@ -679,14 +783,16 @@ function nivelDe(w: any): number {
         <div class="mt-3 pt-2.5 border-t border-[var(--border-color)] flex flex-col gap-2">
           ${checkFila('serie-stones', ui.serieStones, 'Piedras de calibración',
             ui.serieStones
-              ? `${plan.piedrasStock} en almacén · auto hasta el 95 % por tirada`
+              ? `${plan.piedrasStock} en almacén · las necesarias en cada tirada`
               : 'Apagadas: la serie no gasta ninguna')}
-          ${checkFila('serie-nano', ui.serieNano, 'Nanopartícula de Estabilidad',
-            !ui.serieNano
-              ? 'Apagada: la serie no gasta ninguna'
-              : plan.nanoStock > 0
-                ? `${plan.nanoStock} en almacén · una por tirada`
-                : 'No tienes ninguna')}
+          ${ui.tipo === 'collector'
+            ? checkFila('serie-nano', ui.serieNano, 'Nanopartícula de Estabilidad',
+                !ui.serieNano
+                  ? 'Apagada: la serie no gasta ninguna'
+                  : plan.nanoStock > 0
+                    ? `${plan.nanoStock} en almacén · una por tirada, sube la rareza`
+                    : 'No tienes ninguna')
+            : ''}
         </div>
         <button data-act="auto-forge" ${plan.puede ? '' : 'disabled'}
                   class="w-full mt-3 px-3 rounded-xl btn-ghost font-mono text-[11px] font-bold
@@ -1030,9 +1136,41 @@ function wire(root: HTMLElement, game: any, go?: (r: any) => void) {
         redraw();
         break;
       }
+      case 'eter': {
+        // **EL ÉTER MIRA DOS COSAS Y NO UNA.** No basta con tenerlo: el promedio de
+        // los materiales tiene que ser menor que ★5, porque en ★5 no hay escalón
+        // encima y gastarlo sería pagar por una tirada que no se puede hacer. El
+        // botón ya sale deshabilitado con el motivo en el `title`; aquí se repite la
+        // comprobación porque el estado del almacén puede cambiar entre el repintado
+        // y el clic.
+        const count = ((game.getState().warehouse as any[]) || [])
+          .filter(w => w.buffId === 'refiningEther')
+          .reduce((a, w) => a + (w.stackCount || 1), 0);
+        if (count === 0) {
+          sfx.error();
+          showToast('No tienes Éter de Refinamiento.', 'info');
+          return;
+        }
+        const elegidosAhora = ui.selected
+          .map(id => ((game.getState().warehouse as any[]) || []).find((w: any) => w.id === id))
+          .filter(Boolean) as any[];
+        if (elegidosAhora.length === MATERIALES_POR_FUSION) {
+          const media = potencialFusionado(elegidosAhora.map((w: any) =>
+            ui.tipo === 'collector' ? potencialDe(w) : w.potential));
+          if (media >= 5) {
+            sfx.error();
+            showToast('El potencial promedio ya está en ★5: no puede subir más.', 'info');
+            return;
+          }
+        }
+        sfx.nav();
+        ui.eter = !ui.eter;
+        redraw();
+        break;
+      }
       case 'serie-stones': {
         // **DOS CHECKS Y NADA MÁS.** La serie no elige cuántas: o gasta las
-        // justas para el 95 % en cada tirada, o no gasta ninguna. El número lo
+        // necesarias en cada tirada, o no gasta ninguna. El número lo
         // dice el preview con este mismo flag, así que aquí no se calcula nada.
         sfx.nav();
         ui.serieStones = !ui.serieStones;
@@ -1105,19 +1243,23 @@ function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void)
   if (!ui.serieStones) {
     filas.push({ etiqueta: 'Piedras', valor: 'apagadas: la serie no gasta ninguna' });
   } else if ((plan.stonesTotal ?? 0) > 0) {
-    filas.push({ etiqueta: 'Piedras', valor: `${plan.stonesTotal} en total, lo justo para el 95 % en cada tirada` });
+    filas.push({ etiqueta: 'Piedras', valor: `${plan.stonesTotal} en total, las necesarias en cada tirada` });
   } else {
     filas.push({ etiqueta: 'Piedras', valor: 'no gastas: no tienes o no hacen falta' });
   }
-  // **LA NANO SOLO SALE SI SU CHECK ESTÁ PUESTO.** Y con el stock corto se dice:
-  // las parejas sin nano fallan sin gastar materiales, así que "tienes 1 para 4
-  // tiradas" es lo que se decide, no un detalle.
-  if (ui.serieNano) {
+  // **LA NANO SOLO SALE SI SU CHECK ESTÁ PUESTO, Y SOLO EN RECOLECTORES.** Y con el
+  // stock corto se dice lo que de verdad pasa: **no es un fallo, es una rareza que no
+  // sube**. Antes el mensaje prometía "esas tiradas fallarían", que era cierto cuando
+  // la nano garantizaba el éxito; ya no la toca, así que la fila tiene que hablar de
+  // lo único que hace —subir la rareza la mitad de las veces—. Y el `ui.tipo` va
+  // dentro del `if` porque en compañeros `nanoPorTirada` es 0: un mensaje de stock
+  // para un check que el motor ignora sería mentir con la fila entera.
+  if (ui.serieNano && ui.tipo === 'collector') {
     const stock = plan.nanoStock ?? 0;
     filas.push({
       etiqueta: 'Nano',
       valor: stock <= 0
-        ? 'no tienes ninguna: esas tiradas fallarían sin gastar materiales'
+        ? 'no tienes ninguna: ninguna tirada subirá la rareza'
         : `una por tirada · tienes ${stock}${stock < plan.tiradas ? ` (solo alcanza para ${stock})` : ''}`,
       tono: stock < plan.tiradas ? 'accent-text' : undefined
     });
@@ -1151,7 +1293,7 @@ function confirmAutoForge(container: HTMLElement, game: any, redraw: () => void)
  * serie lo que informa es la lista de lo que salió de cada par.
  *
  * **Y LAS PIEDRAS NO SE PIDEN DESDE AQUÍ.** Que el motor calcule cuántas hacen falta
- * para llegar al 95 % no es una comodidad: es que **cada par tiene sus propios afijos**
+ * en cada tirada no es una comodidad: es que **cada par tiene sus propios afijos**
  * y son los afijos los que bajan el número de piedras. La vista no puede saberlo sin
  * repasar el almacén otra vez, y si lo hiciera con los materiales de toda la serie
  * gastaría de más en las parejas que salieran sin afijos. El check dice si se
@@ -1202,13 +1344,18 @@ function confirmForge(container: HTMLElement, game: any, redraw: () => void) {
   const affixLuck = ui.tipo === 'collector'
     ? sel.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0)
     : 0;
-  const chance = successChance(tier, info.craftLuck, ui.stones, affixLuck, ui.nano ? 1 : 0);
+  const chance = successChance(tier, info.craftLuck, ui.stones, affixLuck);
 
+  // **LO QUE PROMETE ESTE DIÁLOGO, EN EL MISMO ORDEN EN QUE SE COBRA.** La media
+  // primero, la tirada de potencial después —la única que puede subirla—, y el Éter
+  // con su letra porque **se gasta aunque la fusión falle**, que es lo que el jugador
+  // tiene que saber antes de pulsar y no después.
   showConfirmModal(
     `${ui.tipo === 'collector' ? 'Dos recolectores' : 'Dos compañeros'} de tier ${tier} ` +
     `se funden en uno de tier ${tier + 1}. El potencial del nuevo es la media ` +
-    `de los dos, y los dos se consumen.`,
-    () => runForge(game, sel, ui.stones, ui.nano, redraw),
+    `de los dos, con una tirada que puede subirlo una ★, y los dos se consumen.` +
+    (ui.eter ? ' El Éter de Refinamiento se gasta también si la tirada sale mal.' : ''),
+    () => runForge(game, sel, ui.stones, ui.nano, ui.eter, redraw),
     {
       sublabel: `Probabilidad ${Math.round(chance * 100)}%`,
       confirmText: 'Forjar',
@@ -1385,16 +1532,22 @@ export function filaDeSerie(x: any, i: number, tipo: 'collector' | 'companion' =
  * descubriría en veinte tiradas que la ruleta no es la fuente de verdad, y a
  * partir de ahí ninguna otra cifra del juego le creería.
  */
-function runForge(game: any, materials: any[], stones: number, nano: boolean, redraw: () => void) {
+function runForge(game: any, materials: any[], stones: number, nano: boolean, eter: boolean, redraw: () => void) {
   sfx.hammer();
   // **LA MISMA PAGINA LLAMA A UNO DE LOS DOS MOTORES, Y NO A UNO INTERMEDIO.**
   // Un `forge()` único que repartiera dentro sería una regla más que mantener;
   // dos funciones del motor que comparten la validación y la tirada es lo que
   // garantiza que no se separen.
+  //
+  // **Y EL ÉTER VA EN LAS DOS LLAMADAS**, porque las dos lo aceptan y las dos lo
+  // gastan: la tirada de potencial es la misma en recolectores y en compañeros.
+  // La nanopartícula, en cambio, la pone solo quien la va a usar —la de
+  // compañeros la ignora sin cobrarla—, y aquí `ui.nano` ya viene a false desde
+  // la pestaña.
   const ids = materials.map(m => m.id);
   const result = ui.tipo === 'companion'
-    ? game.forgeCompanion(ids, stones, nano ? 1 : 0)
-    : game.forgeCollector(ids, stones, nano ? 1 : 0);
+    ? game.forgeCompanion(ids, stones, nano ? 1 : 0, eter ? 1 : 0)
+    : game.forgeCollector(ids, stones, nano ? 1 : 0, eter ? 1 : 0);
   const hecho = result.collector || result.companion;
   // **B22 · `chance` DICE SI HUBO TIRADA, Y ES LO QUE SEPARA UN FALLO DE UN RECHAZO.**
   //

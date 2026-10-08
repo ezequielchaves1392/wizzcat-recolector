@@ -407,7 +407,7 @@ async function main() {
     const desajustes: string[] = [];
     for (const [n, rareza] of [[0, 'Común'], [4, 'Legendario'], [6, 'Divino']] as const) {
       const m = conAfijos(n) as any;
-      const rango = rangoDeAfijosForjados(m, rareza, false);
+      const rango = rangoDeAfijosForjados(m, rareza);
       // La regla, escrita con la aportación de la vista en medio: el suelo de la
       // rareza más lo que aportan los materiales, acotado por el tope del juego.
       //

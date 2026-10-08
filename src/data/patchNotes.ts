@@ -57,6 +57,18 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.14',
+    fecha: '8 de octubre de 2026',
+    titulo: 'Bases ocultas, la forja reequilibrada y el Éter de Refinamiento',
+    lineas: [
+      'Cada arma y cada compañero tiene ahora una base propia y oculta: dos del mismo tier y las mismas estrellas pueden doler distinto.',
+      'La Piedra de Calibración aporta menos por unidad, y el botón de las necesarias te dice cuántas hacen falta de verdad.',
+      'La Nanopartícula de Estabilidad sube la rareza del resultado la mitad de las veces, y solo funciona forjando recolectores.',
+      'Nuevo en la forja: el Éter de Refinamiento, que sube las posibilidades de ganar una estrella de potencial, y se gasta aunque la tirada falle.',
+      'Las cajas altas pueden soltar nanopartículas y Éter, y una caja T2 ya puede soltar piedras.'
+    ]
+  },
+  {
     version: '1.15.13',
     fecha: '8 de octubre de 2026',
     titulo: 'La Tarjeta AFK ya anula todos los cortes',

@@ -1162,16 +1162,47 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
   // Intermedio, T7-T9 el Avanzado y T10 el Supremo.
 tabla.push(buildExpansorLoot(tier, rareza, tier));
 
-  if (tier >= 8) {
+  // ========================================================================
+  //  LOS TRES CONSUMIBLES DE FORJA, Y POR QUÉ YA NO ES UN `IF/ELSE IF`
+  // ========================================================================
+  //  Antes estaban en una ramificación por tier —nanopartícula desde la T8 y, si
+  //  no, piedra desde la T6—, así que **los dos nunca podían salir en la misma
+  //  caja** y el consumible básico era cosa de las cuatro últimas. Ahora son tres
+  //  filas independientes con tres puertas:
+  //
+  //    · **Piedra de Calibración**, desde la **T2**, con pilas de 1 a 2 como
+  //      siempre. Es el consumible que la forja enseña a usar.
+  //    · **Nanopartícula de Estabilidad**, desde la **T3**.
+  //    · **Éter de Refinamiento**, desde la **T3**, y con peso `tier - 2`: es el
+  //      más reciente y el que menos suelta, mientras que las otras dos pesan
+  //      `tier` entero.
+  //
+  //  **LOS PESOS CRECEN CON EL TIER PORQUE AHÍ ES DONDE MÁS DUELE.** Una caja
+  //  T9 la abre quien ya forjea en tiers donde cada intento cuesta de verdad; en
+  //  la T1 todavía no hay a quién forjar. Y **las tres llevan `pesoComo: rareza`**,
+  //  que es la distinción que sostiene la escalera de `saltoCheck`: la rareza que
+  //  cuenta es la de la CAJA, no la del item —una Legendaria suelta en una bolsa
+  //  Mítica rompería "más rareza, menos probabilidad"—. Su rareza describe el
+  //  objeto; lo que decide cuánto sale es la caja.
+  if (tier >= 2) {
     tabla.push({
-      id: 'stabilityNano', weight: 6,
-      // `pesoComo` es la rareza de la CAJA, no la del item, y el motivo es
-      // concreto: la nanopartícula es Legendaria lo mismo en la T8 que en la T10.
-      // Compitiendo por su rareza propia, una entrada Legendaria suelta dentro de
-      // una bolsa Mítica rompe la escalera de rarezas de `saltoCheck` —que exige
-      // que más rareza sea menos probabilidad— y además haría que el mismo item
-      // pesara distinto según la caja. Su rareza describe el item; lo que decide
-      // cuánto sale es la caja.
+      id: 'calibrationStone', weight: tier,
+      pesoComo: rareza,
+      build: () => {
+        const def = CONSUMABLES.calibrationStone;
+        const a = rand(1, 2);
+        return {
+          kind: 'consumable', amount: a, name: def.name,
+          label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: def.details,
+          rarity: def.rarity, icon: 'flask',
+          item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: a, sellPrice: 11250, sellPriceTope: tope }
+        };
+      }
+    });
+  }
+  if (tier >= 3) {
+    tabla.push({
+      id: 'stabilityNano', weight: tier,
       pesoComo: rareza,
       build: () => {
         const def = CONSUMABLES.stabilityNano;
@@ -1182,19 +1213,15 @@ tabla.push(buildExpansorLoot(tier, rareza, tier));
         };
       }
     });
-  } else if (tier >= 6) {
     tabla.push({
-      id: 'calibrationStone', weight: 6,
-      // Como la nanopartícula: compite en la bolsa de la caja, no en la del item.
+      id: 'refiningEther', weight: tier - 2,
       pesoComo: rareza,
       build: () => {
-        const def = CONSUMABLES.calibrationStone;
-        const a = rand(1, 2);
+        const def = CONSUMABLES.refiningEther;
         return {
-          kind: 'consumable', amount: a, name: def.name,
-          label: `${a} Piedra${a > 1 ? 's' : ''} de Calibración`, details: def.details,
+          kind: 'consumable', amount: 1, name: def.name, label: def.name, details: def.details,
           rarity: def.rarity, icon: 'flask',
-          item: { id: `crate_stone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: a, sellPrice: 11250, sellPriceTope: tope }
+          item: { id: `crate_eter_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, name: def.name, type: 'consumable', details: def.details, rarity: def.rarity, buffId: def.buffId, stackable: true, stackCount: 1, sellPrice: 15000, sellPriceTope: tope }
         };
       }
     });

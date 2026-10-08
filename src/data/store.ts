@@ -20,7 +20,7 @@
 //  que son del motor. Lo de aquí es lo que se puede decidir sin mirar la partida.
 // ==========================================================================
 
-import { PIEDRA_PUNTOS } from './constants';
+import { PIEDRA_PUNTOS, pctDe, BONO_ETTER } from './constants';
 
 // ==========================================================================
 //  Consumibles
@@ -54,7 +54,18 @@ export const CONSUMABLES_SIN_EXPANSOR = {
   clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
   clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
   calibrationStone: { name: 'Piedra de Calibración', details: `Sube ${PIEDRA_PUNTOS} puntos la probabilidad de la próxima fusión`, rarity: 'Raro', buffId: 'calibrationStone' },
-  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'En un recolector, un afijo extra garantizado; en un compañero, +1 de potencial', rarity: 'Legendario', buffId: 'stabilityNano' }
+  // **LO QUE ES AHORA LA NANOPARTÍCULA, Y LO QUE DEJÓ DE SER.** Ya no toca la
+  // probabilidad ni garantiza afijos: su efecto entero es subir un escalón la
+  // rareza del recolector forjado, la mitad de las veces. En compañeros no hace
+  // nada, porque su rareza la pone el tier —y por eso la forja de compañeros no
+  // la ofrece ni la cobra.
+  stabilityNano: { name: 'Nanopartícula de Estabilidad', details: 'En la forja de recolectores, sube la rareza del resultado un escalón la mitad de las veces', rarity: 'Legendario', buffId: 'stabilityNano' },
+  // **EL CONSUMIBLE NUEVO, Y POR QUÉ ES EL QUE ROMPE F33.** La forja promediaba y
+  // consolidaba; la tirada de potencial —que la hace la fusión haya o no Éter— es la
+  // excepción, y el Éter le suma puntos. La probabilidad que se anuncia aquí es la de
+  // `PROB_SUBE_POTENCIAL` y `BONO_ETTER`, leídas de constants: un número escrito a
+  // mano sería la segunda fuente de la regla.
+  refiningEther: { name: 'Éter de Refinamiento', details: `En la forja, +${pctDe(BONO_ETTER)} puntos a la probabilidad de subir el potencial una estrella`, rarity: 'Legendario', buffId: 'refiningEther' }
 } as const;
 
 // ==========================================================================
@@ -724,7 +735,8 @@ export const STORE_ITEMS = {
   // Consumibles de crafteo. Caros a propósito: la forja debe seguir siendo
   // una decisión, no algo que se compre en masa y se gaste sin pensar.
   calibrationStone: { cost: 45000, label: `Piedra de Calibración (+${PIEDRA_PUNTOS}% de éxito)` },
-  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (+8% y afijo o potencial extra)' }
+  stabilityNano: { cost: 90000, label: 'Nanopartícula de Estabilidad (50 % de subir la rareza)' },
+  refiningEther: { cost: 60000, label: `Éter de Refinamiento (+${pctDe(BONO_ETTER)} puntos a subir el potencial)` }
 };
 
 /**

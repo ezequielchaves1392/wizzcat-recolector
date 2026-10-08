@@ -19,7 +19,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -2792,20 +2792,27 @@ function sePuedeGuardar(): boolean {
   }
 
     /**
-   * Las piedras y la nanopartícula, y el orden en que se cobran.
+   * Las piedras, la nanopartícula y el Éter, y el orden en que se cobran.
    *
    * **POR QUÉ ESTA FUNCIÓN DEVUELVE EL ERROR EN LUGAR DE TIRAR.** Cobra de verdad:
-   * descuenta del almacén. Un cobro a medias —piedras sí, nanopartícula no— dejaría
-   * al jugador con la partida peor sin haber fusionsado nada. Así que primero se
-   * mira que estén las dos, y solo entonces se toca el almacén.
+   * descuenta del almacén. Un cobro a medias —piedras sí, Éter no— dejaría al jugador
+   * con la partida peor sin haber fusionsado nada. Así que primero se mira que estén
+   * los tres, y solo entonces se toca el almacén.
    *
-   * El tope de 5 piedras por fusión es la regla de la forja infinita: a partir de
-   * ahí la probabilidad ya está cerca del tope y una más solo cobraría.
+   * **LOS TRES SE COBRAN AL ENTRAR, Y EL ÉTER TAMBIÉN CUANDO LA TIRADA FALLA.** El
+   * Éter no compra acierto: compra +20 puntos a la tirada de subida de potencial, y
+   * esa tirada solo se hace en el éxito. Cobrarlo igual —igual que las piedras, que
+   * también se gastan en una fusión que falla— es lo que hace que sea una apuesta y
+   * no un seguro.
+   *
+   * El tope de piedras por fusión lo pone `MAX_PIEDRAS_POR_FUSION`, no un número
+   * escrito aquí: a partir de ahí una piedra más solo cobraría.
    */
   function gastaConsumiblesDeForja(
     stonesUsed: number,
-    nanoUsed: number
-  ): { stones?: number; nano?: number; error?: string } {
+    nanoUsed: number,
+    eterUsed = 0
+  ): { stones?: number; nano?: number; eter?: number; error?: string } {
     // **EL TOPE DE PIEDRAS LO PONE `MAX_PIEDRAS_POR_FUSION`, NO EL NÚMERO ESCRITO AQUÍ.**
     // Estaba el 5 repetido en dos sitios —aquí y en `successChance()`— y el de la
     // probabilidad era el que mandaba de verdad: escribir un 5 aquí solo recortaba la
@@ -2814,11 +2821,13 @@ function sePuedeGuardar(): boolean {
     // necesarias", así que el botón y el motor no pueden separarse.
     const stones = Math.max(0, Math.min(MAX_PIEDRAS_POR_FUSION, Math.floor(stonesUsed || 0)));
     const nano = Math.max(0, Math.floor(nanoUsed || 0));
+    const eter = Math.max(0, Math.floor(eterUsed || 0));
 
     // Se declara sin valor y se rellena solo si toca gastar: una ficha puede no
     // existir y eso no es un error si no se pidió ninguna.
     let piedra: any;
     let nanoFicha: any;
+    let eterFicha: any;
 
     if (stones > 0) {
       piedra = state.warehouse.find(
@@ -2840,9 +2849,19 @@ function sePuedeGuardar(): boolean {
         return { error: `Solo tienes ${available} Nanopartícula(s).` };
       }
     }
+    if (eter > 0) {
+      eterFicha = state.warehouse.find(
+        (w: any) => w.type === 'consumable' && w.buffId === 'refiningEther'
+      );
+      if (!eterFicha) return { error: 'No tienes Éter de Refinamiento.' };
+      const available = eterFicha.stackCount || 1;
+      if (available < eter) {
+        return { error: `Solo tienes ${available} Éter(s) de Refinamiento.` };
+      }
+    }
 
-    // Las dos existen y las dos alcanzan: aquí sí se toca el almacén, y aquí van
-    // las dos, no una detrás de otra con una comprobación en medio. Un cobro a
+    // Los tres existen y los tres alcanzan: aquí sí se toca el almacén, y aquí van
+    // los tres, no uno detrás de otro con una comprobación en medio. Un cobro a
     // medias dejaría al jugador peor sin haber fusionsado nada.
     if (stones > 0) {
       piedra.stackCount = (piedra.stackCount || 1) - stones;
@@ -2856,7 +2875,13 @@ function sePuedeGuardar(): boolean {
         state.warehouse = state.warehouse.filter((w: any) => w.id !== nanoFicha.id);
       }
     }
-    return { stones, nano };
+    if (eter > 0) {
+      eterFicha.stackCount = (eterFicha.stackCount || 1) - eter;
+      if (eterFicha.stackCount <= 0) {
+        state.warehouse = state.warehouse.filter((w: any) => w.id !== eterFicha.id);
+      }
+    }
+    return { stones, nano, eter };
   }
 /**
    * Lo que se hace con los materiales después de la tirada, sea cual sea el
@@ -5030,7 +5055,7 @@ const RITMO_GUARDADO_MS = 30_000;
       if (item.type !== 'consumable') return { unidades: 0, max: 0, motivo: 'Esto no se puede usar.' };
       const buffId = item.buffId ?? inferBuffIdFromName(item.name || '');
       if (!buffId) return { unidades: 0, max: 0, motivo: 'Este consumible no tiene efecto conocido.' };
-      if (buffId === 'calibrationStone' || buffId === 'stabilityNano') {
+      if (buffId === 'calibrationStone' || buffId === 'stabilityNano' || buffId === 'refiningEther') {
         return { unidades: 0, max: 0, motivo: 'Este consumible se usa en la Forja.' };
       }
       const unidades = item.stackable ? (item.stackCount || 1) : 1;
@@ -5213,6 +5238,7 @@ const RITMO_GUARDADO_MS = 30_000;
           }
           case 'calibrationStone':
           case 'stabilityNano':
+          case 'refiningEther':
             // No se usan desde el almacén: se consumen en la Forja
             return { ok: false, msg: 'Este consumible se usa en la Forja.' };
           // B24 · LOS DOS AMPLIFICADORES QUE F4 RETIRÓ, Y POR QUÉ NO ES "RETIRAR EL
@@ -6429,8 +6455,7 @@ const RITMO_GUARDADO_MS = 30_000;
             tipoForge === 'collector'
               ? par.reduce((a: number, id: string) =>
                   a + ((porId.get(id)?.affixes?.length || 0) * 0.02), 0)
-              : 0,
-            0
+              : 0
           ),
           stonesDisponibles()
         )
@@ -6441,10 +6466,15 @@ const RITMO_GUARDADO_MS = 30_000;
         stones,
         stonesTotal: stones.reduce((a: number, n: number) => a + n, 0),
         // **LA NANO ES UNA POR TIRADA, Y EL STOCK SE ENSEÑA.** Si no alcanza
-        // para todas, las parejas sin nano fallan sin gastar materiales, así
-        // que el diálogo tiene que decir cuántas hay antes de cobrar.
-        nanoPorTirada: usarNano ? 1 : 0,
-        nanoTotal: usarNano ? pares.length : 0,
+        // para todas, solo esas tiradas pueden subir la rareza, así que el
+        // diálogo tiene que decir cuántas hay antes de cobrar.
+        //
+        // **Y EN COMPAÑEROS ES CERO, SIEMPRE.** La nanopartícula sube la rareza
+        // y la del compañero la pone el tier: no tiene efecto que cobrar. Que el
+        // plan lo diga aquí es lo que evita que el diálogo ofrezca un check que
+        // no hace nada.
+        nanoPorTirada: usarNano && tipoForge === 'collector' ? 1 : 0,
+        nanoTotal: usarNano && tipoForge === 'collector' ? pares.length : 0,
         nanoStock: nanoDisponibles(),
         piedrasStock: stonesDisponibles(),
         disponibles: ordenados.length,
@@ -6527,7 +6557,11 @@ const RITMO_GUARDADO_MS = 30_000;
         // diga lo que diga el plan. Dos sitios que dicen que no es lo que hace
         // que un plan viejo no pueda cobrar piedras.
         const piedrasDeEstePar = usarPiedras ? plan.stones[i] : 0;
-        const nanoDeEstePar = usarNano ? 1 : 0;
+        // **LA NANO SOLO EXISTE EN LA DE RECOLECTORES, Y EL PLAN YA LO DICE.**
+        // El flag que lee aquí es el del plan —`nanoPorTirada`— y no el `usarNano`
+        // crudo, porque en compañeros el plan lo trae a 0 y con el crudo se
+        // acabaría cobrando una nanopartícula que no hace nada.
+        const nanoDeEstePar = plan.nanoPorTirada;
 
         const r: any = tipoForge === 'collector'
           ? estado.forgeCollector(ids, piedrasDeEstePar, nanoDeEstePar)
@@ -6569,7 +6603,7 @@ const RITMO_GUARDADO_MS = 30_000;
 
 
     /**
-     * CUÁNTAS PIEDRAS HACEN FALTA PARA LLEGAR AL 95 %, Y SI LAS TIENES.
+     * CUÁNTAS PIEDRAS HACEN FALTA, Y **A QUÉ PROBABILIDAD LLEGAN**, Y SI LAS TIENES.
      *
      * **LO PIDE EL MOTOR Y NO LA VISTA, PORQUE EL NÚMERO ACABA EN UN COBRO.** El botón
      * "gastar las necesarias" tiene que prometer exactamente lo que
@@ -6580,8 +6614,15 @@ const RITMO_GUARDADO_MS = 30_000;
      *
      * Y devuelve `suficientes` a propósito: ofrecer "usar 7" sin tener siete es peor que
      * no ofrecer nada, porque el jugador apretaría y se quedaría sin materiales.
+     *
+     * **Y TRAE `chanceConNecesarias`, QUE ES LA OTRA MITAD DE NO MENTIR.** Con diez
+     * piedras de 1,2 puntos, en los tiers medios y altos el 95 % **no se alcanza ni con
+     * la mano entera**: el tope de diez es +12 y eso no llega. Si el botón siguiera
+     * diciendo "para el 95 %", prometería algo que la tirada no va a dar (R3). El número
+     * que se enseña es la probabilidad real con esas piedras, y solo cuando llega al 95 %
+     * el botón lo dice.
      */
-    previewPiedrasNecesarias: (tier: number, nanoUsed = 0, affixLuck = 0) => {
+    previewPiedrasNecesarias: (tier: number, affixLuck = 0) => {
       const stones = state.warehouse.find(
         (w: any) => w.type === 'consumable' && w.buffId === 'calibrationStone'
       );
@@ -6600,8 +6641,7 @@ const RITMO_GUARDADO_MS = 30_000;
       const necesarias = piedrasParaObjetivo(
         tier,
         state.bonus.craftLuck,
-        affixLuck,
-        nanoUsed
+        affixLuck
       );
       const alcanzable = Math.min(necesarias, disponibles);
       return {
@@ -6612,11 +6652,16 @@ const RITMO_GUARDADO_MS = 30_000;
         suficientes: necesarias > 0 && disponibles >= necesarias,
         // Lo que se puede gastar de verdad, que es la parte que el botón usa para no
         // prometer más de lo que hay.
-        alcanzable
+        alcanzable,
+        // La probabilidad real con esas `necesarias` piedras: el objetivo que el botón
+        // puede prometer sin mentir. Sale de `successChance()`, la misma función que
+        // cobra, así que lo que anuncia el botón y lo que tira la tirada son el mismo
+        // número aunque el árbol cambie.
+        chanceConNecesarias: chanceDeFusion(tier, state.bonus.craftLuck, necesarias, affixLuck)
       };
     },
 
-    forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
+    forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0, eterUsed = 0) => {
       handleUserActivity();
 
       // Las tres comprobaciones y el cobro salen de las cuentas internas: las
@@ -6624,15 +6669,16 @@ const RITMO_GUARDADO_MS = 30_000;
       const mat = materialesDeForja(materialIds, 'collector');
       if (mat.error || !mat.materials) return { success: false, msg: mat.error };
 
-      const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed);
-      if (pago.error) return { success: false, msg: pago.error, stones: 0, nano: 0 };
+      const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed, eterUsed);
+      if (pago.error) return { success: false, msg: pago.error, stones: 0, nano: 0, eter: 0 };
 
       const author = user.displayName || username || 'Anónimo';
       const result = attemptForge(mat.materials, mat.tier!, author, {
         craftLuck: state.bonus.craftLuck,
         consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
-        nanoUsed: pago.nano
+        nanoUsed: pago.nano,
+        eterUsed: pago.eter
       });
 
       if (result.error) return { success: false, msg: result.error };
@@ -6656,6 +6702,7 @@ const RITMO_GUARDADO_MS = 30_000;
           // no gasta, y el total no puede contarla.
           stones: pago.stones,
           nano: pago.nano,
+          eter: pago.eter,
           msg: `${w.name} forjada`
         };
       }
@@ -6693,6 +6740,7 @@ const RITMO_GUARDADO_MS = 30_000;
         chance: result.chanceUsed,
         stones: pago.stones,
         nano: pago.nano,
+        eter: pago.eter,
         msg: `Fallo en la forja: +${consuelo} cristales`
       };
     },
@@ -6707,25 +6755,31 @@ const RITMO_GUARDADO_MS = 30_000;
      *
      * **LO QUE CAMBIA ES EL RESULTADO, Y POR QUÉ NO ES UNA COPIA.** El compañero
      * no tiene afijos: su calidad es el potencial, y sale de la media de los dos
-     * materiales. La nanopartícula, que en el recolector garantiza un afijo extra,
-     * aquí sube **+1 al potencial**, que es lo mismo dicho en el idioma del
-     * compañero. Si no hiciera eso, sería el mejor objeto del juego sin efecto
-     * ninguno.
+     * materiales **más la misma tirada de subida** que tira la de recolectores,
+     * con el Éter de Refinamiento sumando puntos igual que allí.
+     *
+     * **Y LA NANOPARTÍCULA SE IGNORA SIN COBRARLA, AQUÍ TAMBIÉN.** Su efecto es
+     * subir la rareza, y la rareza del compañero la pone el tier: no hay escalón
+     * que subir. Cobrar 90 000 nanitas por un efecto que no existe sería el engaño
+     * que esta pantalla no se puede permitir, así que la solicitud se suelta y el
+     * almacén no se toca. La vista tampoco la ofrece para esta fusión.
      */
-    forgeCompanion: (materialIds: string[], stonesUsed = 0, nanoUsed = 0) => {
+    forgeCompanion: (materialIds: string[], stonesUsed = 0, nanoUsed = 0, eterUsed = 0) => {
       handleUserActivity();
 
       const mat = materialesDeForja(materialIds, 'companion');
       if (mat.error || !mat.materials) return { success: false, msg: mat.error };
 
-      const pago = gastaConsumiblesDeForja(stonesUsed, nanoUsed);
-      if (pago.error) return { success: false, msg: pago.error, stones: 0, nano: 0 };
+      // `nanoUsed` queda fuera del cobro a propósito —ver el JSDoc de arriba—:
+      // ni se cobra ni se usa, y por eso la llamada no lo lleva.
+      const pago = gastaConsumiblesDeForja(stonesUsed, 0, eterUsed);
+      if (pago.error) return { success: false, msg: pago.error, stones: 0, nano: 0, eter: 0 };
 
       const result = attemptForgeCompanion(mat.materials, mat.tier!, {
         craftLuck: state.bonus.craftLuck,
         consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
-        nanoUsed: pago.nano
+        eterUsed: pago.eter
       });
 
       if (result.error) return { success: false, msg: result.error };
@@ -6751,6 +6805,7 @@ const RITMO_GUARDADO_MS = 30_000;
           chance: result.chanceUsed,
           stones: pago.stones,
           nano: pago.nano,
+          eter: pago.eter,
           msg: `${c.name} forjado`
         };
       }
@@ -6773,6 +6828,7 @@ const RITMO_GUARDADO_MS = 30_000;
         chance: result.chanceUsed,
         stones: pago.stones,
         nano: pago.nano,
+        eter: pago.eter,
         msg: `Fallo en la forja: +${consuelo} cristales`
       };
     },

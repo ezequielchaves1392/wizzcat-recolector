@@ -33,7 +33,7 @@ así que recargar tiene que devolver exactamente lo mismo (`src/ui/router.ts:1-2
 | `base` | Base | El recolector grande que se clickea, el escuadrón, el HUD de buffs y el ingreso pasivo. Es la única vista con el botón de recolector. |
 | `almacen` | Almacén | Rejilla de celdas con filtros, orden, venta en lote, apilado, uso y apertura de cajas. |
 | `tienda` | Mercado | 7 categorías: cajas, recursos, cartas, forja, mejoras, compañeros, recolectores. |
-| `forja` | Forja | 3 materiales → 1 recolector, con probabilidad visible antes de confirmar. |
+| `forja` | Forja | 2 materiales → 1 recolector (o 1 compañero), con probabilidad visible antes de confirmar. |
 | `perfil` | Perfil | Tarjeta de identidad (título/marco/banner), mejor recolector, logros, cosméticos. |
 | `prestigio` | Ascensión | Núcleos, qué se pierde y qué se conserva, y el árbol de 24 nodos. |
 | `ranking` | Ranking | 4 tablas globales. Solo accesible desde la cabecera. |
@@ -100,7 +100,7 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 | **Cajas** | 4 tipos (común/rara/épica/legendaria). Necesita llave de nivel igual o superior. Tabla de botín con pesos en `crateLoot.ts`. | `components/crateLoot.ts` |
 | **Cartel de cajas** | El premio decidido por el motor va directo al cartel, sin giro (la ruleta se ha quitado en B17). | `components/crateRoulette.ts` (el cartel) |
 | **Sintonizador** | El motor tira el dado y el cartel enseña el `success` que ya vino, con la flecha de niveles. | `components/tuningRoulette.ts` |
-| **Forja** | 3 recolectores del mismo tier → 1 del siguiente. Potencial 1-5, afijos heredados, autor, fecha. | `data/crafting.ts`, `ui/forgePage.ts` |
+| **Forja** | 2 recolectores (o 2 compañeros) del mismo tier → 1. Potencial 1-5, afijos heredados, autor, fecha. Consolida: los dos materiales se van. | `data/crafting.ts`, `ui/forgePage.ts` |
 | **Afijos** | 14 afijos en 6 rarezas. Modifican daño, pasivo y suerte de forja. | `data/crafting.ts:42-71` |
 | **Valoración** | El precio es dinámico: tier × nivel × rareza × potencial × afijos × fama × antigüedad. El jugador se queda el 42 %. | `data/valuation.ts` |
 | **Ascensión** | Reinicia progreso a cambio de núcleos. Umbral: 1 M de producción. Curva `(produccion / 1e6)^0.6`. | `data/prestige.ts`, `ui/prestigePage.ts` |
@@ -128,6 +128,36 @@ firmas realizadas, logros y cosméticos.
 
 El almacén vacío después de la Ascensión es intencionado. Forjar de nuevo es el
 bucle de progresión.
+
+### 4.2 La forja: dos materiales, y la enmienda aceptada de F33
+
+**La forja fusiona DOS materiales del mismo tier en UNO del siguiente** —el
+número lo pone `MATERIALES_POR_FUSION`—, tanto en recolectores como en
+compañeros. Las tablas de este documento decían "3" durante un tiempo: venían
+del plan anterior a F33 y el juego nunca fue así.
+
+**La enmienda, aceptada por el jugador el 8 de octubre de 2026: la forja
+CONSOLIDA Y NO CREA.** Fusionar dos objetos da **uno** nuevo, y los dos
+materiales se van — con el potencial promediado de los dos, los afijos
+heredados por linaje y la rareza sorteada—. Lo que eso implica, y ya no se
+discute:
+
+- **El valor total del almacén baja al forjar** en los tramos donde el precio
+  por punto no crece más rápido de lo que se consume (la discrepancia 13 de más
+  abajo). No es un bug: es lo que significa consolidar, y por eso el fallo de
+  forja paga cristales —el único botín que el bucle devuelve—.
+- **No existe forjar sin perder los materiales**, ni una copia, ni una
+  reversión: la forja es el camino a los items perfectos **porque** cuesta items
+  reales. F37 (síntesis con afijo elegido) quedó pendiente en su día justo por
+  esto: no pueden ser el mismo botón.
+- **Lo que sí se gana siempre es calidad**, que es lo que F33 vendió: la media
+  de potencial —con el empate subiendo, porque eso hace `Math.round`—, los
+  afijos del linaje y un tier más.
+- **Y con el reequilibrio del 8 de octubre, dos consumibles acompañan la
+  apuesta**: la piedra mueve la probabilidad de acierto (1,2 puntos cada una,
+  hasta diez) y el Éter de Refinamiento la de subir potencial (20 puntos). Los
+  dos se gastan **también cuando la tirada falla**, que es la parte que hace
+  que la forja siga siendo una decisión y no un trámite.
 
 ## 5. Guardado y su red de seguridad
 

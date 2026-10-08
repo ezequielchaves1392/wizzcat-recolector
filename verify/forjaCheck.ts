@@ -40,11 +40,12 @@
 //  afijos—, así que una prueba que tire una vez mide el azar, no la regla.
 // ==========================================================================
 
-import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll, reload, recargar } from './kit';
+import { boot, bootNew, check, resumen, s, wh, ids, baseSave, collector, companion, ficha, consumable, conRoll, conSec, reload, recargar } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { filaDeSerie } from '../src/ui/forgePage';
 import { successChance, baseSuccessChance } from '../src/data/crafting';
 import { poderDeCompanero } from '../src/data/crafting';
+import { PROB_SUBE_POTENCIAL, BONO_ETTER, PROB_NANO_SUBE_RAREZA } from '../src/data/constants';
 
 /**
  * **EL NOMBRE DEL CONSUMIBLE NO ES ADORNO, Y ESTA ES LA RAZÓN.**
@@ -62,17 +63,18 @@ import { poderDeCompanero } from '../src/data/crafting';
  */
 const NOMBRE_PIEDRA = 'Piedra de Calibración';
 const NOMBRE_NANO = 'Nanopartícula de Estabilidad';
+const NOMBRE_ETER = 'Éter de Refinamiento';
 import {
   attemptForge, rangoDeAfijosForjados, danioDeRango,
   AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION,
   valorDeUnCristal, cristalesDeConsuelo, rarezaFusionada, afijosCompartidos,
-  PROB_CONSERVA_RAREZA
+  PROB_CONSERVA_RAREZA, subirRareza, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION
 } from '../src/data/crafting';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
 
 const opts = (extra: any = {}) => ({
-  craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, ...extra
+  craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, eterUsed: 0, ...extra
 });
 
 /**
@@ -138,14 +140,15 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  //  2. EL POTENCIAL ES LA MEDIA, Y NUNCA SUBE
+  //  2. EL POTENCIAL ES LA MEDIA, Y SOLO LA TIRADA LO PUEDE SUBIR
   // -------------------------------------------------------------------------
-  //  Con `conRoll(0, ...)`: el éxito de la forja es un `Math.random()` contra la
-  //  probabilidad, y sin quitarla esta comprobación mediría **si ha salido la
-  //  cara**, no la regla. Con el dado a 0 el acierto es seguro para cualquier
-  //  probabilidad, sin tener que conocer la fórmula ni subir `craftLuck`.
+  //  Con `conSec(0, ...)`: el PRIMERO de los dados es el de acierto —a 0 es
+  //  seguro para cualquier probabilidad, sin conocer la fórmula— y el resto,
+  //  el de subir el potencial, se clava en 1: nadie sube. Con un solo número
+  //  —`conRoll(0, ...)`— los dos dados saldrían iguales y **la media subiría
+  //  siempre**, o sea que este bloque mediría el ascenso y no la media.
   {
-    const caso = (p1: number, p2: number) => conRoll(0, () => attemptForge(
+    const caso = (p1: number, p2: number) => conSec(0, 1, () => attemptForge(
       [collector('x', 3, { potential: p1 }), collector('y', 3, { potential: p2 })],
       3, 'X', opts()
     )).collector;
@@ -155,7 +158,7 @@ async function main() {
       `5 y 1 → ${caso(5, 1)?.potential} (media ${Math.round((5 + 1) / 2)})`);
     check('forja: dos iguales dan ese mismo potencial',
       caso(4, 4)?.potential === 4, `4 y 4 → ${caso(4, 4)?.potential}`);
-    check('forja: y promediar NUNCA sube: 5 con 1 da 3, no 5',
+    check('forja: y promediar NUNCA sube por sí solo: 5 con 1 da 3, no 4',
       caso(5, 1)?.potential === 3, `5 y 1 → ${caso(5, 1)?.potential}`);
 
     // Y el daño sale del potencial, no del tier solo: es lo que hace que el
@@ -166,6 +169,60 @@ async function main() {
       `daño=${dos?.damage} · el ★${dos.potential} de T4 es ${danioDeRango(4, dos.potential)}`);
     check('forja: el forjado sube UN tier',
       dos?.tier === 4, `tier=${dos?.tier}`);
+
+    // **LA ENMIENDA DE F33: LA TIRADA DE POTENCIAL, Y QUE ES LO ÚNICO QUE SUBE.**
+    // Con el dado a la mitad de lo que haría falta —0,10 contra un 5 % de ★4→5— la
+    // media se queda; con el mismo 0,10 Y ÉTER —5 % + 20 puntos = 25 %— sube. La
+    // misma tirada en las dos ramas es lo que hace que la diferencia sea el Éter y
+    // no el azar.
+    const rSinEter = conSec(0, 0.10, () => attemptForge(
+      [collector('x', 3, { potential: 4 }), collector('y', 3, { potential: 4 })],
+      3, 'X', opts()
+    )).collector;
+    check('forja: la tirada de potencial existe sin Éter, y con ella a favor NO sube',
+      rSinEter?.potential === 4, `pot=${rSinEter?.potential} tirada=0.10`);
+    const rConEter = conSec(0, 0.10, () => attemptForge(
+      [collector('x', 3, { potential: 4 }), collector('y', 3, { potential: 4 })],
+      3, 'X', opts({ eterUsed: 1 })
+    )).collector;
+    check('forja: y con Éter, el MISMO dado sube la ★ — 5 % + 20 puntos = 25 %',
+      rConEter?.potential === 5,
+      `pot=${rConEter?.potential} prob=${PROB_SUBE_POTENCIAL[4]}+${BONO_ETTER}`);
+    const rSube = conSec(0, 0, () => attemptForge(
+      [collector('x', 3, { potential: 2 }), collector('y', 3, { potential: 2 })],
+      3, 'X', opts()
+    )).collector;
+    check('forja: la subida es de UNA estrella como mucho, aunque el dado diga 0',
+      rSube?.potential === 3, `pot=${rSube?.potential}`);
+    const rCinco = conSec(0, 0, () => attemptForge(
+      [collector('x', 3, { potential: 5 }), collector('y', 3, { potential: 5 })],
+      3, 'X', opts({ eterUsed: 1 })
+    )).collector;
+    check('forja: y un ★5 no sube aunque haya Éter: no hay escalón encima',
+      rCinco?.potential === 5, `pot=${rCinco?.potential}`);
+
+    // **LA NANO NO TOCA EL POTENCIAL NI LA PROBABILIDAD: SUBE LA RAREZA.** Su
+    // tirada va después de la rareza decidida. El par sale de dos materiales con
+    // rareza compartida y ★5 —sin tirada de potencial que consuma dados—, así que
+    // con 0,001 la conserva y la subida es exactamente un escalón; y con 0,999 la
+    // calculada es la misma con y sin nano, que es la única forma de ver que la nano
+    // no hizo nada sin confiar en saber cuál sale calculada.
+    const compartido = (id: string) => collector(id, 3, { potential: 5, rarity: 'Raro', damage: danioDeRango(3, 5) });
+    const raro = () => attemptForge([compartido('x'), compartido('y')], 3, 'X', opts());
+    const rNanoSube = conSec(0, 0.001, () => attemptForge(
+      [compartido('x'), compartido('y')], 3, 'X', opts({ nanoUsed: 1 }))).collector;
+    const rSinNano = conSec(0, 0.001, () => raro()).collector;
+    check('la nanopartícula sube la rareza un escalón con el dado a favor (50 %)',
+      rNanoSube?.rarity === 'Épico' && rSinNano?.rarity === 'Raro',
+      `con nano=${rNanoSube?.rarity} sin=${rSinNano?.rarity}`);
+    const rNoSube = conSec(0, 0.999, () => attemptForge(
+      [compartido('x'), compartido('y')], 3, 'X', opts({ nanoUsed: 1 }))).collector;
+    const rNoNano = conSec(0, 0.999, () => raro()).collector;
+    check('y con el dado en contra la deja exactamente donde estaba',
+      rNoSube?.rarity === rNoNano?.rarity,
+      `con nano=${rNoSube?.rarity} sin=${rNoNano?.rarity}`);
+    check('y el PROB de la nanopartícula está escrita y es media',
+      PROB_NANO_SUBE_RAREZA === 0.5, `p=${PROB_NANO_SUBE_RAREZA}`);
   }
 
   // -------------------------------------------------------------------------
@@ -198,13 +255,13 @@ async function main() {
     const lineaLlena = con(AFIX_MAX);
     check('forja: el suelo es el de la rareza y no lo baja ni el linaje más pobre',
       Object.keys(AFIX_MIN_POR_RARIDAD).every(r =>
-        rangoDeAfijosForjados([pobre, pobre], r, false).minimo === AFIX_MIN_POR_RARIDAD[r]),
+        rangoDeAfijosForjados([pobre, pobre], r).minimo === AFIX_MIN_POR_RARIDAD[r]),
       JSON.stringify(Object.keys(AFIX_MIN_POR_RARIDAD).map(r =>
-        `${r}:${rangoDeAfijosForjados([pobre, pobre], r, false).minimo}`)));
+        `${r}:${rangoDeAfijosForjados([pobre, pobre], r).minimo}`)));
 
     // El techo SÍ depende de los padres, y esa es la parte nueva.
-    const sinLinea = rangoDeAfijosForjados([pobre, pobre], 'Raro', false);
-    const conLinea = rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro', false);
+    const sinLinea = rangoDeAfijosForjados([pobre, pobre], 'Raro');
+    const conLinea = rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro');
     check('forja: los padres suben el TECHO, que antes no existía',
       conLinea.maximo > sinLinea.maximo,
       `sin linaje=${sinLinea.maximo} con linaje=${conLinea.maximo}`);
@@ -214,25 +271,27 @@ async function main() {
 
     // Y es la MEDIA, no el mayor: con eso, un solo material bueno bastaría y el
     // otro sería decorativo, que es justo lo que la forja no debe ser.
-    const unoBueno = rangoDeAfijosForjados([lineaLlena, pobre], 'Raro', false);
-    const medioBueno = rangoDeAfijosForjados([lineaLlena, collector('q', 3, { affixes: TODOS_LOS_AFIJOS.slice(0, 3) })], 'Raro', false);
+    const unoBueno = rangoDeAfijosForjados([lineaLlena, pobre], 'Raro');
+    const medioBueno = rangoDeAfijosForjados([lineaLlena, collector('q', 3, { affixes: TODOS_LOS_AFIJOS.slice(0, 3) })], 'Raro');
     check('forja: el techo es la MEDIA de los dos, no el mejor',
       unoBueno.maximo === sinLinea.maximo + 3 && medioBueno.maximo === sinLinea.maximo + 4,
       `uno bueno=${unoBueno.maximo} · 6 y 0 media 3 → ${unoBueno.maximo}, ` +
       `6 y 3 media 4 → ${medioBueno.maximo}, base=${sinLinea.maximo}`);
 
-    // La nanopartícula suma uno, y a los dos lados: es lo que justifies pagar.
-    const conNano = rangoDeAfijosForjados([pobre, pobre], 'Raro', true);
-    const conNanoYLinea = rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro', true);
-    check('forja: la nanopartícula sube el suelo',
-      conNano.minimo === sinLinea.minimo + 1, `${sinLinea.minimo} → ${conNano.minimo}`);
-    check('forja: y también el techo, no solo lo garantizado',
-      conNanoYLinea.maximo === conLinea.maximo || conNanoYLinea.maximo === AFIX_MAX,
-      `techo=${conNanoYLinea.maximo} sin nano=${conLinea.maximo} tope=${AFIX_MAX}`);
+    // **LA NANO YA NO TOCA ESTE RANGO: SU EFECTO ES LA RAREZA.** Antes sumaba uno
+    // al suelo y al techo, y eso se pagaba dos veces —subir la rareza ya sube el
+    // suelo desde la tabla—. Ahora la comprobación es la contraria: el mismo rango
+    // con el parámetro puesto y sin él es idéntico, porque el parámetro ya ni
+    // existe en la firma. Si volviera a colarse por aquí, esto lo canta.
+    const sinNano = rangoDeAfijosForjados([pobre, pobre], 'Raro');
+    check('forja: la nanopartícula ya no toca el suelo ni el techo de afijos',
+      sinNano.minimo === AFIX_MIN_POR_RARIDAD['Raro']
+        && rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro').maximo === conLinea.maximo,
+      `suelo=${sinNano.minimo} techo=${rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro').maximo}`);
 
     // Un Divino tiene el suelo pegado al tope: el dado no tira nada y sale
     // completo. Es lo que hace que "más rareza, más afijos" tenga final.
-    const divino = rangoDeAfijosForjados([pobre, pobre], 'Divino', false);
+    const divino = rangoDeAfijosForjados([pobre, pobre], 'Divino');
     check('forja: y un Divino sale siempre completo, porque su suelo ES el tope',
       divino.minimo === divino.maximo && divino.maximo === AFIX_MAX,
       `min=${divino.minimo} max=${divino.maximo}`);
@@ -267,7 +326,7 @@ async function main() {
       // La rareza del item la decide su potencial, no el catálogo de arriba: lo
       // que sí vale para todos es el tope duro y que no baje del suelo de la
       // rareza que le haya tocado.
-      const { minimo, maximo } = rangoDeAfijosForjados(padres, r.collector.rarity, false);
+      const { minimo, maximo } = rangoDeAfijosForjados(padres, r.collector.rarity);
       if (afijos.length < minimo || afijos.length > maximo) fueraDeRango++;
       if (afijos.length > AFIX_MAX) demasiados++;
       if (new Set(afijos).size !== afijos.length) repetidos++;
@@ -311,7 +370,7 @@ async function main() {
     const abajo = conRng(secuencia(0.001, 0));
     const arriba = conRng(secuencia(0.001, 0.999));
     const { minimo, maximo } = rangoDeAfijosForjados(
-      [linea(AFIX_MAX, 1), linea(AFIX_MAX, 2)], abajo.collector?.rarity ?? 'Raro', false
+      [linea(AFIX_MAX, 1), linea(AFIX_MAX, 2)], abajo.collector?.rarity ?? 'Raro'
     );
 
     check('forja: el dado es el primero que se tira, así que el acierto va primero',
@@ -463,14 +522,27 @@ async function main() {
       !ids(g).includes('c1') && !ids(g).includes('c2'),
       ids(g).join(','));
 
-    // --- El potencial: la media, y con la nanopartícula +1 -----------------------
-    const forja = async (p1: number, p2: number, nano = 0) => {
+    // --- El potencial: la media, y lo único que la puede subir: la tirada ----------
+    //
+    // **`conSec` Y NO `conRoll`, PORQUE LA FUSIÓN TIRA DOS DADOS.** El primero es
+    // el de acierto —a 0 es seguro para cualquier probabilidad— y el resto es el
+    // de subir el potencial. Con un único número clavado los dos saldrían iguales:
+    // `conRoll(0.001)` haría subir SIEMPRE —0,001 es menos que cualquier
+    // probabilidad de subida— y estos "la media no sube" darían verde sobre una
+    // mentira. Aquí el segundo dado va a 1 (nadie sube) salvo en las pruebas que
+    // miden justo lo contrario.
+    const forja = async (p1: number, p2: number,
+      extra: { nano?: 0 | 1; eter?: 0 | 1 } = {}, tirada = 1) => {
       const j = await boot(baseSave([
         companion('x1', 3, { potential: p1 }), companion('x2', 3, { potential: p2 }),
         ficha('x1', 3, { potential: p1 }), ficha('x2', 3, { potential: p2 }),
-        ...(nano ? [consumable('n1', 'stabilityNano', 1, { name: NOMBRE_NANO })] : [])
+        ...(extra.nano ? [consumable('n1', 'stabilityNano', 3, { name: NOMBRE_NANO })] : []),
+        ...(extra.eter ? [consumable('e1', 'refiningEther', 3, { name: NOMBRE_ETER })] : [])
       ], { warehouseCapacity: 20 }));
-      return conRoll(0.001, () => j.forgeCompanion(['x1', 'x2'], 0, nano)) as any;
+      const r = conSec(0, tirada, () =>
+        j.forgeCompanion(['x1', 'x2'], 0, extra.nano ?? 0, extra.eter ?? 0)) as any;
+      r._g = j;
+      return r;
     };
 
     check('compañero: dos potenciales 5 dan un 5, y la media no inventa nada',
@@ -493,25 +565,39 @@ async function main() {
       (await forja(4, 5)).companion?.potential === 5,
       `pot=${(await forja(4, 5)).companion?.potential}`);
 
-    // Y la nanopartícula sube +1 al potencial: es su versión de "un afijo extra",
-    // porque un compañero no tiene afijos y sin esto sería un consumible de 90 000
-    // nanitas que no hace nada.
-    check('compañero: con nanopartícula, un 3 y un 4 dan un 5, que es +1 a la media',
-      (await forja(3, 4, 1)).companion?.potential === 5,
-      `pot=${(await forja(3, 4, 1)).companion?.potential}`);
-    check('compañero: con nanopartícula, un 5 y un 5 se quedan en 5, por el tope',
-      (await forja(5, 5, 1)).companion?.potential === 5,
-      `pot=${(await forja(5, 5, 1)).companion?.potential}`);
-    const gNano = await boot(baseSave([
-      companion('x1', 3, { potential: 3 }), companion('x2', 3, { potential: 4 }),
-      ficha('x1', 3, { potential: 3 }), ficha('x2', 3, { potential: 4 }),
-      consumable('n1', 'stabilityNano', 3, { name: NOMBRE_NANO })
-    ], { warehouseCapacity: 20 }));
-    conRoll(0.001, () => gNano.forgeCompanion(['x1', 'x2'], 0, 1));
-    const nanoFicha = wh(gNano).find((w: any) => w.id === 'n1');
-    check('compañero: y la nanopartícula se gasta de una en una, no se consume la pila',
-      nanoFicha?.stackCount === 2,
-      `stack=${nanoFicha?.stackCount}`);
+    // --- La tirada de potencial, y el Éter como lo único que la mueve ---------------
+    //
+    // **MISMO 0,10 EN LOS DOS LADOS: LA DIFERENCIA ES EL ÉTER Y NO EL AZAR.** Un ★4
+    // sube con un 5 %; con Éter, con un 25 %. Con el dado a 0,10 la primera rama
+    // pierde y la segunda gana —y si el Éter no añadiera nada, ambas darían 4.
+    const sinEter = await forja(4, 4, {}, 0.10);
+    const conEter = await forja(4, 4, { eter: 1 }, 0.10);
+    check('compañero: la tirada de potencial existe sin Éter, y a 0,10 NO sube un ★4',
+      sinEter.companion?.potential === 4, `pot=${sinEter.companion?.potential}`);
+    check('compañero: y con Éter el MISMO 0,10 sí sube — 5 % + 20 puntos = 25 %',
+      conEter.companion?.potential === 5, `pot=${conEter.companion?.potential}`);
+
+    // **Y SE GASTA AUNQUE LA TIRADA SALGA EN BLANCO**, igual que las piedras: si
+    // solo se cobrara cuando sube, el Éter sería una apuesta y no un consumible,
+    // y el botón de la tienda diría "aumenta" en vez de "añade probabilidad".
+    const tiradaMala = await forja(4, 4, { eter: 1 }, 0.99);
+    const etherTrasFallo = wh(tiradaMala._g).find((w: any) => w.id === 'e1');
+    check('compañero: el Éter se gasta aunque la tirada salga en blanco',
+      tiradaMala.companion?.potential === 4 && etherTrasFallo?.stackCount === 2,
+      `pot=${tiradaMala.companion?.potential} éter=${etherTrasFallo?.stackCount}`);
+
+    // **LA NANOPARTÍCULA YA NO TOCA NADA EN COMPAÑEROS: NI EL POTENCIAL NI EL
+    // ALMACÉN.** Su efecto es subir la rareza un escalón, y la del compañero la
+    // pone el tier, así que aquí sería un interruptor que no hace nada. Antes
+    // daba +1 al potencial y se cobraba; ahora el motor la ignora sin cobrarla,
+    // y la vista ni la ofrece. Un consumible que se cobra sin efecto es la
+    // definición de R3.
+    const conNano = await forja(3, 4, { nano: 1 });
+    const nanoTras = wh(conNano._g).find((w: any) => w.id === 'n1');
+    check('compañero: con la nanopartícula marcada, la media sigue siendo la de siempre',
+      conNano.companion?.potential === 4, `pot=${conNano.companion?.potential}`);
+    check('compañero: y la nanopartícula NO se cobra en compañeros',
+      nanoTras?.stackCount === 3, `stack=${nanoTras?.stackCount}`);
 
     // --- La misma probabilidad que el recolector -----------------------------------
     const gc = await boot(baseSave([
@@ -533,8 +619,8 @@ async function main() {
       Math.abs(rc.chance - rr.chance) < 1e-9,
       `compañero=${rc.chance} recolector=${rr.chance}`);
     check('compañero: y sale de la misma función, no de una cuenta parecida',
-      Math.abs(rc.chance - successChance(3, 0, 3, 0, 1)) < 1e-9,
-      `tirada=${rc.chance} regla=${successChance(3, 0, 3, 0, 1)}`);
+      Math.abs(rc.chance - successChance(3, 0, 3, 0)) < 1e-9,
+      `tirada=${rc.chance} regla=${successChance(3, 0, 3, 0)}`);
 
     // **Y LA QUE ANUNCIA LA PANTALLA TAMBIÉN.** `getForgeInfo().baseChance` reescribía
     // aquí la curva con los mismos números que la regla, y el `preview.ts` la
@@ -583,16 +669,20 @@ async function main() {
       !rCobro.success && (piedras?.stackCount ?? 0) === 5,
       `piedras=${piedras?.stackCount} msg=${rCobro.msg}`);
 
-    // Y el caso caro: **piedras que sí tiene y nanopartícula que no.** Un cobro a
-    // medias dejaría al jugador con menos sin haber forjado nada.
+    // Y el caso caro: **piedras que sí tiene y Éter que no.** Un cobro a medias
+    // dejaría al jugador con menos sin haber forjado nada. Los materiales aquí son
+    // válidos a propósito —dos T3—, porque si no, el rechazo sería de los
+    // materiales y el cobro no se llega a mirar: la comprobación diría "no se gasta
+    // nada" sin haber entrado nunca en la caja.
     const gMedio = await boot(baseSave([
-      companion('m1', 3), companion('m2', 4),
+      companion('m1', 3), companion('m2', 3),
+      ficha('m1', 3), ficha('m2', 3),
       consumable('piedras', 'calibrationStone', 5, { name: NOMBRE_PIEDRA })
     ], { warehouseCapacity: 20 }));
-    const rMedio: any = gMedio.forgeCompanion(['m1', 'm2'], 5, 1);
+    const rMedio: any = gMedio.forgeCompanion(['m1', 'm2'], 5, 0, 1);
     const piedrasMedio = wh(gMedio).find((w: any) => w.id === 'piedras');
-    check('compañero: y si falta la nanopartícula, tampoco se cobran las piedras',
-      !rMedio.success && (piedrasMedio?.stackCount ?? 0) === 5,
+    check('compañero: y si falta el Éter, tampoco se cobran las piedras',
+      !rMedio.success && /Éter/.test(rMedio.msg ?? '') && (piedrasMedio?.stackCount ?? 0) === 5,
       `piedras=${piedrasMedio?.stackCount} msg=${rMedio.msg}`);
 
     // --- El fallo pierde los materiales y paga cristales ----------------------------
@@ -959,8 +1049,9 @@ const falloCon = async () => {
   // tiradas el jugador ha pagado cinco piedras que no le dijeron. Por eso el
   // auto-forge gasta `plan.stones[i]` y no recalcula.
   {
-    // Cuatro del T9: sin piedras no llegan, y con stock cada par pide las suyas
-    // para el 95 % (nueve por tirada con siete puntos cada una).
+    // Cuatro del T9: sin piedras no llegan, y con stock cada par pide las
+    // suyas de la regla —que en el T9 son diez, el tope de la mano, porque ni
+    // diez llegan al 95 % allí.
     const g8 = await boot(baseSave([
       recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
       recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2)
@@ -972,7 +1063,7 @@ const falloCon = async () => {
       `total=${plan8.stonesTotal} porTirada=${JSON.stringify(plan8.stones)}`);
 
     // Con piedras de sobra, la suma por par debe ser el total, y no un número
-    // redondo inventado: nueve por tirada son dieciocho en dos tiradas.
+    // redondo inventado: diez por tirada son veinte en dos tiradas.
     const g9 = await boot(baseSave([
       recDePotencial('a9', 9, 5), recDePotencial('b9', 9, 4),
       recDePotencial('c9', 9, 3), recDePotencial('d9', 9, 2),
@@ -996,9 +1087,22 @@ const falloCon = async () => {
       r9.stonesTotal === plan9.stonesTotal && gastadasDeVerdad === plan9.stonesTotal,
       `prometidas=${plan9.stonesTotal} cobradas=${gastadasDeVerdad} devueltas=${r9.stonesTotal}`);
 
-    check('autoforge: y cada par gasta hasta el 95 por ciento',
-      plan9.stones.every((n: number) => n === 0 || successChance(9, 0, n, 0) >= 0.95),
-      'porTirada=' + JSON.stringify(plan9.stones));
+    // **CADA PAR PIDE LAS NECESARIAS DE LA REGLA — Y EN EL T9 NI DIEZ LLEGAN AL 95 %.**
+    // Antes el objetivo era siempre el 95 % y el tope diez llegaba en todos los
+    // tiers. Con piedras de 1,2 puntos ya no: en el T9 la base es 0,38 y el techo
+    // de la mano 0,50. Por eso el preview trae `chanceConNecesarias` y el botón de
+    // la vista solo dice "para el 95 %" cuando de verdad se alcanza (R3). Aquí se
+    // fija la otra mitad: que la cantidad pedida es la de la regla y que con ella
+    // la probabilidad **es menor que el 95 %**, o sea que nadie está prometiendo
+    // un tope que no se puede pagar.
+    check('autoforge: cada par pide las necesarias de la regla, ni una de más',
+      plan9.stones.every((n: number) => n === piedrasParaObjetivo(9, 0, 0)),
+      `porTirada=${JSON.stringify(plan9.stones)} regla=${piedrasParaObjetivo(9, 0, 0)}`);
+    check('autoforge: y con esas piedras el T9 se queda en 0,50: el 95 % no se promete',
+      successChance(9, 0, plan9.stones[0], 0) < 0.95
+        && Math.abs(successChance(9, 0, plan9.stones[0], 0)
+          - successChance(9, 0, plan9.stones[0] - 1, 0) - 0.012) < 1e-9,
+      `con=${successChance(9, 0, plan9.stones[0], 0)} una menos=${successChance(9, 0, plan9.stones[0] - 1, 0)}`);
 
     // **SI NO HAY PIEDRAS SUFICIENTES, GASTA LAS QUE HAY Y SIGUE FORJANDO.**
     // Devolver un error dejaría al jugador sin poder usar un botón que sí
@@ -1047,10 +1151,13 @@ const falloCon = async () => {
       `quedan=${wh(g2).filter((w: any) => w.type === 'collector').length}`);
   }
   {
-    // **LA NANO SE VE EN EL POTENCIAL DEL COMPAÑERO.** En compañeros la nano
-    // sube +1 al potencial, que es un número exacto y no un sorteo: dos ★2 con
-    // nano dan un ★3, y sin nano dan un ★2. Es la prueba que distingue "la nano
-    // entró" de "la nano se cobró y no hizo nada".
+    // **LA NANO YA NO TOCA LA SERIE DE COMPAÑEROS: NI PROMETE NI COBRA.** Su
+    // efecto es subir la rareza un escalón, y la del compañero la pone el tier,
+    // así que el plan la fuerza a cero **aunque el check esté puesto**: un
+    // número que la vista enseña y el motor no cobra sería mentir con la fila
+    // entera. Y la prueba de que no hace falta: las dos series dan el mismo
+    // potencial —el ascenso es de la tirada de la fusión, que tira igual con y
+    // sin nano en la mano—.
     const dos = () => [
       companion('c1', 2, { potential: 2 }),
       companion('c2', 2, { potential: 2 }),
@@ -1060,45 +1167,48 @@ const falloCon = async () => {
     const g = await boot(baseSave([...dos(), consumable('n1', 'stabilityNano', 4)],
       { warehouseCapacity: 40 }));
     const plan = g.autoForgePreview('companion', 2, true, true);
-    check('autoforge: el preview cuenta una nano por tirada y dice el stock',
-      plan.nanoTotal === 2 && plan.nanoStock === 4,
+    check('autoforge: el plan de compañeros promete cero nanos, con el check puesto',
+      plan.nanoTotal === 0,
       `total=${plan.nanoTotal} stock=${plan.nanoStock} tiradas=${plan.tiradas}`);
 
     const r = conRoll(0.001, () => g.autoForge('companion', 2, true, true));
-    check('autoforge: con nano, los dos forjados suben +1 de potencial',
+    const nanoTras = wh(g).find((w: any) => w.id === 'n1');
+    check('autoforge: la serie con nano marcada forja las dos y sube por la tirada',
       r.hechos === 2 && r.resultados.every((x: any) => x.item?.potential === 3),
       `hechos=${r.hechos} potenciales=${r.resultados.map((x: any) => x.item?.potential).join(',')}`);
-    check('autoforge: y se gastó una nano por tirada, lo que dijo el preview',
-      r.nanoTotal === plan.nanoTotal && r.nanoTotal === 2,
-      `gastadas=${r.nanoTotal} previstas=${plan.nanoTotal}`);
+    check('autoforge: y ninguna nano se cobra: la pila se queda en cuatro',
+      r.nanoTotal === 0 && nanoTras?.stackCount === 4,
+      `gastadas=${r.nanoTotal} stack=${nanoTras?.stackCount}`);
 
-    // **Y SIN NANO, EL MISMO PAR DA UN ★2.** La diferencia entre las dos series
-    // es la nano y nada más: sin ella el potencial es la media sin subir.
+    // **Y SIN NANO EN LA MANO, EL MISMO RESULTADO.** Si las dos series dan el
+    // mismo potencial, la nano marcada no estaba moviendo nada —que es
+    // exactamente lo que se quiere que no haga en compañeros.
     const gB = await boot(baseSave(dos(), { warehouseCapacity: 40 }));
     const rB = conRoll(0.001, () => gB.autoForge('companion', 2, true, false));
-    check('autoforge: sin nano el potencial es la media, sin subir',
-      rB.hechos === 2 && rB.resultados.every((x: any) => x.item?.potential === 2),
+    check('autoforge: y sin nano el resultado es idéntico, que es lo que se exige',
+      rB.hechos === 2 && rB.resultados.every((x: any) => x.item?.potential === 3),
       `potenciales=${rB.resultados.map((x: any) => x.item?.potential).join(',')}`);
   }
   {
-    // **SI LA NANO NO ALCANZA, LA PAREJA FALLA SIN PERDER MATERIALES.** El
-    // cobro va antes de la tirada: sin nano que gastar, la pareja se queda
-    // como está y el total solo cuenta lo que salió del almacén.
+    // **Y EN RECOLECTORES LA NANO SIGUE GASTÁNDOSE POR PAREJA: SI NO ALCANZA, LA
+    // PAREJA SE QUEDA.** Es la misma regla de siempre, pero ahora en el único
+    // sitio donde la nano hace algo. Con una sola nano y dos tiradas, la primera
+    // la gasta y la segunda se queda sin nano —y sin forjar, porque el cobro va
+    // antes de la tirada—: los materiales siguen en el almacén y el total cuenta
+    // la que salió de verdad.
     const g = await boot(baseSave([
-      companion('c1', 2, { potential: 2 }),
-      companion('c2', 2, { potential: 2 }),
-      companion('c3', 2, { potential: 2 }),
-      companion('c4', 2, { potential: 2 }),
+      recDePotencial('a2', 2, 5), recDePotencial('b2', 2, 4),
+      recDePotencial('c2', 2, 3), recDePotencial('d2', 2, 2),
       consumable('n1', 'stabilityNano', 1)
     ], { warehouseCapacity: 40 }));
-    const r = conRoll(0.001, () => g.autoForge('companion', 2, true, true));
+    const r = conRoll(0.001, () => g.autoForge('collector', 2, true, true));
     check('autoforge: con una nano para dos tiradas solo sale una',
       r.hechos === 1 && r.fallos === 1,
       `hechos=${r.hechos} fallos=${r.fallos}`);
     check('autoforge: y el total cuenta una nano, no dos',
       r.nanoTotal === 1, `total=${r.nanoTotal}`);
     check('autoforge: y la pareja sin nano se queda en el almacén',
-      ['c3', 'c4'].every(id => wh(g).some((w: any) => w.id === id)),
+      ['c2', 'd2'].every(id => wh(g).some((w: any) => w.id === id)),
       'quedan=' + wh(g).map((w: any) => w.id).join(','));
   }
 

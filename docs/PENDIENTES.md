@@ -1745,6 +1745,59 @@ feature que falta):**
       decidir si la rareza del compañero pasa a derivarse de la base**, y eso ya es
       economy, no texto.
 
+### Lote I · ENCARGO DEL 8 DE OCTUBRE
+
+*El reequilibrio de la forja que quedó aprobado. **Fue una sola conversación de
+balance**: cada pieza sin la otra deja la forja anunciando un número que no cobra,
+así que las cuatro se hacen y se commitean juntas.*
+
+- [x] **F82 · Reequilibrio de los consumibles de forja, y el Éter de Refinamiento
+      nuevo.** Hecho en v1.15.14, en un commit solo.
+      **Las cuatro piezas, y por qué cada una:**
+      - **La piedra pasa a 1,2 puntos: diez suman 12.** Antes cada una daba 7
+        puntos y diez sumaban 70 —casi cualquier tirada quedaba segura—, así que
+        la piedra dejó de ser una decisión y pasó a ser un impuesto. Ahora la
+        cuenta de "las necesarias" vuelve a elegir. **Y el 95 % deja de ser
+        alcanzable en ningún tier sin suerte del árbol ni afijos**: por eso el
+        botón enseña la probabilidad real con esas piedras y solo dice "para el
+        95 %" cuando de verdad se llega —anteayer el botón prometía un 95 % que
+        en varios tiers era inalcanzable—. El tope sigue en diez por tirada, que
+        ahora es el tope de la mano.
+      - **La nanopartícula sube la rareza un escalón el 50 % de las veces, y es
+        solo de recolectores.** La rareza del compañero la pone su tier, así que
+        en compañeros no hace nada: la vista no la ofrece, el plan de serie la
+        fuerza a cero y el motor no la cobra. Antes daba +1 al potencial en
+        compañeros; ahora el consumible de 90 000 nanitas ya no se cobra sin
+        efecto en ningún sitio.
+      - **Nuevo: Éter de Refinamiento.** Suma 20 puntos a la probabilidad de que
+        la fusión suba una estrella de potencial —la tirada que siempre existió,
+        20/15/10/5 % por ★4 a ★1—, y sirve en las dos forjas. **Se gasta aunque
+        la tirada salga en blanco**, como las piedras: si solo se cobrara al
+        subir, sería una apuesta y no un consumible. 60 000 nanitas en la balda
+        "Forja", entre la piedra y la nanopartícula.
+      - **Las cajas con sus puertas:** la piedra desde la T2 —en la T1 aún no hay
+        a quién forjar—; nanopartícula y Éter desde la T3, con el Éter pesando
+        `tier - 2`, que es la forma de que el más reciente sea el que menos sale
+        sin bajar el peso de nadie más.
+      **Lo que se comprobó con bancos nuevos** (el total pasó de 2351 a 2382):
+      diez piedras suman exactamente 12 y una suma 1,2; en cada tier las
+      necesarias son el tope y con ellas **no** se promete el 95 %; el Éter mueve
+      la tirada —mismo dado, con y sin él— y se gasta al fallar; la
+      nanopartícula no se cobra en compañeros ni en su serie; el Éter no se usa
+      desde el almacén; los tres a su precio, cada uno con su buffId y en su
+      balda, sin duplicarse en otra; y los pesos de caja con sus puertas.
+      **Lo que se descubrió haciendo esto:** (1) la forja ahora tira **dos**
+      dados —acierto y potencial—, así que todos los bancos que fijaban "el"
+      dado con un número único estaban fijando también la subida de potencial
+      sin saberlo: `conSec(primero, resto)` es el helper nuevo que separa los
+      dos. (2) Dos pruebas viejas de "un rechazo no cobra nada" **pasaban
+      vacías**: los materiales que usaban eran de tiers distintos, así que el
+      rechazo era de materiales y el cobro no se llegaba a mirar. (3) El Éter
+      necesitaba su propia línea de lore, que `loreCheck` pidió en rojo.
+      **Y una enmienda que va con esto:** la forja **consolida y no crea** —
+      fusionar dos objetos da uno nuevo y los dos materiales se van—, que es la
+      lectura que aceptaste. Está escrita en `docs/CONTEXTO-JUEGO.md`.
+
 ### Ya encargo y repetido
 
 - [ ] **F72 · Iconos de caja distintos por tier, con brillo y color.** *(Ya estaba en
@@ -2508,7 +2561,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **34 bancos, 2179**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **45 bancos, 2382**, todas en verde._
 
 ### El sistema que se ha quitado entero
 

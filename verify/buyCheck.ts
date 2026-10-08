@@ -18,6 +18,7 @@
 // ==========================================================================
 
 import { STORE_ITEMS } from '../src/gameLoop';
+import { CATEGORIES } from '../src/components/store';
 import { TREE_BY_ID, nodeCost } from '../src/data/tree';
 // Para las ranuras: el número que da cada carta sale de esta tabla, no de un 4
 // escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
@@ -955,6 +956,61 @@ async function main() {
       g.getBulkMax('crateT1') === Math.floor(5_000 / UNIT_CAJA), `max=${g.getBulkMax('crateT1')}`);
     check('lote: lo no apilable no tiene tope que preguntar',
       g.getBulkMax('companionSlot1') === 1, `max=${g.getBulkMax('companionSlot1')}`);
+  }
+
+  // =========================================================================
+  //  8. LA BALDA DE FORJA: TRES CARTAS, Y CADA PRECIO DE SU CARTA
+  // =========================================================================
+  {
+    // **LOS TRES CONSUMIBLES DE LA FORJA Y SUS PRECIOS DEL REBALANCEO.** El Éter
+    // de Refinamiento es el nuevo: 60 000, entre la piedra (45 000) y la
+    // nanopartícula (90 000). Los números salen de `STORE_ITEMS` y no de aquí —
+    // ya se pagó una prueba con un precio escrito a mano que falló sin que
+    // hubiera ningún bug—, y lo que se fija es que los tres sigan a su precio.
+    const items = STORE_ITEMS as Record<string, { cost: number }>;
+    check('tienda: la piedra sigue en 45 000',
+      items.calibrationStone?.cost === 45000, `cost=${items.calibrationStone?.cost}`);
+    check('tienda: la nanopartícula en 90 000',
+      items.stabilityNano?.cost === 90000, `cost=${items.stabilityNano?.cost}`);
+    check('tienda: y el Éter de Refinamiento nuevo en 60 000',
+      items.refiningEther?.cost === 60000, `cost=${items.refiningEther?.cost}`);
+
+    // Y comprándolos de una vez: **cada uno deja SU buffId y no otro.** Un
+    // consumible que al comprarse creara la ficha equivocada —el Éter entrando
+    // como nanopartícula, por ejemplo— no fallaría al comprar: fallaría mucho
+    // después, cuando la forja dijera que no tienes Éter con una pila de Éter
+    // en el almacén.
+    const g = await boot(baseSave([], { nanites: 300_000 }));
+    const antes = nanites(g);
+    g.buyStoreItem('calibrationStone');
+    g.buyStoreItem('stabilityNano');
+    g.buyStoreItem('refiningEther');
+    const total = items.calibrationStone.cost + items.stabilityNano.cost + items.refiningEther.cost;
+    const conBuff = (b: string) => wh(g).filter((w: any) => w.buffId === b).length;
+    check('tienda: los tres se compran, cobra la suma de las tres cartas',
+      nanites(g) === antes - total,
+      `nanites=${nanites(g)} cobrado=${antes - nanites(g)} esperado=${total}`);
+    check('tienda: y cada uno deja su propio buffId en el almacen',
+      conBuff('calibrationStone') === 1 && conBuff('stabilityNano') === 1
+        && conBuff('refiningEther') === 1,
+      `piedra=${conBuff('calibrationStone')} nano=${conBuff('stabilityNano')} éter=${conBuff('refiningEther')}`);
+
+    // **Y LAS TRES EN SU BALDA, Y SOLO EN ELLA.** Un consumible fuera de la
+    // balda "Forja" es un producto que nadie encuentra; repetido en otra se
+    // anuncia dos veces. La lista la lee el mismo componente que la pinta, así
+    // que esta comprobación no puede separarse del render.
+    const forja = CATEGORIES.find(c => c.id === 'forja');
+    check('tienda: la balda Forja enseña exactamente los tres consumibles',
+      !!forja && forja.items.length === 3
+        && ['calibrationStone', 'stabilityNano', 'refiningEther'].every(id => forja.items.includes(id)),
+      JSON.stringify(forja?.items));
+    check('tienda: y los tres tienen carta con precio en la tienda',
+      !!forja && forja.items.every(id => (items[id]?.cost ?? 0) > 0),
+      JSON.stringify(forja?.items.map(id => `${id}=${items[id]?.cost}`)));
+    const enOtra = CATEGORIES.filter(c => c.id !== 'forja'
+      && c.items.some(id => ['calibrationStone', 'stabilityNano', 'refiningEther'].includes(id)));
+    check('tienda: y ninguno de los tres se anuncia en otra balda',
+      enOtra.length === 0, enOtra.map(c => c.id).join(','));
   }
 
   resumen('compra');

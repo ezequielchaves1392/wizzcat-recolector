@@ -35,7 +35,7 @@ import { ic, type IconName } from '../ui/icons';
 import { pageShell, mountInto, wireNav, statStrip } from '../ui/pageShell';
 import { TIER_SYSTEM, lorePara, lineaTipoCompanion } from '../data/tiers';
 import { STORE_ITEMS, CRATE_TYPES, RANURA_POR_CARTA, COMPANION_SLOT_BUY, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP, WAREHOUSE_BASE_CAP, costeDeCaja, type CrateType } from '../data/store';
-import { PIEDRA_PUNTOS } from '../data/constants';
+import { PIEDRA_PUNTOS, pctDe, BONO_ETTER } from '../data/constants';
 import { MAX_PIEDRAS_POR_FUSION } from '../data/crafting';
 import { sfx } from '../utils/audio';
 import { showToast } from '../utils/toast';
@@ -43,7 +43,7 @@ import { showConfirmModal } from '../utils/modal';
 import { rarityClass, raritySlug, RARITY_TEXT } from './crateLoot';
 import { countOccupiedSlots } from '../data/stacking';
 
-interface Category {
+export interface Category {
   id: string;
   label: string;
   icon: string;
@@ -76,7 +76,16 @@ const EXPANSORES_EN_VENTA = EXPANSOR_TIERS
   .map(e => e.buffId)
   .sort();
 
-const CATEGORIES: Category[] = [
+/**
+ * Las baldas de la tienda.
+ *
+ * **EXPORTADAS COMO `DESCRIPTIONS`, Y POR EL MISMO MOTIVO:** un banco las
+ * contrasta con el código. Sin leerlas desde fuera, que el Éter de
+ * Refinamiento esté en la balda "Forja" y en ninguna otra es una línea que
+ * nadie comprueba: un consumible fuera de su balda es un producto que nadie
+ * encuentra, y uno repetido se anuncia dos veces.
+ */
+export const CATEGORIES: Category[] = [
   { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1'] },
   // F47 · **EL CRISTAL SOLO EN RECURSOS.** Los expansores estaban aquí con él porque
   // los dos se compran con lo que produce el juego, pero no son un recurso: no se
@@ -90,7 +99,7 @@ const CATEGORIES: Category[] = [
   // `STORE_ITEMS` no los tiene, así que una carta ahí daría un error de
   // `undefined` al pintar.
   { id: 'cartas', label: 'Cartas', icon: 'card', items: ['afkCard', 'clickX2Card'] },
-  { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano'] },
+  { id: 'forja', label: 'Forja', icon: 'flask', items: ['calibrationStone', 'stabilityNano', 'refiningEther'] },
   // Los expansores que se venden salen de `EXPANSOR_TIERS`, no de una lista escrita.
   // Con diez expansores y cuatro a la venta, escribirlos aquí era otro sitio donde
   // olvidarse de uno; y si mañana se vendiera el T5, esta línea seguiría enseñando
@@ -185,8 +194,12 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     detail: `Se usa en la Forja y se puede gastar más de una por intento, hasta ${MAX_PIEDRAS_POR_FUSION}. Cuantas más gastes en una tirada, más riesgo que asumes.`
   },
   stabilityNano: {
-    what: 'Sube 8 puntos la probabilidad y garantiza un afijo extra.',
-    detail: 'Es el único consumible que mejora el recolector resultante, no solo las probabilidades. Sale de la Caja Legendaria.'
+    what: 'Sube la rareza del recolector forjado un escalón, la mitad de las veces.',
+    detail: 'Solo sirve en la forja de recolectores: ahí decide la rareza del resultado —y la rareza es la que pone el suelo de afijos—, y en compañeros no hace nada porque su rareza la pone el tier. Sube hasta Divino. Sale de las cajas desde la T3.'
+  },
+  refiningEther: {
+    what: `Añade ${pctDe(BONO_ETTER)} puntos a la probabilidad de que la fusión suba el potencial una estrella.`,
+    detail: 'Se usa en la Forja de recolectores y de compañeros, y se gasta aunque la tirada falle o la fusión falle. La probabilidad existe sin Éter y baja al subir de estrella; el Éter la sube. Sale de las cajas desde la T3.'
   },
 
   companionSlot1: {
@@ -276,7 +289,7 @@ function iconFor(itemKey: string): IconName {
     // techo, y el icono lo dice mejor así que un icono por tier.
     ...Object.fromEntries(EXPANSOR_TIERS.map(e => [e.buffId, 'warehouse' as IconName])),
     afkCard: 'clock', clickX2Card: 'bolt', clickX3Card: 'bolt',
-    calibrationStone: 'flask', stabilityNano: 'flask',
+    calibrationStone: 'flask', stabilityNano: 'flask', refiningEther: 'flask',
     // Las cartas de ranura salen de la tabla, no de una entrada por carta. Con una
     // entrada por carta, una ranura nueva nace sin icono y con el de la última.
     ...Object.fromEntries(Object.keys(RANURA_POR_CARTA).map(k => [k, 'layers']))
@@ -324,7 +337,7 @@ function rarityOf(itemKey: string): string | null {
     ...Object.fromEntries(EXPANSOR_TIERS.map(e => [e.buffId, e.rareza])),
     // F4 · Sin `clickBuff` ni `passiveBuff`: no hay carta, no hay rareza.
     afkCard: 'Raro', clickX2Card: 'Raro', clickX3Card: 'Épico',
-    calibrationStone: 'Raro', stabilityNano: 'Legendario',
+    calibrationStone: 'Raro', stabilityNano: 'Legendario', refiningEther: 'Legendario',
     // La rareza de una ranura sale de su posición en la tabla: cuanto más cara,
     // más alta. Es una regla y por eso se calcula; escribirla a mano por carta
     // era otra cosa que hay que acordarse de tocar al añadir una.

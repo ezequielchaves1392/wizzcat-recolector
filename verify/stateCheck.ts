@@ -35,7 +35,8 @@ import { RARITY_RANK } from '../src/components/crateLoot';
 import { collectorValue, fusionImprovesDensity, valorBaseTier } from '../src/data/valuation';
 import {
   boot, reload, bootNew, check, resumen, s, wh, ids, nanites, deType, find, guardado,
-  baseSave, collector, companion, ficha, crate, crystalViejo, consumable, conRoll
+  baseSave, collector, companion, ficha, crate, crystalViejo, consumable, conRoll,
+  conSec
 } from './kit';
 
 /**
@@ -1263,13 +1264,19 @@ async function main() {
       // Dos 5 dan 5: la perfección se conserva. Y un 5 con un 1 da 3: la media,
       // no el mejor de los dos. Si saliera el mejor, forjar seria subir de
       // potencial con un material malo y buscar el bueno no serviría de nada.
+      //
+      // `conSec` y no `conRoll`: la forja tira DOS dados ahora —acierto y
+      // potencial— y con un único número clavado los dos salen iguales.
+      // `conRoll(0)` haría subir SIEMPRE —0 es menos que cualquier probabilidad
+      // de subida— y "da de media un 3" daría verde sobre un 4 subido a mano.
+      // El primero va a 0 (acierto seguro) y el resto a 1 (nadie sube).
       const conBp = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
       const conPot = async (p1: number, p2: number) => {
         const g = await boot(baseSave([
           collector('a', 4, { damage: danioDeRango(4, p1), potential: p1 }),
           collector('b', 4, { damage: danioDeRango(4, p2), potential: p2 })
         ], conBp));
-        return conRoll(0, () => g.forgeCollector(['a', 'b']));
+        return conSec(0, 1, () => g.forgeCollector(['a', 'b']));
       };
       const dosPerfectos = await conPot(5, 5);
       check('forja: dos items perfectos dan un item perfecto',

@@ -38,7 +38,7 @@ import { muestraTarjetaDeEjemplo } from './previewTarjeta';
 import { TIER_SYSTEM } from './data/tiers';
 import { sellPrice } from './data/valuation';
 import { AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta } from './data/autoventa';
-import { baseSuccessChance, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
+import { baseSuccessChance, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat, piedrasParaObjetivo, successChance as chanceDeFusion } from './data/crafting';
 
 const params = new URLSearchParams(location.search);
 const width = params.get('w');
@@ -169,8 +169,13 @@ const MOCK: any = {
     // fabrica un objeto que el juego no fabrica mide un objeto que no existe — el mismo
     // criterio que se aplicó a los bancos, y por el mismo motivo.
     { id: 'cr1', name: CRATE_TYPES[8].name, type: 'crate', details: CRATE_TYPES[8].details, rarity: CRATE_TYPES[8].rarity, stackable: true, stackCount: 3 },
-    { id: 'st1', name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 12 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: 7 },
-    { id: 'nn1', name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Deja el recolector forjado con un afijo garantizado', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 2 },
+    { id: 'st1', name: 'Piedra de Calibración', type: 'consumable', details: 'Sube 1,2 puntos la probabilidad de la próxima fusión', rarity: 'Raro', buffId: 'calibrationStone', stackable: true, stackCount: 7 },
+    { id: 'nn1', name: 'Nanopartícula de Estabilidad', type: 'consumable', details: 'Sube la rareza del resultado un escalón la mitad de las veces', rarity: 'Legendario', buffId: 'stabilityNano', stackable: true, stackCount: 2 },
+    // El Éter va con los otros dos porque **sin él en el ejemplo no se puede revisar su
+    // ficha ni su descripción de tienda**: es el consumible nuevo de la forja y el único
+    // de los tres que toca el potencial. Con stackCount 1 se ve además el caso de pila
+    // mínima, que es el que usa el botón de usar.
+    { id: 'et1', name: 'Éter de Refinamiento', type: 'consumable', details: 'En la forja, +20 puntos a la probabilidad de subir el potencial una estrella', rarity: 'Legendario', buffId: 'refiningEther', stackable: true, stackCount: 1 },
     { id: 'af1', name: 'Tarjeta AFK', type: 'consumable', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk', stackable: true, stackCount: 2 },
     // La Click x2 está porque la barra de acceso rápido tiene una ranura puesta con ella, y
     // sin el item esa ranura saldría con el nombre y un 0: exactamente el estado que hay que
@@ -449,7 +454,7 @@ getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pendin
     const w = (MOCK.warehouse as any[]).find((x: any) => x.id === id);
     if (!w) return { unidades: 0, max: 0, motivo: 'Ese item ya no esta en el almacen.' };
     if (w.type !== 'consumable') return { unidades: 0, max: 0, motivo: 'Esto no se puede usar.' };
-    if (w.buffId === 'calibrationStone' || w.buffId === 'stabilityNano') {
+    if (w.buffId === 'calibrationStone' || w.buffId === 'stabilityNano' || w.buffId === 'refiningEther') {
       return { unidades: 0, max: 0, motivo: 'Este consumible se usa en la Forja.' };
     }
     const n = w.stackable ? (w.stackCount || 1) : 1;
@@ -558,6 +563,26 @@ getPrestigeInfo: () => ({ cores: MOCK.cores, totalCores: MOCK.totalCores, pendin
     return { ok: true, gained: plan.total, sold: plan.vendibles.length, bloqueados: plan.bloqueados };
   },
   getForgeInfo: () => ({ craftLuck: MOCK.bonus.craftLuck, baseChance: (t: number) => baseSuccessChance(t) + MOCK.bonus.craftLuck }),
+  /**
+   * El preview de las piedras necesarias, **con las funciones del motor y no con una
+   * copia.** Sin esto la pantalla de forja no pinta el botón "gastar las necesarias"
+   * —lo llama con `?.` y se queda en `null`—, y el preview es la única forma de mirar
+   * ese botón sin una partida real. El número sale de `piedrasParaObjetivo()` y de
+   * `successChance()`, que son exactamente las dos que usa `gameLoop`: si el mock las
+   * copiara a mano, se podía revisar un botón que promete algo que el motor no cobra.
+   */
+  previewPiedrasNecesarias: (tier: number, affixLuck = 0) => {
+    const piedra = (MOCK.warehouse as any[]).find(w => w.buffId === 'calibrationStone');
+    const disponibles = piedra ? (piedra.stackCount || 1) : 0;
+    const necesarias = piedrasParaObjetivo(tier, MOCK.bonus.craftLuck, affixLuck);
+    return {
+      necesarias,
+      disponibles,
+      suficientes: necesarias > 0 && disponibles >= necesarias,
+      alcanzable: Math.min(necesarias, disponibles),
+      chanceConNecesarias: chanceDeFusion(tier, MOCK.bonus.craftLuck, necesarias, affixLuck)
+    };
+  },
   /**
    * Que da la carta, para que la ficha del mercado enseñe el producto y no solo el
    * precio: con "Precio 200" y "Tienes 213" al lado no hay forma de saber cual es cual.

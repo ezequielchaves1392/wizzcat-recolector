@@ -522,6 +522,36 @@ export function conRoll(valor: number, fn: () => any): any {
   }
 }
 
+/**
+ * Ejecuta `fn` con `Math.random` en secuencia: **la primera llamada devuelve
+ * `primero` y todas las demás `resto`**.
+ *
+ * POR QUÉ NO BASTA `conRoll`. Desde la enmienda de F33 la fusión tira **dos
+ * dados**: el de acierto y el de subir el potencial una estrella. Con un único
+ * número clavado los dos salen iguales, y eso deja imposible medir la mitad de
+ * las reglas nuevas: `conRoll(0.001)` haría acertar la fusión **y subir el
+ * potencial siempre** —0,001 es menor que cualquier probabilidad de subida—, y
+ * un banco que comprobara "la media no sube" con eso daría verde sobre una
+ * mentira.
+ *
+ * El reparto es el del orden real de la tirada: **`primero` es el de acierto**,
+ * que es el que siempre se quiere forzar, y `resto` cubre lo que viene después
+ * —la subida de potencial, la rareza y los afijos—. Para "acierta y no sube"
+ * se pone `conSec(0.001, 0.999, ...)`; para "acierta y sube", `conSec(0.001,
+ * 0.001, ...)`; y para medir el Éter, el mismo `resto` en las dos ramas con y
+ * sin él, que es lo único que deja ver la diferencia.
+ */
+export function conSec(primero: number, resto: number, fn: () => any): any {
+  const original = Math.random;
+  let tirada = 0;
+  Math.random = () => (tirada++ === 0 ? primero : resto);
+  try {
+    return fn();
+  } finally {
+    Math.random = original;
+  }
+}
+
 // --------------------------------------------------------------------------
 //  Resumen
 // --------------------------------------------------------------------------
