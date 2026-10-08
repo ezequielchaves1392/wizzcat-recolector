@@ -55,6 +55,8 @@ import { nombreDe } from './nombres';
 // esta es la primera vez que se le pide un número desde las reglas de la forja.
 import { costeDeCaja } from './store';
 import { PIEDRA_APORTA, PIEDRA_PUNTOS } from './constants';
+// F74 · LAS BASES OCULTAS: importamos el multiplicador y el buscador.
+import { multiplicadorDeBase, basePorId, BaseOculta } from './bases';
 
 // --------------------------------------------------------------------------
 // Atributos
@@ -326,8 +328,33 @@ export function baseDeTier(tier: number): number {
  * se conservan porque todos se mueven igual, pero el precio por punto baja en
  * todos a la vez, y `balanceCheck` mide esa banda.
  */
-export function danioDeRango(tier: number, potential: number): number {
-  return Math.round(baseDeTier(tier) * (1 + 0.2 * potencialNormalizado(potential)));
+/**
+ * EL DAÑO BASE DE UN ITEM: SU BASE DE TIER POR EL POTENCIAL Y LA BASE OCULTA.
+ *
+ * **EL PEDIDO DEL JUGADOR: "PRIMERO CALCULAMOS LA BASE Y DPS LE APLICAMOS POTENCIA Y NIVELES".**
+ *
+ * La fórmula es:
+ *   daño = baseDeTier(tier) × multiplicadorDeBase(base) × (1 + 0.2 × potencial) × multiplicadorDeNivel(nivel)
+ *
+ * **LA BASE ES EL EJE DE LA CAZA:** cada base tiene un `pesoStat` de 0.92 a 1.10.
+ * El potencial (★1..★5) multiplica ×1.2 .. ×2.0. El nivel multiplica al final.
+ *
+ * **POR QUÉ EL PARÁMETRO `base` ES OPCIONAL:** La migración de partidas viejas
+ * llama a esta función sin conocer la base oculta del item (los items viejos
+ * no la traen). En ese caso se usa 1.0 (la media), y `migraPotenciales()` recalcula
+ * el daño real cuando carga la partida. Los items forjados **sí** pasan su base.
+ */
+export function danioDeRango(
+  tier: number,
+  potential: number,
+  base?: BaseOculta | number | null
+): number {
+  const baseStat = typeof base === 'number' ? base : base?.pesoStat ?? 1.0;
+  return Math.round(
+    baseDeTier(tier) *
+    baseStat *
+    (1 + 0.2 * potencialNormalizado(potential))
+  );
 }
 
 /** El potencial entero 1..5, para que nadie tenga que repetir el recorte. */
@@ -919,13 +946,27 @@ export const MATERIALES_POR_FUSION = 2;
 
  */
 
-export function poderDeCompanero(tier: number, potential: number): number {
+/**
+ * EL PODER DE UN COMPAÑERO: SU RANGO DE TIER POR EL POTENCIAL Y LA BASE OCULTA.
+ *
+ * **LA MISMA PIPELINE QUE EL RECOLECTOR:** base × potencial × baseOculta × nivel.
+ * Aquí el nivel no entra (los compañeros no suben de nivel), así que es:
+ *   poder = rangoDelTier × (1 + 0.2 × potencial) × baseOculta
+ */
+export function poderDeCompanero(
+  tier: number,
+  potential: number,
+  base?: BaseOculta | number | null
+): number {
 
   const [min, max] = rangoDePoder(tier);
 
   const p = potencialNormalizado(potential ?? undefined);
+  const baseStat = typeof base === 'number' ? base : base?.pesoStat ?? 1.0;
 
-  return Math.round(min + ((max - min) * (p - 1)) / 4);
+  return Math.round(
+    (min + ((max - min) * (p - 1)) / 4) * baseStat
+  );
 
 }
 

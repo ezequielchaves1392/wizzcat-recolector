@@ -1024,11 +1024,17 @@ el que hay que vigilar.
 
 #### LO QUE FALTA DECIDIR ANTES DE EMPEZAR
 
-| # | Qué | Por qué bloquea |
+**NINGUNA: las tres están decididas. `[v1.15.14]`**
+
+| # | Decisión | Por qué esta |
 |---|---|---|
-| **1** | **El techo de nivel con la base como segundo eje.** Hoy es `20 + potencial × 3`. Con dos ejes, ¿suben los dos? | Es el número que decide cuánto rinde invertir en un god-roll, y va justo en la mitad del "el nivel va al final" |
-| **2** | **Curva de peso de drop.** `11 − posición` sale lineal; también cabe una exponencial que haga la mejor casi mítica | Es la diferencia entre "buscar" y "cazar" |
-| **3** | **Fases.** 200 nombres + 200 lores es el lote de contenido más grande del proyecto, y `loreCheck` exige lore de cada uno | T1–T3 primero permitiría medir la caza en partida antes de escribir el resto |
+| **1** | **Techo de nivel: `20 + potencial × 2 + base × 0,5`** | Baja el peso del potencial de `×3` a `×2` **a propósito**: la base es el eje nuevo y si el techo no lo mirara, invertir en una base buena no rinde nada. El `×0,5` es suave porque **la base solo mueve ±10%**: si contara igual que el potencial, una base buena en un ★1 superaría a una base floja en un ★5 y volveríamos al problema de "dos stats". Que la base suba **un punto de nivel por cada dos puntos de base** hace que cazarla valga, sin que el techo lo sea todo. |
+| **2** | **Curva de drop lineal, `11 − posición`** | La mejor base (posición 10) sale con **peso 1** y la peor (posición 1) con **peso 10**: diez veces menos. Es lo que pidió el jugador —"va estar el mejor de ellos con la menor probabilidad"— y una exponencial lo habría hecho tan raro que nadie lo vería salir. **Lineal se nota en una tarde de cajas; exponencial se nota en un mes.** Y el techo es el mismo para todos, así que el peso **no se inventa**: solo reparte. |
+| **3** | **Las diez de golpe, sin fases** | Decidido por el jugador, con la recomendación contraria escrita: 200 bases + 200 lores es **el lote de contenido más grande del proyecto**. Se hace entero **porque F74 toca a la vez la generación, el botín, la forja, el techo y la migración**, y una versión a medias de eso no se puede medir: o el mecanismo entra completo y se mide la caza, o no hay nada que medir. **El riesgo es de contenido, no de código.** |
+
+**Y POR QUÉ ESTA TABLA ESTABA SIN RELLENAR.** Las tres se decidieron en la conversación y
+**no se llegaron a escribir aquí**, así que el siguiente las habría vuelto a abrir. Un
+acuerdo que vive solo en un chat es un acuerdo que se pierde.
 
 #### LO QUE HAY QUE MIRAR JUGANDO
 
