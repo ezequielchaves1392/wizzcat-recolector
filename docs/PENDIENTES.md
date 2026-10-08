@@ -1234,6 +1234,56 @@ feature que falta):**
       protege los datos en el disco del navegador, y la cuota la cobra el servidor. La cola
       local **ya existe** (`queueCheck`) y es síncrona y sobrevive al cierre; lo que se ha
       hecho es **dejar de pagar en la red lo que la local ya sabe**.
+- [x] **B31 · Desarrollo contra el emulador, para no gastar cuota probando.** `[v1.15.4]`
+      > "tambien si estoy gastando en pruebas locales si se puede hacer algo"
+      **SÍ, Y ERA LA MITAD DEL PROBLEMA.** El emulador estaba **declarado** en
+      `firebase.json` desde el principio y **nadie lo conectaba**: `connectFirestoreEmulator`
+      no aparecía en todo `src/`. O sea que **`npm run dev` escribía en el proyecto de
+      producción**, con la cuenta de verdad, y **cada recarga costaba parte del presupuesto
+      de los 20.000** que comparten los jugadores. Medido: **5 escrituras por recarga**,
+      más **~200 por hora** mientras la pestaña está abierta.
+      **LAS DOS CONDICIONES, Y CADA UNA IMPIDE UNA COSA DISTINTA.** El emulador se conecta
+      solo si `import.meta.env.DEV` **y** `VITE_EMULADOR === '1'`. Con solo `DEV`, cualquier
+      `npm run dev` apuntaría al cubo y nadie podría probar contra el proyecto real; con
+      solo la variable, **un build de producción en una máquina que la tenga puesta
+      apuntaría al emulador y la partida de todos iría a un cubo en localhost**. **Las dos
+      juntas cierran las dos puertas, y la primera sola ya elimina el código del bundle.**
+      **Y AUTH TAMBIÉN, O NO SIRVE.** El juego entra con correo y contraseña. Si solo se
+      conectara Firestore, el acceso seguiría yendo al proyecto real: se entraría con la
+      cuenta de verdad y se guardaría en el cubo. **Dos bases de datos mezcladas es peor que
+      no tener emulador**, porque parece que funciona.
+      **LA COMPROBACIÓN ESTÁ EN `run.mjs` Y NO EN UN BANCO, Y ESO NO ES UN DETALLE DE
+      ORGANIZACIÓN.** Un banco se empaqueta con Vite, y **Vite compila sin saber que lo
+      ejecuta `node`**: resuelve `node:fs` como si fuera de navegador y `readFileSync` llega
+      vacío. Se probaron cuatro caminos —import estático, dinámico, `import.meta.dirname` y
+      marcar los builtins externos— y **los cuatro fallaron**. `run.mjs` lo ejecuta `node`
+      directamente, así que sus imports **sí** funcionan. **Y hace falta que lea `dist/`**,
+      porque la protección **es invisible leyendo la fuente**: el `if` con `DEV` desaparece
+      del bundle por código muerto, y **esa eliminación es la protección**. Comprobado
+      compilando **con `VITE_EMULADOR=1` puesta**: `dist/` no lleva ni el aviso ni los puertos.
+      Uso: `npm run dev:emulador` en una terminal, `$env:VITE_EMULADOR="1"; npm run dev` en
+      otra.
+- [ ] **B32 · La cifra que dije en voz alta era una estimación, y ya está medida.**
+      > "podrias analizarlo y me decis cuanto gastaria un jugador jugando no se 2 o 4 horas diarias"
+      **MEDIDO CON EL RELOJ DE VERDAD, y sale menos de lo que dije.** La nota de B30 decía
+      5.280 escrituras al día por pestaña y **era una resta, no una medición**: suponía que
+      el latido bajaría a 40 por hora sin comprobarlo. `costeRealCheck` deja correr los
+      relojes de verdad durante cuatro minutos y cuenta con el contador del stub.
+      **EL NÚMERO: 195–210 escrituras por hora y pestaña**, con la partida quieta, que es
+      **el mínimo** porque el guardado se salta. Desglose: **160 del latido** (67%), **60 de
+      la presencia** (24%) y **0 del guardado**, que es lo que consiguió B28.
+      **POR JUGADOR Y DÍA:** 1 h ≈ 210 · **2 h ≈ 420 (2%)** · **4 h ≈ 840 (4%)** · 8 h ≈
+      1.680 (8%). **Con 2 h al día caben unos 47 jugadores; con 4 h, unos 23.**
+      **LO QUE ESTO DICE Y NO DICE.** El presupuesto **no lo exhaustion un jugador**: lo
+      agotan las **pestañas abiertas sin hacer nada** y las **pruebas locales**, que eran
+      producción de verdad. Con B28 + B30 + B31, un jugador normal **no vuelve a acercarse
+      al tope por su cuenta**.
+      **LO QUE SIGUE GASTANDO, Y ES LO QUE QUEDA SI NO HAY PLAN DE PAGO.** El latido (160/h)
+      y la presencia (60/h) son **el 91% de lo que queda**. Bajarlos choca con dos cosas que
+      **no son de cuota**: el cerrojo entre pestañas (45 s) y el punto rojo del ranking. **Si
+      hay un plan de pago, esto deja de ser un problema**; si no lo hay, el camino es
+      agrupan latido y presencia en el mismo documento, que es el mismo truco que B30 y que
+      **no se ha hecho porque toca el diseño del cerrojo**.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un

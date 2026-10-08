@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.4',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Probar ya no gasta cuota',
+    lineas: [
+      'Cuando probabas el juego en local, cada recarga escribia en el proyecto de verdad. Recargar para ver un cambio gastaba parte del presupuesto diario que comparten los jugadores.',
+      'Ahora hay un emulador local: levantalo con `npm run dev:emulador` en una terminal y arranca el juego con la variable VITE_EMULADOR en la otra. Los datos se quedan en tu maquina y no se gastan.',
+      'Solo funciona en desarrollo. En la version publicada nunca se activa, ni aunque la variable este puesta.',
+      'Tambien se corrigio que las pruebas del juego desarrollo se ejecutaban una sola vez y con el numero guardado, en vez de con el reloj de verdad.'
+    ]
+  },
+  {
     version: '1.15.3',
     fecha: '7 de octubre de 2026',
     titulo: 'Menos guardado y el bloqueo entre pestañas intacto',

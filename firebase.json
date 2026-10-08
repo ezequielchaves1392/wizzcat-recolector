@@ -4,9 +4,14 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "//emulators": "ESTO ES LO QUE HACE QUE DESARROLLO NO GASTE CUOTA. Con el emulador levantado, `npm run dev` con `VITE_EMULADOR=1` escribe en un cubo local y no en el proyecto de produccion: recargar para probar una cosa deja de costar parte del presupuesto de 20.000 escrituras que comparten los jugadores. Ver el bloque de `emulators` y el comentario sobre `auth`.",
   "emulators": {
     "firestore": {
       "port": 8080
+    },
+    "auth": {
+      "//": "NECESARIO Y NO OPCIONAL. El juego entra con correo y contrasena, asi que sin el emulador de Auth se podria entrar con la cuenta de verdad y guardar en el cubo: dos bases de datos mezcladas, que es peor que no tener emulador. Los dos emuladores van juntos. El puerto 9099 es el que usa `connectAuthEmulator` en `src/firebase.ts`, y los dos tienen que decir lo mismo.",
+      "port": 9099
     },
     "ui": {
       "enabled": true,

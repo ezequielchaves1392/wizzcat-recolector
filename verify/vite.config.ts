@@ -21,8 +21,19 @@ const sustituirFirebase = () => ({
   }
 });
 
+// **LO QUE NO HAY AQUÍ, Y ES LA MISMA LECIÓN QUE EN `vite.one.config.ts`.** Ningún banco
+// lee ficheros: **Vite compila los bancos sin saber que los ejecuta `node`**, y resuelve
+// `node:fs` y `node:path` como si fueran de navegador. Lo que sí lee el disco es
+// `run.mjs`, que **no pasa por Vite** y por eso sus imports de `node:` funcionan.
+const externosNode = {
+  name: 'externos-node',
+  resolveId(source: string) {
+    return source.startsWith('node:') ? { id: source, external: true } : null;
+  }
+};
+
 export default defineConfig({
-  plugins: [sustituirFirebase()],
+  plugins: [externosNode, sustituirFirebase()],
   build: {
     outDir: resolve(here, 'out'),
     emptyOutDir: true,
@@ -49,6 +60,7 @@ export default defineConfig({
         cargaIncompletaCheck: resolve(here, 'cargaIncompletaCheck.ts'),
         cuotaCheck: resolve(here, 'cuotaCheck.ts'),
         costeJuegoCheck: resolve(here, 'costeJuegoCheck.ts'),
+        costeRealCheck: resolve(here, 'costeRealCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
         perfilCheck: resolve(here, 'perfilCheck.ts'),

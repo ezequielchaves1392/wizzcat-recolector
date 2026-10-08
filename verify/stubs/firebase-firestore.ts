@@ -26,6 +26,25 @@ export const getFirestore = (app: any) => app;
  */
 export const initializeFirestore = (app: any, _opciones?: unknown) => app;
 
+/**
+ * `connectFirestoreEmulator`, para que importar `firebase.ts` no reviente.
+ *
+ * El motivo es el mismo que el de `connectAuthEmulator` en `firebase-app.ts`, y es
+ * **el mismo error de las dos veces**: el símbolo tiene que existir aunque la condición
+ * que lo llama sea falsa, porque **Vite comprueba los exports al resolver el módulo, antes
+ * de ejecutar una sola línea**. Sin esto, el fallo es un `Missing export` que no señala
+ * que lo que falta es un stub.
+ *
+ * Y **graba que se llamó**, que es lo que permite comprobar en un banco que la llamada
+ * existe y que **no** ocurre en producción, sin levantar un emulador.
+ */
+export const conectoresFirestore: string[] = [];
+export const connectFirestoreEmulator = (db: any, host: string, port: number) => {
+  const url = `${host}:${port}`;
+  conectoresFirestore.push(url);
+  (globalThis as any).__EMULADOR_FIRESTORE__ = url;
+};
+
 export const doc = (_db: any, ...path: string[]) => ({ id: path.join('/') });
 export const getDoc = async (ref: any) => {
   // FALLO DE LECTURA, Y POR QUÉ HACE FALTA UN CONMUTADOR PROPIO.

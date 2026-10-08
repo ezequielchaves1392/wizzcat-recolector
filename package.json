@@ -1,10 +1,12 @@
 {
   "name": "cyber-forge",
   "private": true,
-  "version": "1.15.3",
+  "version": "1.15.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:emulador": "firebase emulators:start --project chronos-tap --only firestore,auth",
+    "reglas:local": "firebase emulators:exec --project chronos-tap --only firestore \"firebase deploy --only firestore:rules --project demo-chronos-tap\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "verify": "node verify/scanTexto.mjs && node verify/scanPlantillas.mjs && node verify/scanCss.mjs && vite build --config verify/vite.config.ts && node verify/run.mjs",

@@ -9,6 +9,18 @@
 // funcionar también con el otro, y eso solo se garantiza si hay una definición.
 import { instalarEntorno, instalarProceso } from './entorno.mjs';
 import { resolve } from 'node:path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * `aqui`, **a nivel de módulo y no dentro del bloque que hace las comprobaciones de disco.**
+ *
+ * Declarado dentro, el bloque de B31 lo necesita y **no lo ve**: da `ReferenceError: aqui
+ * is not defined` antes de imprimir nada. Es un detalle de alcance —no de lógica— y por eso
+ * está aquí y con un comentario, porque el error que produce **no señala dónde está el
+ * problema**: dice que una variable no existe, no que está declarado en el sitio equivocado.
+ */
+const aqui = dirname(fileURLToPath(import.meta.url));
 
 globalThis.__MEM_DB__ = {};
 instalarEntorno();
@@ -40,6 +52,7 @@ const BANCOS = [
   'cargaIncompletaCheck',
   'cuotaCheck',
   'costeJuegoCheck',
+  'costeRealCheck',
   'forjaCheck',
   'sessionCheck',
   'perfilCheck',
@@ -85,9 +98,6 @@ const BANCOS = [
 //  comprobaciones leen lo que hay de verdad**: el directorio de fuentes y el de salidas.
 {
   const { readdirSync, existsSync } = await import('node:fs');
-  const { fileURLToPath } = await import('node:url');
-  const { dirname } = await import('node:path');
-  const aqui = dirname(fileURLToPath(import.meta.url));
 
   const listado = new Set(BANCOS);
   const sinEjecutar = readdirSync(aqui)
@@ -105,6 +115,72 @@ const BANCOS = [
     console.error('  !! BANCOS QUE NO ESTÁN EN EL BUNDLE: ' + sinEmpaquetar.join(', '));
     console.error('     Añádelos a `entry` en vite.config.ts.');
     process.exitCode = 1;
+  }
+}
+
+// ==========================================================================
+//  B31 · EL EMULADOR NO PUEDE SALIR DE DESARROLLO.
+// ==========================================================================
+//
+//  **POR QUÉ ESTÁ AQUÍ Y NO EN UN BANCO, Y ES LO CONTRARIO DE LO QUE PARECE.** Un banco
+//  se empaqueta con Vite para poder sustituirle Firebase, y **Vite compila el banco sin
+//  saber que lo ejecuta `node`**: resuelve `node:fs`, `node:path` y `node:url` como si
+//  fueran módulos de navegador, y entonces `readFileSync` y `fileURLToPath` llegan vacíos.
+//  Se probaron cuatro caminos —import estático, import dinámico, `import.meta.dirname` y
+//  marcar los builtins como externos en la config— y **los cuatro fallaron**. Un quinto
+//  intento habría sido persistence sin entender el motivo.
+//
+//  **ESTE FICHERO NO PASA POR VITE.** `run.mjs` lo ejecuta `node` directamente, así que
+//  sus imports de `node:fs` son de verdad y funcionan. **Por eso la comprobación va aquí.**
+//
+//  **LO QUE PROTEGE, Y ES MÁS GRAVE QUE UN ERROR NORMAL.** Conectar el emulador mal no es
+//  "que no funcione el desarrollo": es **que la partida de todos acabe en el cubo de la
+//  máquina de quien compiló**. El juego apuntaría a `127.0.0.1`, que para un jugador es
+//  nada, y **nadie lo vería nunca**, porque el que lo subió lo probó en su máquina.
+//
+//  **Y LA COMPROBACIÓN ES SOBRE `dist/`, NO SOBRE EL CÓDIGO, PORQUE LA PROTECCIÓN ES INVISIBLE
+//  LEYENDO LA FUENTE.** El `if` con `import.meta.env.DEV` **desaparece del bundle entero**
+//  al compilar en producción, porque `DEV` es `false` y el bloque es código muerto. Esa
+//  eliminación **es** la protección. Así que leer `firebase.ts` y ver la condición **no
+//  demuestra nada**: hay que mirar lo que sale.
+{
+  const { readdirSync, readFileSync, existsSync } = await import('node:fs');
+  const raiz = aqui + '/..';
+
+  const fuente = readFileSync(raiz + '/src/firebase.ts', 'utf8');
+  const conDevYVariable = /import\.meta\.env\.DEV\s*&&\s*import\.meta\.env\.VITE_EMULADOR/.test(fuente);
+  const conLosDos = /connectFirestoreEmulator/.test(fuente) && /connectAuthEmulator/.test(fuente);
+
+  // **EL BUNDLE. `dist/assets/*.js`, que es lo que se desplegaría.**
+  let js = '';
+  if (existsSync(raiz + '/dist/assets')) {
+    js = readdirSync(raiz + '/dist/assets')
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => readFileSync(raiz + '/dist/assets/' + f, 'utf8'))
+      .join('\n');
+  }
+  const emuladorEnBundle = js.includes('Emulador conectado');
+
+  // `pkg` y `firebase.json`, que es lo que decide si alguien puede arrancar el emulador.
+  const pkg = JSON.parse(readFileSync(raiz + '/package.json', 'utf8'));
+  const firebaseJson = JSON.parse(readFileSync(raiz + '/firebase.json', 'utf8'));
+  const hayScript = typeof pkg.scripts?.['dev:emulador'] === 'string';
+  const authDeclarado = firebaseJson.emulators?.auth?.port === 9099;
+
+  const fallos = [];
+  if (!conDevYVariable) fallos.push('el emulador no exige DEV Y VITE_EMULADOR a la vez');
+  if (!conLosDos) fallos.push('Firestore y Auth no se conectan en el mismo sitio');
+  if (emuladorEnBundle) fallos.push('*** EL BUNDLE DE PRODUCCION LLEVA EL EMULADOR ***');
+  if (js && js.includes('127.0.0.1:8080')) fallos.push('el puerto del emulador esta en el bundle');
+  if (!hayScript) fallos.push('no hay script dev:emulador');
+  if (!authDeclarado) fallos.push('el emulador de Auth no esta declarado en firebase.json');
+
+  if (fallos.length) {
+    console.error('  !! B31 · EMULADOR: ' + fallos.join(' | '));
+    process.exitCode = 1;
+  } else {
+    console.log('  B31 emulador: la condicion es DEV && variable, los dos emuladores van juntos,');
+    console.log('               y dist/ no lleva nada de esto.');
   }
 }
 
