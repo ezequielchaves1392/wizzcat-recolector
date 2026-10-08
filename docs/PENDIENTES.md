@@ -372,7 +372,12 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       potencial. **Y ojo:** subir el multiplicador de nivel sube también el ingreso de los
       compañeros, que usan la misma función, así que es un cambio de economía y no un ajuste
       de la forja.
-- [ ] **B10 · Que dentro de un mismo tier haya bases distintas.** Hoy **no las hay**:
+- [ ] **B10 · Que dentro de un mismo tier haya bases distintas.** *(Ahora es F74, y
+      está en marcha: desde `c28dd5e` el daño y el poder pasan por una base oculta
+      —peso de 0,92 a 1,10—, así que **dos ★5 del T1 al T3 ya no son el mismo
+      objeto**. Lo que queda —contenido T4–T10 y qué base suelta cada caja— está
+      escrito en F74. El texto de abajo describe el estado anterior al commit.)*
+      Hoy **no las hay**:
       `danioDeRango()` es `base del tier × (1 + 0,2 × potencial)`, y el potencial es un
       entero de 1 a 5. O sea que **dentro de un tier hay exactamente cinco valores**, y dos
       T1 con el mismo potencial son **idénticos**: mismo daño, mismos afijos posibles, misma
@@ -836,14 +841,15 @@ programarlo, para que no viva solo en una conversación.*
       activos (`perfiles/{uid}`, con coacción y reglas si hace falta) y pintar
       el bloque "así juega ahora" en la tarjeta ajena, diciendo que es al
       guardar (los buffs caducan y la tarjeta no).
-- [ ] **F69 · Diez piedras por fusión, cada una más suave.**
+- [x] **F69 · Diez piedras por fusión, cada una más suave.** Hecho y **superado** en
+      v1.15.14.
       > "Ahora se pueden agregar hasta 10 piedras de calibración reducir la probabilidad base que aumenta cada una..."
-      El tope de 10 **ya está** (`maximoDePiedras()`); lo que falta es bajar el
-      aporte de 12 a **7 puntos** por piedra. Con 7, el 95 % se sigue alcanzando
-      en todos los tiers (el T11+ lo pide justo con 10, que es lo que hace que
-      la pila entera importe) y el techo sube de 60 a 70. Toca etiqueta de
-      tienda, `details`, comentarios que dicen "12"/"5", y los bancos que clavan
-      el 12 %.
+      El tope de 10 **ya estaba** (`maximoDePiedras()`), y se queda. Lo que hizo el
+      encargo del 8 de octubre es bajar el aporte a **1,2 puntos** por piedra —
+      diez suman 12—, no a 7 como decía este plan: con 7 cualquier tirada alta
+      quedaba casi segura y la piedra dejó de ser una decisión. Ahora el botón de
+      las necesarias enseña la probabilidad real cuando el 95 % ya no se alcanza.
+      El plan de bajar a 7 queda escrito en el commit que lo superó.
 - [ ] **F70 · Cada Ascensión pide más, y los núcleos no compran núcleos.**
       > "Ver que cada reinicio o ascensión en base a los nucleos obtenidos me vaya pidiendo mas nanitas para el próximo reset, balancerlo lo mejor posible para evitar exploits."
       Dos mitades: (a) el escalado por `totalCores` **ya existe** (cada reset
@@ -896,7 +902,10 @@ programarlo, para que no viva solo en una conversación.*
 su transcripción**: una decisión que solo vive en un mensaje no existe dentro de
 tres meses, y esta toca la economía entera.*
 
-- [ ] **F74 · Diez bases por tier, ocultas, con más cuanto más raras.**
+- [ ] **F74 · Diez bases por tier, ocultas, con más cuanto más raras.** *(En marcha:
+      el motor y el contenido T1–T3 están desde `c28dd5e` —30 bases con nombre y
+      lore, daño y poder por base, techo de nivel con base—. Falta el contenido
+      T4–T10 y decidir qué base suelta cada caja.)*
       > "podremos hacer que para cada Tier existan 10 bases distintas tanto de compañeros como de recolectores... y entre ellas algunas mas dificiles de conseguir porque tienen mejores bases? entre uno de ellos va estar el mejor de ellos con la menor probabilidad , cosa de hacer divertido que los jugadores busquen las bases... de paso esto va a modificar la forja... cada Base de cada tier va a tener un peso y depende lo que combine va a dar mejor o menor resultado"
       > "primero calculamos la base y dsp le aplicamos potencia y niveles"
       > "creería que si fijate que nada se desbalancee... y me gustaría que un tier inferior mejorado pueda llegar a superar una base superior... si no el jugador tiene a esperar el siguiente tier y listo"
