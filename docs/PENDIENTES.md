@@ -1081,7 +1081,44 @@ feature que falta):**
       materiales**.
       **Lo que sigue sin poder comprobarse aquí:** el pintado de la card es DOM, y
       lo que se mira es la fila que dice "Intacto. No se gastó ningún material".
-- [ ] **B23 · La Tarjeta AFK no desactiva todo lo que el AFK activa.**
+- [x] **B23 · La Tarjeta AFK no desactivaba una de las siete puertas.** `[v1.15.13]`
+      > "La tarjeta afk no esta funcionando correctamente , debería deshabilitar todas las funciones que habilita el afk. El cartel que muestra el afk , el bloqueo de la ganancia pasiva , el bloqueo por espera , el bloqueo por pestaña , el bloqueo por ventan y todo lo demás que habilite el afk."
+      **La lista del jugador era la especificación, y el banco la recorre entera.** Hecho: el
+      tick tiene **cuatro puertas** al ingreso y **ahora las cuatro preguntan a la tarjeta**.
+      **LA QUE SE QUEDABA ERA LA ESPERA POR CLIC.** Se llama así porque es el peaje que se
+      paga al volver de estar ausente: el tick había acumulado medio segundo de más y sin un
+      click de verdad se contaría tiempo que no le corresponde. **Con la tarjeta puesta el
+      ingreso nunca se cortó, así que no había peaje que pagar** —y se estaba cobrando igual.
+      **LO IMPORTANTE ES QUE ARREGLARLA EN UN SOLO SITIO NO BASTABA.** Poner la condición en
+      la puerta del tick deja `awaitingClickAfterAfk` **colgada**: ya no hay puerta que la
+      mire, pero el clic se la lleva, y el jugador pierde ingreso justo en el caso contrario,
+      cuando la tarjeta **ha caducado** y sí tendría que esperar. Por eso la espera **deja de
+      crearse** cuando hay tarjeta, y no solo de aplicarse: **dos sitios con la misma pregunta
+      y la misma respuesta, o la contradicción vuelve.**
+      **LO MEDIDO, Y SALIÓ EN EL DETALLE DE UNA COMPROBACIÓN:** sin tarjeta el watchdog corta
+      el intervalo y el tick deja de correr (`isAfk=false`, saldo 0). **Con tarjeta el tick
+      sigue vivo** (`isAfk=true`, saldo 110). Eso **es** el bug, visto de lado.
+      **LO QUE ESTA COMPROBADO Y LO QUE NO, Y POR QUÉ.** El banco comprueba el **efecto**
+      (entra dinero / no entra) y **no** la bandera interna, porque `estaPausado()` empieza
+      con `if (!isAfk) return false` y responde por **este instante**. Y **el disparo exacto
+      del bug —volver con una tecla en vez de con un clic— no se puede probar**: el `domStub`
+      de `verify/` tiene `addEventListener() {}`, **no guarda los listeners**, así que un banco
+      no puede lanzar un `keydown`. Se comprueba **la condición que usa el arreglo**, y está
+      escrito por qué.
+      **Y HACÍA FALTA TIEMPO REAL, NO TICKS.** El ingreso pasivo se cobra por **segundos
+      enteros** (`msParaCobroPasivo`), así que correr los ticks con esperas de 0 **no pasa ni
+      un segundo**: el saldo se quedaba en 0 con y sin tarjeta y la comprobación daba falso
+      **por el reloj del banco, no por el motor**. El motor cuenta con `Date.now()` para que
+      el navegador no le engañe; **el banco tampoco puede engañarse a sí mismo**.
+      `tarjetaPuertasCheck` (nuevo, 5): **sin tarjeta el ingreso se sigue cortando** (R10
+      intacto, y va **primero** a propósito), con tarjeta entra; la espera por clic no se crea
+      con la tarjeta puesta; **si la tarjeta caduca mientras estás fuera el corte vuelve**; y
+      **la tarjeta sigue durando 10 minutos**, porque arreglar una puerta no puede ser tocar el
+      reloj de la otra.
+      **Y UN BANCO MUDO QUE PARECÍA UNO VERDE:** la primera versión **no exportaba
+      `default`**, así que el runner importaba `undefined`, `await undefined` no lanzaba nada
+      y el banco salía con `exit=0`. **Un banco que no existe y uno que pasa se ven igual**,
+      que es el mismo agujero que `run.mjs` con los bancos ausentes de la lista.
       > "La tarjeta afk no esta funcionando correctamente , debería deshabilitar todas las funciones que habilita el afk. El cartel que muestra el afk , el bloqueo de la ganancia pasiva , el bloqueo por espera , el bloqueo por pestaña , el bloqueo por ventan y todo lo demás que habilite el afk."
       **Ojo al nombre: B9 y B19 ya arreglaron la mitad de esto** (el cartel y el
       botón parado leen `estaPausado()`, la misma pregunta del tick). Lo que queda es
@@ -1433,39 +1470,6 @@ feature que falta):**
       que no abre es peor que no tenerla. Para ver los documentos, la consola.
       `npm run dev:emulador` y `$env:VITE_EMULADOR="1"; npm run dev`. **41 bancos = 2311
       pruebas, en verde.**
-- [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
-      > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
-      **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un
-      tope que debería ser de 30 min más. **O sea, casi el doble de lo prometido**, y
-      en el peor sitio posible: la tarjeta AFK es **la única forma de que haya ingreso
-      sin mirar la pantalla**, que es justo lo que R10 prohíbe. Un tope que no se
-      respeta no es un descuadre de la barra, es la regla del juego rota.
-      **POR QUÉ HAY QUE MEDIRLO ANTES DE ARREGLAR Y NO DESPUÉS.** La duración de un
-      buff **acumula** (B13 lo dejó escrito: `pasoDeConsumible()` × unidades, con el
-      total concedido en `afkTotalMs`), así que hay **tres sumandos posibles** y cada
-      uno es un bug distinto:
-      - **El tope no mira la tarjeta.** Si el tope duro de 30 min está sobre el
-        acumulado en vez de sobre el paso, tres tarjetas dan 30 min y una sola con
-        nivel da 30, y el HUD mente sobre el que se está mirando.
-      - **El `+30 min` del nodo se aplica dos veces.** `afkCardDurationMs()` es
-        `10 min base + extra del árbol`, y si el extra está en el paso **y** en el
-        tope, se suma en los dos sitios.
-      - **El nodo cuenta un nivel que no tiene.** Si `afk_extend` da +30 por nivel y
-        el jugador lo tiene en nivel 2, son 60 de extra, no 30: y entonces la hora y
-        media es **la cuenta correcta con el multiplicador mal**. Esta es la más
-        probable, porque **1:55 es casi 2 h y el pase no puede ser de dos horas** con
-        un tope de 30: hay un multiplicador que se está contando dos veces o un nivel
-        de más.
-      **Lo que hay que leer primero:** `afkCardDurationMs()` (`gameLoop.ts`) y el nodo
-      `afk_extend` de `data/tree.ts`, **los dos con sus números puestos**, porque un
-      tope que se respeta a medias y un tope que se aplica dos veces se diferencian en
-      el orden de las multiplicaciones y no en el resultado final.
-      **`tarjetaCheck` es el banco que lo ata**, y ya tiene la invariante de duración
-      de la parte comprable; falta la del **tope del acumulado**: con N tarjetas de
-      nivel 1, el tiempo total no puede pasar del tope, ni aunque el nodo lo suba. Y
-      **con el HUD en la captura**: la barra se pinta con `afkTotalMs`, así que si el
-      número grande y la barra no coinciden, es que el denominador es otro caso del
-      mismo bug.
 - [x] **B26 · La tarjeta AFK dura más de lo que el tope dice.** `[v1.15.9]`
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Arreglado, y era peor de lo que parecía la captura: con el nodo al máximo el tope

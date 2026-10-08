@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.13',
+    fecha: '8 de octubre de 2026',
+    titulo: 'La Tarjeta AFK ya anula todos los cortes',
+    lineas: [
+      'Con la Tarjeta AFK puesta, al volver de estar ausente el juego te paraba el ingreso hasta que hicieras clic. Era un cobro que no tocaba: el ingreso nunca se habia cortado, asi que no habia nada que compensar.',
+      'Ahora la Tarjeta AFK anula los cuatro cortes a la vez: por pestana, por ventana, por no estar mirando y por la espera al volver.',
+      'Si la tarjeta se acaba mientras estas fuera, el corte vuelve con ella y el peaje tambien. Solo deja de existir mientras esta viva.',
+      'Sin tarjeta no cambia nada: el juego sigue cobrando solo cuando lo estas mirando.'
+    ]
+  },
+  {
     version: '1.15.12',
     fecha: '8 de octubre de 2026',
     titulo: 'El amplificador retirado te explica por que',

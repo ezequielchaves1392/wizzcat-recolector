@@ -65,6 +65,7 @@ export default defineConfig({
         cuotaPantallaCheck: resolve(here, 'cuotaPantallaCheck.ts'),
         cargaCortaCheck: resolve(here, 'cargaCortaCheck.ts'),
         afkTopeCheck: resolve(here, 'afkTopeCheck.ts'),
+        tarjetaPuertasCheck: resolve(here, 'tarjetaPuertasCheck.ts'),
         criticoAutoCheck: resolve(here, 'criticoAutoCheck.ts'),
         expansorCheck: resolve(here, 'expansorCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),

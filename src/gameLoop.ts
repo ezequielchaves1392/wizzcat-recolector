@@ -3881,8 +3881,21 @@ function sePuedeGuardar(): boolean {
       lastActiveTimestamp = Date.now();
       if (isAfk) {
         isAfk = false;
-        // Activar estado de espera de click para retomar pasivos
-        awaitingClickAfterAfk = true;
+        // B23 · **LA ESPERA POR CLIC NO SE PONE SI HAY TARJETA AFK, Y POR QUÉ ESTÁ AQUÍ Y
+        // NO SOLO EN LA PUERTA DEL TICK.**
+        //
+        // **CORREGIR SOLO LA PUERTA DEL TICK NO BASTA, Y ESTO ES LO QUE SE HA HECHO MAL LA
+        // PRIMERA VEZ.** Si el tick respeta la tarjeta pero aquí se pone igual la espera,
+        // entonces `awaitingClickAfterAfk` se queda **colgada**: ya no hay puerta que la
+        // mire, pero el clic se lleva la partida, y el jugador vuelve a perder ingreso en la
+        // situación contraria —cuando la tarjeta **ha caducado** y sí tendría que esperar.
+        //
+        // O sea: **la espera tiene que dejar de existir cuando la tarjeta está puesta, y no
+        // solo dejar de aplique.** Por eso la pregunta se hace **aquí, al crearla**, y no
+        // solo en el sitio donde se comprueba. Y usa la misma función que la puerta
+        // (`estaPausado()`), que es la que sabe si hay buff: **dos sitios con la misma
+        // pregunta y la misma respuesta, o la contradicción vuelve**.
+        if (estaPausado()) awaitingClickAfterAfk = true;
         onUpdate(state, false);
       }
     }
@@ -4162,7 +4175,27 @@ const RITMO_GUARDADO_MS = 30_000;
         return;
       }
 
-      if (awaitingClickAfterAfk) {
+      // B23 · LA ESPERA POR CLIC TAMBIÉN ES UNA DE LAS PUERTAS, Y ESTA ERA LA QUE SE QUEDABA.
+      //
+      // **EL TICK TIENE CUATRO PUERTAS AL INGRESO Y AHORA LAS CUATRO PREGUNTAN A LA
+      // TARJETA.** El watchdog (que es "por pestaña"), `isEffectivelyAfk` (que es "por no
+      // estar mirando") y el manejador de presencia (que es "por ventana") miran
+      // `estaPausado()` o el buff. **Esta cuarta miraba `awaitingClickAfterAfk` a secas**, y
+      // con eso el jugador compraba la tarjeta y **aun así perdía ingreso al volver**.
+      //
+      // **POR QUÉ EXISTE ESTA PUERTA Y POR QUÉ HERE DESAPARECE CON LA TARJETA.** La espera
+      // existe para esto: el jugador vuelve de estar ausente, el tick había acumulado medio
+      // segundo de más, y sin un click de verdad se contaría **un tiempo que no le
+      // corresponde**. Es decir: **es el peaje de haber estado ausente**. Con la tarjeta AFK
+      // puesta **el ingreso nunca se cortó**, así que **no hay peaje que pagar**: nada se
+      // acumuló de más, porque la línea 4118 siguió cobrando mientras no estaba. Pedir un
+      // click para devolverle lo que ya tiene es la forma de cobrarle dos veces.
+      //
+      // **Y NO ES QUE SE PERDONE LA ESPERA, ES QUE NO SE HA CREADO.** Por eso lo que hace
+      // este arreglo es **no ponerla**, y no saltársela: si el buff caduca justo cuando
+      // vuelve, lo correcto es que la siguiente vuelta sí pause, y eso lo decide la puerta
+      // de `isEffectivelyAfk`, que es la que de verdad mira el buff.
+      if (awaitingClickAfterAfk && estaPausado()) {
         onUpdate(state, false);
         return;
       }

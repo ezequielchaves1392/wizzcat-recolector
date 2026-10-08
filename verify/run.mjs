@@ -57,6 +57,7 @@ const BANCOS = [
   'cuotaPantallaCheck',
   'cargaCortaCheck',
   'afkTopeCheck',
+  'tarjetaPuertasCheck',
   'criticoAutoCheck',
   'expansorCheck',
   'forjaCheck',
