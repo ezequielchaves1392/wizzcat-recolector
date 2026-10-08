@@ -27,7 +27,7 @@ import { chanceDeSintonizacion } from '../src/data/items';
 import { costeDeCaja , techoDeExpansor } from '../src/data/store';
 import { formatNumber } from '../src/utils/format';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
-import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom } from '../src/data/crafting';
+import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom, poderDeCompanero } from '../src/data/crafting';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
 import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_LOOT, tablaDePesos, resolveLootAmount } from '../src/components/crateLoot';
@@ -2681,6 +2681,56 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
       f2.base + f2.filas.reduce((a: number, f: any) => a + f.suma, 0) === f2.total &&
       f2.total === g2.getStatPrincipal('r2')?.valor,
       `base=${f2.base} total=${f2.total} stat=${g2.getStatPrincipal('r2')?.valor}`);
+  }
+  {
+    // F77 · EL HOVER DEL COMPANERO USA SUS MULTIPLICADORES DE VERDAD. La lista
+    // comun aplicaba 1 + 0,2 x potencial —la regla del recolector— y no traia
+    // la rareza: un Divino de 5 estrellas decia "+100 %" donde el cobro pone
+    // x1,06 de potencial y x1,60 de rareza, y la lista no sumaba el numero de
+    // al lado. Ahora cada fila es un multiplicador que el cobro aplica, y la
+    // que no mueve el entero no sale, igual que en el recolector.
+    const cuadra = (f: any, st: any) =>
+      f.base + f.filas.reduce((a: number, x: any) => a + x.suma, 0) === f.total
+      && f.total === st?.valor;
+    const monta = async (id: string, tier: number, pot: number, rarity: string, level: number) => {
+      const power = poderDeCompanero(tier, pot);
+      const g = await boot(baseSave([
+        companion(id, tier, { rarity, potential: pot, power }),
+        ficha(id, tier, { type: 'passive', power, rarity, potential: pot })
+      ], {
+        activeCompanions: [id],
+        companions: [{ id, name: 'Compañero T' + tier, type: 'passive', power, rarity, tier, potential: pot }]
+      }));
+      const w: any = (s(g).warehouse as any[]).find((x: any) => x.id === id);
+      w.level = level;
+      return g;
+    };
+    // Divino de 5 estrellas con nivel: las tres filas, cada una con su numero.
+    const g5 = await monta('c5', 5, 5, 'Divino', 2);
+    const f5 = g5.getStatFilas('c5');
+    check('filas: el hover del companero cuadra con su stat',
+      cuadra(f5, g5.getStatPrincipal('c5')),
+      `base=${f5.base} filas=${f5.filas.map((x: any) => x.nombre + ':' + x.suma).join(' ')} total=${f5.total} stat=${g5.getStatPrincipal('c5')?.valor}`);
+    check('filas: el potencial del companero es su extra, no el del recolector',
+      f5.filas.some((x: any) => x.nombre === 'Potencial 5★' && x.detalle === '6% extra'),
+      f5.filas.map((x: any) => x.nombre + ' ' + x.detalle).join(' | '));
+    check('filas: y la rareza sale con su multiplicador',
+      f5.filas.some((x: any) => x.nombre === 'Rareza Divino' && x.detalle === '60% más'),
+      f5.filas.map((x: any) => x.nombre + ' ' + x.detalle).join(' | '));
+    // Raro de 3 estrellas: el potencial no paga extra y no sale; la rareza si.
+    const g3 = await monta('c3', 4, 3, 'Raro', 0);
+    const f3 = g3.getStatFilas('c3');
+    check('filas: sin extra no hay fila de potencial en el companero',
+      cuadra(f3, g3.getStatPrincipal('c3'))
+        && !f3.filas.some((x: any) => x.nombre.startsWith('Potencial'))
+        && f3.filas.some((x: any) => x.nombre === 'Rareza Raro' && x.detalle === '10% más'),
+      f3.filas.map((x: any) => x.nombre + ' ' + x.detalle).join(' | '));
+    // Comun de 1 estrella: no hay filas y el total es la base.
+    const g1 = await monta('c1', 2, 1, 'Común', 0);
+    const f1 = g1.getStatFilas('c1');
+    check('filas: un companero Comun de 1 estrella no tiene filas que explicar',
+      cuadra(f1, g1.getStatPrincipal('c1')) && f1.filas.length === 0,
+      `filas=${f1.filas.length} total=${f1.total} stat=${g1.getStatPrincipal('c1')?.valor}`);
   }
 
 resumen('estado, migracion y economia');

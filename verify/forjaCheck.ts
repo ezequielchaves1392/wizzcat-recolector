@@ -68,7 +68,8 @@ import {
   attemptForge, rangoDeAfijosForjados, danioDeRango,
   AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION,
   valorDeUnCristal, cristalesDeConsuelo, rarezaFusionada, afijosCompartidos,
-  PROB_CONSERVA_RAREZA, subirRareza, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION
+  PROB_CONSERVA_RAREZA, subirRareza, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION,
+  rarezaCalculadaDeForja, potencialFusionado
 } from '../src/data/crafting';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
@@ -1244,6 +1245,30 @@ const falloCon = async () => {
     check('herencia: dos Comunes dan un Común casi siempre',
       r.success === true && r.collector?.rarity === 'Común',
       `rarity=${r.collector?.rarity}`);
+  }
+  {
+    // F76 · LO QUE LA PANTALLA ANUNCIA ES LO QUE LA FORJA ESTAMPA. La linea de
+    // "Rareza calculada" sale de `rarezaCalculadaDeForja()` con el tier nuevo y
+    // el promedio del yunque: sin rarezas compartidas no hay nada que conservar
+    // y con el segundo dado a 1 la estrella no sube, asi que el forjado tiene
+    // que traer exactamente la anunciada.
+    const a = (id: string) => collector(id, 3, { potential: 2, rarity: 'Común', damage: danioDeRango(3, 2) });
+    const b = (id: string) => collector(id, 3, { potential: 2, rarity: 'Raro', damage: danioDeRango(3, 2) });
+    const medio = potencialFusionado([2, 2]);
+    const anunciada = rarezaCalculadaDeForja(4, medio);
+    const r = conSec(0, 1, () => attemptForge([a('x'), b('y')], 3, 'X', opts()));
+    check('herencia: sin compartir, el forjado trae la rareza calculada',
+      r.success === true && r.collector?.rarity === anunciada,
+      `rarity=${r.collector?.rarity} anunciada=${anunciada}`);
+    // **Y LA TABLA ANUNCIADA ES LA DE SIEMPRE.** Los umbrales por potencial y
+    // tier no los mueve esta feature: solo se exponen para ensenarlos.
+    check('herencia: y la calculada cruza los umbrales donde toca',
+      rarezaCalculadaDeForja(4, 2) === 'Épico'
+        && rarezaCalculadaDeForja(5, 3) === 'Legendario'
+        && rarezaCalculadaDeForja(7, 4) === 'Mítico'
+        && rarezaCalculadaDeForja(9, 5) === 'Divino',
+      'T4p2=' + rarezaCalculadaDeForja(4, 2)
+        + ' T5p3=' + rarezaCalculadaDeForja(5, 3));
   }
   {
     // Lo compartido entra primero, en orden de aparición: forzar es elegir.

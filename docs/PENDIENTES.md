@@ -1736,23 +1736,42 @@ feature que falta):**
       se pasan a resolver como el Inicial** (mismo `buffId` efectivo, techo 60), y
       `TECHOS_VIEJOS` queda solo para `expansorT5..T10`, que sí son de tramo
       distinto. **Un banco:** un item `expansorT3` guardado sube hasta 60, no hasta 45.
-- [ ] **F76 · En la forja se ve el potencial y la rareza de lo crafteado.**
+- [x] **F76 · En la forja se ve el potencial y la rareza de lo crafteado.**
       > "En la forja también se tiene que ver el potencial y la rareza de lo crafteado"
-      **Medido primero, porque puede que ya se vea y no se note.** Si ya sale, la
-      feature es de formato (que el potencial vaya **al lado de la rareza** y no
-      escondido tras un `details`), y eso es media hora. Si no sale, hay que tener
-      en cuenta que **con F74 la rareza y el potencial ya no son la mitad de la
-      historia**: la base también tiene que estar, y sin ella el jugador no puede
-      decidir si forjar. **O sea que esta piece es parte de F74, no un extra.**
-- [ ] **F77 · El compañero enseña su potencial y su rareza en la descripción.**
+      Hecho en v1.15.15. Medido primero, como pedía la entrada: el potencial promedio
+      ya salía y la rareza compartida tambien, pero **la rareza del resultado no salía en
+      ningún sitio**. Ahora sale al lado del potencial: en recolectores la calculada con
+      el promedio del yunque —dice "calculada" porque los tres dados que faltan (conservar
+      la compartida, subir la estrella y la Nano) solo la mejoran, nunca la empeoran—, y en
+      compañeros la del tier, que no tiene dado. Los dos números salen de las mismas
+      funciones que los estampan al forjar, y un banco ata que lo anunciado y lo forjado
+      coinciden.
+- [x] **F77 · El compañero enseña su potencial y su rareza en la descripción.**
       > "Los compañeros también deben dar una descripción de donde sale el daño: Potencial / Rareza en su descripción"
-      **Y F76 y F77 son la misma línea de código en dos sitios** (forja y ficha),
-      así que se hacen juntos. Ojo a una cosa que sale de aquí: **la rareza del
-      compañero no es la del item**, es la del tier —un T7 de caja es Legendario—, y
-      **con la base oculta la rareza pasa a ser información falsa por partida**:
-      dos T7 con base distinta y la misma rareza no son el mismo objeto. **Hay que
-      decidir si la rareza del compañero pasa a derivarse de la base**, y eso ya es
-      economy, no texto.
+      Hecho en v1.15.15, junto con F76: era la misma línea en dos sitios. Y al medirla
+      salió un bug de verdad: el desglose "De dónde sale" del compañero usaba la cuenta
+      del recolector (+20 % por estrella) y no traía la rareza, así que un Divino de 5
+      estrellas anunciaba "+100 %" donde el cobro pone x1,06 de potencial y x1,60 de
+      rareza. **Causa raíz:** la lista común no sabía que el potencial del compañero ya
+      va dentro del poder y que la rareza sí multiplica. Ahora la lista sale de las mismas
+      funciones que el cobro, fila por fila, y un banco comprueba que suma el stat. La
+      decisión grande —si la rareza pasa a derivarse de la base— sigue abierta, y es
+      economy, no texto: no se toca aquí.
+
+- [ ] **[PRIORIDAD] F83 · El daño final suma arma y buffs, y se ve en ranking y menú.**
+      > "El daño del arma debe sumar tambien al daño final la influencia de los pasivos, en el perfil se esta haciendo bien en el resto de lados no., en el ranking al igual que en el menu principal se debe mostrar el daño del arma mas las bonificaciones de las partidas del jugador en cuestion y el daño final, y al apoyarme decirme cuanto es de arma y cuanto de buffs, con el detalle como en el main o la base."
+      **Para después, con prioridad: pedido el 8 de octubre con tres capturas.** La ficha
+      del almacén y la tarjeta de MEJOR RECOLECTOR FORJADO enseñan +689, que es solo el
+      arma (base 382 + potencial 307): los pasivos no entran. El menú principal sí los
+      cuenta, porque el daño del clic sale de la cuenta con bonos. Lo pedido: que el
+      ranking y el menú muestren arma + bonos = final, y que al apoyar parta cuánto es de
+      arma y cuánto de buffs, con el mismo detalle del main.
+      **Dos preguntas abiertas para cuando se programe, no para ahora:** (1) los bonos
+      del JUGADOR EN CUESTIÓN —la tarjeta ajena trae su partida? F80 (perfil entero) sigue
+      pendiente y es la que trae esos datos; sin ella no hay de dónde leerlos. (2) La
+      tarjeta MEJOR RECOLECTOR muestra el arma, no el arma EQUIPADA: el daño final solo
+      existe del equipado, y arma + bonos de una no equipada es un número hipotético que
+      habría que rotular como tal o no mostrar.
 
 ### Lote I · ENCARGO DEL 8 DE OCTUBRE
 
@@ -2570,7 +2589,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **45 bancos, 2382**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **45 bancos, 2393**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -3356,6 +3375,15 @@ _Cosas que estorban al trabajo más que al juego._
       despliegue público cualquiera termine subido el botón de **borrar la base de
       datos**, y esa red compensa más que el sitio que ocupa. Borrar el fichero de
       despliegue no es lo mismo que borrar la protección.
+- [ ] **La rareza de un compañero forjado de T11 en adelante dice dos cosas distintas
+      según quién la lea** *(descubierto haciendo F76, 8 de octubre de 2026)*.
+      `crearCompanioDeTier()` estampa `TIER_SYSTEM.rarityByTier[tier] || 'Común'` y
+      `rarezaDeTier()` devuelve `'Divino'` para el mismo tier: un T11 forjado sale
+      Común mientras todo lo demás de ese tier es Divino, y su ingreso paga ×1,00
+      en vez de ×1,60. **No se toca aquí a propósito:** cambiarlo es ×1,6 de ingreso
+      para esos compañeros, y eso es balance, no texto. La pantalla de forja anuncia
+      lo que el motor estampa —las dos salen de `rarezaDeCompanionForjado()`—, así que hoy nadie miente; lo que queda es decidir cuál de las dos reglas
+      es la buena.
 - [ ] **`Math.min(5, …)` está escrito a mano en seis sitios** y el tope de potencial no
       tenía nombre. Lo pasó a tener (`POTENTIAL_MAX`, en `data/crafting.ts`) porque un
       logro necesitaba compararse con él y no había con qué. Los seis sitios sueltos —

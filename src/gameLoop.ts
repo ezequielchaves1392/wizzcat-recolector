@@ -19,7 +19,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, potencialNormalizado, desgloseDeStat } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -4436,6 +4436,44 @@ const RITMO_GUARDADO_MS = 30_000;
       const multPot = 1 + 0.2 * pot;
 
       const esRecolector = w.type === 'collector';
+      // **EL COMPAÑERO TIENE SU PROPIA LISTA, PORQUE SUS MULTIPLICADORES SON
+      // OTROS (F77).** La lista común aplica `1 + 0,2 × potencial`, que es la
+      // regla del recolector; en el compañero el potencial guardado ya va dentro
+      // del poder (posición en el rango del tier) y encima solo hay un extra de
+      // ★4/★5 —y falta la rareza, que sí multiplica—. Con la lista común, el
+      // hover de un ★3 decía "+60 %" donde el cobro pone ×1,00, y la rareza no
+      // salía: el desglose no sumaba el número de al lado.
+      //
+      // Las filas salen de las mismas funciones que cobra `poderEfectivoDeCompanio()`,
+      // en el mismo orden en que multiplica: potencial extra, rareza y nivel. Y
+      // la lectura del potencial y la rareza es la de la ficha del compañero, no
+      // la del item del almacén, igual que hace `getStatPrincipal()`: son dos
+      // copias y la ficha es la que tiene el dato guardado.
+      if (!esRecolector) {
+        const comp: any = (state.companions as any[]).find((c: any) => c.id === w.id);
+        const powerC = Number(comp?.power ?? w.power) || 0;
+        const potC = potencialNormalizado(comp?.potential ?? (w as any).potential);
+        const rarezaC = String(comp?.rarity ?? (w as any).rarity ?? '');
+        const multPotExtra = multiplicadorPorPotencialDeCompanero(potC);
+        const multRareza = multiplicadorDeRarezaDeCompanero(rarezaC);
+        const multNivelC = multiplicadorDeNivel(nivel);
+        const filasC: Array<{ nombre: string; detalle: string; suma: number }> = [];
+        let acumC = powerC;
+        let mostradoC = Math.round(acumC);
+        const anotaC = (nombre: string, detalle: string, mult: number) => {
+          if (Math.abs(mult - 1) <= 0.0001) return;
+          acumC *= mult;
+          const ahora = Math.round(acumC);
+          // Un bono que no mueve el entero no se pinta: una fila con un +0 es ruido.
+          if (ahora === mostradoC) return;
+          filasC.push({ nombre, detalle, suma: ahora - mostradoC });
+          mostradoC = ahora;
+        };
+        anotaC(`Potencial ${potC}★`, `${Math.round((multPotExtra - 1) * 100)}% extra`, multPotExtra);
+        anotaC(`Rareza ${rarezaC}`, `${Math.round((multRareza - 1) * 100)}% más`, multRareza);
+        if (nivel > 0) anotaC(`Nivel ${nivel}`, 'del compañero', multNivelC);
+        return { base: Math.round(powerC), total: mostradoC, filas: filasC };
+      }
       // **LA BASE DEL RECOLECTOR ES EL DAÑO GUARDADO PARTIDO POR EL POTENCIAL.** Es el
       // mismo razonamiento que `danosDeClick()`: el campo `damage` ya lleva el potencial
       // aplicado, así que para que "base + potencial = daño guardado" hay que deshacerlo.

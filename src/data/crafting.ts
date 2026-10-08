@@ -999,7 +999,10 @@ export function crearCompanioDeTier(
     name: nombreDe('companion', tier, rng),
     type: 'click',
     power: poderDeCompanero(tier, p),
-    rarity: TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común',
+    // **LA RAREZA LA PONE EL TIER, Y LA PONE ESTA FUNCIÓN.** Estaba escrita a mano
+    // (`TIER_SYSTEM.rarityByTier[tier] || 'Común'`) y la pantalla de forja necesita
+    // la misma para anunciar el resultado antes de tirar (F76): una sola fuente.
+    rarity: rarezaDeCompanionForjado(tier),
     tier,
     potential: p,
     // **NACE CON NIVEL 0 Y SU TECHO PUESTOS, Y POR ESO NO HAY MIGRACIÓN QUE
@@ -1240,21 +1243,48 @@ export function multiplicadorPorPotencialDeCompanero(potential: number | undefin
  * "Mítica" tienen que dar el mismo multiplicador. El color del halo y el poder del
  * compañero salen de la misma rareza, y si uno la leyera distinto del otro, el mejor
  * item del juego daría más ingreso del que aparenta.
+ *
+ * **ESTA FUNCIÓN ES LA SUMA DE DOS, Y CADA UNA SE PUEDE PEDIR SOLA.** La ficha del
+ * compañero (F77) explica su número con una fila por multiplicador, y la fila de la
+ * rareza necesita este número sin el extra del potencial: por eso la lectura vive en
+ * `multiplicadorDeRarezaDeCompanero()` y esta solo multiplica las dos mitades.
  */
 export function multiplicadorDeCalidadDeCompanero(
   rarity: string | undefined | null,
   potential: number | undefined | null
 ): number {
-  const porPotencial = multiplicadorPorPotencialDeCompanero(potential);
+  return multiplicadorDeRarezaDeCompanero(rarity)
+    * multiplicadorPorPotencialDeCompanero(potential);
+}
+
+/**
+ * El multiplicador de un compañero por SU RAREZA SOLA, sin el potencial.
+ *
+ * **EXISTE POR F77, Y LA LECTURA VIVE AQUÍ UNA SOLA VEZ.** La ficha del compañero
+ * explica de dónde sale su número con una fila por multiplicador, y la fila de la
+ * rareza necesita este número sin el extra del potencial. La lectura con y sin
+ * acentos es la misma que la de `multiplicadorDeCalidadDeCompanero()` —mismo
+ * catálogo, mismo plano sin acentos— para que el color del halo, el ingreso que
+ * se cobra y la ficha lean la misma rareza de la misma manera.
+ *
+ * **Y UNA RAREZA QUE NO SE CONOCE DA 1, Y NO "LA DE COMÚN".** Hoy las dos son
+ * 1,00, así que la diferencia no se ve; lo que importa es el motivo. Una rareza
+ * inventada tiene que poder, no romperse: si mañana se añade una rareza y se
+ * olvida esta tabla, el item nuevo no puede dejar de dar ingreso por un
+ * `undefined` que se multiplica.
+ */
+export function multiplicadorDeRarezaDeCompanero(
+  rarity: string | undefined | null
+): number {
   const clave = String(rarity ?? '').trim();
   const directo = MULTIPLICADOR_POR_RAREZA[clave];
-  if (typeof directo === 'number') return directo * porPotencial;
+  if (typeof directo === 'number') return directo;
   const plano = clave.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   for (const [nombre, valor] of Object.entries(MULTIPLICADOR_POR_RAREZA)) {
     const nombrePlano = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (nombrePlano === plano) return valor * porPotencial;
+    if (nombrePlano === plano) return valor;
   }
-  return 1 * porPotencial;
+  return 1;
 }
 
 /**
@@ -1593,6 +1623,34 @@ function collectorRarity(tier: number, potential: number): Rarity {
   if (potential >= 3 && tier >= 5) return 'Legendario';
   if (potential >= 2 && tier >= 3) return 'Épico';
   return (base as Rarity) || 'Común';
+}
+
+/**
+ * LA RAREZA QUE LA FORJA ANUNCIA ANTES DE TIRAR EL DADO (F76).
+ *
+ * Es la calculada del recolector —`collectorRarity()` con el tier nuevo y el
+ * potencial promedio del yunque— sin la tirada de conservar la compartida, sin
+ * la tirada de subida de potencial y sin la Nanopartícula. Las tres son dados
+ * que todavía no salieron, así que lo único honesto que se puede enseñar es el
+ * suelo: si la ★ sube y cruza un umbral, o si la compartida se conserva, la
+ * rareza final es ESA o mejor, nunca peor. Por eso la línea de la pantalla dice
+ * "calculada" y no "sale".
+ */
+export function rarezaCalculadaDeForja(newTier: number, potencialPromedio: number): Rarity {
+  return collectorRarity(newTier, potencialPromedio);
+}
+
+/**
+ * LA RAREZA QUE UN COMPAÑERO FORJADO TRAE DEL TIER, EN UNA SOLA FUNCIÓN.
+ *
+ * La pone el tier y nada más: ni la de los materiales, ni la tirada, ni la
+ * Nanopartícula (que en compañeros no se cobra). Vivía escrita a mano dentro
+ * de `crearCompanioDeTier()` y la pantalla la necesitaría igual para anunciar
+ * el resultado antes de forjar (F76): dos copias de la misma tabla son dos
+ * oportunidades de que una diga Divino y la otra Común.
+ */
+export function rarezaDeCompanionForjado(tier: number): string {
+  return TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
 }
 
 /**

@@ -29,7 +29,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado } from '../data/crafting';
 import { pctDe, PROB_SUBE_POTENCIAL, BONO_ETTER } from '../data/constants';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -568,6 +568,27 @@ function nivelDe(w: any): number {
             Potencial promedio ${estrellasDe(potMedio)}${potMedio < 5
               ? ` · sube una ★ con un ${pctDe(PROB_SUBE_POTENCIAL[potMedio] ?? 0)} %${ui.eter ? `, con Éter un ${pctDe((PROB_SUBE_POTENCIAL[potMedio] ?? 0) + BONO_ETTER)} %` : ''}`
               : ' · ya está en ★5: no puede subir más'}
+          </p>
+        ` : ''}
+        <!--
+          F76 · LA RAREZA DE LO CRAFTEADO, AL LADO DEL POTENCIAL Y NO EN OTRA
+          PANTALLA. La forja decía el potencial promedio y la probabilidad de
+          conservar la compartida, pero no qué rareza trae el resultado: el
+          jugador elegía materiales a ciegas en el eje que decide los afijos.
+
+          **LO QUE SE ENSEÑA ES LA CALCULADA, Y DICE "CALCULADA".** Los tres
+          dados que todavía no salieron —conservar la compartida, subir la ★ y
+          la Nanopartícula— solo pueden dejarla igual o mejorarla, nunca
+          empeorarla: el suelo es honesto y el techo no se promete. En
+          compañeros no hay dado: la rareza la pone el tier y se enseña tal cual.
+          Los dos números salen de data/crafting, de las mismas funciones que
+          los estampan al forjar (R2/R3).
+        -->
+        ${ready && matTier ? `
+          <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
+            ${ui.tipo === 'collector'
+              ? `Rareza calculada: ${rarezaCalculadaDeForja(matTier + 1, potMedio)}${potMedio < 5 ? ' · puede subir si sube la ★' : ''}${ui.nano ? ' · con Nano un escalón más, 50 %' : ''}`
+              : `Rareza del resultado: ${rarezaDeCompanionForjado(matTier + 1)} (la pone el tier)`}
           </p>
         ` : ''}
       </div>

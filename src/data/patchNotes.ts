@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.15',
+    fecha: '8 de octubre de 2026',
+    titulo: 'La forja anuncia la rareza y el compañero explica su número',
+    lineas: [
+      'La forja ahora dice qué rareza trae lo que vas a forjar, al lado del potencial: en recolectores la calculada, en compañeros la del tier.',
+      'La ficha del compañero explica de dónde sale su número, fila por fila: potencial, rareza y nivel, con los mismos números que cobra.',
+      'Su desglose decía de más: usaba la cuenta del recolector y no traía la rareza. Ahora cuadra con el ingreso.'
+    ]
+  },
+  {
     version: '1.15.14',
     fecha: '8 de octubre de 2026',
     titulo: 'Bases ocultas, la forja reequilibrada y el Éter de Refinamiento',

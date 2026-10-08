@@ -32,9 +32,10 @@ import { boot, check, resumen, s, baseSave, companion, ficha, RAREZA_NEUTRA } fr
 import {
   poderDeCompanero, poderEfectivoDeCompanio,
   multiplicadorDeCalidadDeCompanero, multiplicadorPorPotencialDeCompanero,
+  multiplicadorDeRarezaDeCompanero, rarezaDeCompanionForjado, crearCompanioDeTier,
   MULTIPLICADOR_POR_RAREZA
 } from '../src/data/crafting';
-import { rangoDePoder } from '../src/data/tiers';
+import { rangoDePoder, rarezaDeTier } from '../src/data/tiers';
 import { RARITY_RANK } from '../src/components/crateLoot';
 
 const RAREZAS = ['Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'];
@@ -259,6 +260,60 @@ async function main() {
     check('companero: y una rareza inventada tampoco lo cambia, porque vale 1',
       s(raro).passiveIncome === 40,
       'pasivo=' + s(raro).passiveIncome);
+  }
+
+  // -------------------------------------------------------------------------
+  //  6. LA RAREZA SOLA Y LA QUE ESTAMPA LA FORJA (F76/F77)
+  // -------------------------------------------------------------------------
+  //
+  //  La ficha del companero explica su numero con una fila por multiplicador, y
+  //  la fila de la rareza pide el multiplicador SIN el extra del potencial. Esa
+  //  lectura vive en `multiplicadorDeRarezaDeCompanero()` y `calidad` es su
+  //  producto con el extra: esta seccion fija que partirla no cambio nada.
+  {
+    // **CALIDAD ES RAREZA POR POTENCIAL, EN TODAS LAS COMBINACIONES.** Si la
+    // refactorizacion hubiese cambiado un solo producto, el ingreso de alguien
+    // se moveria sin que ninguna regla lo pidiera.
+    const potes = [1, 2, 3, 4, 5, undefined, null];
+    let rotos = '';
+    for (const r of [...RAREZAS, 'Rarisima', '', undefined, null]) {
+      for (const p of potes) {
+        const junto = multiplicadorDeCalidadDeCompanero(r as any, p as any);
+        const partido = multiplicadorDeRarezaDeCompanero(r as any)
+          * multiplicadorPorPotencialDeCompanero(p as any);
+        if (junto !== partido) rotos += `[${r}/${p}: ${junto} vs ${partido}]`;
+      }
+    }
+    check('companero: calidad es rareza por potencial en todas las combinaciones',
+      rotos === '',
+      rotos || '6 rarezas + 4 desconocidas x 7 potenciales, todas iguales');
+
+    // **LA TABLA DE LA RAREZA SOLA, CON LOS MISMOS SEIS VALORES.** Y con y sin
+    // tilde da lo mismo, porque es la misma lectura que ya fijaba la seccion 2.
+    const sola = RAREZAS.map(r => r + '=' + multiplicadorDeRarezaDeCompanero(r));
+    check('companero: la rareza sola trae la tabla entera',
+      RAREZAS.every(r =>
+        multiplicadorDeRarezaDeCompanero(r) === MULTIPLICADOR_POR_RAREZA[r]),
+      sola.join(' '));
+    check('companero: y sin tilde ni mayusculas lee igual',
+      multiplicadorDeRarezaDeCompanero('Mitico') === 1.45
+        && multiplicadorDeRarezaDeCompanero('Epico') === 1.20
+        && multiplicadorDeRarezaDeCompanero('legendario') === 1.32,
+      'Mitico=' + multiplicadorDeRarezaDeCompanero('Mitico'));
+
+    // **LA FORJA ESTAMPA LA DEL TIER, Y LA FUNCION DICE LA MISMA.** La pantalla
+    // anuncia el resultado antes de tirar: si esta funcion dijera otra cosa que
+    // el companero forjado, la linea mentiria (R3).
+    let otra = '';
+    for (let t = 1; t <= 10; t++) {
+      const dicha = rarezaDeCompanionForjado(t);
+      const delTier = rarezaDeTier(t);
+      const forjado = crearCompanioDeTier(t, 3, () => 0.5).rarity;
+      if (dicha !== delTier || forjado !== dicha) otra += `[T${t}: ${dicha}/${delTier}/${forjado}]`;
+    }
+    check('companero: lo anunciado, lo del tier y lo forjado son la misma rareza',
+      otra === '',
+      otra || 'T1-T10: las tres dicen lo mismo');
   }
 
   resumen('multiplicador del compañero');
