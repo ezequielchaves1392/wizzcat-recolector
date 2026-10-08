@@ -66,6 +66,7 @@ export default defineConfig({
         cargaCortaCheck: resolve(here, 'cargaCortaCheck.ts'),
         afkTopeCheck: resolve(here, 'afkTopeCheck.ts'),
         criticoAutoCheck: resolve(here, 'criticoAutoCheck.ts'),
+        expansorCheck: resolve(here, 'expansorCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
         perfilCheck: resolve(here, 'perfilCheck.ts'),

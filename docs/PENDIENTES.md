@@ -1090,19 +1090,41 @@ feature que falta):**
       y **`tarjetaCheck` es el banco que las tiene que recorrer todas** —no solo la
       duración (F71)—: con la tarjeta puesta, ninguna de esas siete puede cortar el
       ingreso, y sin ella, todas cortan.
-- [ ] **B24 · Los expansores nuevos dicen "no tiene efecto conocido".**
-      > "me dice este consumible no tiene efecto conocido lo podríamos arreglar?"
-      **Causa raíz casi segura: `EXPANSOR_CONSUMABLES` se construye con
-      `Object.fromEntries` sobre `EXPANSOR_TIERS`, y F66 cambió los `buffId` a
-      `expansorInicial` / `expansorIntermedio` / … mientras el `switch` de
-      `useConsumable` y `expansorPorBuff()` siguen hablando de `expansorT{n}`.**
-      `expansorPorBuff()` sí tiene la rama de legado, pero si algún camino pide el
-      expansor por el `buffId` **sin pasar por ahí**, la carta no encuentra su regla
-      y cae al mensaje genérico. **Hay que encontrar el camino, no adivinarlo**: el
-      mensaje "efecto desconocido" es la señal de un `buffId` que no está en
-      `CONSUMABLES`, y `consumableCheck` tiene que afirmar que **los cuatro
-      `buffId` nuevos resuelven** (con la invariante "toda carta de expansor
-      comprable tiene efecto conocido").
+- [x] **B24 · Un consumible decía "no tiene efecto conocido".** `[v1.15.12]`
+      > "me dice este consumible no tiene efecto desconocido lo podríamos arreglar?"
+      **LA HIPÓTESIS DE AQUÍ ERA FALSA, Y CORREGIRLA ES LA MITAD DEL TRABAJO.** Apuntaba a
+      que `EXPANSOR_CONSUMABLES` se construye con `Object.fromEntries` sobre
+      `EXPANSOR_TIERS` y a que el `switch` seguía hablando de `expansorT{n}`. **Las dos cosas
+      son ciertas y ninguna es el fallo**: los cuatro `buffId` nuevos están bien, el `switch`
+      los tiene escritos uno a uno (`gameLoop.ts:5106`), el botín de las cajas mete
+      `buffId: def.buffId`, y hasta **un expansor viejo sin `buffId` guardado resuelve por el
+      nombre**. Trece comprobaciones sobre expansores, todas en verde.
+      **LA PISTA ESTABA EN LA FRASE DEL JUGADOR Y LA PASÉ POR ALTO DOS VECES:** dijo "**este
+      consumible**", no "el expansor". Los expansores no eran el problema.
+      **EL CULPABLE: F4 RETIRÓ `clickBuff` Y `passiveBuff`, Y NO LOS SACÓ DEL `switch`.** F4
+      quitó los dos amplificadores de la tienda porque un buff pasivo comprado rompe R10. Se
+      borraron del catálogo, de la inferencia por nombre y de la barra asignable: todo bien.
+      **Pero el `switch` de `useConsumable` no tiene `case` para los dos**, y un item de un
+      guardado anterior a F4 llega con `buffId: 'clickBuff'`, que **es un `buffId`
+      verdadero**, así que pasa la puerta de la línea 5063 y cae en el `default` de la 5186.
+      **Y POR QUÉ A UNO SÍ Y A OTRO NO:** el item viene de una partida vieja. **Un jugador
+      nuevo no lo ve nunca**, porque nadie le da ese item, y por eso ninguna prueba de
+      partida nueva lo detecta.
+      **LO QUE NO SE HIZO, Y ES LA DECISIÓN.** Devolver el buff sería **deshacer F4**: un x2
+      o x3 al click o al pasivo comprado con nanitas es justo lo que R10 prohíbe. **El item ya
+      no sirve y hay que decirlo, pero diciendo qué es**: ahora el mensaje explica que se
+      retiró, qué multiplicaba y que no vuelve, en vez de un "no tiene efecto conocido" que
+      no explicaba nada.
+      **Y MI PRIMERA COMPROBACIÓN PASABA EN FALSO, QUE ES PEOR QUE NO TENERLA.** Buscaba
+      `/efecto desconocido/i`; el mensaje real dice "no tiene efecto **conocido**". La
+      expresión no coincidía con nada, el `!` daba `true` y el banco daba verde **sin haber
+      comprobado el fallo que existía**. Ahora va **la cadena literal del motor**. **Una
+      comprobación que pasa porque su patrón no encuentra nada parece que vigila y no vigila
+      nada.**
+      `expansorCheck` (nuevo, 15): los cuatro expansores están en la tabla, **resuelven a su
+      tramo con su techo**, **se usan de verdad y suben la capacidad**; un expansor viejo sin
+      `buffId` guardado también se usa; y los dos amplificadores retirados **no dicen "no tiene
+      efecto conocido"** sino lo que pasó.
 - [x] **B27 · Una lectura a medias dejaba al jugador sin partida.** Hecho en v1.15.1.
       **NO HABÍA NADA PERDIDO.** El jugador se encontró con una partida en blanco (140
       nanitas, Blaser de partida, 0 núcleos) y en la consola de Firestore sus datos

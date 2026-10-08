@@ -5182,7 +5182,46 @@ const RITMO_GUARDADO_MS = 30_000;
           case 'stabilityNano':
             // No se usan desde el almacén: se consumen en la Forja
             return { ok: false, msg: 'Este consumible se usa en la Forja.' };
+          // B24 · LOS DOS AMPLIFICADORES QUE F4 RETIRÓ, Y POR QUÉ NO ES "RETIRAR EL
+          // EFECTO" OTRA VEZ.
+          //
+          // **EL BUG, Y LA PISTA QUE YO PASÉ POR ALTO DOS VECES.** El jugador escribió "me
+          // dice **este consumible** no tiene efecto conocido", y la entrada apuntaba a los
+          // **expansores**. Los trece casos de `expansorCheck` sobre expansores pasan: la
+          // tabla está bien, los cuatro `buffId` nuevos están, el `switch` los tiene uno a
+          // uno, el botín los mete y hasta un expansor viejo sin `buffId` guardado resuelve
+          // por el nombre. **La hipótesis de PENDIENTES era falsa y la palabra "consumible"
+          // del mensaje era la pista de que el problema no estaba en los expansores.**
+          //
+          // **LO QUE PASA.** F4 quitó `clickBuff` y `passiveBuff` de la tienda porque un
+          // buff pasivo comprado rompe R10 por la puerta de atrás. Se quitaron del catálogo,
+          // de la inferencia por nombre y de la barra asignable: todo bien. **Pero el `switch`
+          // de aquí no tiene `case` para los dos**, y un item guardado de antes de F4 llega
+          // con `buffId: 'clickBuff'`, que **es un `buffId` verdadero** —así que pasa la
+          // puerta de la línea 5063— y se precipita al `default`.
+          //
+          // **POR QUÉ A UN JUGADOR SÍ Y A OTRO NO.** El item viene de un guardado anterior a
+          // F4. **Un jugador nuevo no lo ve nunca**, porque nadie le da ese item. Por eso
+          // ninguna prueba de partida nueva lo detecta y por eso se cuela: es un fallo de
+          // partidas viejas, que es donde caen los que no aparecen al probar.
+          //
+          // **Y POR QUÉ NO SE DEVUELVE EL BUFF.** Sería deshacer F4: un x2 o x3 al click o
+          // al pasivo comprado con nanitas es justo lo que R10 prohíbe. **El item ya no sirve
+          // y hay que decirlo**, pero **diciendo qué es**, porque si no el jugador tiene una
+          // carta que compró y un "no tiene efecto conocido" que no explica nada.
+          case 'clickBuff':
+          case 'passiveBuff':
+            return {
+              ok: false,
+              msg: buffId === 'clickBuff'
+                ? 'Este amplificador se retiró del juego: multiplicaba tu click y ya no es comprable. Se ha quitado de la tienda y no vuelve.'
+                : 'Este amplificador se retiró del juego: multiplicaba tu ingreso y ya no es comprable. Se ha quitado de la tienda y no vuelve.',
+            };
           default:
+            // **ESTE `default` SIGUE SIENDO EL ÚLTIMO RECURSO, Y AHORA ES ALCANZABLE DE
+            // VERDAD.** Antes los dos casos de arriba lo dejaban casi imposible; con ellos
+            // puestos, lo que llega aquí es un `buffId` que **nadie ha declarado**, y eso es
+            // un bug de datos, no un item viejo. El texto lo dice así a propósito.
             return { ok: false, msg: 'Este consumible no tiene efecto conocido.' };
         }
       return { ok: true };

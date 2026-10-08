@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.12',
+    fecha: '8 de octubre de 2026',
+    titulo: 'El amplificador retirado te explica por que',
+    lineas: [
+      'Si tenias en el almacen un amplificador de click o de pasivo, al usarlo te decia que no tenia efecto conocido. No era un fallo tuyo ni del item: esos amplificadores se retiraron del juego.',
+      'Ahora el mensaje dice que se retiraron, que multiplicaba cada uno y que no vuelven. Se quitem de la tienda hace tiempo y el item seguia sin explicar nada.',
+      'El motivo de retirarlos: multiplicaban tu ingreso mientras no miraras la pantalla. Esa es justo la regla que el juego no rompe.',
+      'El resto de consumibles y los cuatro expansores nunca han tenido este problema, y ahora hay pruebas que lo confirman.'
+    ]
+  },
+  {
     version: '1.15.11',
     fecha: '8 de octubre de 2026',
     titulo: 'El ingreso de los companeros sigue sin dados',

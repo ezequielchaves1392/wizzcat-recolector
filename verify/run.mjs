@@ -58,6 +58,7 @@ const BANCOS = [
   'cargaCortaCheck',
   'afkTopeCheck',
   'criticoAutoCheck',
+  'expansorCheck',
   'forjaCheck',
   'sessionCheck',
   'perfilCheck',
