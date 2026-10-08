@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.8',
+    fecha: '8 de octubre de 2026',
+    titulo: 'Un comando para probar sin gastar cuota',
+    lineas: [
+      'Probar el juego en local ya no escribe en el servidor de verdad: hay un comando que levanta todo contra un almacen de datos en tu maquina.',
+      'Antes habia que acordarse de dos terminales y de una variable de entorno. Ahora el comando dice que falta Java si falta, lo busca si esta instalado pero no esta en el PATH, y avisa si hay un emulador viejo abierto que te haria ver datos de la sesion anterior.',
+      'La interfaz web del emulador no esta: se probo y no levanta con esta configuracion, asi que no se anuncia. Para ver los documentos, la consola del navegador.',
+      'La partida de verdad no se toca. Para volver a ella, abre el juego sin la variable y todo sigue igual.'
+    ]
+  },
+  {
     version: '1.15.7',
     fecha: '8 de octubre de 2026',
     titulo: 'El almacen vacio era una lectura a medias, no tu cuenta',

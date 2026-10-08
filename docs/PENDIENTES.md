@@ -1389,6 +1389,28 @@ feature que falta):**
       diferencia entre "vacío" y "vino recortado" es si la **clave existe**, y confundirlas
       rompería a los jugadores nuevos. También se comprueba que con la carga a medias **no se
       escribe nada**.
+- [x] **B36 · Un comando para levantar el entorno de pruebas.** `[v1.15.8]`
+      > "me armas un comando /dev para poder levantar un local de pruebas?"
+      Hecho: `/dev` documenta el procedimiento y `npm run dev:emulador` lo levanta solo.
+      **LO QUE HAY QUE TENER INSTALADO, Y NO LO TENÍA: JAVA.** El emulador de Firestore
+      necesita Java, y sin él **no da un error útil**: dice `Could not spawn 'java -version'`
+      y se queda esperando, que es lo que hace pensar que el proyecto está roto. Instalado
+      el **OpenJDK 21** con `winget`.
+      **Y EL CASO QUE DE VERDAD FALLABA, QUE NO ES "NO TENER JAVA".** Java **se instala y
+      aun así `java` no existe**, porque el PATH de la terminal ya abierta no se actualiza.
+      El script lo detecta: **si no está en el PATH, lo busca en disco** en
+      `C:\Program Files\Microsoft\jdk-*` y se añade a la sesión. Decir "instala Java"
+      cuando ya está instalado hace perder media hora.
+      **ADEMÁS COMPRUEBA LOS PUERTOS ANTES DE LEVANTAR.** Si el emulador de ayer sigue
+      vivo, el de hoy falla hablando de "otro proceso" y **lo que se acaba viendo son los
+      datos de la sesión anterior** en vez de una base vacía —justo lo que no se espera al
+      probar una carga nueva—. Se comprobó: el script detectó el emulador que había dejado
+      una prueba anterior.
+      **Y NO HAY INTERFAZ WEB DEL EMULADOR.** Se pidió con `--only firestore,auth` y **el
+      puerto 4000 no levanta**, así que el comando **no la anuncia**: prometer una pantalla
+      que no abre es peor que no tenerla. Para ver los documentos, la consola.
+      `npm run dev:emulador` y `$env:VITE_EMULADOR="1"; npm run dev`. **41 bancos = 2311
+      pruebas, en verde.**
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un

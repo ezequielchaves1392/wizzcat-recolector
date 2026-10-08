@@ -1,11 +1,11 @@
 {
   "name": "cyber-forge",
   "private": true,
-  "version": "1.15.7",
+  "version": "1.15.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:emulador": "firebase emulators:start --project chronos-tap --only firestore,auth",
+    "dev:emulador": "powershell -ExecutionPolicy Bypass -File scripts/dev-emulador.ps1",
     "reglas:local": "firebase emulators:exec --project chronos-tap --only firestore \"firebase deploy --only firestore:rules --project demo-chronos-tap\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
