@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.9',
+    fecha: '8 de octubre de 2026',
+    titulo: 'La tarjeta AFK ya no se pasa del tiempo prometido',
+    lineas: [
+      'Compraste "+30 min por tarjeta" y te daba casi el doble. El extra estababien puesto en lo que alarga cada tarjeta, y otra vez en el tope, asi que se contaba dos veces.',
+      'Con el pase a un nivel, el limite de AFK es de una hora, como decia el nodo. Con el pase al maximo, dos horas y media, no las seis y media que salian antes.',
+      'Tambien se arreglo que el limite se multiplicaba en dos sitios distintos: uno arreglado, el otro seguia aplicando tres tarjetas. Ahora los dos preguntan a la misma regla.',
+      'Lo que ya tengas puesto no se toca. Las tarjetas que no caben en el limite ya no se gastan.'
+    ]
+  },
+  {
     version: '1.15.8',
     fecha: '8 de octubre de 2026',
     titulo: 'Un comando para probar sin gastar cuota',

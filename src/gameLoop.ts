@@ -51,7 +51,7 @@ import {
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, sePuedeCancelar, type BuffKey } from './data/buffs';
 import {
-  cuantasVecesCabe, pasoDeConsumible, anotaTotalDeBuff,
+  cuantasVecesCabe, pasoDeConsumible, anotaTotalDeBuff, topeDeConsumible,
   BUFF_TOTAL_CAMPOS, BUFF_TOTAL_FIELDS
 } from './data/buffs';
 import {
@@ -5101,9 +5101,20 @@ const RITMO_GUARDADO_MS = 30_000;
             state.warehouseCapacity = Math.min(WAREHOUSE_MAX_CAP, state.warehouseCapacity + 1);
             break;
           case 'afk': {
-            // Tope 3 tarjetas: más allá el AFK es infinita y rompe el ritmo
+            // B26 · AQUÍ ESTABA EL MISMO BUG QUE EN `topeDeConsumible()`, COPIADO.
+            //
+            // Era `Math.min(base + afkMs, ahora + afkMs * 3)`: **el mismo `×3` sobre la
+            // misma duración**, o sea el mismo error de magnitud en un segundo sitio. Por
+            // eso **no se arregla escribiendo aquí lo correcto**, sino **preguntando**: este
+            // `case` llama a `topeDeConsumible()`, que es donde vive la regla, y así los
+            // dos caminos **no pueden volver a separarse**.
+            //
+            // Y el motivo de fondo era el mismo: `3` es un **número de tarjetas**, y aquí
+            // estaba multiplicando un **tiempo**. El tope del AFK es un techo de reloj, y
+            // el nodo del árbol lo sube una vez, no lo multiplica.
+            const topeAfk = topeDeConsumible('afk', afkMs) ?? MAX_AFK_BUFF_DURATION_MS;
             const base = Math.max(ahora, state.afkExpiresAt || 0);
-            state.afkExpiresAt = Math.min(base + afkMs, ahora + afkMs * 3);
+            state.afkExpiresAt = Math.min(base + afkMs, ahora + topeAfk);
             break;
           }
           case 'clickBoost': {

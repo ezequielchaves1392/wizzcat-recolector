@@ -1444,6 +1444,46 @@ feature que falta):**
       **con el HUD en la captura**: la barra se pinta con `afkTotalMs`, así que si el
       número grande y la barra no coinciden, es que el denominador es otro caso del
       mismo bug.
+- [x] **B26 · La tarjeta AFK dura más de lo que el tope dice.** `[v1.15.9]`
+      > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
+      **Arreglado, y era peor de lo que parecía la captura: con el nodo al máximo el tope
+      eran 6 h 30 min, trece veces la base.** La captura enseñaba 1:55:46 porque el
+      jugador tenía el nodo a un nivel; el multiplicador grows de ahí para arriba.
+      **EL BUG NO ERA NINGUNA DE LAS TRES HIPÓTESIS QUE HABÍA AQUÍ.** Las tres apuntaban a
+      que el `+30 min` se contara de más. **El sospechoso era el `×3`.**
+      · `afk_extend` da `afkHours: 0.5` = **+30 min por nivel**, `maxLevel: 4`.
+      · `afkCardDurationMs()` = **10 min + extra** — el extra va en el **paso**, correcto.
+      · `topeDeConsumible('afk', afkMs)` era **`TOPE_DE_TARJETA_AFK * afkMs`** = `3 × afkMs`.
+      **O sea que el extra entraba DOS veces**, y además **`TOPE_DE_TARJETA_AFK = 3` es un
+      número de TARJETAS** usado como multiplicador de un **TIEMPO**: dos magnitudes
+      distintas que el `*` confunde. Con un nivel: tarjeta de 40 min, tope de **120** en
+      vez de 60. Al máximo del nodo, **390 min**.
+      **POR QUÉ NO SE VIO NUNCA, Y ES LA LECIÓN.** Sin nivel del nodo, `3 × 10 min` da
+      exactamente los mismos `30 min` que `MAX_AFK_BUFF_DURATION_MS`: **las dos
+      definiciones coincidían de milagro**. Un número que solo se rompe cuando otro camino
+      lo toca **no está protegido por el banco que no lo toca**.
+      **EL `×3` ESTABA COPIADO EN DOS SITIOS, Y ESO ES LO QUE CASI SE ESCAPA.** No solo en
+      `topeDeConsumible()`: también en el `case 'afk'` del motor, que era
+      `Math.min(base + afkMs, ahora + afkMs * 3)` y es **el camino que de verdad mueve
+      `state.afkExpiresAt`**. Arreglando solo la función, el `case` seguiría aplicando tres
+      tarjetas y el banco lo daría por bueno. Ahora **el `case` pregunta a
+      `topeDeConsumible()`**, así que los dos caminos **no pueden volver a separarse**. Los
+      otros cuatro consumibles tienen su tope escrito como **tiempo fijo**, que es la
+      magnitud correcta, y por eso el fallo era del AFK.
+      **LO QUE NO SE TOCÓ, Y POR QUÉ SE COMPRUEBA IGUAL.** El **paso** sigue llevando el
+      extra, porque es lo que compró el jugador. Un arreglo rápido podía "arreglarlo"
+      bajando el paso y **quitarle lo que pagó**.
+      `afkTopeCheck` (nuevo, 13): el tope es 30 base + 30 del nodo; el extra cuenta una vez;
+      sube de uno en uno y no se multiplica (×5 al máximo, antes ×13); **sin nodo sigue
+      siendo 30 min**, que es donde se escondía; **usando tarjetas de verdad con el motor**,
+      caben dos y las sobrantes **no se gastan**; y el paso no se ha tocado.
+      **UNA COMPROBACIÓN MÍA SE EQUIVOCÓ Y ESTÁ ESCRITO.** La primera versión esperaba 80
+      min (dos tarjetas de 40) y el motor dio 60. **El motor tenía razón**: la segunda
+      tarjeta **se recorta al tope**, que es el comportamiento escrito en `cuantasVecesCabe()`.
+      Se corrigió la afirmación, no el código.
+      **Lo que ve el jugador a partir de ahora:** con el nodo a un nivel, el tope es de
+      **1 hora**, no de 2. La cola que ya tenía puesta **no se toca**: al recargar, el
+      tiempo que le quedaba se respeta hasta que caduca.
 - [ ] **B25 · Los clics pasivos no critican.**
       > "Los clicks pasivos también deberían hacer críticos"
       **Hoy solo `click()` tira el dado de crítico** (B16), y se dejó fuera a

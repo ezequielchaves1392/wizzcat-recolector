@@ -143,13 +143,53 @@ export const MIN_MS_DE_UNIDAD = 1_000;
  */
 export function topeDeConsumible(buffId: string, afkMs: number): number | null {
   switch (buffId) {
-    case 'afk': return TOPE_DE_TARJETA_AFK * afkMs;
+    // B26 · ESTA LÍNEA ERA `TOPE_DE_TARJETA_AFK * afkMs`, Y ERA UN ERROR DE MAGNITUD.
+    //
+    // **`TOPE_DE_TARJETA_AFK` ES UN NÚMERO DE TARJETAS Y `afkMs` ES UN TIEMPO.** El tope
+    // del AFK está escrito como "tres tarjetas y nada más", o sea que son **tres
+    // unidades**, no tres veces un tiempo. Multiplicarlos produce un tope que **crece con
+    // el nodo del árbol**, y el nodo existe precisamente para alargar la tarjeta.
+    //
+    // **EL DAÑO, CON LOS NÚMEROS DEL CÓDIGO.** Con un nivel de `afk_extend` (que da
+    // `afkHours: 0.5`, o sea +30 min): la tarjeta pasa de 10 a 40 min, y el tope se va a
+    // `3 × 40 = 120 min` cuando el jugador compró **60 min** (los 30 de base más sus 30).
+    // Al máximo del nodo son 390 minutos: **trece veces** el tope de base.
+    //
+    // **Y POR QUÉ NO SE DI ANTES, QUE ES LA LECIÓN.** Sin nivel del nodo, `afkMs` es
+    // `AFK_CARD_DURATION_MS` y `3 × 10 min` da exactamente `MAX_AFK_BUFF_DURATION_MS`:
+    // **las dos definiciones coincidían de milagro**, así que el banco que comprobaba el
+    // tope sin tocar el nodo pasaba en verde. Un número que solo se rompe cuando otro
+    // camino lo toca **no está protegido por el banco que no lo toca**.
+    //
+    // **LO QUE SE ESCRIBE AHORA: EL TOPE ES UN TIEMPO, Y EL EXTRA CUENTA UNA VEZ.** La
+    // regla que dice el nombre de la constante —"treinta minutos de AFK como mucho"— es un
+    // techo de reloj, y el nodo lo sube **una** vez, no lo multiplica.
+    case 'afk': return MAX_AFK_BUFF_DURATION_MS + extraDelArbol(afkMs);
     case 'clickX2': return TOPE_MS_CLICK_X2;
     case 'clickX3': return TOPE_MS_CLICK_X3;
     case 'clickBoost': return TOPE_MS_CLICK_BOOST;
     case 'passiveBoost': return TOPE_MS_PASSIVE_BOOST;
     default: return null;
   }
+}
+
+/**
+ * Lo que el nodo del árbol le ha alargado a **una** tarjeta de AFK, en milisegundos.
+ *
+ * **POR QUÉ ES UNA FUNCIÓN Y NO UN PARÁMETRO.** Porque `topeDeConsumible()` recibe
+ * `afkMs`, que es la duración **ya con el nodo aplicado** (`10 min + extra`), y el tope lo
+ * necesita **por separado**. Restarlo de la base es la única forma de no pasar un tercer
+ * número por medio de todo el juego, y de paso **hace imposible que el extra entre dos
+ * veces**: si alguien vuelve a multiplicar, el test se pone rojo enseguida.
+ *
+ * **Y POR QUÉ NUNCA NEGATIVO.** Una partida muy vieja puede no tener el nodo, y entonces
+ * `afkMs` sería exactamente la base y el extra sería cero. Si algún día `afkMs` llegara por
+ * debajo —una migración, un cambio de regla—, el tope **bajaría por debajo de los 30
+ * minutos** y dejaría de poder usarse ni una tarjeta: un fallo que no puede pasar, pero que
+ * el `Math.max(0, ...)` hace imposible en vez de improbable.
+ */
+function extraDelArbol(afkMs: number): number {
+  return Math.max(0, afkMs - AFK_CARD_DURATION_MS);
 }
 
 /**

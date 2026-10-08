@@ -64,6 +64,7 @@ export default defineConfig({
         cerrojoCheck: resolve(here, 'cerrojoCheck.ts'),
         cuotaPantallaCheck: resolve(here, 'cuotaPantallaCheck.ts'),
         cargaCortaCheck: resolve(here, 'cargaCortaCheck.ts'),
+        afkTopeCheck: resolve(here, 'afkTopeCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
         perfilCheck: resolve(here, 'perfilCheck.ts'),

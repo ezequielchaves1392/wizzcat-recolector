@@ -56,6 +56,7 @@ const BANCOS = [
   'cerrojoCheck',
   'cuotaPantallaCheck',
   'cargaCortaCheck',
+  'afkTopeCheck',
   'forjaCheck',
   'sessionCheck',
   'perfilCheck',
