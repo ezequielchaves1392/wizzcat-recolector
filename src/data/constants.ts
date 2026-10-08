@@ -12,7 +12,7 @@
 // ==========================================================================
 
 /** Lo que aporta cada Piedra de Calibración a la probabilidad de fusión. */
-export const PIEDRA_APORTA = 0.07;
+export const PIEDRA_APORTA = 0.12;
 
 /** Los puntos que aporta cada piedra, para los textos que la nombran. */
 export const PIEDRA_PUNTOS = Math.round(PIEDRA_APORTA * 100);
