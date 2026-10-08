@@ -33,6 +33,7 @@ import { showPatchNotes } from './ui/patchNotes';
 import { renderProfilePage } from './ui/profilePage';
 import { renderPrestigePage } from './ui/prestigePage';
 import { renderRankings } from './components/rankings';
+import { renderCuotaAgotada } from './components/blocked';
 import { muestraTarjetaDeEjemplo } from './previewTarjeta';
 import { TIER_SYSTEM } from './data/tiers';
 import { sellPrice } from './data/valuation';
@@ -676,6 +677,20 @@ const ir = (destino: string) => {
 };
 
 switch (vista) {
+  case 'cuota':
+    // B34 · La pantalla de cuota agotada, con datos de ejemplo.
+    //
+    // **POR QUÉ NECESITA UNA VISTA PROPIA Y NO SE PUEDE REVISAR EN EL BANCO.** `verify/`
+    // sustituye el DOM por un `domStub`, así que una prueba **no puede pintarla ni medir si
+    // cabe en un móvil**: una comprobación ahí pasaría en verde sin haber mirado un solo
+    // píxel. Y esta pantalla es **la que el jugador ve cuando algo va mal**, o sea que es
+    // justo la que menos conviene mirar a ciegas: si el texto no cabe a 390 px, se sale de
+    // la pantalla y el jugador no lee la parte que explica que su partida está bien.
+    //
+    // **Y POR QUÉ SE PIDE CON EL ANCHO Y EL ALTO EN LA URL.** Porque lo que hay que mirar
+    // es el móvil, no el escritorio. En un monitor todo cabe; en 390×844 es donde falla.
+    renderCuotaAgotada(app, () => { /* el botón recarga; aquí no recarga nada */ });
+    break;
   case 'almacen':
     renderWarehouseTab(app, fakeGame, noop, ir);
     break;

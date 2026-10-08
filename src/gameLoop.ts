@@ -5,6 +5,7 @@ import { db } from './firebase';
 import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
+import { esCuotaAgotada, renderCuotaAgotada } from './components/blocked';
 import { publicarTarjeta } from './services/profileService';
 import { tarjetaDesdeEstado } from './data/profile';
 import { evaluateAchievements, createAchievementState, ACHIEVEMENTS, type Achievement } from './achievements';
@@ -1474,6 +1475,41 @@ let rankingUltimoEnvio = 0;
    * avisos idénticos superpuestos, tapando el juego.
    */
   let guardadoFallando = false;
+
+  /**
+   * B34 · ¿YA SE AVISÓ DE LA CUOTA EN ESTA SESIÓN?
+   *
+   * **UN FLAG Y NO NADA, PORQUE EL FALLO SE REPITE.** El guardado automático reintenta
+   * cada treinta segundos, así que sin este flag la pantalla se pediría **en cada
+   * reintento**: se limpia, se vuelve a montar, y una pantalla que parpadea cada medio
+   * minuto da más impresión de avería que un aviso que se va.
+   *
+   * **Y NUNCA VUELVE A `false` A PROPÓSITO.** La cuota agotada **no se arregla durante la
+   * sesión** —se repone al día siguiente—, así que avisar una vez es lo que corresponde.
+   * Si el servidor se recuperara antes, el aviso lo tapa el propio botón de reintentar, que
+   * recarga la página entera y vuelve a pasar por el arranque con la partida ya dentro.
+   */
+  let cuotaAvisada = false;
+
+  /**
+   * Pinta la pantalla de cuota sobre `#app`, **si hay algo que pintar**.
+   *
+   * Se hace con `try/catch` a propósito. Esta pantalla es **lo último que se ve** cuando
+   * algo ya va mal: si `#app` no existe o el DOM del banco no tiene lo que espera, una
+   * excepción aquí **tumba el guardado**, y el jugador se queda sin guardado **y** sin
+   * aviso. Un aviso que no se puede pintar **no puede ser lo único que haya entre el
+   * jugador y la pérdida de progreso**: si falla, se registra y el juego sigue, que es lo
+   * que hacía antes con el aviso flotante.
+   */
+  function mostrarAvisoDeCuota(): void {
+    try {
+      const app = typeof document === 'undefined' ? null : document.querySelector('#app');
+      if (!app) return;
+      renderCuotaAgotada(app as HTMLElement, () => { location.reload(); });
+    } catch (e) {
+      console.error('[cuota] No se ha podido pintar el aviso de cuota:', e);
+    }
+  }
 
 /**
  * QUE NO SE HA PODIDO LEER LA PARTIDA DEL SERVIDOR.
@@ -3614,6 +3650,44 @@ function sePuedeGuardar(): boolean {
        */
       console.error("Error al guardar en Firebase:", error);
       marcarPendiente(true);
+
+      /**
+       * B34 · CUOTA AGOTADA, QUE NO ES LO MISMO QUE "SIN CONEXIÓN".
+       *
+       * **POR QUÉ AQUÍ Y NO EN EL AVISO FLOTANTE, Y POR QUÉ ES OTRA COSA.** El aviso se va
+       * solo a los pocos segundos y el caso **no es un instante: es esperar**. El límite del
+       * día se repone y quien lo ve pasar se va a jugar a otra cosa creyendo que el juego
+       * está roto. Una pantalla que **queda** es la diferencia entre "he visto un aviso" y
+       * "sé lo que está pasando y mi partida está bien".
+       *
+       * **Y EL CRITERIO ES ESTE, Y ES LO QUE LA HACE HONESTA.** Se pregunta por
+       * `resource-exhausted` y por nada más. **`Using maximum backoff delay` NO es cuota
+       * agotada**: es un "todavía no" que aparece **con el juego funcionando perfectamente**,
+       * y montar una pantalla de alarma con él sería enseñarle un problema a alguien que no
+       * lo tiene. Por eso lo que se busca es el código, no el texto del aviso.
+       *
+       * **LO QUE PASA CON LA PARTIDA, Y POR QUÉ SE PUEDE TRANQUILIZAR.** El motor **no ha
+       * guardado nada** desde que empezó el problema, así que el servidor tiene exactamente
+       * lo que tenía antes: **no se ha perdido nada**. Lo jugado desde entonces está en la
+       * cola local de este dispositivo y subirá al volver. Decir eso es verdad, no consuelo.
+       *
+       * **Y POR QUÉ NO HAY PAGO AQUÍ, EN UNA LÍNEA, PORQUE ALGUIEN VA A PREGUNTAR.** El
+       * límite se repone solo, así que cobrar para continuar es cobrar por el reloj. Y el
+       * pago tampoco podría funcionar: se guarda en la misma base de datos que está
+       * saturada, así que con la cuota agotada no llega ni la confirmación.
+       */
+      if (esCuotaAgotada(error)) {
+        // **UNA VEZ, NO EN CADA FALLO.** El reintento sigue corriendo y cada uno volvería a
+        // pedir la pantalla: el aviso se limpia y se vuelve a montar, y una pantalla que
+        // parpadea cada treinta segundos es peor que ninguna.
+        if (!cuotaAvisada) {
+          cuotaAvisada = true;
+          marcarPendiente(true);
+          mostrarAvisoDeCuota();
+        }
+        return;
+      }
+
       if (!guardadoFallando) {
         guardadoFallando = true;
         showToast(

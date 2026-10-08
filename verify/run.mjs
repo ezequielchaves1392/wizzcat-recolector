@@ -54,6 +54,7 @@ const BANCOS = [
   'costeJuegoCheck',
   'costeRealCheck',
   'cerrojoCheck',
+  'cuotaPantallaCheck',
   'forjaCheck',
   'sessionCheck',
   'perfilCheck',

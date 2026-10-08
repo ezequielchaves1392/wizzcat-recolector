@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.6',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Cuando el servidor se pasa, te lo explica en serio',
+    lineas: [
+      'Si el juego llega a su limite de uso del dia, ahora te sale una pantalla completa en vez de un aviso que se va a los segundos.',
+      'La pantalla dice las tres cosas que importan: que no es un fallo de tu equipo, que tu partida esta intacta y que el limite se repone solo al dia siguiente.',
+      'Tambien tienes un boton para reintentar por si ya ha pasado.',
+      'Solo sale cuando el servidor dice de verdad que se acabo el limite. Una perdida de conexion o una espera normal siguen mostrando lo de siempre, que es lo que toca.'
+    ]
+  },
+  {
     version: '1.15.5',
     fecha: '7 de octubre de 2026',
     titulo: 'La pestana dormida deja de guardarte la cuenta',

@@ -276,3 +276,76 @@ export function renderErrorDeCarga(
   // este nodo vive dentro de `#app`.
   container.querySelector('[data-reintentar]')?.addEventListener('click', onReintentar);
 }
+
+/**
+ * B34 · PANTALLA DE CUOTA AGOTADA, CUANDO OCURRE **DURANTE** EL JUEGO.
+ *
+ * **POR QUÉ HACE FALTA UNA PANTALLA Y NO BASTA EL AVISO FLOTANTE.** El aviso se va solo a
+ * los pocos segundos, y el caso es de **esperar**, no de un instante: el límite del día se
+ * repone y quien lo ha visto pasar se ha ido a jugar a otra cosa creyendo que el juego no
+ * funciona. Un aviso que desaparece es un aviso que se olvida; una pantalla que **queda**
+ * explica, tranquiliza —**tu partida está intacta**— y ofrece reintentar cuando toca.
+ *
+ * **LO QUE ESTA PANTALLA PROMETE Y CÓMO SE CUMPLE, Y ES LO IMPORTANTE.** Dice tres cosas,
+ * y las tres son verdad o no sirve de nada:
+ *
+ *   1. **Tu partida está intacta.** Y no es consuelo: el motor **no ha guardado nada** desde
+ *      que empezó el problema (`partidaNoCargada` y la firma de B28), así que lo que hay en
+ *      el servidor es exactamente lo que había antes. Lo que el jugador ha jugado estos
+ *      minutos vive **en este dispositivo**, en la cola local, y se sube al volver.
+ *   2. **El límite se repone solo.** Firestore repone el presupuesto al día siguiente. No
+ *      hay que hacer nada, no se ha roto nada y no se ha perdido nada.
+ *   3. **Reintentar funciona** cuando el límite vuelve.
+ *
+ * **Y NO HAY PAGO, Y NO ES OLVIDO: ES UNA DECISIÓN QUE HAY QUE ESCRIBIR.** Se pidió una
+ * pantalla de pago. **El límite se repone solo**, así que cobrar para continuar es cobrar
+ * por el reloj. Y además **el pago no podría ni funcionar**: la pantalla del pago y su
+ * confirmación se guardan en **la misma base de datos que está saturada**, así que con la
+ * cuota agotada el pago tampoco llega. Un muro que no se puede cobrar no es una venta, es
+ * una pantalla de error. Si algún día hay un plan de pago, lo razonable es un enlace
+ * **voluntario** de apoyo, que no condicione poder jugar.
+ *
+ * **Y LA REGLA QUE LA HACE HONESTA, QUE ES EL RIESGO REAL DE ESTA PANTALLA.** Solo se
+ * muestra con `resource-exhausted` de verdad, mediante `esCuotaAgotada()`. **Ese criterio
+ * es el que la separa de la pantalla de espera**: `Using maximum backoff delay` es un
+ * "todavía no", aparece **con el juego funcionando bien** y **nunca debe cobrar ni asustar**.
+ * Si esta pantalla saliera por ese motivo, le estaríamos enseñando una factura a alguien
+ * cuyo juego va perfecto, y esa es la forma más rápida de que se vaya y no vuelva.
+ */
+export function renderCuotaAgotada(
+  container: HTMLElement,
+  onReintentar: () => void
+): void {
+  container.innerHTML = `
+    <div class="min-h-screen flex items-center justify-center p-6 bg-[var(--bg-app)]">
+      <div class="card-glass border rounded-2xl p-6 max-w-sm w-full flex flex-col gap-4">
+        <div class="label-caps text-amber-400">Límite del día alcanzado</div>
+        <div class="font-['Orbitron'] font-bold text-base leading-tight">
+          El servidor ha llegado a su límite de hoy
+        </div>
+        <div class="text-xs text-[var(--text-muted)] leading-relaxed">
+          No es un fallo de tu equipo ni de tu cuenta, y <strong>tu partida está intacta</strong>:
+          no se ha perdido nada de lo que tenías guardado. Lo que hayas jugado desde entonces
+          se queda en este dispositivo y subirá solo en cuanto vuelva el servicio.
+        </div>
+        <div class="text-xs text-[var(--text-muted)] leading-relaxed">
+          El límite se repone por sí solo al día siguiente. Puedes dejarlo y volver mañana,
+          o reintentar ahora mismo si ya ha pasado.
+        </div>
+        <button data-reintentar
+                class="w-full py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs
+                       rounded-xl hover:opacity-90 transition cursor-pointer">
+          REINTENTAR
+        </button>
+        <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+          El aviso sale solo cuando el servidor dice que se pasó el límite, no por un fallo
+          de conexión. Si es la conexión, lo que funciona es reintentar.
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Mismo `addEventListener` sobre el nodo nuevo y no `onclick`, por R5: este nodo vive
+  // dentro de `#app`, que se recrea, y un atributo inline ahí se acumula con cada montaje.
+  container.querySelector('[data-reintentar]')?.addEventListener('click', onReintentar);
+}

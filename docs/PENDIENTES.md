@@ -1324,6 +1324,45 @@ feature que falta):**
       que oculta y ocupada van a la vez**, que es el que se rompería si alguien escribiera
       `if (!oculta) escribir()`: se gastaría **y** se pisaría a la vez.
       `sessionCheck` intacto: 39/39, el cerrojo sigue bloqueando igual.
+- [x] **B34 · Pantalla completa cuando la cuota se agota de verdad.** `[v1.15.6]`
+      > "Using maximum backoff delay to prevent overloading the backend. hace una pantalla que indique que firestore llego a su maximo y que para continuar hay que pagar una la version premium del juego"
+      **LO QUE SE PIDIÓ Y LO QUE SE CONSTRUYE, Y POR QUÉ NO SON LO MISMO.** Se pidió una
+      pantalla de pago. Se hace una pantalla **honesta, sin pago**, por dos razones que
+      ninguna son de gusto:
+      · **El mensaje que se pegó NO es un error de cuota.** `Using maximum backoff delay`
+        significa **"todavía no"**, no "no": la petición se queda esperando, no se rechaza.
+        **Esa frase aparece a diario con el juego funcionando bien**, así que una pantalla
+        de pago atada a ella **estaría cobrando por una espera de segundos**. La señal de
+        cuota agotada de verdad es otra, y ya existe: `esCuotaAgotada()` busca
+        `resource-exhausted`.
+      · **Un muro de pago no funcionaría con el diseño actual.** La pantalla, el pago y su
+        confirmación se guardan **en la misma base de datos** que está saturada: con la
+        cuota agotada **el pago tampoco llega**. Un bloqueo que no se puede ni cobrar es un
+        bloqueo, no una venta.
+      **ADEMÁS, LA PANTALLA DE PAGO MENTIRÍA.** El límite **se repone solo cada día**. Pedir
+      dinero para continuar por algo que va a funcionar igualmente en unas horas es cobrar
+      por el reloj. **La pantalla que había ya decía la verdad** —"tu partida sigue intacta,
+      el límite se repone"— y por eso el cambio es de **fondezuelo y de enganche**, no de
+      texto: hoy es un aviso flotante que se va solo, y lo que hace falta es una pantalla
+      que **quede**, explique y ofrezca reintentar.
+      **LO QUE SE CONSTRUYE, Y YA ESTÁ.** Pantalla completa con el motivo real
+      (`resource-exhausted`), que la partida **está intacta** y que **el límite se repone
+      solo**, y un botón de reintentar. **Cuesta 0€ al jugador.** Se muestra **una sola vez**,
+      porque el guardado reintenta cada 30 s y sin un flag la pantalla parpadearía cada medio
+      minuto; y **va dentro de un `try/catch`**, porque se pinta **desde el `catch` del
+      guardado**, que es el peor sitio: si la pantalla lanzara, el jugador se quedaría **sin
+      guardar y sin aviso**.
+      **COMPROBADO.** `cuotaPantallaCheck` (6): la señal de verdad la abre y los tres falsos
+      **no** —el "todavía no", la caída de red y el fallo de permisos—, que es lo que evita
+      enseñarle un problema a quien no lo tiene; y el motor **sobrevive a tres fallos
+      seguidos** y **vuelve a guardar** cuando la red vuelve, que es lo que hace que la
+      pantalla no pueda costarle la partida. Medido en `preview.html?vista=cuota` a **390×844**:
+      **0 px de desbordamiento horizontal y el botón dentro de la pantalla**.
+      **LA REGLA QUE SALE DE AQUÍ, Y ES LA QUE MANTIENE ESTO HONESTO.** El aviso de cuota
+      **solo aparece con el código de verdad**, nunca por un fallo genérico ni por un
+      tiempo de espera agotado: `sessionCheck` y `blocked.ts` ya separan los tres casos
+      (cuota, sin respuesta, otro) porque **darle a alguien el mensaje equivocado lo
+      manda a esperar lo que no toca**.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un
