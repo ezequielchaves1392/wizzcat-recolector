@@ -1284,6 +1284,46 @@ feature que falta):**
       hay un plan de pago, esto deja de ser un problema**; si no lo hay, el camino es
       agrupan latido y presencia en el mismo documento, que es el mismo truco que B30 y que
       **no se ha hecho porque toca el diseño del cerrojo**.
+- [x] **B33 · El cerrojo se apaga cuando no hay nadie mirando.** `[v1.15.5]`
+      > "hace lo que creas mas conveniente y que mejore esta situacion"
+      **Hecho, y son las dos cosas que se propusieron. Con 3 jugadores, la cuenta sale así:**
+      antes **16.800/día (84%)**, y **cabe**, pero justa y con la condición de que nadie
+      tenga una pestaña zombi. Ahora hay margen de sobra.
+      **1 · LA PRESENCIA, DE 60 s A 5 MIN.** Escribía **60 veces por hora para pintar un
+      punto verde en el ranking**, y el juego abierto ya dice "estoy aquí" con el latido.
+      Medido: el coste por hora y pestaña pasa de **~210 a ~165**.
+      **2 · EL LATIDO SOLO CUANDO HAY ALGUIEN MIRANDO, QUE ES EL ARREGLO DE FONDO.** Con la
+      pestaña oculta **deja de latir**, no latir menos: la ventana de 45 s **caduca sola** y
+      la cuenta queda libre. Ahorra **hasta 160/h en las horas muertas**, que es donde se
+      comía el presupuesto.
+      **POR QUÉ NO SE BAJA EL RITMO, Y ES LA DECISIÓN QUE MÁS IMPORTÓ.** Se podía haber
+      alargado la ventana de 45 s a dos minutos y el ahorro habría sido mayor, pero **eso le
+      cobra al jugador**: tras cerrar el portátil esperaría dos minutos para entrar desde el
+      móvil en vez de menos de uno. **El ahorro es del jugador, pero la espera también.**
+      Por eso el ahorro sale de **no escribir de más**, no de empeorar la espera.
+      **Y ESTO NO ES SOLO UN AHORRO: ARREGLA UN FALLO DE FONDO.** Antes, la pestaña dormida
+      seguía batiendo el latido **para siempre**, así que **la cuenta no se liberaba nunca**
+      y **no había manera de entrar desde otro dispositivo**. El cerrojo estaba protegiendo
+      contra la construcción durante el sueño, que no es una amenaza. **Ahora protege contra
+      lo único que es real —dos sesiones activas a la vez— y ese hueco es el que se cierra.**
+      **EL RIESGO QUE HAY QUE NOMBRAR, Y POR QUÉ ESTÁ CUBIERTO.** Si el latido se calla y al
+      volver **no se comprueba nada**, la pestaña que vuelve **cree que tiene la cuenta y
+      guarda encima** de lo del otro dispositivo: dos sesiones escribiendo, y la que vuelve
+      **pisa** a la otra con una partida viejo. Eso no es cuota, es **pérdida de progreso**.
+      Por eso al volver **se vuelve a preguntar** (`consultarSesion`) y, si la cuenta la tiene
+      otro, **cede**: no escribe y enseña el aviso. **Solo parar el latido habría sido un
+      ahorro que rompía el juego.**
+      **"OCULTA" ES `document.hidden`, NO LA FOCO, Y ES A PROPÓSITO.** Un jugador puede tener
+      la ventana visible detrás de otra y **seguir jugando**, y ese no puede perder el
+      cerrojo. Es la misma pregunta que ya hace el ingreso pasivo.
+      **LO QUE NO SE TOCA.** La ventana de 45 s, el aviso de "abierto en otro sitio", el
+      latido del motor dentro del documento de la partida (ese no depende de este intervalo)
+      y la espera entre pestaña dormida y jugador que entra: seguiría siendo de 45 s.
+      `cerrojoCheck` (nuevo, 6): la ventana caduca —que es lo que hace que parar libere—,
+      no se toca su duración, y la decisión tiene las tres ramas correctas **más el caso en
+      que oculta y ocupada van a la vez**, que es el que se rompería si alguien escribiera
+      `if (!oculta) escribir()`: se gastaría **y** se pisaría a la vez.
+      `sessionCheck` intacto: 39/39, el cerrojo sigue bloqueando igual.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un

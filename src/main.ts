@@ -401,7 +401,7 @@ async function ocuparSesion(uid: string, nombre: string): Promise<boolean> {
     return esperarSesion(uid, nombre, miId, despues.latido);
   }
 
-  mantenerLatido(uid, miId);
+  latidoSegunMirada(uid, miId, resolvedUsername || ANON);
   return true;
 }
 
@@ -425,7 +425,7 @@ function esperarSesion(uid: string, nombre: string, miId: string, latidoAjeno: n
       if (!estado.ocupada) {
         await anotarLatido(uid, miId);
         limpiarPantallaOcupada();
-        mantenerLatido(uid, miId);
+        latidoSegunMirada(uid, miId, resolvedUsername || ANON);
         console.info('[sesion] La otra sesion se ha liberado; entrando.');
         resolve(true);
         return;
@@ -488,7 +488,7 @@ function pintarSesionOcupada(uid: string, nombre: string, miId: string, latidoAj
       if (e.ocupada) return;
       await anotarLatido(uid, miId);
       limpiarPantallaOcupada();
-      mantenerLatido(uid, miId);
+      latidoSegunMirada(uid, miId, resolvedUsername || ANON);
       if (activeUser) await initGame(activeUser, resolvedUsername || undefined);
     });
   });
@@ -521,15 +521,97 @@ function limpiarPantallaOcupada() {
  * proyecto: un tercio de las escrituras del juego eran solo para mantener vivo un
  * reloj que el propio jugador no ve.
  */
-function mantenerLatido(uid: string, miId: string) {
-  const refresco = setInterval(() => { void anotarLatido(uid, miId); }, Math.floor(VENTANA_MS / 2));
+/**
+ * B33 · EL LATIDO SOLO CUANDO HAY ALGUIEN MIRANDO, Y LO QUE HACE FALTA AL VOLVER.
+ *
+ * **EL PROBLEMA QUE ESTE COMMIT CIERRA, MEDIDO.** Con la pestaña abierta y sin hacer nada,
+ * el juego se gastaba **160 escrituras por hora solo en latido**. Y como el latido ya
+ * viaja gratis dentro del guardado (B30), ese gasto **ocurre exactamente cuando NO se
+ * está jugando**: jugando, el guardado lo lleva de viaje y no cuesta nada. O sea que el
+ * presupuesto se lo comía el cenário en el que el jugador no está haciendo nada, que es el
+ * peor sitio posible para gastar.
+ *
+ * **LA IDEA, Y POR QUÉ NO ES "BAJAR EL RITMO".** Con la pestaña oculta, el latido **se
+ * para**. No se escribe menos a menudo: **no se escribe**. La ventana del cerrojo sigue
+ * siendo de 45 segundos, así que al dejar de batirla el cerrojo **caduca**, y con él se
+ * libera la cuenta. Eso es **justo lo que se quiere**: una pestaña dormida no debería
+ * reservar la cuenta, y menos todavía cuando el jugador está en el móvil.
+ *
+ * **LO QUE NO SE PUEDE HACER, Y ES LA MITAD IMPORTANTE: SOLO PARAR.**
+ *
+ * Si el latido se para y al volver **no se comprueba nada**, entonces la pestaña que vuelve
+ * **cree que tiene la cuenta** y **sigue guardando encima** de lo que haya hecho el otro
+ * dispositivo. Dos pestañas escribiendo la misma partida: la que vuelve **pisa** a la otra
+ * con una partida viejo. **Eso no es un problema de cuota, es pérdida de progreso**, y es
+ * el motivo por el que el cerrojo existe.
+ *
+ * **ASÍ QUE AL VOLVER HAY QUE VOLVER A PREGUNTAR, Y POR ESO ESTE COMMIT NO ES SOLO
+ * "AHORRAR".** Al volver a mirar la pantalla se llama a `consultarSesion()`: si la cuenta
+ * la tiene **otro** dispositivo, esta pestaña **suelta el Cerrojo y no vuelve a escribir**,
+ * que es lo mismo que hace `esperarSesion()`. Si la cuenta sigue siendo nuestra —o no hay
+ * nadie— se reanuda el latido y el juego sigue como si nada.
+ *
+ * **ESTO ARREGLA UN FALLO QUE YA EXISTÍA, Y NO ES TEÓRICO.** Antes de este commit, con la
+ * pestaña dormida el cerrojo se mantenía **para siempre**: la cuenta no se liberaba nunca y
+ * **no había forma de que otro dispositivo entrara**. El cerrojo estaba protegiendo contra
+ * la construcción durante el sueño, que no es un amenaza. Ahora protects contra lo único
+ * que es real —dos sesiones **activas** a la vez— y ese hueco es el que se cierra.
+ *
+ * **LO QUE NO SE ROMPE, Y POR QUÉ.** La ventana de 45 segundos **no se toca**, así que una
+ * recarga normal o un móvil que cambia de aplicación no se cuelan. El bloqueo **sigue
+ * dando el aviso de "abierto en otro sitio"**. Y **el latido del motor** —el que viaja en el
+ * documento de la partida— **sigue escribiéndose igual**, porque ese va dentro del guardado y
+ * no depende de este intervalo: quien se para aquí es **solo el reloj propio**.
+ */
+function latidoSegunMirada(uid: string, miId: string, nombre: string): () => void {
+  let refresco: ReturnType<typeof setInterval> | null = null;
 
-  const soltar = () => {
+  const parar = () => {
+    if (refresco === null) return;
     clearInterval(refresco);
-    void soltarSesion(uid, miId);
+    refresco = null;
+    // **NO SE SUELTA LA SESIÓN AL PARAR, Y ES DELIBERADO.** Soltarla aquí escribiría un
+    // documento para decir "me voy", que es justo la escritura que se está evitando. Lo que
+    // se hace es **dejar de batir el latido**, y que la ventana lo caduque sola: el efecto
+    // para el otro dispositivo es el mismo —la cuenta queda libre— y no cuesta ni una
+    // escritura.
   };
-  window.addEventListener('pagehide', soltar);
-  window.addEventListener('beforeunload', soltar);
+
+  const arrancar = () => {
+    if (refresco !== null) return;
+    refresco = setInterval(() => { void anotarLatido(uid, miId); }, Math.floor(VENTANA_MS / 2));
+  };
+
+  const decidir = () => {
+    // **SI ESTÁ OCULTA, SE CALLA. Y "oculta" es la misma pregunta que ya se hace para el
+    // ingreso**, que es la regla del proyecto: nada se cobra ni se gasta con la pantalla
+    // apagada. Se usa `document.hidden` y no la presencia de `focus`, porque un jugador
+    // puede tener la ventana visible detrás de otra y **seguir jugando**, y ese no puede
+    // perder el cerrojo.
+    if (document.hidden) { parar(); return; }
+
+    // **AL VOLVER, ANTES DE BATIR NADA, SE PREGUNTA QUIÉN TIENE LA CUENTA.** Sin esto,
+    // esta pestaña escribiría encima de la otra, y eso es perder la partida.
+    void consultarSesion(uid, miId).then((estado) => {
+      if (estado.ocupada) {
+        // Otro dispositivo se ha instalado mientras esta pestaña dormía. **No se escribe:**
+        // se avisa y se deja entrar al otro sitio, que es lo que hace el cerrojo para eso.
+        parar();
+        pintarSesionOcupada(uid, nombre, miId, estado.latido);
+        return;
+      }
+      arrancar();
+    });
+  };
+
+  document.addEventListener('visibilitychange', decidir);
+  window.addEventListener('focus', decidir);
+  window.addEventListener('pageshow', decidir);
+  window.addEventListener('pagehide', parar);
+  window.addEventListener('beforeunload', () => { parar(); void soltarSesion(uid, miId); });
+
+  if (document.hidden) parar(); else arrancar();
+  return parar;
 }
 
 /**

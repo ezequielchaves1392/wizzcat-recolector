@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.5',
+    fecha: '7 de octubre de 2026',
+    titulo: 'La pestana dormida deja de guardarte la cuenta',
+    lineas: [
+      'Con el juego abierto en una pestana que no estabas mirando, el juego seguia guardando "estoy aqui" cada 22 segundos. Ahora se calla cuando la pantalla esta oculta y se retoma cuando vuelves.',
+      'Tambien se nota en el punto del ranking: se actualiza cada cinco minutos en vez de cada minuto. Lo unico que enseña es si estas conectado.',
+      'Esto arregla algo que te podia pasar: si dejabas el portatil abierto, la cuenta se quedaba reservada toda la noche y no habia forma de entrar desde el movil. Ahora la cuenta se libera en cuanto cierras o minimizas.',
+      'Si vuelves y resulta que la partida se ha abierto en otro sitio, esta pestana te lo dice y deja pasar a la otra en vez de guardar encima.'
+    ]
+  },
+  {
     version: '1.15.4',
     fecha: '7 de octubre de 2026',
     titulo: 'Probar ya no gasta cuota',

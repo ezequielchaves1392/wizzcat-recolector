@@ -61,6 +61,7 @@ export default defineConfig({
         cuotaCheck: resolve(here, 'cuotaCheck.ts'),
         costeJuegoCheck: resolve(here, 'costeJuegoCheck.ts'),
         costeRealCheck: resolve(here, 'costeRealCheck.ts'),
+        cerrojoCheck: resolve(here, 'cerrojoCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
         perfilCheck: resolve(here, 'perfilCheck.ts'),

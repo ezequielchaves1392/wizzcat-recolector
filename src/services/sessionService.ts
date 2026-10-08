@@ -360,7 +360,7 @@ export async function soltarSesion(uid: string, miId: string): Promise<void> {
  * El latido de la sesion sigue a quince segundos, porque de el depende el bloqueo y
  * ese necesita margen. La presencia no bloquea nada: solo paints un punto.
  */
-export const RITMO_PRESENCIA_MS = 60_000;
+export const RITMO_PRESENCIA_MS = 5 * 60_000;
 
 let ultimaPresencia = 0;
 
