@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.7',
+    fecha: '8 de octubre de 2026',
+    titulo: 'El almacen vacio era una lectura a medias, no tu cuenta',
+    lineas: [
+      'Si el servidor se pasa, el juego se montaba con el almacen vacio y tu saldo encima. Parecia que habias perdido tus cosas. No era asi: estaban a salvo en el servidor, lo que llegaba era una carga a medias.',
+      'Ahora, cuando la carga llega incompleta, el juego no arranca y te enseña la pantalla de limite con un boton para reintentar, en vez de dejarte jugar sobre una partida fantasma que tampoco se guardaba.',
+      'Los jugadores nuevos siguen jugando igual: su almacen vacio de verdad no se confunde con una lectura cortada.',
+      'Tus cosas no se han perdido en ningun momento. Nada se ha escrito encima.'
+    ]
+  },
+  {
     version: '1.15.6',
     fecha: '7 de octubre de 2026',
     titulo: 'Cuando el servidor se pasa, te lo explica en serio',

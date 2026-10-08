@@ -695,6 +695,29 @@ function mostrarFalloDeCarga(error: unknown) {
 }
 
 /**
+ * El error de cuota que se le pasa a `mostrarFalloDeCarga` cuando **la carga vino a
+ * medias**, que no es lo mismo que "el arranque lanzó".
+ *
+ * **POR QUÉ UN ERROR Y NO UN SEGUNDO ARGUMENTO DE TIPO "PANTALLA".** Porque
+ * `renderErrorDeCarga()` ya sabe decir tres cosas distintas —cuota, sin respuesta, otro
+ * fallo— y decide por el error que le llega. Fabricar aquí un error con el código de
+ * `resource-exhausted` **usa esa ruta tal cual**, con su texto y su botón, y no duplica la
+ * lógica de "qué pantalla va".
+ *
+ * **Y POR QUÉ ES DE CUOTA Y NO "OTRO FALLO".** Porque la lectura **vino recortada**, y lo
+ * único que recorta un documento a la mitad es que **el servidor no está dando todo lo que
+ * tiene**: la cuota del día, o un problema de la red que se manifestó así. Decirle al
+ * jugador "no se ha podido cargar tu partida" sin más lo dejaría **esperando un reintento
+ * que igual no arregla nada**, cuando lo que sí tiene sentido es que espere al día
+ * siguiente. El texto de cuota dice exactamente eso: **se repone solo**.
+ */
+function cuotaAgotadaComoError(): unknown {
+  const e: any = new Error('Quota exceeded for quota metric: Read operations');
+  e.code = 'resource-exhausted';
+  return e;
+}
+
+/**
  * Cuánto se espera a que la partida se monte antes de decir que no se ha podido.
  *
  * **VEINTICINCO SEGUNDOS, Y POR QUÉ EL ARRANQUE NECESITABA UN RELOJ.**
@@ -726,6 +749,45 @@ async function initGame(user: any, username?: string) {
   }, username, (achievement: any) => {
     showAchievementPopup(achievement);
   }, () => campoLatido(user?.uid ?? '', idDeSesion()), confirmarLatido);
+
+  /**
+   * B35 · LA CARGA VIENE A MEDIAS: NO SE MONTA EL JUEGO, QUE ES LO QUE FALTA.
+   *
+   * **EL BUG, Y CÓMO SE MANIFIESTA.** Con la cuota de Firestore agotada la lectura llega
+   * **incompleta**: el documento existe pero le faltan `warehouse` y `nanites`. El motor lo
+   * detecta y hace lo correcto — `partidaNoCargada`, y el guardado queda deshabilitado para
+   * no escribir una partida en blanco encima de la buena—, **pero no lanza nada**. Y como
+   * `mostrarFalloDeCarga()` solo se ejecuta ante una excepción, **no se enseñaba ninguna
+   * pantalla**: el juego se montaba entero, con el **almacén vacío**, y el jugador veía
+   * **346.744 M de nanitas** —salvadas de la cola local— sobre un almacén que parecía vacío.
+   *
+   * **POR QUÉ ESO ES PEOR QUE NO ENTRAR.** Es la peor forma de perder una partida, y ya
+   * está escrita más abajo de este fichero: **parece que la has perdido y no la has
+   * perdido**. El jugador ve el almacén vacío, cierra el portátil y cree que sus
+   *colecciones se han borrado, cuando **están intactas en el servidor**. Y peor todavía: el
+   * guardado está deshabilitado, así que **lo que juegue ahí tampoco se guarda**.
+   *
+   * **O SEA QUE ANTES DE ESTA LÍNEA PASABAN LAS DOS COSAS MAL A LA VEZ:** una partida
+   * fantasma **y** una partida que no se guarda. B27 evitó el daño de datos —el motor no
+   * escribe encima— pero dejó al jugador **jugando de mentira** sobre ella.
+   *
+   * **POR QUÉ SE COMPRUEBA AQUÍ Y NO EN EL MOTOR.** Porque el motor ya hizo su parte: avisó
+   * por consola y se negó a guardar. Lo que falta es la decisión de **no montar la
+   * pantalla de juego**, y esa es de `main.ts`, que es quien sabe si la partida es
+   * jugable. Además el corte va **antes del primer `renderRoute`**, así que **no hay un
+   * fotograma con el almacén vacío**: o se ve la pantalla de aviso o se ve el juego, nunca
+   * el juego roto.
+   *
+   * **EL ERROR QUE SE PASA ES SINTÉTICO A PROPÓSITO.** No se reintenta la lectura, porque
+   * la cuota **no se repone en milisegundos** y un bucle de reintentos solo gastaría más. Se
+   * enseña la pantalla de carga con su botón, que **recarga la página entera**, y eso sí
+   * corta la petición colgada. El mensaje que sale es el de cuota, que es el que dice la
+   * verdad: **tu partida está intacta**.
+   */
+  if (activeGameInstance.cargaFallida?.()) {
+    mostrarFalloDeCarga(cuotaAgotadaComoError());
+    return;
+  }
 
   // Handle de depuración solo en dev: permite inspeccionar y probar el estado
   // desde la consola. Se elimina del build de producción.

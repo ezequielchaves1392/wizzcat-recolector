@@ -1363,6 +1363,32 @@ feature que falta):**
       tiempo de espera agotado: `sessionCheck` y `blocked.ts` ya separan los tres casos
       (cuota, sin respuesta, otro) porque **darle a alguien el mensaje equivocado lo
       manda a esperar lo que no toca**.
+- [x] **B35 · Una carga a medias te dejaba jugar con el almacén vacío.** `[v1.15.7]`
+      > "me esta dejando entrar" + consola con `resource-exhausted`, `[carga] El documento
+      > existe pero llegó incompleto... Faltan: warehouse, nanites`
+      **Sí, y era un bug real de B27 a medias.** El motor detectaba la lectura recortada y
+      hacía bien —`partidaNoCargada`, sin guardar para no pisar la partida buena—, **pero no
+      lanzaba nada**. Y como la pantalla de fallo solo salía **ante una excepción**, **el
+      juego se montaba entero con el almacén vacío**, con el saldo de la cola local encima.
+      **LO PEOR NO ES QUE ENTRASES: ES QUE PARECÍA QUE HABÍAS PERDIDO LA PARTIDA.** Tus
+      objetos estaban **intactos en el servidor** y tú veías un almacén vacío. Y el guardado
+      estaba deshabilitado, así que **lo que jugaras ahí tampoco se guardaba**: las dos
+      cosas mal a la vez. Cerrar el portátil con esa pantalla es la forma más rápida de
+      perderla de verdad.
+      **LO QUE FALTA Y SE AÑADE: NO MONTAR.** Después de crear el motor y **antes del
+      primer `renderRoute`**, se pregunta por `cargaFallida()` y, si es cierto, se enseña la
+      pantalla de cuota en vez del juego. Va antes del render **para que no haya ni un
+      fotograma con el almacén vacío**: o se ve el aviso o se ve el juego.
+      **LA PANTALLA ES LA DE CUOTA, Y POR QUÉ.** Se fabrica el error con
+      `resource-exhausted` y se reutiliza `renderErrorDeCarga()` tal cual, sin duplicar
+      textos: es la que dice **"tu partida está intacta y el límite se repone solo"**. Un
+      fallo genérico haría al jugador esperar un reintento que igual no arregla nada.
+      `cargaCortaCheck` (nuevo, 4) y **el caso que hay que mirar dos veces**: una partida
+      **nueva** con `warehouse: []` **sí monta el juego**, porque un jugador que se registra
+      tiene el almacén vacío de verdad y **no se le puede decir que hay un problema**. La
+      diferencia entre "vacío" y "vino recortado" es si la **clave existe**, y confundirlas
+      rompería a los jugadores nuevos. También se comprueba que con la carga a medias **no se
+      escribe nada**.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un
