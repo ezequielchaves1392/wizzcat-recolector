@@ -57,6 +57,27 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.11',
+    fecha: '8 de octubre de 2026',
+    titulo: 'El ingreso de los companeros sigue sin dados',
+    lineas: [
+      'Los clicks del arbol ya critiquen. Los companeros no cambian, y es a proposito: su ingreso es por segundo, no son clicks.',
+      'Un critico ahi seria cobrarte de mas sin que se vea por que, y ese ingreso se cobra aunque no estes mirando la pantalla.',
+      'Para verlo necesitas un recolector con afijo de critico equipado: sin afijo no hay probabilidad que tirar, ni a mano ni en el arbol.'
+    ]
+  },
+  {
+    version: '1.15.10',
+    fecha: '8 de octubre de 2026',
+    titulo: 'Los clics del arbol ya critican',
+    lineas: [
+      'Los nodos que sueltan clicks automaticos ahora tiran critico, con la misma probabilidad y el mismo doble de dano que tu click.',
+      'Y se ven igual que el tuyo: sale un "CRIT" en dorado cuando pegan fuerte.',
+      'Tus afijos de critico ahora valen para los dos. Antes solo mejoraban tu click a mano.',
+      'El ingreso de los companeros no cambia: sigue siendo por segundo y sin dados, porque se cobra aunque no estes mirando.'
+    ]
+  },
+  {
     version: '1.15.9',
     fecha: '8 de octubre de 2026',
     titulo: 'La tarjeta AFK ya no se pasa del tiempo prometido',

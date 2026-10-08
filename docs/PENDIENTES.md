@@ -1484,16 +1484,55 @@ feature que falta):**
       **Lo que ve el jugador a partir de ahora:** con el nodo a un nivel, el tope es de
       **1 hora**, no de 2. La cola que ya tenía puesta **no se toca**: al recargar, el
       tiempo que le quedaba se respeta hasta que caduca.
-- [ ] **B25 · Los clics pasivos no critican.**
+- [x] **B25 · Los clics pasivos no critican.** `[v1.15.10]`
       > "Los clicks pasivos también deberían hacer críticos"
-      **Hoy solo `click()` tira el dado de crítico** (B16), y se dejó fuera a
-      propósito para los automáticos del árbol. Pero un compañero de tipo `click`
-      **sí cobra por clic** y **no puede criticar nunca**, que es el mismo tipo de
-      cosa que B1 (los `passive` que no anunciaban su ingreso): la señal existe para
-      unos y no para otros. Hay que decidir **qué automáticos quedan fuera**: la propuesta
-      es que critiquen **los compañeros de tipo `click`** —porque el jugador los
-      ve cobrar— y **no** los nodos de `auto_clicker` del árbol, porque esos no
-      tienen a nadie mirándolos. **`senalCheck` lo ata por los dos lados.**
+      Hecho: **los clics automáticos del árbol ya critican**, con la misma probabilidad y el
+      mismo multiplicador ×2 que el click del jugador, y se ven igual: `¡CRÍT! +N` en el
+      dorado de la forja.
+      **LA PROPUESTA DE AQUÍ PARTÍA DE UNA PREMISA FALSA, Y ES LO PRIMERO QUE HAY QUE
+      DECIR.** Decía que los compañeros de tipo `click` "sí cobran por clic". **No lo hacen.**
+      Su poder entra en `recalculatePassiveIncome()` como **una tasa por segundo**, dentro
+      de `state.passiveIncome`, junto a los `passive`. **No hay ningún evento al que
+      tirarle un dado.** Ponerle un crítico ahí no sería un evento: sería **más ingreso de
+      golpe**, que es otra cosa —y que cobraría **sin que el jugador esté mirando la
+      pantalla**, que es justo lo que R10 prohíbe—. **Se quedan fuera a propósito.**
+      **LOS QUE SÍ SON CLICS SON LOS NODOS `autoClick`.** El motor cuenta `totalClicks` por
+      cada uno, cada vuelta del bucle es un click y cada click tiene su flotante. Que no
+      pudieran criticar era **la excepción sin motivo**: es la misma acción que el click del
+      jugador, así que **el afijo de crítico tiene que aplicar a los dos o miente sobre lo que
+      afecta**.
+      **EL DADO ESTÁ EN EL BUCLE Y NO EN `calculateClickDamage()`, Y ESO ES LO QUE MANTIENE
+      VIVO B16.** B16 dejó escrito que esa función no puede tirar el dado porque la leen el
+      panel y el desglose, y **un dado dentro haría que el número que se enseña cambiara en
+      cada lectura**. Meterlo ahí habría hecho que el automático **criticara** —el arreglo
+      habría funcionado— **y habría roto el panel**. Por eso va en el bucle, que es donde ya
+      se ha decidido que esto **es** un click, y la función sigue siendo pura.
+      `criticoAutoCheck` (nuevo, 6), y atan **las dos mitades**: el automático crítico pega
+      **exactamente el doble del daño puro**; **la función pura da la misma cifra con dados
+      distintos**, que es la mitad que el arreglo fácil rompe; el evento **lleva la marca**
+      `critico` y **no la lleva cuando no es crítico** —un evento que siempre dice que sí no
+      es una señal, es ruido—; y el compañero `click` **suma tasa y no genera eventos**.
+      **DOS ERRORES PROPIOS EN ESTE BANCO, Y LOS DOS ERAN DE LA PRUEBA, NO DEL MOTOR.**
+      · **No llevaba recolector equipado**, así que `critChance` era `0` y `Math.random() < 0`
+        **nunca** daba crítico: las comprobaciones salían a cero con el motor correcto.
+        **Una comprobación que clava el dado tiene que tener de dónde salga el crítico.**
+      · Medí sobre `state.nanites`, que **suma también el ingreso pasivo**, que no critica, y
+        por eso salía 32 contra 18 en vez de 36 contra 18: **la cuenta estaba mal, no el
+        motor.** Ahora se mide la suma de los eventos, que son solo clics automáticos.
+      · Y el `setInterval` del juego **no arranca en los bancos** (`entorno.mjs`): la primera
+        versión llamaba a un `tick()` que no existe y daba cero y `undefined`. El truco es el
+        de `tickCheck`, y está copiado con el motivo escrito.
+      · **Y UNA CUARTA, QUE ES LA QUE DE VERDAD ENSEÑA:** la comprobación de la magnitud
+        **pasaba en solitario y fallaba en la suite**, con el motor correcto. Daba 32 contra
+        16 medido sobre `state.nanites`; luego 32 contra 18 con el promedio, y **18 es
+        IMPOSIBLE** si los únicos valores posibles son 8 y 16 — eso delató que **entre el
+        drenaje y los `tick()` manuales entra un tick de verdad**, con su `Math.random` sin
+        clavar y su acumulador ya avanzado desde el arranque. **El experimento no estaba
+        controlado y el total no significaba nada.** Ahora se afirma **la relación con el
+        daño puro**: el mayor evento es exactamente el doble de `getClickDamage()`, y sin
+        crítico ninguno lo supere. Es cierto llegue la cantidad de clics que llegue.
+        **Una comprobación que depende de cuántos eventos han pasado no comprueba el
+       _arranque; pide suerte.**
 
 **Features:**
 

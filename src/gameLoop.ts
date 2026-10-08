@@ -4034,11 +4034,24 @@ const RITMO_GUARDADO_MS = 30_000;
    * crecería sin límite en una partida larga con muchos nodos de autoClick.
    */
   const MAX_CLICKS_PENDIENTES = 40;
-  let clicksPendientes: { cantidad: number }[] = [];
+  /**
+   * B25 · EL EVENTO LLEVA SI FUE CRÍTICO, Y NO SOLO LA CIFRA.
+   *
+   * **POR QUÉ NO BASTA CON QUE EL NÚMERO SEA MAYOR.** Un "+200" al lado de un "+100" se lee
+   * como un click mejor, no como un evento: el jugador no sabe que el afijo ha hecho nada.
+   * Eso está escrito en el click del jugador, que pinta `¡CRÍT!` y el dorado de la forja, y
+   * este automático **es el mismo click**, así que tiene que verse igual.
+   *
+   * **Y POR QUÉ LA MARCA VIENE EN EL EVENTO Y NO SE CALCULA AL PINTAR.** La vista no puede
+   * saberlo: sabría si el número es grande, no si el dado salió. Recalcularlo en la vista
+   * sería **tirar el dado dos veces** y hacer que el número que sube al saldo **no** sea el
+   * que ve el jugador, que es la forma más fácil de volver a tener dos verdades (R1, R3).
+   */
+  let clicksPendientes: { cantidad: number; critico: boolean }[] = [];
 
-  function anotarClickAutomatico(cantidad: number) {
+  function anotarClickAutomatico(cantidad: number, critico: boolean) {
     if (clicksPendientes.length >= MAX_CLICKS_PENDIENTES) clicksPendientes.shift();
-    clicksPendientes.push({ cantidad });
+    clicksPendientes.push({ cantidad, critico });
   }
 
   /**
@@ -4178,7 +4191,35 @@ const RITMO_GUARDADO_MS = 30_000;
         autoClickAccumulator += state.bonus.autoClick * (TICK_RATE_MS / 1000);
         while (autoClickAccumulator >= 1) {
           autoClickAccumulator -= 1;
-          const dmg = calculateClickDamage() * calculateMultiplier();
+          // B25 · ESTOS AUTOMÁTICOS TIRAN EL DADO, Y ANTES NO.
+          //
+          // **LO QUE CAMBIA Y POR QUÉ ESTA ERA LA PREGUNTA MAL PLANTEADA.** La entrada
+          // pedía críticos para "los clics pasivos" y proponíaómplelo para los compañeros
+          // de tipo `click`. **Un compañero de tipo `click` no hace clics**: su poder entra
+          // en `recalculatePassiveIncome()` como **una tasa por segundo**, dentro de
+          // `passiveIncome`. No hay ningún evento al que tirarle un dado, y poner un
+          // crítico ahí no sería un evento: sería **más ingreso de golpe**, que es otra
+          // cosa y además el ingreso pasivo ya se cobra sin mirar la pantalla.
+          //
+          // **LOS QUE SÍ SON CLICS SON ESTOS.** El nodo se llama `autoClick`, el motor
+          // cuenta `totalClicks`, y cada vuelta del bucle es **un click de verdad**: el
+          // jugador lo compró como "clics que sueltos solos", y se cobra como un click, en
+          // su propio slot, con su propio flotante. Que no pueda criticar es la excepción
+          // sin motivo: el click del jugador y este son **la misma acción**.
+          //
+          // **EL DADO ESTÁ AQUÍ Y NO EN `calculateClickDamage()`, Y ESO ES LO IMPORTANTE.**
+          // B16 dejó escrito el motivo: esa función la leen el panel, el desglose y estos
+          // automáticos, y **un dado dentro haría que el número que enseña el panel
+          // cambiara en cada lectura**. Sigue siendo verdad. Por eso el dado se tira en el
+          // bucle, que es donde ya se ha decidido que esto **es** un click, y la función
+          // pura sigue sin dados.
+          //
+          // **LA PROBABILIDAD ES LA DEL RECOLECTOR EQUIPADO**, igual que en el click del
+          // jugador, porque es el mismo click: los afijos que dicen "+X% de crítico"
+          // tienen que aplicar a los dos o el afijo miente sobre lo que afecta.
+          const critico = Math.random() < equippedAffixEffect().critChance;
+          const dmg = calculateClickDamage() * calculateMultiplier()
+            * (critico ? MULTIPLICADOR_CRITICO : 1);
           state.nanites += dmg;
           state.totalNanitesProduced += dmg;
           state.totalClicks += 1;
@@ -4186,7 +4227,7 @@ const RITMO_GUARDADO_MS = 30_000;
           // cuenta. Si aquí se guardara el valor sin floor, el "+N" flotante y
           // el saldo divergirían en la fracción, que es justo lo que se está
           // arreglando.
-          anotarClickAutomatico(Math.floor(dmg));
+          anotarClickAutomatico(Math.floor(dmg), critico);
         }
       }
       // Los logros se comprueban en el tick: así se desbloquean solos sin que
@@ -4506,7 +4547,7 @@ const RITMO_GUARDADO_MS = 30_000;
      * recolector puede no llamarla nunca, y eso no cuesta nada —ver
      * `anotarClickAutomatico()`.
      */
-    drainClickEvents: (): { cantidad: number }[] => {
+    drainClickEvents: (): { cantidad: number; critico: boolean }[] => {
       if (!clicksPendientes.length) return [];
       const salida = clicksPendientes;
       clicksPendientes = [];

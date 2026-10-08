@@ -1299,7 +1299,11 @@ function updateUI(state: any, isAfk: boolean = false) {
   // es la forma más fácil de volver a tener dos verdades.
   if (activeGameInstance && typeof activeGameInstance.drainClickEvents === 'function') {
     for (const evento of activeGameInstance.drainClickEvents()) {
-      showCompanionClickInCollector(evento.cantidad);
+      // B25 · EL CRÍTICO SE PINTA COMO EL DEL JUGADOR, Y POR QUÉ NO COMO UN NÚMERO MAYOR.
+      // Un "+200" al lado de un "+100" se lee como un click mejor, no como un evento, y el
+      // jugador no sabría que el afijo ha hecho nada. El motor trae la marca porque la vista
+      // no puede saberlo: sabría si el número es grande, no si el dado salió.
+      showCompanionClickInCollector(evento.cantidad, evento.critico);
     }
   }
 
@@ -1691,7 +1695,7 @@ function playHitEffect(strength: number = 1) {
  * misma señal que usa el clic del jugador, así que el golpe se lee sin aprender
  * nada nuevo y la posición aleatoria lo hace propio.
  */
-function showCompanionClickInCollector(power: number) {
+function showCompanionClickInCollector(power: number, critico = false) {
   const collector = document.querySelector('#click-btn');
   if (!collector) return;
   const rect = collector.getBoundingClientRect();
@@ -1702,6 +1706,17 @@ function showCompanionClickInCollector(power: number) {
 
   // Se queda en pantalla bastante más que el click del jugador: este número es
   // la única señal de cuánto trae el compañero y aparece solo, sin aviso.
+  //
+  // **B25 · Y EL CRÍTICO USA LA FORMA DEL CLICK DEL JUGADOR**: `¡CRÍT! +N` y el dorado de
+  // la forja, que es el mismo `#fde047`. Son **la misma acción** —un click del recolector—
+  // y el jugador que tiene un afijo de crítico tiene que verlo funcionar igual en los dos,
+  // o el afijo parece funcionar a medias.
+  if (critico) {
+    showFloatingText(x, y, `¡CRÍT! +${formatNumber(power)}`, '#fde047', FLOAT_MS_COMPANION);
+    // Y el golpe más fuerte, como el del jugador: el crítico es un evento y se nota.
+    playHitEffect(1.4);
+    return;
+  }
   showFloatingText(x, y, `+${formatNumber(power)}`, 'var(--accent)', FLOAT_MS_COMPANION);
   // Mismo golpe que el del jugador, más suave. El número ya sube desde un punto
   // aleatorio, así que el recoil va en el botón: el efecto va en el recolector,
