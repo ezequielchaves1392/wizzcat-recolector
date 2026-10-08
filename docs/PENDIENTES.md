@@ -1175,12 +1175,65 @@ feature que falta):**
       mirando cuesta 0 escrituras; el pasivo y el clic **sí** se guardan; un guardado
       **fallido se reintenta** al volver la red; y con la red aún caída **se sigue
       intentando**, porque el documento no está en el servidor.
-      **LO QUE QUEDA, Y NO ES DE ESTE COMMIT.** El latido de sesión (22,5 s, dos
-      escrituras) y la presencia (60 s) viven en `main.ts` y `sessionService`, fuera del
-      motor, y **siguen escribiendo con la pestaña en idle**: son unos 160 + 60 por hora
-      que este commit **no toca**. Medidos, no estimados, pero **fuera de alcance aquí**.
-      Sin una subida de plan, B27 **vuelve**, y esta vez sin el crash que hacía de red
-      de seguridad.
+      **LO QUE QUEDA, Y NO ES DE ESTE COMMIT.** La presencia (60 s) vive en
+      `sessionService`, fuera del motor, y **sigue escribiendo con la pestaña en idle**: son
+      60 por hora que este commit **no toca**. **El latido sí está resuelto, en B30.**
+      Sin una subida de plan, B27 **vuelve**, y esta vez sin el crash que hacía de red de
+      seguridad.
+- [x] **B30 · El latido de sesión no necesita su propio viaje.** `[v1.15.3]`
+      > "hay forma de mejorar esto para evitar 20k diarios?"
+      > "necesito si o si bajar ese rate porque tengo 20k diarios"
+      **Sale de B28, que quitó las escrituras del guardado en reposo pero dejó el latido
+      entero.** Hecho: **el latido viaja dentro del documento de la partida**, que se
+      estaba escribiendo igual cada 30 segundos. **Una pestaña que 24 horas seguidas gastaba
+      8.160 escrituras; ahora gasta 5.280**, y el ahorro es entero de un solo sitio.
+      **LA CUENTA ANTES, MEDIDA Y NO ESTIMADA.** Por hora y por pestaña: **160 del latido,
+      60 de la presencia y 120 del guardado** = 340. El latido se llevaba **casi la mitad**,
+      y era **gasto puro**: `anotarLatido()` hacía un `setDoc` con `merge: true` en
+      `users/{uid}`, y el guardado hacía otro `setDoc` con `merge: true` en **`users/{uid}`**.
+      **El mismo documento.** Firestore cobra una escritura por documento, así que el
+      latido pagaba un viaje entero para mover un campo que ese viaje ya movía.
+      **POR QUÉ NO SE PUEDE SIMPLEMENTE BAJAR EL RITMO DEL LATIDO.** Porque el latido es un
+      cerrojo con `VENTANA_MS = 45 s`: bajarlo alarga el tiempo que el jugador espera
+      después de cerrar el portátil, y eso es un fallo visible. La ventana **no se toca**.
+      **LO QUE SE HACE ES QUE EL LATIDO DEJE DE ESCRIBIRSE SOLO**, no que se escriba
+      menos: conserva su reloj de 22,5 s y su `setDoc` propio para cuando el guardado no
+      está pagando un viaje, y **se sube al barco cuando ya se está pagando**.
+      **LO QUE NO SE ROMPE, Y ESTA ES LA PARTE QUE IMPORTABA.** El latido **no** puede
+      depender solo del guardado, porque B28 dejó de guardar cuando nada cambia: con la
+      pestaña en reposo el documento no se escribiría nunca, el cerrojo caducaría a los 45
+      segundos y **el jugador encontraría su cuenta libre desde el móvil**. Por eso el
+      campo lo pide el servicio (que es quien sabe si toca) y el motor solo lo lleva. El
+      banco mide que el reloj propio sigue dando el campo, no solo el guardado.
+      **UN BUG PROPIO, Y ES EL TERCER VECZ QUE SALE EL MISMO ERROR.** El reloj del latido
+      lo puse **antes** de escribir, "para no repetir el trabajo de comparar si se
+      repite". Con la red en su sitio daba igual. **Con la red caída es un agujero**: el
+      `setDoc` lanzaba, el reloj **ya estaba puesto**, y durante los siguientes 45 segundos
+      —justo la ventana del cerrojo— la cuenta se creía viva sin estarlo. **El que pierde la
+      partida es el que no tiene red, que es el que más lo necesita.** Ahora el reloj se
+      mueve en `confirmarLatido()`, que se llama **después** del `setDoc`. Es la misma regla
+      que B28 con la firma de la partida: **firmar antes de escribir es afirmar que algo
+      está en el servidor cuando no lo está.**
+      **Y UN BUG QUE NO ERA DE ESCRITURAS, PERO SÍ DE DINERO.** En `esperarSesion()`
+      había **tres** temporizadores para lo mismo, y solo se paraba uno: un `setTimeout`
+      con el resto de la ventana, **otro `setTimeout` a `REINTENTO_MS`** y un `setInterval`
+      a `REINTENTO_MS`. O sea que **el primer reintento se lanzaba dos veces**, y los dos
+      `setTimeout` **no se paraban nunca** —seguían consultando después de que el jugador
+      ya hubiera entrado, y solo se acababan al cerrar la pestaña—. Cada `probar()` es una
+      **lectura**, y con la cuota al límite eso no era un detalle.
+      `costeJuegoCheck` (nuevo, 8): el latido de viaje quita escrituras de verdad, el reloj
+      propio sigue escribiendo, un latido recién escrito no se vuelve a pagar, y **diez
+      minutos de clics seguidos no cuestan más que uno**, porque los clics se agrupan en el
+      guardado.
+      **LO QUE SIGUE GASTANDO, Y NO ES POCO.** La **presencia** (60 por hora y pestaña) y
+      el **ranking** (12 por hora) siguen escribiendo en idle. Con 20.000 al día, esta
+      versión aguanta **unas 3 pestañas o 3 jugadores**; **con un plan pagado, el problema
+      desaparece de raíz** y esto es solo red de seguridad.
+      **Y LO QUE EL JUGADOR PREGUNTÓ, CONTESTADO CON LA CUENTA.** Se propuso **combinar
+      Firestore con `localStorage` cifrado**, y **no baja ni una escritura**: el cifrado
+      protege los datos en el disco del navegador, y la cuota la cobra el servidor. La cola
+      local **ya existe** (`queueCheck`) y es síncrona y sobrevive al cierre; lo que se ha
+      hecho es **dejar de pagar en la red lo que la local ya sabe**.
 - [ ] **B26 · La tarjeta AFK dura más de lo que el tope dice.**
       > "el tiempo afk esta mal me dejo pasarme de lo 30 min ... tengo un pasivo que sube 30 min lo pague y deberia tener una hora . pero tengo una hora y media... lo vemos?"
       **Lo que enseña la captura: `AFK 1:55:46`** con un pase que "sube 30 min" y un

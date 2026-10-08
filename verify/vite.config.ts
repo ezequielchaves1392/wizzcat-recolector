@@ -47,6 +47,8 @@ export default defineConfig({
         queueCheck: resolve(here, 'queueCheck.ts'),
         guardadoCheck: resolve(here, 'guardadoCheck.ts'),
         cargaIncompletaCheck: resolve(here, 'cargaIncompletaCheck.ts'),
+        cuotaCheck: resolve(here, 'cuotaCheck.ts'),
+        costeJuegoCheck: resolve(here, 'costeJuegoCheck.ts'),
         forjaCheck: resolve(here, 'forjaCheck.ts'),
         sessionCheck: resolve(here, 'sessionCheck.ts'),
         perfilCheck: resolve(here, 'perfilCheck.ts'),

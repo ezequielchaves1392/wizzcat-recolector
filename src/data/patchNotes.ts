@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.3',
+    fecha: '7 de octubre de 2026',
+    titulo: 'Menos guardado y el bloqueo entre pestañas intacto',
+    lineas: [
+      'El juego decia "estoy aqui" con su propio guardado cada 22 segundos. Ahora lo dice aprovechant el guardado de la partida, que ya se hacia igual: una pestana abierta un dia entero pasa de 8.160 guardados a 5.280.',
+      'El bloqueo entre pestanas sigue igual: abrir el juego en otro movil te dice lo de siempre y el tiempo de espera es el mismo.',
+      'Tambien se arreglo un fallo que hacia el doble de consultas al esperar por una sesion ocupada, y que se quedaba consultando despues de haber entrado.'
+    ]
+  },
+  {
     version: '1.15.2',
     fecha: '7 de octubre de 2026',
     titulo: 'La partida no se vuelve a guardar si no ha cambiado nada',

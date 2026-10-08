@@ -8,6 +8,7 @@
 // no señalaba a su causa real. Un banco que funciona con este runner tiene que
 // funcionar también con el otro, y eso solo se garantiza si hay una definición.
 import { instalarEntorno, instalarProceso } from './entorno.mjs';
+import { resolve } from 'node:path';
 
 globalThis.__MEM_DB__ = {};
 instalarEntorno();
@@ -16,7 +17,12 @@ instalarProceso();
 // Cada módulo exporta la promesa de `main()`: hay que esperarla, o el proceso
 // se cierra antes de que termine la tanda. Se recorren en orden y se acumulan
 // los códigos de salida, para que un fallo en el segundo no enmascare al primero.
-for (const banco of [
+//
+// **ESTÁ EN UNA CONSTANTE Y NO EN EL `for` PORQUE ALGO TIENE QUE PODER LEERLA.** La
+// comprobación de "ningún banco se queda en el disco sin ejecutarse" compara esta lista
+// con el directorio, y para eso hace falta el array. Con la lista dentro del `for` el
+// comprueba-bancos no podría verla.
+const BANCOS = [
   'sellCheck',
   'equipCheck',
   'buyCheck',
@@ -32,6 +38,8 @@ for (const banco of [
   'queueCheck',
   'guardadoCheck',
   'cargaIncompletaCheck',
+  'cuotaCheck',
+  'costeJuegoCheck',
   'forjaCheck',
   'sessionCheck',
   'perfilCheck',
@@ -51,7 +59,56 @@ for (const banco of [
   'arbolLoreCheck',
   'leyendaCheck',
   'contadorCheck'
-]) {
+];
+
+// ==========================================================================
+//  NINGÚN BANCO SE QUEDA FUERA DE LA LISTA, Y POR QUÉ ESTA COMPROBACIÓN
+//  ESTÁ AQUÍ Y NO EN UN BANCO.
+// ==========================================================================
+//
+// **ESTA LISTA ES MANUAL, Y ESA ES LA TRAMPA.** Alguien escribe un banco nuevo,
+// `npm run verify` **no lo ejecuta**, sale todo en verde y nadie se entera: el banco
+//  parece estar porque existe, y no está porque nadie lo escribió en la lista. Un banco
+//  que no se ejecuta **no es un banco que pasa**, pero se comporta como si lo fuera, que
+//  es peor que no tenerlo.
+//
+//  **Y NO ERA SOLO LA LISTA: TAMBIÉN LA DE VITE.** El banco tiene que estar en `BANCOS` (el
+//  runner) **y** en `vite.config.ts` (el bundle). El primero se olvidó al añadir
+//  `cuotaCheck` y `costeJuegoCheck`, y el segundo también: el `import` falló con
+//  `Cannot find module` **a mitad de la suite**, después de quince bancos que ya habían
+//  pasado. Es el peor sitio posible para enterarse.
+//
+//  **SE COMPRUEBA ANTES DE EMPEZAR, CONTRA EL DISCO Y CONTRA EL BUNDLE.** Contra el disco
+//  para que un banco nuevo sea un fallo de la suite y no un olvido, y contra el bundle
+//  para que el fallo sea **este mensaje** y no un `Cannot find module` a mitad. La segunda
+//  lista sería el mismo fallo con dos sitios donde equivocarse, así que **las dos
+//  comprobaciones leen lo que hay de verdad**: el directorio de fuentes y el de salidas.
+{
+  const { readdirSync, existsSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname } = await import('node:path');
+  const aqui = dirname(fileURLToPath(import.meta.url));
+
+  const listado = new Set(BANCOS);
+  const sinEjecutar = readdirSync(aqui)
+    .filter((f) => f.endsWith('Check.ts'))
+    .map((f) => f.replace(/\.ts$/, ''))
+    .filter((b) => !listado.has(b));
+  if (sinEjecutar.length) {
+    console.error('  !! BANCOS QUE NO SE EJECUTAN: ' + sinEjecutar.join(', '));
+    console.error('     Añádelos a BANCOS en run.mjs y a `entry` en vite.config.ts.');
+    process.exitCode = 1;
+  }
+
+  const sinEmpaquetar = BANCOS.filter((b) => !existsSync(resolve(aqui, 'out', `${b}.js`)));
+  if (sinEmpaquetar.length) {
+    console.error('  !! BANCOS QUE NO ESTÁN EN EL BUNDLE: ' + sinEmpaquetar.join(', '));
+    console.error('     Añádelos a `entry` en vite.config.ts.');
+    process.exitCode = 1;
+  }
+}
+
+for (const banco of BANCOS) {
   console.log(`\n=== ${banco} ===`);
   try {
     const { default: pruebas } = await import(`./out/${banco}.js`);

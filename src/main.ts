@@ -13,7 +13,7 @@ import { renderBloqueado, renderSesionOcupada, renderErrorDeCarga } from './comp
 import { ponMiUid } from './ui/tarjetaAjena';
 import { conTiempoLimite } from './utils/timeout';
 import {
-  anotarLatido, consultarSesion, idDeSesion, soltarSesion,
+  anotarLatido, campoLatido, confirmarLatido, consultarSesion, idDeSesion, soltarSesion,
   REINTENTO_MS, VENTANA_MS
 } from './services/sessionService';
 import { consultarBloqueo } from './services/bloqueoService';
@@ -442,13 +442,31 @@ function esperarSesion(uid: string, nombre: string, miId: string, latidoAjeno: n
       }
     };
 
+    // **B30 · UN TEMPORIZADOR, Y NO DOS. ESTO ERA UN BUG DE ESCRITURAS.**
+    //
+    // Aquí había **tres** líneas de temporizador para lo mismo: un `setTimeout` con el
+    // resto de la ventana, **otro `setTimeout` a `REINTENTO_MS`**, y un `setInterval` a
+    // `REINTENTO_MS`. O sea: **el primer reintento se lanzaba dos veces**, y solo se
+    // paraba el `setInterval` cuando se resolvía. **Los dos `setTimeout` no se paraban
+    // nunca.**
+    //
+    // Cada `probar()` hace un `consultarSesion()` —una **lectura**— y si la cuenta está
+    // libre escribe el latido. Con la línea duplicada, cada espera gastaba **el doble de
+    // lecturas**, y la que sobraba se quedaba sola detrás de la pantalla de sesión
+    // ocupada: un temporizador huérfano que sigue consultando después de que el jugador
+    // ya haya entrado, **y que solo se acaba cuando la pestaña se cierra**. Con la cuota
+    // compartida al límite, eso no era un detalle: era gasto sin que nadie estuviera
+    // haciendo nada.
+    //
+    // **LO QUE QUEDA ES UNO, Y EL `setTimeout` DE LA VENTANA SE PARA TAMBIÉN.** La
+    // pantalla de sesión ocupada ya tiene su botón de reintentar, que llama a `probar`
+    // por su cuenta; el temporizador solo tiene que sostener la espera.
     const espera = Math.max(1500, Math.min(REINTENTO_MS, queda));
-    setTimeout(probar, espera);
-    setTimeout(() => { void probar(); }, REINTENTO_MS);
+    const primerIntento = setTimeout(() => { void probar(); }, espera);
     const id = setInterval(() => { void probar(); }, REINTENTO_MS);
-    // El intervalo se para en cuanto se resuelve, para no dejar un temporizador
-    // vivo detrás de la pantalla.
-    const parar = () => clearInterval(id);
+    // Los dos se paran en cuanto se resuelve, para no dejar un temporizador vivo detrás
+    // de la pantalla. Antes solo se paraba uno de los tres.
+    const parar = () => { clearInterval(id); clearTimeout(primerIntento); };
     const observador = new MutationObserver(() => {
       if (document.querySelector('#reintentar-sesion')) return;
       parar();
@@ -625,7 +643,7 @@ async function initGame(user: any, username?: string) {
     updateUI(state, isAfk ?? false);
   }, username, (achievement: any) => {
     showAchievementPopup(achievement);
-  });
+  }, () => campoLatido(user?.uid ?? '', idDeSesion()), confirmarLatido);
 
   // Handle de depuración solo en dev: permite inspeccionar y probar el estado
   // desde la consola. Se elimina del build de producción.

@@ -89,7 +89,20 @@ export const guardado = (): any => (globalThis as any).__MEM_DB__[DB];
  * estado, y son dos cosas distintas: el cartel depende de la primera y del cableado
  * hasta la vista, y esa segunda mitad no es comprobable desde un banco (B3).
  */
-export async function boot(save?: any, extra?: { onAchievement?: (a: any) => void }) {
+export async function boot(save?: any, extra?: {
+  onAchievement?: (a: any) => void;
+  /**
+   * B30 · El latido de viaje, conectado al banco **como en el juego**.
+   *
+   * `main.ts` le pasa a `createGameLoop` las dos funciones de `sessionService`: la que
+   * pregunta y la que confirma. Si el banco no se las pasa, el motor arranca **sin
+   * latido**, y cualquier cuenta de escrituras que mida el gasto del cerrojo mediría un
+   * juego que no existe. Por eso están aquí y no en un banco suelto: conectarlas en un
+   * solo sitio haría que los demás bancos midieran un motor distinto del de producción.
+   */
+  campoDeLatido?: () => Record<string, unknown> | null;
+  confirmarLatido?: () => void;
+}) {
   // Dos turnos de espera, y el motivo es de orden.
   //
   // `createGameLoop` arranca con un `saveToFirebase()` en vuelo. Un turno deja
@@ -117,7 +130,10 @@ export async function boot(save?: any, extra?: { onAchievement?: (a: any) => voi
   globalThis.__MEM_DB__ = {};
   if (fallaLectura) (globalThis as any).__MEM_DB__.fallarLectura = true;
   if (save) globalThis.__MEM_DB__[DB] = JSON.parse(JSON.stringify(save));
-  return anotarJuego(await createGameLoop(USER, () => {}, undefined, extra?.onAchievement));
+  return anotarJuego(await createGameLoop(
+    USER, () => {}, undefined, extra?.onAchievement,
+    extra?.campoDeLatido, extra?.confirmarLatido
+  ));
 }
 
 /**

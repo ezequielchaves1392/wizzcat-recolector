@@ -193,17 +193,119 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
  *     —que la sesión no se pueda anotar— sí rompería algo, porque de eso depende
  *     la ocupacion de la cuenta, y por eso cada uno lleva su `try`.
  */
+/**
+ * **CUÁNDO SE HA ESCRITO EL LATIDO POR ÚLTIMA VEZ, Y POR QUÉ ESTÁ EXPORTADO.**
+ *
+ * Es el reloj que decide si un latido se escribe o no, y lo necesita `gameLoop`,
+ * porque el latido va a viajar **dentro del documento de la partida** en vez de en una
+ * escritura propia. Sin este número el motor no puede saber si su escritura ya ha
+ * refreshed el latido, y acabaría escribiendo las dos veces.
+ *
+ * **EL RELOJ SE PONE EN `confirmarLatido()`, NO EN `campoLatido()`, Y ES EL MISMO
+ * ERROR QUE B28 CORIGIÓ CON LA FIRMA DE LA PARTIDA, VUELTO A SALIR.**
+ *
+ * La primera versión lo ponía al devolver el campo, antes de que nadie escribiera nada.
+ * Con la red en su sitio daba igual. **Con la red caída, o con un guardado que B28 decide
+ * no hacer, el reloj mentía**: decía "el latido está escrito" sin que se hubiera escrito
+ * nada, y el cerrojo se quedaba **sin latido durante 45 segundos** —con lo que la cuenta
+ * del jugador quedaba libre y otro dispositivo podía entrar—. El jugador que pierde la
+ * partida es exactamente el que no tenía red, que es el que más lo necesita.
+ *
+ * Por eso el reloj se mueve **después** de la escritura, en `confirmarLatido()`, que
+ * llaman los dos caminos que escriben de verdad: `anotarLatido()` y el guardado del motor.
+ * **Firmar antes de escribir es afirmar que algo está en el servidor cuando no lo está**,
+ * y sale más barato en la misma regla que en la partida.
+ */
+let ultimoLatidoEscrito = 0;
+
+/**
+ * El campo `sesion` tal y como hay que escreverlo, o `null` si no toca.
+ *
+ * **ESTE ES EL ARREGLO DE B30, Y LA IDEA ES UNA SOLA: EL LATIDO NO TIENE QUE
+ * ESCRIBIRSE SOLO.**
+ *
+ * El latido dice una sola cosa, "esta pestaña sigue viva", y la dice cada
+ * `VENTANA_MS / 2`. Para decirlo hace falta **una escritura en `users/{uid}` cada 22,5
+ * segundos**, y esa escritura es la que se gastaba la cuota: el comentario de arriba ya
+ * lo sospechaba ("un tercio de las escrituras del juego eran solo para mantener vivo un
+ * reloj que el propio jugador no ve").
+ *
+ * **EL PROBLEMA ES QUE ESE `setDoc` ES INÚTIL POR SEPARADO, PORQUE EL GUARDADO DE LA
+ * PARTIDA ESTÁ ESCRIBIENDO EL MISMO DOCUMENTO CADA 30 SEGUNDOS.** `anotarLatido`
+ * escribe `{ sesion: {...} }` con `merge: true` en `users/{uid}`, y el guardado escribe
+ * la partida entera en `users/{uid}` con `merge: true`. Son **el mismo documento**: dos
+ * viajes al mismo sitio con el mismo sello. Firestore cobra **una escritura por
+ * documento**, así que la segunda no compra nada que la primera no compre, y sin embargo
+ * las dos se pagan.
+ *
+ * **LA SOLUCIÓN, Y POR QUÉ NO ROMPE EL CERROJO.** El latido se mete **dentro** del
+ * documento del guardado. Cada 30 segundos, mientras se guarda, el latido viaja de
+ * viaje y **no cuesta una escritura extra**: ya se estaba pagando esa. El cerrojo sigue
+ * vivo exactamente igual de souvent, porque la frecuencia del latido la daba el
+ * temporizador del latido, no la del guardado... y aquí está el punto que obliga a
+ * tener cuidado: **30 segundos es MÁS que la ventana de 45 segundos dividida por dos**,
+ * o sea que si el único latido fuera el del guardado, habría tramos de casi 30 segundos
+ * sin refrescar dentro de una ventana de 45. Por eso el latido **sigue teniendo su
+ * propio reloj**, pero **solo escribe cuando el guardado no lo ha hecho hace poco**: si
+ * el juego acaba de guardar, su latido es de ahora mismo y escribirlo otra vez sería
+ * pagar dos veces por el mismo sello.
+ *
+ * **LO QUE NO SE ROMPE, Y POR QUÉ.** La ventana de 45 segundos no se toca, así que
+ * cerrar el portátil sigue liberando la cuenta en menos de un minuto. El cerrojo sigue
+ * bloqueando igual. Lo único que cambia es **cuántas veces se paga el sello**.
+ */
+export function campoLatido(uid: string, miId: string): { sesion: any } | null {
+  // Solo si ha pasado el rato que se considera "fresco". `VENTANA_MS / 2` es el mismo
+  // margen que usa el temporizador, o sea que un latido que acaba de escribirse por su
+  // cuenta se considera fresco y no se vuelve a escribir.
+  //
+  // **OJO CON EL CERO DE LA IZQUIERDA, Y ES LO QUE MANTIENE VIVO EL CERROJO AL
+  // ARRANCAR.** La comparación es `ultimoLatidoEscrito && ...` a propósito: con el reloj
+  // a cero, "ha pasado el rato" sería cierto —el reloj dice que nunca se escribió— y el
+  // primer latido saldría, que es lo que se quiere. Pero un `Date.now() - 0` da una
+  // cifra enorme y **un banco o una recarga se tragarían la primera llamada sin
+  // enterarse**. La forma corta de esto es que la condición se lee al revés de lo
+  // normal: se pregunta "¿hay un latido reciente?" y si **no lo hay**, se escribe.
+  if (ultimoLatidoEscrito && Date.now() - ultimoLatidoEscrito < VENTANA_MS / 2) return null;
+  return { sesion: { dispositivo: miId, latido: Date.now(), v: 1 } };
+}
+
+/**
+ * Confirma que el latido **sí** se ha escrito, y solo entonces mueve el reloj.
+ *
+ * **LA MITAD QUE NO SE PUEDE OLVIDAR.** Quien llama a `campoLatido()` recibe un campo y
+ * tiene que escribirlo; si la escritura falla, **el reloj no se mueve** y el siguiente
+ * latido se vuelve a intentar. Es lo contrario de lo que hace un "optimista", que da el
+ * campo por bueno antes de saber si llegó al servidor.
+ */
+export function confirmarLatido(): void {
+  ultimoLatidoEscrito = Date.now();
+}
+
 export async function anotarLatido(uid: string, miId: string): Promise<void> {
+  const campo = campoLatido(uid, miId);
   try {
     // **UN CAMPO, Y CON MERGE.** Va dentro de la partida porque es el unico sitio
     // donde las reglas ya dejan escribir, pero `merge: true` con una sola clave
     // anidada no puede tocar nanitas ni inventario: Firestore fusiona por el primer
     // nivel, asi que lo unico que se reemplaza es el mapa `sesion` entero.
-    await conTiempoLimite(setDoc(
-      doc(db, 'users', uid),
-      { sesion: { dispositivo: miId, latido: Date.now(), v: 1 } },
-      { merge: true }
-    ), PLAZO_DE_LECTURA_MS, 'anotarLatido');
+    //
+    // **`campo` PUEDE SER `null`, Y ESO ES EL ARREGLO.** Si el guardado acaba de
+    // escribir el latido, esta escritura **no se hace**: se salta entera, y con ella se
+    // ahorra una de las que más gastaba. La comprobación va **aquí y no dentro del
+    // `setDoc`** porque el coste es el viaje, no los campos: un `setDoc` con `merge` de
+    // un mapa vacío sigue siendo una escritura y Firestore la cobra igual.
+    if (campo) {
+      await conTiempoLimite(setDoc(
+        doc(db, 'users', uid),
+        campo,
+        { merge: true }
+      ), PLAZO_DE_LECTURA_MS, 'anotarLatido');
+      // **SOLO AQUÍ, Y SOLO SI NO HA LANZADO.** El reloj se mueve después de la
+      // escritura, no antes: si el `setDoc` falla, el siguiente latido tiene que volver a
+      // intentarlo, porque el cerrojo **no** se ha refrescado.
+      confirmarLatido();
+    }
   } catch (e) {
     console.warn('[sesion] No se ha podido anotar el latido.', e);
   }

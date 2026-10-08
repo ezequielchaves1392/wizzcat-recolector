@@ -411,7 +411,36 @@ export async function createGameLoop(
   user: any,
   onUpdate: (state: any, isAfkPaused?: boolean) => void,
   username?: string,
-  onAchievement?: (achievement: Achievement) => void
+  onAchievement?: (achievement: Achievement) => void,
+  /**
+   * B30 · EL LATIDO DE VIAJE, ENTREGADO COMO FUNCIÓN Y NO COMO DATO.
+   *
+   * **POR QUÉ UNA FUNCIÓN Y NO EL ID DE SESIÓN.** El motor no sabe de sesiones ni debe
+   * saberlo: `sessionService` es quien entiende el cerrojo entre pestañas, y si el motor
+   * guardara el id tendría que saber **cuándo** toca escribirlo —y esa decisión depende
+   * de la ventana, que es cosa del servicio—. Que el servicio decida y el motor pregunte
+   * deja la regla en un sitio y permite que un banco pase el suyo sin red de por medio.
+   *
+   * **DEVUELVE `null` CUANDO NO TOCA ESCRIBIR**, que es la mitad del ahorro: con la
+   * partida guardándose cada 30 segundos, casi todos los latidos viajan de viaje y esta
+   * función dice que no hay nada que añadir. Devolver `null` en vez de un objeto vacío es
+   * a propósito: un `merge` con `{}` **también es una escritura** y Firestore la cobra.
+   */
+  campoDeLatido?: () => Record<string, unknown> | null,
+  /**
+   * B30 · CONFIRMAR QUE EL LATIDO VIAJÓ, Y POR QUÉ ES UNA FUNCIÓN DISTINTA.
+   *
+   * Preguntar (`campoDeLatido`) y **confirmar** no son la misma cosa, y confundirlas es
+   * un fallo que ya se cometió dos veces en este mismo commit: la firma de la partida
+   * (B28) y el reloj del latido seAdvancean antes de escribir, y las dos veces salió un
+   * cerrojo que creía estar vivo sin estarlo.
+   *
+   * El motor **no sabe** si su `setDoc` ha llegado al servidor —solo sabe que no ha
+   * lanzado—, así que se lo dice a quien sí lo sabe: la función recibe el veredicto y
+   * mueve el reloj. Quien decide cuándo es "fresco" es el servicio, que es donde vive
+   * `VENTANA_MS`.
+   */
+  confirmarLatido?: () => void
 ) {
   // Se declara antes de la carga de Firestore: `recalculatePassiveIncome` se llama
   // durante la carga y lee este estado (TDZ si se declarase más abajo).
@@ -3305,6 +3334,32 @@ function sePuedeGuardar(): boolean {
         autoVenta: state.autoVenta,
         updatedAt: new Date(),
         // ======================================================================
+        //  B30 · EL LATIDO DE SESIÓN, DE VIAJE EN ESTA ESCRITURA.
+        // ======================================================================
+        //
+        //  **ESTE CAMPO ES EL QUE QUITA UN TERCIO DE LA CUOTA, Y LA IDEA ES QUE NO
+        //  CUESTA NADA.** El latido dice "esta pestaña sigue viva" y lo decía con un
+        //  `setDoc` propio en `users/{uid}` cada 22,5 segundos. Pero **este `setDoc` está
+        //  escribiendo el mismo documento**: `merge: true` sobre `users/{uid}`, una
+        //  escritura por documento se cobre una vez. Así que el latido se llevaba un viaje
+        //  entero para mover un campo que este ya está moviendo.
+        //
+        //  **POR QUÉ AQUÍ Y NO EN UN `setDoc` PROPIO AL FINAL.** Dos razones, y la
+        //  segunda es la importante. La primera es el coste: son dos viajes al mismo
+        //  sitio. La segunda es que **el cerrojo se rompería**: si el latido fuera un
+        //  campo más del documento, el latido solo viajaría cuando el guardado escriba, y
+        //  el guardado **no siempre escribe** —B28 lo dejó de hacer cuando no cambia
+        //  nada—. Con la pestaña en reposo, el documento no se escribiría **nunca**, el
+        //  cerrojo caducaría en 45 segundos y el jugador encontraría su cuenta libre
+        //  desde su propio móvil. Por eso el servicio decide (`campoDeLatido`) y devuelve
+        //  `null` cuando su propio reloj dice que toca: **el latido conserva su reloj
+        //  propio y simplemente se sube al barco cuando ya está pagando el viaje.**
+        //
+        //  `campoDeLatido()` devuelve `null` cuando no toca, y un `merge` con `null` no
+        //  añade ninguna clave, así que la partida no se ensucia con un `sesion: null`
+        //  que después habría que distinguir de un latido de verdad.
+        ...(campoDeLatido ? campoDeLatido() : null),
+        // ======================================================================
         //  EL BORRADO DE LAS ESQUIRLAS, Y POR QUÉ NECESITA SU PROPIA LÍNEA
         // ======================================================================
         //
@@ -3377,6 +3432,16 @@ function sePuedeGuardar(): boolean {
       if (!forzar && firmaPartida === ultimaFirma) return;
 
       await setDoc(userRef, gameData, { merge: true });
+
+      // **B30 · EL LATIDO QUE VIAJABA AQUÍ, AHORA QUE ESTÁ DE VERDAD ESCRITO.**
+      //
+      // Se confirma **después** del `setDoc` y no antes, por el mismo motivo que la firma
+      // de la partida: confirmar antes sería **afirmar que el cerrojo está vivo cuando
+      // este `setDoc` puede no haber ocurrido**. Con la red caída, el latido se daba por
+      // bueno sin haberse escrito, y durante los siguientes 45 segundos —justo la
+      // ventana del cerrojo— la cuenta del jugador quedaba libre para otro dispositivo.
+      // El que pierde la partida es el que no tiene red, que es el que más lo necesita.
+      if ((gameData as any).sesion) confirmarLatido?.();
 
       // **Y LA FIRMA SE PONE AQUÍ, DESPUÉS DEL `setDoc`, Y NO ANTES. ES EL ORDEN QUE
       // IMPORTA Y EL QUE HACE FALTA.**
