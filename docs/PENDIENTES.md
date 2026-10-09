@@ -639,6 +639,9 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
         número. Y `Doblaje` medía el multiplicador tal cual, que **empieza en 1**: la
         barra nacía al 50 % del marco antes de hacer nada. Mide la diferencia.
       `identidadCheck` 70 → 79, `leyendaCheck` sube sola (27 logros).
+- [ ] **F84 · El contador de ranuras del almacén, más grande o recuadrado.** *(Para después, 9 de octubre, con captura.)*
+      > "hacer este texto del almacen mas grande o recuadrarlo"
+      *La captura: "91/94 (60+34) ranuras" en texto chico y sin caja, al pie del almacén. Lo pinta la línea de capacidad del almacén.*
 
 ### Lote 9 · CAJAS
 
