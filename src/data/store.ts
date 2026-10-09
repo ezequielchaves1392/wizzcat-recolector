@@ -681,7 +681,28 @@ export const RANURA_POR_CARTA: Record<string, { da: number; etiqueta: string }> 
  * Los precios salen todos de `COSTE_POR_TIER` y de `defDeRanura()`, y ninguna
  * carta escribe su número: si el precio cambia en un sitio, cambia en los tres
  * (R3).
+ *
+ * F97 Lote 2c · VUELVEN LA T2 Y LA T3, CON LICENCIA. Lo de arriba sigue
+ * valiendo para la T1; las dos siguientes se venden si el árbol dice que sí.
+ * No son "las tres cajas altas" de antes: aquellas se compraban sin más y
+ * mataban las cajas; estas piden su licencia de Fortuna, así que la tienda
+ * vende atajos, no progreso regalado.
  */
+/**
+ * QUÉ CAJA PIDE QUÉ NODO PARA VENDERSE (F97 Lote 2c).
+ *
+ * La T1 no pide nada; la T2 y la T3 piden su licencia del árbol. La tabla vive
+ * aquí y no en la tienda ni en el motor: es dato de catálogo, y los tres que
+ * la leen (la tarjeta, el botón y el cobro) no pueden separarse.
+ *
+ * **FUERA DE `STORE_ITEMS` A PROPÓSITO.** Si viviera dentro, cada carta
+ * llevaría su puerta con otro nombre de campo y la primera que no lo trajera
+ * sería comprable sin licencia por olvidar una clave.
+ */
+export const CAJA_REQUIERE_NODO: Record<string, string> = {
+  crateT2: 'licencia_t2',
+  crateT3: 'licencia_t3'
+};
 export const STORE_ITEMS = {
   // **"PACK DE CRISTAL", Y POR QUÉ.** La carta cuesta 200 y entrega `valorDeUnCristal(1)`
   // = 675 cristales de golpe. Llamarla "Cristal de Mejora" hacía que el jugador creyera
@@ -689,6 +710,12 @@ export const STORE_ITEMS = {
   // cantidad va en la nota de la tarjeta ("Pack de 675 cristales").
   upgradeCrystal: { cost: 200, label: 'Pack de Cristal de Mejora' },
   crateT1: { cost: CRATE_COSTS[0], label: CRATE_TYPES[1].name },
+  // F97 Lote 2c · LA T2 Y LA T3 SE VENDEN CON LICENCIA. La T1 sigue siendo la
+  // puerta de entrada; las dos siguientes se compran o se abren, a elegir. El
+  // precio sale de la misma curva que la T1: tres cuartos de un objeto de su
+  // tier, como todas.
+  crateT2: { cost: CRATE_COSTS[1], label: CRATE_TYPES[2].name },
+  crateT3: { cost: CRATE_COSTS[2], label: CRATE_TYPES[3].name },
   // F4 · Aquí estaban `clickBuff` (800, 30 min) y `passiveBuff` (1.500, 60 min).
   // Se han retirado de la tienda; ver el comentario en `CONSUMABLES` para el porqué
   // de que el efecto siga en el motor y solo desaparezca la compra.

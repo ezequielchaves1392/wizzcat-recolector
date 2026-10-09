@@ -21,6 +21,7 @@ import { STORE_ITEMS } from '../src/gameLoop';
 import { CATEGORIES } from '../src/components/store';
 import { TREE_BY_ID, nodeCost } from '../src/data/tree';
 import { puntosEnRama, UMBRAL_PUNTOS_RAMA } from '../src/data/prestige';
+import { CAJA_REQUIERE_NODO } from '../src/data/store';
 // Para las ranuras: el número que da cada carta sale de esta tabla, no de un 4
 // escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
 // texto de la tarjeta y en estas dos aserciones.
@@ -88,7 +89,11 @@ async function main() {
   //     una cuarta copia: si el motor entregara otra cosa, la prueba lo vería.
   // =========================================================================
   const cartas = (Object.keys(STORE_ITEMS) as (keyof typeof STORE_ITEMS)[])
-    .filter(k => !RANURA_POR_CARTA[k as string]) as string[];
+    .filter(k => !RANURA_POR_CARTA[k as string])
+    // F97 Lote 2c · Las cajas con licencia no se compran sin nodo: este loop
+    // compra a pelo y mediría el rechazo, no la carta. Su camino (rechazo sin
+    // cobrar, compra con nodo y recarga) vive en el bloque de licencias de §7.
+    .filter(k => !(k in CAJA_REQUIERE_NODO)) as string[];
 
   // El precio de la caja, leído de la tabla. El mismo número estaba escrito a mano
   // en cuatro aserciones y en un titular ("1000/250 = 4"), y cuando la curva de
@@ -819,6 +824,57 @@ async function main() {
     const r2 = g2.buyNode('bulk_buy');
     check('arbol: los puntos de otra rama no abren esta',
       !r2.success && /Fortuna/.test(r2.msg ?? ''), r2.msg ?? '');
+  }
+
+  // =========================================================================
+  //  7c. LAS LICENCIAS ABREN LA TIENDA (F97 Lote 2c)
+  // =========================================================================
+  //  La T1 no pide nada; la T2 y la T3 piden su nodo de Fortuna. Lo que se
+  //  comprueba son las tres patas a la vez, porque van juntas o no van: el
+  //  botón apagado (`canBuyStoreItem`), el cobro que se niega (`buyStoreItem`)
+  //  y el motivo que los dos enseñan. Y que la licencia se compra por el
+  //  camino normal: puntos de la rama más requisitos, sin atajos.
+  {
+    const g = await boot(baseSave([], { cores: 10_000, nanites: 100_000 }));
+    check('licencia: la T1 se vende sin nodo',
+      g.canBuyStoreItem('crateT1') === true
+        && g.motivoLicenciaCaja('crateT1') === null,
+      `t1=${g.canBuyStoreItem('crateT1')}`);
+    check('licencia: la T2 no se vende sin su nodo, y lo dice',
+      g.canBuyStoreItem('crateT2') === false
+        && (g.motivoLicenciaCaja('crateT2') ?? '').includes('Licencia T2'),
+      `t2=${g.canBuyStoreItem('crateT2')} motivo=${g.motivoLicenciaCaja('crateT2')}`);
+    const nanitesAntes = s(g).nanites;
+    check('licencia: y comprarla sin nodo se rechaza sin cobrar',
+      g.buyStoreItem('crateT2') === false && s(g).nanites === nanitesAntes,
+      `nanites=${s(g).nanites}`);
+    check('licencia: la T3 tampoco, con su propio motivo',
+      g.canBuyStoreItem('crateT3') === false
+        && (g.motivoLicenciaCaja('crateT3') ?? '').includes('Licencia T3'),
+      `t3=${g.canBuyStoreItem('crateT3')}`);
+
+    // El camino entero hasta la T2, comprando: raíz, T1, T2 de la rama y el
+    // nodo. Sin dados en medio: comprar nodos es determinista.
+    for (const id of ['scrapyard', 'refinery', 'storage_rack', 'bulk_buy', 'crate_sight', 'licencia_t2']) {
+      const r = g.buyNode(id);
+      if (!r.success) {
+        check(`licencia: el camino compra ${id}`, false, r.msg ?? '');
+        break;
+      }
+    }
+    check('licencia: con el nodo, la T2 se vende',
+      g.canBuyStoreItem('crateT2') === true && g.motivoLicenciaCaja('crateT2') === null,
+      `t2=${g.canBuyStoreItem('crateT2')}`);
+    const saldoAntes = s(g).nanites;
+    const comprada: any = g.buyStoreItem('crateT2');
+    check('licencia: y se compra la caja T2 de verdad, no otra',
+      !!comprada && comprada !== false && /Caja T2/.test(comprada.name ?? '') && s(g).nanites < saldoAntes,
+      JSON.stringify(comprada?.name));
+    const g2 = await reload();
+    check('licencia: la licencia sobrevive a la recarga y la T2 sigue en venta',
+      g2.canBuyStoreItem('crateT2') === true
+        && (s(g2).nodeLevels as any).licencia_t2 === 1,
+      `t2=${g2.canBuyStoreItem('crateT2')}`);
   }
 
   // =========================================================================

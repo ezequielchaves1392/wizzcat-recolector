@@ -63,6 +63,8 @@ export interface CrateReward {
   up?: boolean;
   /** Jackpot: este premio subió un tier por el nodo, después del sorteo. */
   jackpot?: boolean;
+  /** Eco: este premio salió doble por el nodo, después del sorteo. */
+  eco?: boolean;
 }
 
 // Colores de rareza. Devolvemos la clase de texto y la de borde por separado:
@@ -1485,7 +1487,48 @@ export function aplicarJackpot(
   return { ...c, jackpot: true } as CrateReward;
 }
 
-export function rollCrateReward(crateType: CrateType, applier: LootApplier, suerte = 0, jackpotChance = 0): CrateReward {
+/**
+ * EL ECO: BOTÍN DOBLE DESPUÉS DEL SORTEO (F97 Lote 2c).
+ *
+ * Con el nodo comprado, las nanitas, los cristales y los consumibles apilables
+ * pueden salir dobles: se duplica la cantidad que entra y la etiqueta que la
+ * anuncia, porque una etiqueta con el número sin doblar es la mentira que
+ * `loteCheck` vigila (el total suma y la etiqueta dice la unidad). Lo que no
+ * es apilable —recolectores, compañeros, cosméticos y las propias cajas— no se
+ * toca: doblar cajas sería progresión compuesta (una caja que da dos que dan
+ * cuatro), y doblar un objeto único no tiene sentido.
+ *
+ * Va DESPUÉS del Jackpot y ANTES del `switch` que aplica, por el mismo motivo:
+ * el veto de espacio, la autoventa y la compensación valen para lo doblado
+ * sin una segunda cuenta. Y no toca la tabla: sin nodo devuelve el premio
+ * intacto, con la misma identidad.
+ */
+export function aplicarEco(
+  reward: CrateReward,
+  chance: number,
+  rng: () => number = Math.random
+): CrateReward {
+  if (!(chance > 0)) return reward;
+  const item: any = (reward as any).item;
+  const esDoblable = reward.kind === 'nanites' || reward.kind === 'crystals'
+    || (reward.kind === 'consumable' && item?.stackable === true && typeof item?.stackCount === 'number');
+  if (!esDoblable) return reward;
+  if (rng() >= chance) return reward;
+  const doblado: any = { ...reward, eco: true };
+  if (typeof doblado.amount === 'number') {
+    doblado.amount = doblado.amount * 2;
+    // La etiqueta lleva la cantidad que entra: `+400` con 800 dentro es la
+    // mitad de R3 que este cambio existe para no romper. El formato es el de
+    // siempre (la unidad con `formatNumber`, el nombre intacto).
+    doblado.label = `+${formatNumber(doblado.amount)} ${reward.name}`;
+  }
+  if (doblado.item && typeof doblado.item.stackCount === 'number') {
+    doblado.item = { ...doblado.item, stackCount: doblado.item.stackCount * 2 };
+  }
+  return doblado as CrateReward;
+}
+
+export function rollCrateReward(crateType: CrateType, applier: LootApplier, suerte = 0, jackpotChance = 0, ecoChance = 0): CrateReward {
   const entry = pickLoot(crateType, tablaDePesos(crateType, suerte));
   const ctx: LootBuildContext = { ownedCosmetics: applier.ownedCosmetics() };
   const built = entry.build(ctx);
@@ -1500,7 +1543,7 @@ export function rollCrateReward(crateType: CrateType, applier: LootApplier, suer
     return dup;
   }
 
-  const reward = aplicarJackpot(crateType, resolveLootAmount(crateType, built), jackpotChance);
+  const reward = aplicarEco(aplicarJackpot(crateType, resolveLootAmount(crateType, built), jackpotChance), ecoChance);
 
   switch (reward.kind) {
     case 'nanites': {

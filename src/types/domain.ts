@@ -167,6 +167,12 @@ export interface PassiveBonuses {
   jackpotChance: number;
   /** 1 si la forja puede firmar Obras Maestras (dos ★5 en un ★5). */
   obraMaestra: number;
+  /** 1 si la tienda vende cajas T2 (Licencia T2 comprada). */
+  licenciaT2: number;
+  /** 1 si la tienda vende cajas T3 (Licencia T3 comprada). */
+  licenciaT3: number;
+  /** Probabilidad de botín doble en cajas (Eco, por nivel). */
+  ecoDoble: number;
 }
 
 export type NodeCategory = 'asalto' | 'manada' | 'fortuna' | 'forja';

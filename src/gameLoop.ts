@@ -49,6 +49,7 @@ import {
   CONSUMABLES, COLLECTOR_BASE_COSTS,
   COMPANION_SLOT_COSTS, RANURA_POR_CARTA, EXPANSOR_TIERS, WAREHOUSE_MAX_CAP,
   expansorPorBuff, RANURAS_BARRA, CONSUMIBLES_ASIGNABLES, consumibleAsignable,
+  CAJA_REQUIERE_NODO,
   type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, sePuedeCancelar, type BuffKey } from './data/buffs';
@@ -655,7 +656,8 @@ export async function createGameLoop(
       clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
       craftLuck: 0, consolationBonus: 0, autoClick: 0, afkHours: 0,
       offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0,
-      sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0
+      sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0,
+      licenciaT2: 0, licenciaT3: 0, ecoDoble: 0
     },
     // --- Cosméticos equipados ---
     cosmetics: {
@@ -1192,6 +1194,34 @@ function cabeLaCompra(itemKey: string, unidades = 1): boolean {
 const STORE_MATERIAL_TIER = 1;
 
 /**
+ * El tier de una carta de caja (`crateT1` → 1), o `null` si no es carta de
+ * caja. La T2 y la T3 usan la misma regla que la T1: el tier sale de la clave
+ * y la carta tiene que existir en `STORE_ITEMS`, para que una clave inventada
+ * no fabrique una caja que no se vende.
+ */
+function tierDeCartaCaja(itemKey: string): number | null {
+  const m = /^crateT(\d+)$/.exec(itemKey);
+  if (!m) return null;
+  if (!(STORE_ITEMS as Record<string, any>)[itemKey]) return null;
+  return Math.max(1, Math.floor(Number(m[1]) || 1));
+}
+
+/**
+ * SI A ESTA CAJA LE FALTA LICENCIA, Y CUÁL (F97 Lote 2c).
+ *
+ * La T1 no pide nada; la T2 y la T3 piden su nodo de Fortuna. Devuelve el
+ * motivo listo para pintar o `null` si puede comprarse. Lo leen el botón
+ * (canBuyStoreItem), el cobro (buyStoreItem) y la tarjeta (statusOf): una sola
+ * pregunta con una sola respuesta, o el botón promete lo que el cobro niega.
+ */
+function motivoLicencia(itemKey: string): string | null {
+  const nodo = CAJA_REQUIERE_NODO[itemKey];
+  if (!nodo) return null;
+  if ((state.nodeLevels[nodo] || 0) > 0) return null;
+  return `Pide ${TREE_BY_ID[nodo]?.name ?? 'licencia del árbol'}`;
+}
+
+/**
  * Cómo se llamaría y de qué tipo sería el item de una compra, sin crearlo.
  *
  * La comprobación de "¿queda hueco?" va ANTES de cobrar, así que no puede
@@ -1219,7 +1249,12 @@ function previewStoreItem(itemKey: string): any {
   // F31 · Una sola carta de caja, `crateT1`. Antes el `if` era "cualquier cosa que
   // acabe en Crate y cuyo nombre sea una caja conocida", lo que servía para cuatro
   // cartas y con diez cajas habría servido para cuatro también, en silencio.
-  if (itemKey === 'crateT1') return { type: 'crate', name: CRATE_TYPES[1].name, stackable: true };
+  // F97 Lote 2c · Las tres cartas leen su tier: la T2 y la T3 se venden con
+  // licencia, y la preview tiene que ser la caja que la compra crea (R3).
+  const tier = tierDeCartaCaja(itemKey);
+  if (tier !== null) {
+    return { type: 'crate', name: (CRATE_TYPES as Record<number, { name: string }>)[tier].name, stackable: true };
+  }
   const consumable = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
   if (consumable) return { type: 'consumable', name: consumable.name, stackable: true };
   return null;
@@ -6097,6 +6132,11 @@ const RITMO_GUARDADO_MS = 60_000;
       // Llaves y cristales AHORA SÍ ocupan ranura: son items físicos. Lo que no
       // ocupa espacio son las Ampliaciones de almacén y los Huecos de
       // compañero, porque no son objetos que se guarden: son permisos.
+      //
+      // F97 Lote 2c · Y SIN LICENCIA NO SE VENDE, ANTES DE COBRAR. Un rechazo
+      // después del cargo tendría que devolver el dinero camino por camino; el
+      // veto va con los otros dos, antes de que se mueva una nanita.
+      if (motivoLicencia(itemKey as string) !== null) return false;
       if (!cabeLaCompra(itemKey as string, n)) {
         showToast('Almacén lleno. No puedes comprar más items.', 'error');
         return false;
@@ -6134,11 +6174,12 @@ const RITMO_GUARDADO_MS = 60_000;
         // tenga `type` ni `id` es lo correcto: no hay nada en el almacén que
         // identificar.
         return { units: valorDeUnCristal(STORE_MATERIAL_TIER) * n, label: CRISTAL_NOMBRE };
-      } else if (itemKey === 'crateT1') {
+      } else if (tierDeCartaCaja(itemKey) !== null) {
         // F31 · La caja es un item real del almacén: sin esto no se puede abrir.
-        // Y es la ÚNICA que se vende. Las otras nueve salen de las anteriores, que
-        // es lo que hace que abrir una caja sea progresar y no coleccionar.
-        const warehouseItem = createCrateItem(1, n);
+        // F97 Lote 2c · La T2 y la T3 pasan por aquí con su tier. La licencia
+        // ya se pidió arriba, antes de cobrar: aquí solo se crea la caja.
+        const tierCaja = tierDeCartaCaja(itemKey)!;
+        const warehouseItem = createCrateItem(tierCaja as CrateType, n);
         if (!addToWarehouse(warehouseItem as any)) { state.nanites += cost; return false; }
         syncCrateCounters();
         onUpdate(state, isAfk);
@@ -6391,7 +6432,7 @@ const RITMO_GUARDADO_MS = 60_000;
           }
           return { ok: true };
         }
-      }, state.bonus.crateLuck ?? 0, state.bonus.jackpotChance ?? 0);
+      }, state.bonus.crateLuck ?? 0, state.bonus.jackpotChance ?? 0, state.bonus.ecoDoble ?? 0);
 
       // Los contadores se recalculan DESPUÉS de aplicar el botín, para que
       // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el
@@ -7349,10 +7390,22 @@ const RITMO_GUARDADO_MS = 60_000;
 //  que es un rechazo por partida y no de espacio; después "¿cabe?". Un almacén
 //  lleno y una ranura ya comprada es "no cabe", no "ya lo tienes".
 canBuyStoreItem: (itemKey: string): boolean => {
+  // F97 Lote 2c · La licencia va primero: es permiso, no stock. Una carta
+  // bloqueada con el almacén lleno es "sin licencia", no "lleno".
+  if (motivoLicencia(itemKey) !== null) return false;
   const ranura = RANURA_POR_CARTA[itemKey];
   if (ranura && effectiveCompanionSlots() >= ranura.da) return false;
   return cabeLaCompra(itemKey);
 },
+    /**
+     * Por qué la T2 o la T3 no se pueden comprar todavía, o `null` si sí.
+     *
+     * Es el motivo que pinta la tarjeta bloqueada. Vive en el motor y no en la
+     * vista porque es el mismo que cobra `buyStoreItem`: si cada uno escribiera
+     * el suyo, bastaría un renombre del nodo para que el botón dijera una cosa
+     * y el cobro otra.
+     */
+    motivoLicenciaCaja: (itemKey: string): string | null => motivoLicencia(itemKey),
     getCompanionSlots: () => effectiveCompanionSlots(),
     getAfkDurationMs: () => afkCardDurationMs(),
 

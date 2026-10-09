@@ -59,6 +59,9 @@ function bonusLabel(key: keyof PassiveBonuses, value: number): string {
     case 'colmenaPorComp': return `${pct(value)} pasivo por compañero activo`;
     case 'jackpotChance': return `${pct(value)} de subida de tier en cajas`;
     case 'obraMaestra': return `firma Obras Maestras al forjar`;
+    case 'licenciaT2': return `vende cajas T2 en la tienda`;
+    case 'licenciaT3': return `vende cajas T3 en la tienda`;
+    case 'ecoDoble': return `${pct(value)} de botín doble en cajas`;
     default: return `${key} +${value}`;
   }
 }

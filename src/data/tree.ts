@@ -277,6 +277,32 @@ export const TREE_NODES: TreeNode[] = [
     icon: 'collector', category: 'forja', tier: 4, requires: ['chaos_forge'],
     baseCost: 350, costGrowth: 1, maxLevel: 1,
     bonus: { obraMaestra: 1 }, x: 4, y: 4
+  },
+  // ---------------------------------------------------------------- FORTUNA EXTRA (F97 Lote 2c)
+  //
+  // Las licencias abren la tienda y el Eco dobla el botín: las dos mitades de
+  // jugar con cajas. Son nodos de un solo nivel porque son permisos, no
+  // bonificaciones: un permiso no se sube, se consigue.
+  {
+    id: 'licencia_t2', name: 'Licencia T2', description: 'Desbloquea la compra de cajas del tier dos en la tienda.',
+    lore: 'Un papel sellado que dice que puedes comprar lo que ya sabías abrir.',
+    icon: 'crate', category: 'fortuna', tier: 2, requires: ['crate_sight'],
+    baseCost: 25, costGrowth: 1, maxLevel: 1,
+    bonus: { licenciaT2: 1 }, x: 2, y: 4
+  },
+  {
+    id: 'licencia_t3', name: 'Licencia T3', description: 'Desbloquea la compra de cajas del tier tres en la tienda.',
+    lore: 'El de antes, pero para la caja que de verdad cuesta.',
+    icon: 'crate', category: 'fortuna', tier: 3, requires: ['licencia_t2'],
+    baseCost: 80, costGrowth: 1, maxLevel: 1,
+    bonus: { licenciaT3: 1 }, x: 3, y: 5
+  },
+  {
+    id: 'eco_caja', name: 'Eco de Caja', description: '+2% de botín doble por nivel.',
+    lore: 'A veces la caja hace eco y lo de dentro viene dos veces.',
+    icon: 'gem', category: 'fortuna', tier: 3, requires: ['crate_sight'],
+    baseCost: 30, costGrowth: 1.55, maxLevel: 5,
+    bonus: { ecoDoble: 0.02 }, x: 3, y: 6
   }
 ];
 

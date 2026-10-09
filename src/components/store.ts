@@ -86,7 +86,7 @@ const EXPANSORES_EN_VENTA = EXPANSOR_TIERS
  * encuentra, y uno repetido se anuncia dos veces.
  */
 export const CATEGORIES: Category[] = [
-  { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1'] },
+  { id: 'cajas', label: 'Cajas', icon: 'crate', items: ['crateT1', 'crateT2', 'crateT3'] },
   // F47 · **EL CRISTAL SOLO EN RECURSOS.** Los expansores estaban aquí con él porque
   // los dos se compran con lo que produce el juego, pero no son un recurso: no se
   // gastan, no se acumulan y no se venden, **se usan** para abrir el almacén, y la
@@ -133,19 +133,27 @@ export const CATEGORIES: Category[] = [
 const CRISTALES_POR_PACK = costeDeCaja(1);
 
 export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
+  // **ESTA TARJETA NO ENUMERA EL BOTÍN, Y SIGUE SIN HACERLO.** Decía "da
+  // nanitas, cristal T1, un compañero T1, su llave y —a veces— la caja T2",
+  // que son cinco cosas y **no incluían el recolector**: quien reportaba que
+  // las cajas T1 no tiraban armas no se equivocaba, se fiaba de la carta. Una
+  // lista escrita al lado de la tabla que genera esa lista es una segunda
+  // fuente de verdad. `leyendaCheck` la comprueba.
   crateT1: {
-    what: 'La caja básica, y la única que se vende.',
-    // **ESTE TEXTO ENUMERABA EL BOTÍN Y ESTABA VIEJO.** Decía "da nanitas, cristal
-    // T1, un compañero T1, su llave y —a veces— la caja T2", que son cinco cosas y
-    // **no incluyen el recolector**: el jugador leía que esa caja nunca podía darle
-    // un arma. Y sí puede. Quien reportaba que las cajas T1 no tiraban armas de T1
-    // no se equivocaba: se fiaba de la carta.
-    //
-    // Una lista escrita al lado de la tabla que genera esa lista es una segunda
-    // fuente de verdad, y `data/store.ts` ya lo prohíbe para las cajas con un
-    // comentario que explica por qué. Aquí la prohibición no se había aplicado.
-    // `leyendaCheck` la comprueba.
-    detail: 'Las nueve cajas siguientes no están en la tienda: se sacan abriendo la anterior. Lo que trae cada una se ve cuando sale.'
+    what: 'La caja con la que se empieza.',
+    // F97 Lote 2c · La T2 y la T3 también se venden (con licencia), así que el
+    // texto viejo mentía. No nombra tiers con número: la leyenda de la tienda
+    // no distingue cartas por su cifra, y "caja T2" en la tarjeta de la T1 es
+    // la confusión que el banco vigila.
+    detail: 'Las siguientes salen de abrir la anterior; algunas también se venden con licencia del árbol.'
+  },
+  crateT2: {
+    what: 'Un tier por encima de la básica.',
+    detail: 'Pide licencia del árbol para comprarla; si no, sale de abrir la anterior.'
+  },
+  crateT3: {
+    what: 'Dos tiers por encima de la básica.',
+    detail: 'Pide su propia licencia del árbol; si no, sale de abrir la anterior.'
   },
 
     // POR QUÉ AQUÍ NO SE DICE CÓMO ESTÁ HECHA LA TIRADA. Antes decía "con el
@@ -282,7 +290,9 @@ const ui = {
 
 /** Icono del producto según su clave. */
 function iconFor(itemKey: string): IconName {
-  if (itemKey === 'crateT1') return 'crate';
+  // F97 Lote 2c · Todas las cartas de caja comparten icono: el `if` de antes
+  // solo conocía la T1 y la T2 salía con el genérico de tienda.
+  if (/^crateT\d+$/.test(itemKey)) return 'crate';
   const map: Record<string, IconName> = {
     upgradeCrystal: 'crystal',
     // Los expansores comparten icono: los diez son el mismo objeto con distinto
@@ -305,11 +315,11 @@ function iconFor(itemKey: string): IconName {
  * aquí, que es la vista.
  */
 function singularDeUnidad(itemKey: string): string {
-  if (itemKey === 'crateT1') return 'caja';
+  if (/^crateT\d+$/.test(itemKey)) return 'caja';
   return 'unidad';
 }
 function pluralDeUnidad(itemKey: string): string {
-  if (itemKey === 'crateT1') return 'cajas';
+  if (/^crateT\d+$/.test(itemKey)) return 'cajas';
   return 'unidades';
 }
 
@@ -326,8 +336,9 @@ const CRISTAL_PLURAL = 'cristales';
 function rarityOf(itemKey: string): string | null {
   // F31 · Y la de la caja sale de ``CRATE_TYPES``, que es donde vive su nombre.
   // Antes era un objeto de cuatro pares en línea, aquí, que con diez cajas solo
-  // habría acertado en cuatro.
-  if (itemKey === 'crateT1') return CRATE_TYPES[1].rarity;
+  // habría acertado en cuatro. F97 Lote 2c: las tres cartas leen su tier.
+  const mCaja = /^crateT(\d+)$/.exec(itemKey);
+  if (mCaja) return (CRATE_TYPES as Record<number, { rarity: string }>)[Number(mCaja[1])]?.rarity ?? null;
   const map: Record<string, string> = {
     upgradeCrystal: 'Raro',
     // La rareza de un expansor es la de su tramo, que vive en la tabla: es un
@@ -362,6 +373,12 @@ function descFor(itemKey: string): { what: string; detail: string } {
 /** Estado del producto dentro de la partida. */
 function statusOf(itemKey: string, state: any, game: any): { disabled: boolean; reason: string | null } {
   const effSlots = game.getCompanionSlots?.() ?? state.maxCompanionSlots;
+  // F97 Lote 2c · SIN LICENCIA NO SE VENDE, Y SE DICE. La T2 y la T3 se
+  // enseñan bloqueadas en vez de esconderse: la licencia se compra en el árbol
+  // y el jugador tiene que saber que existe. El motivo sale del motor, que es
+  // quien cobra; la vista solo lo pinta.
+  const motivoLicencia = game.motivoLicenciaCaja?.(itemKey);
+  if (motivoLicencia) return { disabled: true, reason: motivoLicencia };
   // F7/F11 · El tope de esta carta sale de la fila de la tabla, no de un `if` por
   // carta. Con tres cartas y tres `if` escritos a mano, añadir la cuarta era
   // acordarse de los tres sitios; con la tabla es una fila.

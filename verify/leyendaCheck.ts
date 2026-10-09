@@ -279,10 +279,14 @@ async function main() {
   //  7. LA TARJETA DE LA TIENDA: TAMPOCO, Y AQUÍ ESTABA EL QUE SE PASÓ
   // =========================================================================
   {
-    const carta: any = (DESCRIPTIONS as any).crateT1;
-    check('leyenda: la tarjeta de la caja T1 no enumera el botín',
-      !!carta && !/nanitas|cristal|compa|recolector|llave|caja T2/i.test(carta.detail),
-      carta?.detail ?? 'no hay tarjeta');
+    // F97 Lote 2c · Las tres cartas con la misma regla: ninguna enumera el
+    // botín, ninguna habla de llaves y ninguna nombra otro tier con número
+    // (eso confunde cartas entre sí, que es la mitad que este bloque vigila).
+    const cartas = ['crateT1', 'crateT2', 'crateT3'].map(k => ({ k, carta: (DESCRIPTIONS as any)[k] }));
+    const malas = cartas.filter(({ carta }) =>
+      !carta || /nanitas|cristal|compa|recolector|llave|caja T\d/i.test(`${carta.what ?? ''} ${carta.detail ?? ''}`));
+    check('leyenda: ninguna tarjeta de caja enumera el botín ni nombra otro tier',
+      malas.length === 0, malas.map(({ k }) => k).join(',') || 'las tres limpias');
   }
 
   // =========================================================================

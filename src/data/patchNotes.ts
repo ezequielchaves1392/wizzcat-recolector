@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.27',
+    fecha: '9 de octubre de 2026',
+    titulo: 'La tienda vende cajas altas con licencia y las cajas hacen eco',
+    lineas: [
+      'La tienda vende cajas T2 y T3 si tienes su licencia del árbol de Fortuna.',
+      'El Eco puede doblar el botín de una caja: nanitas, cristales y cartas apilables.',
+      'Las tarjetas de caja dicen si piden licencia antes de que las compres.'
+    ]
+  },
+  {
     version: '1.15.26',
     fecha: '9 de octubre de 2026',
     titulo: 'Cuatro keystones, uno por rama',

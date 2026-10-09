@@ -43,7 +43,10 @@ export const EMPTY_BONUSES: PassiveBonuses = {
   sobrecargaMult: 0,
   colmenaPorComp: 0,
   jackpotChance: 0,
-  obraMaestra: 0
+  obraMaestra: 0,
+  licenciaT2: 0,
+  licenciaT3: 0,
+  ecoDoble: 0
 };
 
 /** Umbral mínimo de producción para que un reinicio tenga sentido. */

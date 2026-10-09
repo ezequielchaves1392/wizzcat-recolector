@@ -22,7 +22,7 @@
 import { boot, reload, check, resumen, s, wh, nanites, ids, baseSave, crate, distintos, collector } from './kit';
 import { STORE_ITEMS, costeDeCaja, CRATE_TYPES, type CrateType } from '../src/data/store';
 import { CRISTAL_NOMBRE } from '../src/data/items';
-import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, type CrateReward } from '../src/components/crateLoot';
+import { CRATE_LOOT, rollCrateReward, resolveLootAmount, tablaDePesos, probabilidadDeSalto, aplicarEco, type CrateReward } from '../src/components/crateLoot';
 import { resumenDePremios, MAX_APERTURA_LOTE, maximoDeApertura, estrellasDeFila, tierDeFila } from '../src/components/crateSummary';
 import { TOPE_PILA } from '../src/data/stacking';
 
@@ -498,6 +498,49 @@ async function main() {
       check(`equilibrio: nada de la caja T${t} se vende por más que abrirla`,
         peor <= tope, `peor=${peor} (${deQuien}) tope=${tope} ${peor > tope ? `IMPRIME x${(peor / tope).toFixed(2)}` : ''}`);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  //  4b. EL ECO DOBLA NANITAS, CRISTALES Y APILABLES (F97 Lote 2c)
+  // -------------------------------------------------------------------------
+  //  Es segunda tirada, no entrada de tabla: sin nodo el premio sale intacto.
+  //  Lo que se comprueba es qué se dobla y qué no, y que la etiqueta dice la
+  //  cantidad que entra —una etiqueta sin doblar con el doble dentro es la
+  //  mitad de R3 que este cambio existe para no romper—.
+  {
+    const nanita = { kind: 'nanites', amount: 900, name: 'Nanitas', label: '+900 Nanitas', details: 'x', rarity: 'Común', icon: 'bolt', exclusive: false } as any;
+    const quieto = aplicarEco(nanita, 0, () => 0);
+    check('eco: sin nodo no se toca nada',
+      quieto.amount === 900 && !(quieto as any).eco, `amount=${quieto.amount}`);
+    const doble = aplicarEco(nanita, 1, () => 0) as any;
+    check('eco: las nanitas salen dobles, con etiqueta doblada',
+      doble.amount === 1800 && doble.eco === true
+        && Number(String(doble.label).replace(/[^\d]/g, '')) === 1800 && /Nanitas/.test(doble.label),
+      `amount=${doble.amount} etiqueta="${doble.label}"`);
+    const cri = { kind: 'crystals', amount: 675, name: 'Cristal', label: '+675', details: 'x', rarity: 'Raro', icon: 'crystal', exclusive: false } as any;
+    const dobleCri = aplicarEco(cri, 1, () => 0) as any;
+    check('eco: y los cristales también',
+      dobleCri.amount === 1350 && Number(String(dobleCri.label).replace(/[^\d]/g, '')) === 1350,
+      `amount=${dobleCri.amount} etiqueta="${dobleCri.label}"`);
+    const carta = {
+      kind: 'consumable', amount: 1, name: 'Piedra', label: '+1 Piedra', details: 'x', rarity: 'Raro', icon: 'flask', exclusive: false,
+      item: { id: 'p', name: 'Piedra', type: 'consumable', stackable: true, stackCount: 1 }
+    } as any;
+    const dobleCarta = aplicarEco(carta, 1, () => 0) as any;
+    check('eco: y la carta apilable dobla pila y etiqueta',
+      dobleCarta.item.stackCount === 2 && /2/.test(dobleCarta.label) && /Piedra/.test(dobleCarta.label),
+      `pila=${dobleCarta.item.stackCount} etiqueta="${dobleCarta.label}"`);
+    const arma = { kind: 'collector', amount: 1, name: 'X', label: 'X', details: 'x', rarity: 'Raro', icon: 'collector', exclusive: false, item: { id: 'x', type: 'collector', tier: 3 } } as any;
+    check('eco: un recolector no se dobla',
+      (aplicarEco(arma, 1, () => 0) as any).eco !== true, 'se dobló un objeto');
+    const cajaPremio = { kind: 'crate', amount: 1, name: 'Caja T2', label: '+1 Caja T2', details: 'x', rarity: 'Común', icon: 'crate', exclusive: false, item: { id: 'c', type: 'crate', stackable: true, stackCount: 1 } } as any;
+    check('eco: y una caja tampoco (sería progresión compuesta)',
+      (aplicarEco(cajaPremio, 1, () => 0) as any).eco !== true, 'se dobló una caja');
+
+    // Y en el resumen la fila doblada suma lo doblado: lo que se ve es lo que entra.
+    const filas = resumenDePremios([doble]);
+    check('eco: el resumen suma lo doblado, no lo original',
+      filas.length === 1 && filas[0].total === 1800, `total=${filas[0]?.total}`);
   }
 
   // -------------------------------------------------------------------------
