@@ -1534,6 +1534,58 @@ export function aplicarEco(
   return doblado as CrateReward;
 }
 
+/** Probabilidad de que una caja T3+ suelte un buffer de cada tipo. Son tiradas mutuamente excluyentes (sale el primero que toca). */
+const PROB_BUFFER_PASIVO = 0.03;
+const PROB_BUFFER_CLICK = 0.03;
+const PROB_BUFFER_GLOBAL = 0.02;
+
+/**
+ * LOS BUFFERS DE COMPAÑERO: UNA SEGUNDA TIRADA, FUERA DE LA TABLA (F97 Lote 2d).
+ *
+ * No van como entradas de la tabla porque cualquier peso plano que se añade
+ * diluye la probabilidad de las demás: el salto ya baja de botín de arriba
+ * (lo comprueba `saltoCheck`), y tres filas de peso 3-3-2 le bajaban un 0,4 %
+ * en las cajas medias sin que el buffer saliera ni una vez más a menudo.
+ *
+ * Así que van como el Jackpot y el Eco: una tirada aparte, después del sorteo,
+ * que solo puede SUMAR un premio. Si no toca, toca exactamente lo mismo que
+ * antes; si toca, el premio principal no se toca y el buffer se aplica
+ * aparte. La tabla no se entera de que existen.
+ *
+ * Las probabilidades salen de las constantes de arriba y no de un número
+ * escrito aquí: tres buffers, tres chances, una sola verdad.
+ */
+export function rollBufferCompañero(
+  crateType: CrateType,
+  rng: () => number = Math.random
+): CrateReward | null {
+  if (crateType < 3) return null;
+  const tope = topeDeVenta(crateType);
+  const dados: Array<{ buffId: string; chance: number }> = [
+    { buffId: 'compPassiveBoost', chance: PROB_BUFFER_PASIVO },
+    { buffId: 'compClickBoost', chance: PROB_BUFFER_CLICK },
+    { buffId: 'compGlobalBoost', chance: PROB_BUFFER_GLOBAL },
+  ];
+  // La tirada es por orden y sale el primero que toca: así las tres suman la
+  // probabilidad anunciada y no más (si se tiraran las tres a la vez con
+  // independencia, el total sería la unión, que es otra cifra).
+  for (const d of dados) {
+    if (rng() >= d.chance) continue;
+    const def = (CONSUMABLES as Record<string, { name: string; details: string; rarity: string; buffId: string }>)[d.buffId];
+    return {
+      kind: 'consumable', amount: 1, name: def.name, label: def.name, details: def.details,
+      rarity: def.rarity, icon: 'companion', exclusive: false,
+      item: {
+        id: `buff_${d.buffId}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 9)}`,
+        name: def.name, type: 'consumable', details: def.details, rarity: def.rarity,
+        buffId: def.buffId, stackable: true, stackCount: 1,
+        sellPrice: 1000, sellPriceTope: tope
+      }
+    };
+  }
+  return null;
+}
+
 export function rollCrateReward(crateType: CrateType, applier: LootApplier, suerte = 0, jackpotChance = 0, ecoChance = 0): CrateReward {
   const entry = pickLoot(crateType, tablaDePesos(crateType, suerte));
   const ctx: LootBuildContext = { ownedCosmetics: applier.ownedCosmetics() };

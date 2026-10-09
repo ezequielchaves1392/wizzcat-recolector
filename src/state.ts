@@ -26,7 +26,19 @@ export const defaultState: GameState = {
   warehouse: [],
   buffs: {
     clickBoostExpiresAt: 0,
-    passiveBoostExpiresAt: 0
+    clickX2ExpiresAt: 0,
+    clickX3ExpiresAt: 0,
+    passiveBoostExpiresAt: 0,
+    compPassiveBoostExpiresAt: 0,
+    compClickBoostExpiresAt: 0,
+    compGlobalBoostExpiresAt: 0,
+    clickBoostTotalMs: 0,
+    clickX2TotalMs: 0,
+    clickX3TotalMs: 0,
+    passiveBoostTotalMs: 0,
+    compPassiveBoostTotalMs: 0,
+    compClickBoostTotalMs: 0,
+    compGlobalBoostTotalMs: 0
   },
   totalClicks: 0,
   totalInfraestructure: 0,

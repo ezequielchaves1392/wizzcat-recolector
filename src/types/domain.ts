@@ -187,6 +187,12 @@ export interface PassiveBonuses {
   compMulti: number;
   /** Reducción del coste de mejora de compañeros, fracción (Cuidador). */
   compDescuento: number;
+  /** Multiplicador de ingreso de compañeros pasivos (buffer temporal). */
+  compPassivoBuffMult: number;
+  /** Multiplicador de ingreso de compañeros de click (buffer temporal). */
+  compClickBuffMult: number;
+  /** Multiplicador de ingreso de todos los compañeros (buffer temporal). */
+  compGlobalBuffMult: number;
 }
 
 export type NodeCategory = 'asalto' | 'manada' | 'fortuna' | 'forja';

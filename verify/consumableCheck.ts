@@ -41,7 +41,11 @@ import {
 const AFK_MS = AFK_CARD_DURATION_MS;
 const MIN_60 = 60 * 60_000;
 const MIN_30 = 30 * 60_000;
-const BUFFS_ZERO = { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 };
+const BUFFS_ZERO = {
+  clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0,
+  clickX2ExpiresAt: 0, clickX3ExpiresAt: 0,
+  compPassiveBoostExpiresAt: 0, compClickBoostExpiresAt: 0, compGlobalBoostExpiresAt: 0
+};
 
 async function main() {
 // =========================================================================
@@ -1352,6 +1356,113 @@ async function main() {
     check('forja: y hay tope, porque sin el el boton ofrece gastarlo todo',
       MAX_PIEDRAS_POR_FUSION > 0 && MAX_PIEDRAS_POR_FUSION < 100,
       'tope=' + MAX_PIEDRAS_POR_FUSION);
+  }
+
+  // =========================================================================
+  //  10. BUFFERS DE COMPAÑERO (F97 Lote 2d)
+  // =========================================================================
+  //  Los tres buffers dan boost a un tipo de compañero: pasivos, clicks o
+  //  global. Se usan desde el almacén como cualquier consumible. Lo que se
+  //  comprueba es que cada uno aplica al tipo correcto y no a los demás.
+  {
+    const poderM1 = poderDeCompanero(1, 3, basePorId('base_com_t1_6'));
+    const g = await boot(baseSave([
+      consumable('bp', 'compPassiveBoost', 1, { name: 'Buffer Pasivo' }),
+      consumable('bc', 'compClickBoost', 1, { name: 'Buffer Click' }),
+      consumable('bg', 'compGlobalBoost', 1, { name: 'Buffer Global' }),
+      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: RAREZA_NEUTRA, tier: 1, sellPrice: 100, potential: 3, baseId: 'base_com_t1_6' }
+    ], {
+      activeCompanions: ['m1'],
+      companions: [{ id: 'm1', name: 'Compañero T1', type: 'passive', power: poderM1, rarity: RAREZA_NEUTRA, tier: 1, potential: 3, baseId: 'base_com_t1_6' }]
+    }));
+    const base = s(g).passiveIncome;
+    check('buffer: hay ingreso pasivo de partida', base === poderM1, 'pasivo=' + base);
+
+    // Buffer Pasivo: +50% a pasivos
+    g.useConsumable('bp');
+    check('buffer: el pasivo sube el ingreso un 50%',
+      s(g).passiveIncome === Math.floor(base * 1.5),
+      `${base} -> ${s(g).passiveIncome}`);
+
+    // Buffer Click: no afecta a pasivos
+    g.useConsumable('bc');
+    check('buffer: el de click no afecta a pasivos',
+      s(g).passiveIncome === Math.floor(base * 1.5),
+      `${s(g).passiveIncome}`);
+
+    // Buffer Global: +25% a todos
+    g.useConsumable('bg');
+    check('buffer: el global sube el ingreso un 25%',
+      s(g).passiveIncome === Math.floor(base * 1.5 * 1.25),
+      `${s(g).passiveIncome}`);
+  }
+  {
+    // Con un compañero de click, el buffer de click sí afecta y el de pasivo no.
+    const poderM1 = poderDeCompanero(1, 3, basePorId('base_com_t1_6'));
+    const g = await boot(baseSave([
+      consumable('bp', 'compPassiveBoost', 1, { name: 'Buffer Pasivo' }),
+      consumable('bc', 'compClickBoost', 1, { name: 'Buffer Click' }),
+      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: RAREZA_NEUTRA, tier: 1, sellPrice: 100, potential: 3, baseId: 'base_com_t1_6' }
+    ], {
+      activeCompanions: ['m1'],
+      companions: [{ id: 'm1', name: 'Compañero T1', type: 'click', power: poderM1, rarity: RAREZA_NEUTRA, tier: 1, potential: 3, baseId: 'base_com_t1_6' }]
+    }));
+    const base = s(g).passiveIncome;
+    check('buffer: hay ingreso de click de partida', base === poderM1, 'click=' + base);
+
+    g.useConsumable('bp');
+    check('buffer: el de pasivo no afecta a clicks',
+      s(g).passiveIncome === base,
+      `${s(g).passiveIncome}`);
+
+    g.useConsumable('bc');
+    check('buffer: el de click sube el ingreso un 50%',
+      s(g).passiveIncome === Math.floor(base * 1.5),
+      `${base} -> ${s(g).passiveIncome}`);
+  }
+  {
+    // El buffer global aplica a ambos tipos.
+    const poderM1 = poderDeCompanero(1, 3, basePorId('base_com_t1_6'));
+    const g = await boot(baseSave([
+      consumable('bg', 'compGlobalBoost', 1, { name: 'Buffer Global' }),
+      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: RAREZA_NEUTRA, tier: 1, sellPrice: 100, potential: 3, baseId: 'base_com_t1_6' }
+    ], {
+      activeCompanions: ['m1'],
+      companions: [{ id: 'm1', name: 'Compañero T1', type: 'click', power: poderM1, rarity: RAREZA_NEUTRA, tier: 1, potential: 3, baseId: 'base_com_t1_6' }]
+    }));
+    const base = s(g).passiveIncome;
+    g.useConsumable('bg');
+    check('buffer: el global sube el ingreso de click un 25%',
+      s(g).passiveIncome === Math.floor(base * 1.25),
+      `${base} -> ${s(g).passiveIncome}`);
+  }
+  {
+    // Tope de 2 horas para pasivo y click, 1 hora para global.
+    const g = await boot(baseSave([consumable('bp', 'compPassiveBoost', 10, { name: 'Buffer Pasivo' })],
+      { buffs: BUFFS_ZERO }));
+    g.useConsumable('bp');
+    g.useConsumable('bp');
+    g.useConsumable('bp');
+    check('buffer: el tope del pasivo son 2 horas',
+      s(g).buffs.compPassiveBoostExpiresAt - Date.now() <= 2 * MIN_60,
+      `restante=${s(g).buffs.compPassiveBoostExpiresAt - Date.now()}`);
+
+    const g2 = await boot(baseSave([consumable('bg', 'compGlobalBoost', 10, { name: 'Buffer Global' })],
+      { buffs: BUFFS_ZERO }));
+    g2.useConsumable('bg');
+    g2.useConsumable('bg');
+    check('buffer: el tope del global es 1 hora',
+      s(g2).buffs.compGlobalBoostExpiresAt - Date.now() <= MIN_60,
+      `restante=${s(g2).buffs.compGlobalBoostExpiresAt - Date.now()}`);
+  }
+  {
+    // Los buffers se pueden cancelar.
+    const g = await boot(baseSave([consumable('bp', 'compPassiveBoost', 1, { name: 'Buffer Pasivo' })]));
+    g.useConsumable('bp');
+    const r = g.cancelBuff('compPassiveBoost');
+    check('buffer: el pasivo se puede cancelar', r === 'Buffer Pasivo', String(r));
+    check('buffer: y el buff queda a cero', s(g).buffs.compPassiveBoostExpiresAt === 0,
+      'expira=' + s(g).buffs.compPassiveBoostExpiresAt);
   }
 
   resumen('consumibles');

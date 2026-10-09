@@ -126,6 +126,10 @@ export function rarezaDeTier(tier: number): string {
 export const LORE: Record<string, string> = {
   // ---------------------------------------------------------- COMPAÑEROS T1
   'Dron Explorador': 'Cartografía cada rincón de la base antes de que amanezca.',
+  // F97 Lote 2d · Los tres buffers de compañero.
+  'Buffer Pasivo': 'Un rato de más para los que trabajan solos.',
+  'Buffer Click': 'Los golpes se repiten mejor cuando alguien marca el ritmo.',
+  'Buffer Global': 'Un empujón que llega a todos, aunque no todos lo agradezcan.',
   'Dron Centinela': 'No parpadea. No duerme. Vigila tu producción.',
   'Dron Mensajero': 'Lleva tus nanitas de un nodo a otro sin perder ni una.',
   // ---------------------------------------------------------- COMPAÑEROS T2

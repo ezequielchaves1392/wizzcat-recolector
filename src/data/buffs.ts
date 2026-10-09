@@ -45,7 +45,10 @@ export const BUFF_FIELDS = {
   clickBoost: 'clickBoostExpiresAt',
   clickX2: 'clickX2ExpiresAt',
   clickX3: 'clickX3ExpiresAt',
-  passiveBoost: 'passiveBoostExpiresAt'
+  passiveBoost: 'passiveBoostExpiresAt',
+  compPassiveBoost: 'compPassiveBoostExpiresAt',
+  compClickBoost: 'compClickBoostExpiresAt',
+  compGlobalBoost: 'compGlobalBoostExpiresAt'
 } as const;
 
 export type BuffKey = keyof typeof BUFF_FIELDS | 'afk';
@@ -75,6 +78,9 @@ export const BUFF_CANCELABLE: Record<BuffKey, boolean> = {
   clickX2: true,
   clickX3: true,
   passiveBoost: true,
+  compPassiveBoost: true,
+  compClickBoost: true,
+  compGlobalBoost: true,
   afk: false
 };
 
@@ -110,6 +116,17 @@ export const TOPE_MS_CLICK_X2 = 30 * 60_000;
 export const TOPE_MS_CLICK_X3 = 30 * 60_000;
 export const TOPE_MS_CLICK_BOOST = 30 * 60_000;
 export const TOPE_MS_PASSIVE_BOOST = 2 * 60 * 60_000;
+
+/**
+ * Los tres buffers de compañero (F97 Lote 2d).
+ *
+ * Cada uno da boost a un tipo de compañero: pasivos, clicks o global.
+ * Se usan como consumibles normales: se compran de caja y se gastan desde el
+ * almacén. El tope evita que un jugador con muchas unidades acumule demasiado.
+ */
+export const TOPE_MS_COMP_PASSIVE_BOOST = 2 * 60 * 60_000;
+export const TOPE_MS_COMP_CLICK_BOOST = 2 * 60 * 60_000;
+export const TOPE_MS_COMP_GLOBAL_BOOST = 60 * 60_000;
 
 /**
  * Lo que una tarjeta tiene que mover para que cuente como gastada.
@@ -169,6 +186,9 @@ export function topeDeConsumible(buffId: string, afkMs: number): number | null {
     case 'clickX3': return TOPE_MS_CLICK_X3;
     case 'clickBoost': return TOPE_MS_CLICK_BOOST;
     case 'passiveBoost': return TOPE_MS_PASSIVE_BOOST;
+    case 'compPassiveBoost': return TOPE_MS_COMP_PASSIVE_BOOST;
+    case 'compClickBoost': return TOPE_MS_COMP_CLICK_BOOST;
+    case 'compGlobalBoost': return TOPE_MS_COMP_GLOBAL_BOOST;
     default: return null;
   }
 }
@@ -224,7 +244,10 @@ export const BUFF_TOTAL_FIELDS = {
   clickBoost: 'clickBoostTotalMs',
   clickX2: 'clickX2TotalMs',
   clickX3: 'clickX3TotalMs',
-  passiveBoost: 'passiveBoostTotalMs'
+  passiveBoost: 'passiveBoostTotalMs',
+  compPassiveBoost: 'compPassiveBoostTotalMs',
+  compClickBoost: 'compClickBoostTotalMs',
+  compGlobalBoost: 'compGlobalBoostTotalMs'
 } as const;
 
 /** Dónde vive la expiración de un buff, sea cual sea el buff. */
@@ -338,6 +361,9 @@ export function pasoDeConsumible(buffId: string, afkMs: number): number {
     case 'clickX3': return 30_000;
     case 'clickBoost': return 30 * 60_000;
     case 'passiveBoost': return 60 * 60_000;
+    case 'compPassiveBoost': return 30 * 60_000;
+    case 'compClickBoost': return 30 * 60_000;
+    case 'compGlobalBoost': return 30 * 60_000;
     case 'warehouseExpander': return 1;
     default: return 0;
   }

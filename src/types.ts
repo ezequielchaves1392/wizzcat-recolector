@@ -49,7 +49,19 @@ export interface GameState {
   warehouse: WarehouseItem[];
   buffs: {
     clickBoostExpiresAt: number;
+    clickX2ExpiresAt: number;
+    clickX3ExpiresAt: number;
     passiveBoostExpiresAt: number;
+    compPassiveBoostExpiresAt: number;
+    compClickBoostExpiresAt: number;
+    compGlobalBoostExpiresAt: number;
+    clickBoostTotalMs: number;
+    clickX2TotalMs: number;
+    clickX3TotalMs: number;
+    passiveBoostTotalMs: number;
+    compPassiveBoostTotalMs: number;
+    compClickBoostTotalMs: number;
+    compGlobalBoostTotalMs: number;
   };
   // Stats
   totalClicks: number;
