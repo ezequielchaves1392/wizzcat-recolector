@@ -2802,7 +2802,7 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **49 bancos, 2689**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **49 bancos, 2701**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
