@@ -183,6 +183,39 @@ export const MAX_INTENTOS_AUTOMATICOS = 400;
 export const SAVE_VERSION = 10;
 
 /**
+ * B40 · LA LLAVE DEL MODO PRUEBAS, Y POR QUÉ ESTÁ EXPORTADA.
+ *
+ * Quien prueba el juego sin parar —tours de ranking, aperturas de perfiles,
+ * forja en serie— paga cada acción con operaciones de la cuota compartida, y la
+ * mitad de esas operaciones son documentos derivados (la fila del ranking y la
+ * tarjeta pública) que el testeo no necesita mover. Con esta llave puesta en
+ * `localStorage`, el guardado publica la partida igual pero se salta esos dos.
+ *
+ * Está exportada porque el banco la necesita para encender y apagar el modo sin
+ * reescribir la llave a mano: una llave escrita en dos sitios es una llave que
+ * un día no coincide y un modo que no se apaga. Ver `modoPruebas()`.
+ */
+export const CLAVE_MODO_PRUEBAS = 'cyberforge_modo_pruebas';
+
+/**
+ * B40 · SI HAY QUE SALTARSE LA TABLA EN ESTE GUARDADO.
+ *
+ * Lee la llave en cada llamada y no una vez al arrancar, porque el modo se
+ * enciende y se apaga sin recargar: pones el flag, testeas, lo quitas y tu fila
+ * vuelve a publicarse en el siguiente guardado. El `try/catch` es porque en
+ * modo privado `localStorage` puede no existir, y un modo de pruebas que tumba
+ * el guardado sería lo contrario de lo que promete. NUNCA lanza: sin flag
+ * legible no hay modo, y el juego sigue guardando todo como siempre.
+ */
+function modoPruebas(): boolean {
+  try {
+    return localStorage.getItem(CLAVE_MODO_PRUEBAS) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Tope de seguridad de celdas de hueco guardadas.
  *
  * No es el limite real -ese es el tablero, y lo calcula la vista-, sino un
@@ -3651,7 +3684,13 @@ function sePuedeGuardar(): boolean {
         || firma !== rankingUltimaFirma;
 
         try {
-        if (hayQueEscribirElRanking) {
+        // B40 · EN MODO PRUEBAS LA TABLA Y LA TARJETA ESPERAN. La partida ya está
+        // guardada tres líneas más arriba, que es lo que no se puede perder; lo que
+        // se salta aquí son los dos documentos derivados, que es justo lo que un
+        // testeo intensivo mueve sin necesitarlo. La firma y el envío NO se tocan al
+        // saltar, así que al quitar el flag lo pendiente se publica en el siguiente
+        // guardado en vez de esperar al periodo entero.
+        if (hayQueEscribirElRanking && !modoPruebas()) {
           rankingUltimoEnvio = ahora;
           rankingUltimaFirma = firma;
         await setDoc(rankingRef, {

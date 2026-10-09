@@ -1879,6 +1879,161 @@ así que las cuatro se hacen y se commitean juntas.*
       fusionar dos objetos da uno nuevo y los dos materiales se van—, que es la
       lectura que aceptaste. Está escrita en `docs/CONTEXTO-JUEGO.md`.
 
+### Lote J · WIKI Y PROBADOR DE BUILDS (encargo del 9 de octubre)
+
+*Lo pedido, con tus palabras: "una seccion Wiki para tener la base de conocimiento ahi
+explicando las mecanicas, las probabilidades, los items que salen de cada caja, los nombres
+de las bases y sus valores, todos los items del juego, los logros, las pasivas existentes...
+tambien alguna herramienta para probar builds (eso luego)". La Wiki va ahora, con las seis
+secciones; el probador queda anotado y no se toca.*
+
+- [x] **F86 · Wiki en pestaña aparte, con las seis secciones.** Hecha en v1.15.19:
+      Mecánicas, Cajas, Bases, Items, Logros y Pasivas, en `wiki.html`, una entrada
+      propia **sin game loop, sin Firebase y sin auth**: es solo lectura y se puede abrir
+      sin cuenta, desde el acceso o desde el botón de la cabecera. Abrirla no interfiere
+      con la partida —la pestaña del juego queda oculta y el juego se pausa solo por
+      presencia—. Por eso **no es una ruta del router** (las rutas son del juego) y la
+      barra inferior sigue en 5. Ningún número está escrito a mano: precios de
+      `costeDeCaja()`, porcentajes de `tablaDePesos()`, salto de `probabilidadDeSalto()`,
+      costes de `nodeCost()` y núcleos de `pendingCores()`. Banco nuevo `wikiCheck` con
+      el contrato (sin ruta en el juego, botón en la cabecera, diez cajas que reparten el
+      100 %, salto en banda y sin salto en T10, seis exclusivos cada uno en su caja,
+      doscientas bases con stat y sorteo en regla, 27 logros con difíciles sin bonus,
+      árbol sin requisitos imposibles). Lo visual (`wiki.html` en el navegador, a
+      390×844 y a 1440×900) no lo cubre ningún banco, a propósito.
+      **Iconos del juego y sección Versiones, con regla R32:** cada fila pinta su icono
+      de verdad (cara de cada caja con su acento, icono de cada logro y nodo, color de
+      cada rareza) y el banco ata que existan en el set; la séptima pestaña lista todos
+      los parches desde la 1.1.0 leyendo `NOTAS`, sin segunda lista. Y cada commit que
+      toque reglas tiene que releer la sección que lo enseña: está escrito en R32, y el
+      banco canta si la regla cambió y la Wiki no.
+      **Descubierto haciendo esto (no es de la Wiki, queda anotado):** `sellCheck`
+      §11 (`renombre`) es intermitente desde F74: la migración sortea la base oculta
+      con `Math.random` sin fijar y el test espera el daño exacto sin base, así que
+      una de cada ~55 corridas sale la base 10 y da 7 en vez de 6. Reproducido en
+      una corrida completa (140/141) y ausente en 8 sueltas. No se toca: el arreglo
+      es fijar el dado en el test, no relajar la migración.
+- [ ] **F87 · Probador de builds.** Anotado y sin empezar, como pediste ("eso luego"):
+      elegir recolector/compañero con nivel, estrellas, afijos y base, más nodos del árbol
+      y logros, y que el daño y el pasivo los calcule el motor de verdad
+      (`getClickDamage` y el reparto del pasivo), no una copia. Si calcula por su cuenta,
+      es la segunda fuente que se queda vieja.
+- [x] **F95 · Buscador en la Wiki y enlaces entre conceptos.** Hecha, con el
+      documento entero enriquecido de paso (era lo pedido: no solo un sector).
+      > "Meter un buscador en la wiki, y moverse automáticamente a conceptos por hipervinculos"
+      Un campo encima de las pestañas que busca en las siete secciones a la vez —
+      cajas, bases por nombre, items, afijos, logros, nodos y parches—, sin tildes
+      y sin mayúsculas y con "y" entre términos como el del almacén. Pulsar un
+      resultado o darle a Enter lleva a su sección, abre el desplegable si vive
+      en uno cerrado y lo deja señalado; la dirección queda en el hash para
+      copiarla. Y las menciones dentro de los textos son enlaces: la Piedra en
+      la forja lleva a su ficha en Items. Los conceptos van como subtítulos con
+      su descripción debajo en todo el documento; el reparto de cada caja lleva
+      su icono, cada tier de bases señala a la mejor, y expansores y afijos
+      llevan el color de su rareza. El índice es `src/data/wikiIndex.ts`, puro y
+      desde las mismas tablas, con las anclas en un solo sitio para que página
+      y buscador no diverjan; `wikiCheck` 106 → 129 (+23: cobertura por grupo,
+      integridad de anclas y comportamiento). El campo vive fuera del repintado
+      para no repetir el B15. La explicación de afijos se lee de
+      `explicacionDeAfijos()`: con el rebalanceo en curso decir "solo la forja"
+      ya era mentira.
+      **Descubierto haciendo esto (no es de la Wiki):** `senalCheck`
+      "sin afijo no hay crítico" cae con 25/200 —hay una probabilidad base de
+      crítico nueva en la rama del refactor de afijos—. Y un apaño documentado
+      en el propio banco: importar `CONSUMABLES` a la vez directo y vía
+      `wikiIndex` dejaba el nombre sin declarar en el bundle, así que va con
+      alias (`CONSUMIBLES`).
+
+### Lote K · ENCARGO DEL 9 DE OCTUBRE (ideas nocturnas del jugador)
+
+*Lo pedido, con tus palabras. Sin tocar todavía: se escribe aquí antes de
+programarlo, para que no viva solo en una conversación. Los bugs van primero
+(criterio 1 del GDD). No entran "refactor de pasivas" ni "comprar cajas de tier
+más alto": los estás haciendo tú.*
+
+**Bugs (se elige uno y se reproduce antes de arreglar):**
+
+- [ ] **B41 · Resto del afijo 10 % de forja en el mock de tarjeta.**
+      > "los recolectores tienen un afijo 10% de forja es mucho no me gusta sacalo... porque aparte se pueden guardar ese afijo y equipar y desequipar a gusto"
+      El afijo ya está fuera del catálogo justo por ese motivo (swap: equiparlo
+      solo para tirar) y la migración lo quita de los saves viejos. Lo que queda
+      es el mock de `previewTarjeta.ts`, que lo mete a mano. Si además se quiere
+      quitar el +2 % por afijo del material, es decisión de balance con banco,
+      no limpieza.
+- [ ] **B42 · La barra de próximo prestigio queda al máximo.**
+      > "La barra de progreso para proximo prestigio debe mostrar cuanto necesito para el que sigue ... actualmente queda al maximo"
+      Un progreso clavado al 100 % es un número que miente (criterio 1): tiene
+      que mostrar lo que falta para el siguiente, y salir del mismo
+      `pendingCores()` que cobra el botón.
+
+**Features (después de los bugs que elijas):**
+
+- [ ] **F88 · Expansores más caros, y los espacios persisten en el prestigio.**
+      > "Aumentar el precio de los expansores de almacen, enseguida el jugador puede llegar al máximo. (Al hacer prestigio se deben mantener los espacios que haya comprado anteriormente el jugador)"
+      Dos mitades: (a) la curva de precio, contra F66 (cuatro tramos hasta 240);
+      (b) el prestigio conserva los espacios comprados, que hoy vuelve a 15 y
+      reescribe F41. Con banco que acabe en `reload()`.
+- [ ] **F89 · Rareza y afijos en las cards de ítems.**
+      > "Que aparezca la rareza y los afijos en las cards de ítems: en almacen, en forja, en forja automática, en apertura de cajas"
+      Los cuatro sitios leen el mismo `item`, solo falta pintarlo. Continúa
+      F64/F73/F76/F77/F81.
+- [ ] **F90 · La forja enseña la posible combinación antes de tirar.**
+      > "Que la forja me de la posible combinación en el texto, ejemplo: Tier 2, Base Normal (%) / buena (%) / mejor (%), Potencial 2-3, Afijos afijo 1 (%)..., Rareza Comun+Comun=Comun (%) o Raro (%). Armemos este texto bien identado con colores, bolds, etc."
+      Sale del preview del motor, no calculado en la vista (R3). Depende de F74
+      (bases), F60 (rareza/afijos) y F82 (probabilidades).
+- [ ] **F91 · Los logros de tiempo muestran lo que falta.**
+      > "Los logros referidos a tiempo que muestren el tiempo faltante (1 dia estando top 1 ejemplo)"
+      Ojo: la vía `ranking` sigue sin resolverse (discrepancia 6): "7 días top 1"
+      no se responde con el estado solo.
+- [ ] **F92 · Tarjetas x2 y x3 de daño de compañeros.**
+      > "Nuevo item: Tarjeta x2 daño de compañeros y x3 - mismo funcionamiento que las de click, pueden salir en cajas, las x3 unicamente salen en cajas tier 3 o superior"
+      **Choca con F71 decidido** (x1.5 tienda + x2 solo cajas, 30 s por R10/AFK).
+      Hay que reescribir F71 o descartar: duración y tope por fijar.
+- [ ] **F93 · Banner visible en perfil y de fondo en el nav.**
+      > "En el perfil no se ve el banner, reescalar, tambien que se vea el banner en el fondo del nav de la pagina principal."
+      Estética (criterio 4). Continúa F53/F54. Solo `preview.html`, sin banco.
+- [ ] **F94 · Eventos por ventana de tiempo.**
+      > "una idea para que los jugadores puedan meterse en un evento a tal hora donde el que mas nanitas saque en un tiempo gane por ejemplo, banners, logros, cajas tier alto, items valiosos, etc..."
+      Feature grande: ventana/hora, métrica (producidas en la ventana, no saldo,
+      si no gana el que ya era rico), ranking temporal y reparto de premios.
+      Faltan duración, inscripción y anti-AFK.
+
+- [x] **F96 · Contador de operaciones en vivo (ritmos y picos mientras se juega).**
+      > "si encontras alguna estrategia para medir ritmos o picos de escrituras mientras alguien este jugando es bienvenido"
+      **Hecho (sin versión: sale en la próxima).** Lo pedido más dos cosas que
+      se decidieron en conversación: el numerito estilo FPS con semáforo
+      (verde ≤6, naranja 7–12, rojo >12, con histéresis de 3 s) y `window.__ops()`.
+      **De dónde sale:** captura del 9 de octubre, ~10 min solo AFK sin forjar ni
+      clickear ni abrir rankings: **48 lecturas / 46 escrituras** en total. Medido
+      contra el código, las escrituras son normales (~4-5/min: guardado 1 + ranking
+      y tarjeta 1 + latido ~2 + presencia), pero el pico de lecturas (~27+14 en los
+      primeros minutos) **no sale del juego idle**, que al arrancar hace ~4
+      (`consultarSesion` ×2, `consultarBloqueo`, carga). Candidatos: una apertura
+      de ranking (`getTopRankings` con `limit(40)`: N filas = N lecturas) o la
+      consola de Firebase abierta en otra pestaña, que contamina el mismo gráfico
+      del proyecto.
+      **La estrategia, sin gastar cuota:** `src/services/contadorOps.ts`, contador
+      en memoria y cero escrituras. Cada sitio real lo llama con su motivo
+      (`guardado-users`, `guardado-ranking`, `tarjeta`, `latido`, `presencia`,
+      `carga`, `bloqueo`, `sesion-check`, `ranking-tabla`): son ~8 líneas, una por
+      sitio. Ring buffer de timestamps (30 min) + resumen por minuto y por motivo,
+      expuesto como `window.__ops()` y overlay con `?ops=1`. Medir no puede costar
+      lecturas: nada de listeners. **Y banco nuevo** con reloj falso que afirma el
+      techo (≤6 escrituras/min en idle): si un cambio futuro mete un `setDoc` por
+      tick, el banco lo caza en vez de la consola.
+      **Lo construido:** `services/contadorOps.ts` (registro en memoria, cero
+      operaciones), 12 motivos anotados en sus sitios (carga, guardado-users,
+      guardado-ranking, tarjeta, tarjeta-lectura, visita, latido, presencia,
+      soltar-sesion, sesion-check, bloqueo, ranking-tabla con su nº de filas),
+      `ui/opsOverlay.ts` (píldora `W4·R0` fuera de `#app`, solo con `?ops=1`,
+      detalle al tocar), y banco nuevo `opsCheck` (14: el reposo no se inventa
+      nada, el semáforo, el pico que se abre en rojo y se cierra en verde, y la
+      tabla que dice sus 27 filas).
+      **Lo que el banco ya enseñó:** el arranque escribe 3 documentos
+      (users+rankings+perfiles), no 1.
+      **Cómo se usa:** abrir el juego con `?ops=1` y jugar normal; en rojo,
+      tocar el numerito dice el motivo y la hora del pico.
+
 ### Ya encargo y repetido
 
 - [ ] **F72 · Iconos de caja distintos por tier, con brillo y color.** *(Ya estaba en
@@ -2645,7 +2800,7 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **46 bancos, 2436**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **47 bancos, 2604**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -3992,6 +4147,45 @@ por codigo es que el numero que promete el modal sale del motor y es el que se c
 
 ### Cuota: lo que salio del pico de las 23h
 
-- [ ] **B39 � El pico se comio la cuota free.** 20K escrituras en el dia con ~8K en una hora y ~3K lecturas. Cuadra con testeo intensivo (1-2 acciones/s entre juego, perfiles y recargas), no con un bug: cada accion guarda, cada perfil ajeno es 1 lectura + 1 escritura, cada ranking hasta 40 lecturas.
-  Estrategia (industria: cache con TTL + reutilizar lo leido + coalescing, sin tocar reglas): ranking cacheado 2 min, la visita reutiliza la tarjeta ya leida en vez de releerla, guardado 30s->60s y ranking 5->10 min. Lo calculable no se quita para la cuota: Firestore cobra por documento, no por campo.
+- [x] **B39 � El pico se comio la cuota free.** 20K escrituras en el dia con ~8K en una hora y ~3K lecturas. Cuadra con testeo intensivo (1-2 acciones/s entre juego, perfiles y recargas), no con un bug: cada accion guarda, cada perfil ajeno es 1 lectura + 1 escritura, cada ranking hasta 40 lecturas.
+  Estrategia (industria: cache con TTL + reutilizar lo leido + coalescing, sin tocar reglas): ranking cacheado 2 min, la visita reutiliza la tarjeta ya leida en vez de releerla, guardado 30s->60s y ranking 5->10 min. Lo calculable no se quita para la cuota: Firestore cobra por documento, no por campo. Hecho en v1.15.18: lo cubre `perfilCheck` (+6, con `lecturas`/`consultas` contadas en el stub). OJO de metodo: el commit `813a5ad` se llevo este codigo dentro con mensaje solo de F74, y `toastCheck` cayo en el run completo por edicion concurrente (33/33 en solitario). Re-correr `npm run verify` entero cuando el otro agente pause.
+
+- [x] **B40 · Modo pruebas que no paga la tabla.** Paso 1 (jugador, sin codigo): 30 min de juego normal contra 30 min de testeo en la consola de Firebase + tamano real del doc `users/{uid}`; si el testeo multiplica x10, hipotesis confirmada. Paso 2 (codigo): flag `cyberforge_modo_pruebas` en `localStorage` que publica la partida igual pero se salta ranking + tarjeta; apagado por defecto, sin UI, con banco en `guardadoCheck`. Hecho en v1.15.20: `guardadoCheck` 40/40 en solitario (+3). Full suite pendiente del otro agente: su refactor F97 de afijos rompe `tsc`, el bundle de `verify` (3 MISSING_EXPORT de `crafting.ts`) y un check de `perfilCheck` (afijos del item forjado, 41/42); nada de eso toca este cambio.
+
+### Lote J · ENCARGO DEL 9 DE OCTUBRE (cuatro ramas de pasivas)
+
+*Lo pedido, con tus palabras. **Diseño cerrado en conversación el 9 de octubre**: no
+reparte el árbol en cinco filtros sino en **cuatro ramas estilo WoW** (Asalto /
+Manada / Fortuna / Forja), cada una con su fantasía y su keystone, con
+horizonte de 15 nodos por rama y salida en dos oleadas (10 + 5). La devolución
+de núcleos va en el parche grande y es una sola vez.*
+
+- [ ] **F97 · Cuatro ramas + rebalanceo de afijos y autos, con devolución.**
+  Decisiones tuyas, ya tomadas:
+  1. **Afijos fijos por rareza** (0/1/2/3/4/6) para recolectores de tienda, caja y
+     forja. La rareza se sortea y la cantidad sale sola: si un forjado lleva 2
+     afijos, es Épico por construcción. El linaje deja de decidir *cuántos* y
+     pasa a decidir *cuáles* (los compartidos entran primero, que ya existía).
+  2. **Magnitud de afijo por tier**, calculada al usar y no guardada: el mismo
+     afijo pega más en tier alto. Sin migración de items; lo guardado cambia de
+     número al cargar porque la fórmula cambió, y es rebalanceo declarado.
+  3. **Fuera `aff_luck`.** Causa raíz medida antes de tocar nada: su `craftLuck`
+     solo lo leía la valoración (precio), ningún cálculo de probabilidad —el
+     equipar-des-equipar no hacía nada, pero el texto prometía +10 %. Misma
+     clase que B18. La suerte real de los materiales (+2 % por afijo) no se toca.
+  4. **Autos domados:** Total a +1/s ×3 y los autos no usan x2/x3; el crítico se
+     queda (B25). Techo del árbol ~20/s en vez de 37/s.
+  5. **Manada:** buffers nuevos por caja (solo-pasivos, solo-clicks, global) +
+     afijos innatos de compañero escalados por tier, sin herencia de forja (la
+     forja sigue en potencial).
+  6. **Fortuna:** licencias T2/T3 (unlock 0/1) + Eco, doble 2 % ×5 solo
+     apilables y con hueco.
+  7. **Keystones:** Sobrecarga (cada 50 clics un ×3) / Mente Colmena (+4 % por
+     activo) / Jackpot (1 % subir tier) / Obra Maestra (firma ★5×★5).
+  8. **Devolución única** en el parche grande: lo gastado vuelve a `cores`,
+     árbol vacío, `totalCores` intacto.
+  Orden: Lote 0 motor (1+2+3, sin árbol) → Lote 1 autos (4) → Lote 2 parche
+  grande atómico (~10 nodos/rama + 5+6+7+8) → Lote 3 las 20 restantes.
+  Abierto: sacar `core_yield` o no (F70 sigue abierto); paridad por coste total,
+  no por tarjetas (Fortuna nace con 1-2 de más).
 

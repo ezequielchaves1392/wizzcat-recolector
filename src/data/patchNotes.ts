@@ -57,6 +57,39 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.20',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Un modo para probar sin gastar',
+    lineas: [
+      'Hay un modo de pruebas escondido para quien prueba el juego sin parar: con el puesto, tu partida se guarda igual pero tu fila del ranking y tu ficha dejan de publicarse.',
+      'Pasear el ranking y abrir perfiles deja de sumar operaciones mientras dure la prueba.',
+      'Se enciende desde la consola del navegador y viene apagado: no es un ajuste del juego, es una herramienta para no gastar la cuota probando.'
+    ]
+  },
+  {
+    version: '1.15.19',
+    fecha: '9 de octubre de 2026',
+    titulo: 'La Wiki del juego',
+    lineas: [
+      'La Wiki se abre en una pestaña aparte, desde el acceso o la cabecera, y explica el juego en un solo sitio: mecánicas, cajas, bases, items, logros, pasivas y versiones.',
+      'Cada caja enseña lo que puede traer y con qué probabilidad, con los números del sorteo de verdad.',
+      'Las bases ocultas tienen su lista completa, con lo que multiplica cada una y lo raro que sale.',
+      'Los logros dicen qué piden y qué dan, y el árbol enseña cada nodo con su coste y sus requisitos.',
+      'El probador de builds queda anotado como lo siguiente y todavía no está.'
+    ]
+  },
+  {
+    version: '1.15.18',
+    fecha: '9 de octubre de 2026',
+    titulo: 'El ranking y los perfiles gastan menos',
+    lineas: [
+      'Abrir el ranking varias veces seguidas ya no lo vuelve a pedir cada vez: la tabla se queda un rato en tu pantalla.',
+      'Mirar el perfil de otro jugador cuenta la visita igual que antes, pero pide su ficha una sola vez en vez de dos.',
+      'La partida se guarda cada minuto cuando no haces nada, en vez de cada medio minuto: lo producido se recupera al recargar igual que antes.',
+      'Tu puesto en el ranking tarda un poco más en moverse: la tabla se actualiza cada diez minutos.'
+    ]
+  },
+  {
     version: '1.15.17',
     fecha: '9 de octubre de 2026',
     titulo: 'Diez bases ocultas por tier, y a cazar',

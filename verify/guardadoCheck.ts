@@ -21,6 +21,7 @@
 
 import { boot, reload, check, resumen, baseSave, guardado } from './kit';
 import { computeScore } from '../src/services/rankingService';
+import { CLAVE_MODO_PRUEBAS } from '../src/gameLoop';
 
 /**
  * lush() NO espera al setDoc -es una promesa suelta-, as� que hay que dar un
@@ -475,6 +476,58 @@ async function main() {
       'cuota: y sí actualiza lo suyo',
       db[perfil].totalClicks === 1,
       `clics=${db[perfil].totalClicks} producido=${db[perfil].nanitasProducidas}`
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  //  B40 · EL MODO PRUEBAS NO PAGA LA TABLA, PERO LA PARTIDA SIGUE GUARDADA
+  // -------------------------------------------------------------------------
+  //
+  // Quien testea sin parar mueve la fila del ranking y la tarjeta sin necesitarlo,
+  // y esas son las escrituras que quemaron la cuota. Con el flag puesto esas dos se
+  // saltan; la partida —el documento que no se puede perder— se guarda igual, y al
+  // quitar el flag lo pendiente se publica en el siguiente guardado, no en el
+  // periodo entero.
+  {
+    const db = () => (globalThis as any).__MEM_DB__;
+    const g = await boot(baseSave([], {
+      nanites: 5_000,
+      totalNanitesProduced: 90_000_000
+    }));
+    await g.flush();
+    await asentar();
+    const filasAntes = db().filas ?? 0;
+
+    localStorage.setItem(CLAVE_MODO_PRUEBAS, '1');
+    try {
+      db().escrituras = 0;
+      g.click();
+      await g.flush();
+      await asentar();
+      check(
+        'cuota: en modo pruebas la partida SE guarda',
+        (db().escrituras ?? 0) >= 1,
+        'escrituras=' + db().escrituras
+      );
+      check(
+        'cuota: ...pero la fila del ranking NO se escribe',
+        (db().filas ?? 0) === filasAntes,
+        `filas=${db().filas} antes=${filasAntes}`
+      );
+    } finally {
+      // Sin esto, los bancos que vienen detrás heredarían el flag: el `localStorage`
+      // del runner es uno solo para todos, igual que el `__MEM_DB__`.
+      localStorage.removeItem(CLAVE_MODO_PRUEBAS);
+    }
+
+    // Sin el flag vuelve a publicar: el modo pausa el ritmo, no lo rompe.
+    g.click();
+    await g.flush();
+    await asentar();
+    check(
+      'cuota: sin el flag la fila vuelve a escribirse',
+      (db().filas ?? 0) > filasAntes,
+      `filas=${db().filas} antes=${filasAntes}`
     );
   }
 
