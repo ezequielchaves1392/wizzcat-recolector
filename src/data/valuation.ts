@@ -99,7 +99,6 @@ export function affixValueMult(collector: CollectorItem): number {
     if (a.effect.clickMultPorNivel) contrib += a.effect.clickMultPorNivel * 20;
     if (a.effect.passiveMultPorNiveles) contrib += a.effect.passiveMultPorNiveles * 4;
     if (a.effect.critChance) contrib += a.effect.critChance * 2.5;
-    if (a.effect.craftLuck) contrib += a.effect.craftLuck * 1.5;
     mult += contrib;
   }
   return mult;

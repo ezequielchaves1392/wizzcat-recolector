@@ -20,7 +20,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
 import { basePorPosicion } from './data/bases';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
@@ -2047,6 +2047,14 @@ function sePuedeGuardar(): boolean {
         state.warehouse = conPotencial.items;
         warehouseNeedsMigration = true;
       }
+      // F97 · Los afijos van ENCIMA del potencial: la cantidad sale de la rareza
+      // y la rareza ya está coaccionada a estas alturas. Un item sin campo recibe
+      // los suyos y uno con campo se recorta o rellena hasta la tabla.
+      const conAfijos = migraAfijosPorRareza(state.warehouse);
+      if (conAfijos.changed) {
+        state.warehouse = conAfijos.items;
+        warehouseNeedsMigration = true;
+      }
       const compConPotencial = migraPotencialesDeCompaneros(state.companions, state.warehouse);
       if (compConPotencial.changed) {
         state.companions = compConPotencial.companeros;
@@ -3101,7 +3109,7 @@ function sePuedeGuardar(): boolean {
     // **LA CUENTA VIVE EN `data/crafting` (F83).** La ficha de un arma no equipada,
     // la tarjeta de perfil y el recálculo ajeno necesitan el efecto de UNOS afijos
     // con UN nivel, no el del equipado. Esta función es ese caso con el equipado.
-    return efectoDeAfijos(item.affixes, item.level);
+    return efectoDeAfijos(item.affixes, item.level, item.tier);
   }
 
   /**
@@ -3383,7 +3391,7 @@ function sePuedeGuardar(): boolean {
     // un item neutro queda igual que antes—.
     //
     // La regla que queda, y que un banco comprueba: **las filas suman el total**.
-    anota('Afijos', 'del item', 1 + efectoDeAfijos(w.affixes, nivel).clickMult, 'item');
+    anota('Afijos', 'del item', 1 + efectoDeAfijos(w.affixes, nivel, w.tier).clickMult, 'item');
     anota('Compañeros', 'de la partida', calculateCompanionMultiplier(), 'partida');
     anota('Logros', 'de la partida', 1 + achievementState.clickBonus, 'partida');
     anota('Árbol de pasivas', 'de la partida', 1 + state.bonus.clickMult, 'partida');

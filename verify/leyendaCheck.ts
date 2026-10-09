@@ -4,7 +4,7 @@ import { getPatchNotes, setPatchNotes, getNotasVistas, setNotasVistas } from '..
 import { check, resumen } from './kit';
 import { TREE_NODES, TREE_BY_ID } from '../src/data/tree';
 import { chanceDeSintonizacion } from '../src/data/items';
-import { AFIX_MIN_POR_RARIDAD, AFIX_MAX, explicacionDeAfijos, fraseDeSueloDeAfijos, aporteDeAfijos, rangoDeAfijosForjados, costeDeNivel } from '../src/data/crafting';
+import { AFIX_MIN_POR_RARIDAD, AFIX_MAX, explicacionDeAfijos, fraseDeAfijosDeRareza, rangoDeAfijosForjados, costeDeNivel } from '../src/data/crafting';
 import { CRATE_TYPES, COMPANION_SLOT_BUY, STORE_ITEMS } from '../src/data/store';
 import { ACHIEVEMENTS } from '../src/achievements';
 import { CRATE_LOOT } from '../src/components/crateLoot';
@@ -376,31 +376,32 @@ async function main() {
   {
     // La explicación sale de la tabla, no de un número escrito aquí.
     const texto = explicacionDeAfijos();
-    check('leyenda: la explicación de los afijos nombra el suelo de cada rareza',
+    check('leyenda: la explicación de los afijos nombra el número de cada rareza',
       Object.entries(AFIX_MIN_POR_RARIDAD).every(([rareza, n]) => texto.includes(`${rareza} ${n}`)),
       texto);
 
     check('leyenda: y nombra el tope del juego, que es donde acaba la regla',
       texto.includes(String(AFIX_MAX)), texto);
 
-    // **Y QUE DIGA "FORJADO", QUE NO ES UN ADVERBIO.** Los afijos solo los da la forja:
-    // ni la tienda ni las cajas los dan, porque `pickAffixes()` es el único sitio que los
-    // escribe. Un texto que dice "un Mítico lleva 4 afijos" sin ese matiz es una mentira
-    // comprobable en diez segundos, y un jugador que pilla una mentira en un texto deja
-    // de fiarse de los otros veinte.
-    const conSuelo = fraseDeSueloDeAfijos('Mítico');
-    check('leyenda: el suelo de afijos dice forjado y promete un mínimo con nombre y apellidos',
-      conSuelo.includes('forjado') && conSuelo.includes('4'), conSuelo);
+    // **Y QUE DIGA DE DÓNDE SALEN, QUE YA NO ES SOLO LA FORJA.** Desde F97 la
+    // tienda y las cajas también los dan: un texto que dijera "forjado" haría
+    // pensar que el de la tienda es distinto, y es el mismo objeto con la misma
+    // regla. El matiz que sí lleva es el de la forja: allí los compartidos
+    // entran primero.
+    check('leyenda: la explicación dice que salen de tienda, caja y forja',
+      texto.includes('tienda') && texto.includes('caja') && texto.includes('forja'), texto);
+    const conNumero = fraseDeAfijosDeRareza('Mítico');
+    check('leyenda: la frase de rareza promete el número exacto con nombre y apellidos',
+      conNumero.includes('4') && !conNumero.includes('al menos'), conNumero);
 
-    // La rareza desconocida no tiene suelo: inventar uno sería peor que no decir nada.
-    check('leyenda: una rareza que no existe no tiene suelo de afijos que explicar',
-      fraseDeSueloDeAfijos('Rarisima') === '', JSON.stringify(fraseDeSueloDeAfijos('Rarisima')));
+    // La rareza desconocida no tiene número: inventar uno sería peor que no decir nada.
+    check('leyenda: una rareza que no existe no tiene afijos que explicar',
+      fraseDeAfijosDeRareza('Rarisima') === '', JSON.stringify(fraseDeAfijosDeRareza('Rarisima')));
 
-    // **Y QUE EL NÚMERO DE LA PANTALLA SEA LA MISMA PIEZA QUE USA LA REGLA.** No que
-    // coincida con el resultado final —no puede, el suelo depende del dado— sino que sea
-    // exactamente la parte que la regla llama "lo que arrastra el linaje". Es lo que
-    // impide que la vista tenga su propia cuenta: el día que la media cambie, la vista y
-    // la forja se separan en silencio.
+    // **Y QUE EL NÚMERO DEL JUEGO SEA EL DE LA TABLA.** Sin dado de cantidad, el
+    // rango es el número fijo: con padres pobres o ricos da lo mismo, porque la
+    // cantidad ya no sale de ahí. Es lo que impide que la forja tenga su propia
+    // cuenta: el día que la tabla cambie, la forja cambia con ella.
     const conAfijos = (n: number) => [
       { affixes: Array.from({ length: n }, () => 'a') }, { affixes: [] as string[] }
     ];
@@ -408,33 +409,20 @@ async function main() {
     for (const [n, rareza] of [[0, 'Común'], [4, 'Legendario'], [6, 'Divino']] as const) {
       const m = conAfijos(n) as any;
       const rango = rangoDeAfijosForjados(m, rareza);
-      // La regla, escrita con la aportación de la vista en medio: el suelo de la
-      // rareza más lo que aportan los materiales, acotado por el tope del juego.
-      //
-      // **Y EL ACOTE IMPORTA CON UN DIVINO.** Su suelo ya es el tope entero, así que
-      // sumar la aportación da más de seis y la regla se queda en seis. Por eso la
-      // comprobación no es "más" sino "exactamente igual": un item con ocho afijos
-      // sería el mismo bug que este, al revés.
-      const esperado = Math.min(AFIX_MAX, (AFIX_MIN_POR_RARIDAD[rareza] ?? 0) + (aporteDeAfijos(m) ?? 0));
-      if (rango.maximo !== esperado) desajustes.push(`${rareza}: la vista y la regla dan ${esperado} y ${rango.maximo}`);
+      const esperado = AFIX_MIN_POR_RARIDAD[rareza] ?? 0;
+      if (rango.minimo !== esperado || rango.maximo !== esperado) desajustes.push(`${rareza}: la regla da ${rango.minimo}-${rango.maximo} y la tabla ${esperado}`);
     }
-    check('leyenda: el número de afijos de la forja es la parte que usa la regla',
-      desajustes.length === 0, desajustes.join(' | ') || 'aportación = parte de linaje de la regla');
+    check('leyenda: el número de afijos de la forja es el de la tabla, con los padres que sean',
+      desajustes.length === 0, desajustes.join(' | ') || 'número = tabla en las tres');
 
-    // Sin dos materiales no hay linaje: es preferible no enseñar nada a enseñar un cero.
-    check('leyenda: sin dos materiales no se enseña una aportación de afijos',
-      aporteDeAfijos([] as any) === null && aporteDeAfijos([{ affixes: [] }] as any) === null,
-      String(aporteDeAfijos([] as any)));
-
-    // **Y QUE NUNCA SE PASE DEL TOPE.** Con dos materiales de seis afijos cada uno la media
-    // da seis, y el tope del juego es seis: no puede salir un siete por mucho que los
-    // padres lleven, porque un item con siete afijos no existe.
-    const tope = aporteDeAfijos([
+    // **Y QUE NUNCA SE PASE DEL TOPE.** Ni con los dos padres llenos: la tabla
+    // manda y el tope del juego es seis, porque un item con siete afijos no existe.
+    const tope = rangoDeAfijosForjados([
       { affixes: Array.from({ length: 6 }, () => 'a') },
       { affixes: Array.from({ length: 6 }, () => 'a') }
-    ] as any);
-    check('leyenda: la aportación de afijos nunca pasa del tope del juego',
-      tope === AFIX_MAX, `aportación=${tope} tope=${AFIX_MAX}`);
+    ] as any, 'Divino');
+    check('leyenda: ni con los padres llenos se pasa del tope del juego',
+      tope.maximo === AFIX_MAX, `máximo=${tope.maximo} tope=${AFIX_MAX}`);
   }
 
 

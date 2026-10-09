@@ -97,8 +97,15 @@ export const AFFIXES: Affix[] = [
     effect: { critChance: 0.08 } },
   { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', rarity: 'Legendario',
     effect: { critChance: 0.14 } },
-  { id: 'aff_luck', name: 'Suerte de Forja', description: '+10% a la probabilidad de crafteo del recolector.', rarity: 'Legendario',
-    effect: { craftLuck: 0.10 } },
+  // **`aff_luck` YA NO ESTÁ, Y EL PORQUÉ QUEDA ESCRITO.** Era "Suerte de Forja:
+  // +10 % a la probabilidad de crafteo", y ese +10 % no lo leía ningún cálculo:
+  // `equippedAffixEffect()` y `efectoDeAfijos()` no leen `craftLuck`, y la suerte
+  // que la forja sí cobra sale del NÚMERO de afijos de los materiales (+2 % cada
+  // uno en `tiraDeForja()`), no de este id. El único lector de su efecto era la
+  // valoración (precio), así que el afijo se cobraba y no hacía nada en la
+  // partida —la misma clase que `crateLuck` antes de B18—, con el agravante de
+  // que invitaba al swap (ponerlo solo para tirar). La migración lo quita de los
+  // items guardados; lo que ya filtraba ids desconocidos lo ignora igual.
   { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', rarity: 'Legendario',
     effect: { clickMult: 0.35, passiveMult: 0.35 } },
   { id: 'aff_eternal', name: 'Eterno', description: '+2% de daño por cada nivel del recolector.', rarity: 'Mítico',
@@ -1196,7 +1203,26 @@ export function multiplicadorDeNivel(level: number | undefined | null): number {
 export const DANIO_MINIMO_SIN_RECOLECTOR = 1;
 
 /**
- * EL EFECTO DE UNOS AFIJOS CON UN NIVEL, SIN MIRAR QUÉ HAY EQUIPADO (F83).
+ * LA POTENCIA DE UN AFIJO SEGÚN EL TIER DEL ITEM (F97).
+ *
+ * El mismo afijo pega más en un tier alto: un Baluarte de T3 no es el de T8.
+ * Es lo que hace que los mejores stats salgan en los mejores items, sin guardar
+ * nada nuevo en el item —la magnitud se calcula al usar, con el tier que el item
+ * ya trae—. Sube 10 puntos por tier desde el 60 %: en T3 (el primer tier con
+ * afijos, Raro) el afijo rinde al 80 %, en T5 al 100 % y en T10 al 150 %.
+ *
+ * **SOLO ESCALA MAGNITUDES, NO PROBABILIDADES.** `critChance` no se toca: una
+ * probabilidad no es "más stat", y un Foco de T10 con 21 % de crítico sería otra
+ * economía de críticos. Los `clickMult`, `passiveMult` y sus variantes por nivel
+ * sí, porque son porcentaje del item.
+ */
+export function potenciaDeAfijoPorTier(tier: number | undefined | null): number {
+  const t = Math.max(1, Math.floor(Number(tier) || 1));
+  return 0.5 + t * 0.1;
+}
+
+/**
+ * EL EFECTO DE UNOS AFIJOS CON UN NIVEL Y UN TIER, SIN MIRAR QUÉ HAY EQUIPADO (F83).
  *
  * Es la cuenta de `equippedAffixEffect()` del motor, sacada a `data/` porque la
  * necesitan tres sitios que no son el equipado: la ficha de un arma no equipada
@@ -1209,22 +1235,25 @@ export const DANIO_MINIMO_SIN_RECOLECTOR = 1;
  */
 export function efectoDeAfijos(
   affixIds: Array<string> | undefined | null,
-  nivel: number | undefined | null
+  nivel: number | undefined | null,
+  tier: number | undefined | null = null
 ): { clickMult: number; passiveMult: number; critChance: number } {
   const out = { clickMult: 0, passiveMult: 0, critChance: 0 };
   const ids = Array.isArray(affixIds) ? affixIds : [];
   const nv = Number(nivel) || 0;
+  // Sin tier (item viejo sin el campo) el factor es 1: la cuenta de siempre.
+  const potencia = tier === null || tier === undefined ? 1 : potenciaDeAfijoPorTier(tier);
   for (const affixId of ids) {
     const affix = AFFIX_BY_ID[affixId];
     if (!affix) continue;
-    out.clickMult += affix.effect.clickMult || 0;
-    out.passiveMult += affix.effect.passiveMult || 0;
+    out.clickMult += (affix.effect.clickMult || 0) * potencia;
+    out.passiveMult += (affix.effect.passiveMult || 0) * potencia;
     out.critChance += affix.effect.critChance || 0;
     // Los que dependen del nivel suman un PORCENTAJE por nivel, no un número
     // plano: es lo que hace que subir de nivel siga valiendo sin que un
     // "+8 por nivel" convierta un T1 en un T10. Ver el comentario de AFFIXES.
-    out.clickMult += (affix.effect.clickMultPorNivel || 0) * nv;
-    out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nv / 5);
+    out.clickMult += (affix.effect.clickMultPorNivel || 0) * nv * potencia;
+    out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nv / 5) * potencia;
   }
   return out;
 }
@@ -1956,92 +1985,75 @@ export const AFIX_MIN_POR_RARIDAD: Record<string, number> = {
 export const AFIX_MAX = 6;
 
 /**
- * Cuántos afijos puede llevar un item forjado: el suelo y el techo.
+ * Cuántos afijos lleva un item forjado: EL DE SU RAREZA, NI UNO MÁS NI UNO MENOS.
  *
- * **SON DOS NÚMEROS Y NO UNO, Y POR QUÉ ES LO QUE PEDÍAS.** Con un solo número,
- * el item forjado lleva siempre los mismos afijos que le tocan por rareza, y los
- * dos materiales que pones solo sirven para decidir *cuáles*. Se podían haber
- * gastado en cualquier otra cosa. Con dos, los padres deciden también *cuántos*:
- * dos materiales con muchos afijos dan un item que puede llevar más, y esa es la
- * recompensa de buscar buenos materiales en vez de la primera pareja que se vea.
+ * **F97: LA RAREZA MANDA Y EL LINAJE ELIGE CUÁLES.** Antes había suelo (la tabla)
+ * y techo (suelo + linaje): dos materiales buenos daban un item con MÁS afijos.
+ * Ahora la cantidad es fija por rareza —si un forjado lleva 2 afijos, es Épico
+ * por construcción— y los padres deciden *cuáles* (los compartidos entran
+ * primero, que ya existía). Un Común lleva 0 siempre, aunque sus padres fueran
+ * buenos; un Divino lleva los 6, que es el tope entero.
  *
- * **EL SUELO ES EL DE LA RAREZA, Y NO SE NEGOCIA.** `AFIX_MIN_POR_RARIDAD` es una
- * regla del juego ("más rareza, más afijos") y esta función no la puede desbordar
- * hacia abajo: un Divino no sale con dos afijos porque sus padres fueran pobres.
- *
- * **Y LA NANOPARTÍCULA YA NO TOCA ESTO.** Antes sumaba uno al suelo y al techo, y
- * ese efecto se fue con la reescritura de la nanopartícula: ahora su tirada sube la
- * rareza, y al subir la rareza sube el suelo **desde la tabla**, que es la única
- * fuente de esta regla. Sumarlo aquí también sería pagar dos veces por lo mismo.
- *
- * **UN `Divino` TIENE EL TECHO PEGADO AL SUELO** —los 6 afijos—, así que el dado
- * no tira nada y el item sale siempre completo. Es lo que hace que "más rareza, más
- * afijos" tenga final, y no es casualidad: la rareza la pone el potencial en la
- * forja, así que un Divino sale de fundir dos materiales con potencial 5.
+ * El parámetro `materials` se conserva porque los llamadores lo pasan y la
+ * regla se lee "para estos materiales", pero la cantidad ya no sale de ahí:
+ * sale de la tabla. Quien busque de dónde salen los *cuáles*, es `pickAffixes()`.
  */
 export function rangoDeAfijosForjados(
   materials: CollectorItem[], rarity: string
 ): { minimo: number; maximo: number } {
+  void materials;
   const suelo = AFIX_MIN_POR_RARIDAD[rarity] ?? 0;
-  // Lo que arrastra el linaje: la MEDIA de los dos padres, no el mayor ni la
-  // suma. Con la suma, un solo material perfecto bastaría y el otro sería
-  // decorativo, que es justo lo que la forja no debe ser: los dos importan.
-  const linea = materials.reduce((a, m) => a + (m.affixes?.length ?? 0), 0) / Math.max(1, materials.length);
-  const tope = Math.min(AFIX_MAX, suelo + Math.floor(linea));
-  return { minimo: Math.max(0, Math.min(suelo, AFIX_MAX)), maximo: Math.max(0, tope) };
+  const fijo = Math.max(0, Math.min(suelo, AFIX_MAX));
+  return { minimo: fijo, maximo: fijo };
 }
 
 /**
- * EL SUELO DE AFIJOS DE UNA RAREZA, Y CÓMO SE DICE EN PALABRAS.
+ * LOS AFIJOS DE UNA RAREZA, Y CÓMO SE DICEN EN PALABRAS.
  *
  * F51. La regla "más rareza, más afijos" estaba escrita en un comentario y en
  * ninguna parte que el jugador pudiera leer. La pregunta que se hacía —"¿cuántos
- * afijos puede tener un Mítico?"— tiene respuesta exacta y la daba
- * `AFIX_MIN_POR_RARIDAD`, así que lo que faltaba no era el número: era que
- * alguien lo dijera.
+ * afijos puede tener un Mítico?"— tiene respuesta exacta y la daba la tabla,
+ * así que lo que faltaba no era el número: era que alguien lo dijera.
  *
  * **Y EL NÚMERO NO SE ESCRIBE AQUÍ, SE LEE DE LA TABLA.** Esta función monta la
  * frase con `AFIX_MIN_POR_RARIDAD[rareza]`, de modo que el día que la tabla suba
- * el suelo de un Mítico la frase lo dice sola. Una explicación con el número
- * escrito a mano es una segunda fuente de la verdad, y es exactamente el tipo de
- * cosa que se queda diciendo la regla vieja después de que la regla haya cambiado.
+ * un peldaño la frase lo dice sola. Una explicación con el número escrito a mano
+ * es una segunda fuente de la verdad, y es exactamente el tipo de cosa que se
+ * queda diciendo la regla vieja después de que la regla haya cambiado.
  *
- * **Y DICE "FORJADO", QUE NO ES UN ADVERBIO.** Los afijos **solo** existen en los
- * recolectores que salen de la forja: ni la tienda ni las cajas los dan, porque
- * `pickAffixes()` es el único sitio que los escribe. Un "un Mítico lleva 4
- * afijos" sin ese matiz es mentira comprobable en diez segundos —el jugador abre
- * un Mítico de la tienda, ve que no tiene ninguno y deja de leer todo lo demás—,
- * así que la frase lleva el "forjado" dentro y no en una nota aparte.
+ * **Y YA NO DICE "FORJADO".** Desde F97 los afijos salen de tienda, caja y forja
+ * por igual: un "Mítico forjado lleva 4" sin ese matiz haría pensar que el de la
+ * tienda es distinto, y es el mismo objeto con la misma regla.
  */
-export function fraseDeSueloDeAfijos(rareza: string): string {
-  const suelo = AFIX_MIN_POR_RARIDAD[rareza];
-  if (suelo === undefined) return '';
-  if (suelo === 0) return `Un ${rareza} forjado no lleva afijos por rareza.`;
-  if (suelo >= AFIX_MAX) {
-    return `Un ${rareza} forjado lleva los ${AFIX_MAX} afijos: no puede llevar ni uno más.`;
+export function fraseDeAfijosDeRareza(rareza: string): string {
+  const n = AFIX_MIN_POR_RARIDAD[rareza];
+  if (n === undefined) return '';
+  if (n === 0) return `Un ${rareza} no lleva afijos.`;
+  if (n >= AFIX_MAX) {
+    return `Un ${rareza} lleva los ${AFIX_MAX} afijos: no puede llevar ni uno más.`;
   }
-  return `Un ${rareza} forjado lleva al menos ${suelo} afijos.`;
+  return `Un ${rareza} lleva ${n} afijos.`;
 }
 
 /**
  * LA EXPLICACIÓN COMPLETA, EN UNA FRASE QUE CABE EN UNA TARJETA.
  *
  * Las dos mitades de la regla, que es lo que el jugador no puede deducir:
- * **el suelo lo pone la rareza** —y por eso no hay forma de negociarlo a la baja—
- * y **el techo lo ponen los materiales** —y por eso buscar buenos parents vale
- * algo—. Con una regla y sin la otra, la mitad de las preguntas que se hacen en
- * la forja no tienen respuesta.
+ * **la cantidad la pone la rareza** —un Épico lleva 2 salga de donde salga— y
+ * **los *cuáles* los pone el linaje en la forja** —los compartidos entran
+ * primero, y por eso buscar buenos padres vale algo—. Con una regla y sin la
+ * otra, la mitad de las preguntas que se hacen en la forja no tienen respuesta.
  *
  * El texto se arma con `AFIX_MAX` y con la lista de rarezas de
  * `AFIX_MIN_POR_RARIDAD`, en el mismo orden que el juego las ordena, para que
  * añadir una rareza nueva no deje un texto que se la salta en silencio.
  */
 export function explicacionDeAfijos(): string {
-  const suelo = Object.entries(AFIX_MIN_POR_RARIDAD)
+  const tabla = Object.entries(AFIX_MIN_POR_RARIDAD)
     .map(([rareza, n]) => `${rareza} ${n}`)
     .join(' · ');
-  return `Solo la forja da afijos. El suelo lo pone la rareza (${suelo}) y el techo los `
-    + `materiales que pones, hasta ${AFIX_MAX}.`;
+  return `Cada rareza lleva sus afijos (${tabla}), salgan de tienda, caja o forja, `
+    + `hasta ${AFIX_MAX}. En la forja, los que comparten tus dos materiales entran primero.`;
 }
 
 /**
@@ -2061,44 +2073,14 @@ export function explicacionDePotencial(): string {
 }
 
 /**
- * Cuántos afijos **aportan** los materiales de una selección, y solo eso.
- *
- * Es la pregunta que el jugador sí puede hacer antes de forjar: sus dos padres traen
- * afijos, y la media de los dos es lo que su forjado puede heredar de ellos.
- *
- * **NO ES EL TECHO DEL ITEM Y NO SE PIDE QUE LO SEA.** El techo de verdad lo da
- * `rangoDeAfijosForjados()`, que es el suelo de la rareza **más** esta aportación. Y
- * el suelo depende de la rareza del item que salga, que a su vez depende del potencial
- * que todavía no ha salido del dado: **antes de forjar no se sabe**. Un banco lo
- * detectó —la vista decía 2 y la regla daba 5— y tenía razón: la vista enseñaba un
- * número que no era el que el item iba a tener, y solo por cómo estaba redactado
- * ("hasta N") parecía que sí.
- *
- * Por eso esto se llama **aporte** y la vista lo enseña como aportación, no como techo.
- * El número que sí se puede enseñar sin mentir es la parte que depende del jugador, y
- * es justo la parte por la que merece la pena buscar buenos materiales.
- *
- * Devuelve `null` si no hay materiales suficientes: sin dos padres no hay linaje, y
- * teach "aporta 0" es peor que no teach nada.
- */
-export function aporteDeAfijos(materials: Array<{ affixes?: string[] }>): number | null {
-  if (materials.length < MATERIALES_POR_FUSION) return null;
-  const linea = materials.reduce((a, m) => a + (m.affixes?.length ?? 0), 0) / materials.length;
-  return Math.max(0, Math.min(AFIX_MAX, Math.floor(linea)));
-}
-
-/**
  * Reparte los afijos del item forjado.
  *
- * **La rareza da el suelo y el linaje da el techo** (`rangoDeAfijosForjados()`),
- * y entre los dos se tira un dado. Con un solo número fijo, un Divino podía salir
- * con un afijo —que era lo que pasaba antes— y los dos materiales solo decidían
- * *cuáles*, no *cuántos*. Ahora el suelo de un Divino son 6, que es el tope
- * entero, y un Común puede llegar a llevar afijos si sus padres los traían.
- *
- * **Y EL DADO VA ANTES DE ELEGIR CUÁLES**, que es el orden que hace que la mezcla
- * tenga sentido: si se eligieran primero, el número sería un efecto secundario de
- * qué afijos entraron y el techo del linaje no se llenaría nunca.
+ * **LA RAREZA DA EL NÚMERO Y EL LINAJE DA LOS NOMBRES (F97).** El item lleva
+ * exactamente los de su tabla, y la mezcla decide cuáles: primero lo que traen
+ * **los dos materiales**, en orden —es lo que permite forzar un afijo—, después
+ * al azar entre el resto de lo que traen entre los dos, y si aún faltan se
+ * rellena del catálogo con los raros pesando menos. Con un número que dependiera
+ * de los padres, un Mítico saldría a veces con 2 y "lleva 4" mentiría.
  *
  * **La mezcla es en dos pasos, y ese orden es lo que la hace tener sentido:**
  *
@@ -2106,7 +2088,7 @@ export function aporteDeAfijos(materials: Array<{ affixes?: string[] }>): number
  *    forzar un afijo. Después, al azar entre el resto de lo que tienen entre
  *    los dos. Es la herencia: los afijos buenos se transmiten de verdad, y por
  *    eso buscar un item con buenos afijos tiene recompensa.
- * 2. Si aún faltan para llegar al número que salió del dado, se rellenan **al azar
+ * 2. Si aún faltan para llegar al número de la rareza, se rellenan **al azar
  *    de todo el catálogo**, con los raros pesando menos.
  *
  * El paso 1 va primero a propósito. Si rellenara de catálogo y luego heredara,
@@ -2119,20 +2101,13 @@ function pickAffixes(
   materials: CollectorItem[], rarity: string,
   rng: () => number = Math.random
 ): string[] {
-  const { minimo, maximo } = rangoDeAfijosForjados(materials, rarity);
+  const { minimo } = rangoDeAfijosForjados(materials, rarity);
 
-  // **EL DADO VA ANTES DE ELEGIR CUÁLES, Y POR QUÉ.** Cuántos afijos lleva lo
-  // decide el linaje y lo tira el azar; cuáles lleva lo decide la mezcla. Si se
-  // eligieran primero y se rellenara después, el número sería un efecto
-  // secundario de qué afijos entraron, y con dos materiales muchas veces no
-  // quedarían huecos: el techo del linaje no se llenaría nunca.
-  //
-  // `minimo + Math.floor(rng() * (maximo - minimo + 1))` con `+1` para que el techo
-  // sea alcanzable: sin el `+1` un `Divino` con el techo pegado al suelo daría
-  // `0` y se quedaría sin afijos.
-  const objetivo = maximo <= minimo
-    ? minimo
-    : minimo + Math.floor(rng() * (maximo - minimo + 1));
+  // **YA NO HAY DADO DE CANTIDAD (F97).** El objetivo es el de la rareza, fijo:
+  // el azar solo decide *cuáles* (paso 1 y 2 de abajo), no *cuántos*. Con un
+  // dado aquí, un Mítico saldría a veces con 2 y a veces con 4, y "lleva 4"
+  // dejaría de ser verdad.
+  const objetivo = minimo;
   if (objetivo <= 0) return [];
 
   const picked: string[] = [];
@@ -2179,4 +2154,112 @@ function pickAffixes(
   }
 
   return picked;
+}
+
+/**
+ * Sorteo ponderado del catálogo, sin repetir y saltando los excluidos.
+ *
+ * Es el paso 2 de la mezcla de la forja sacado a función: los tres que sortean
+ * afijos —la forja no, que hereda primero— tiran de aquí para no tener tres
+ * dados con tres pesos. Los raros pesan menos, como siempre.
+ */
+function sorteaAfijos(
+  cantidad: number,
+  excluidos: string[],
+  rng: () => number = Math.random
+): string[] {
+  const restantes = AFFIXES.filter(a => !excluidos.includes(a.id));
+  const picked: string[] = [];
+  while (picked.length < cantidad && restantes.length > 0) {
+    const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
+    const total = weights.reduce((a, b) => a + b, 0);
+    let roll = rng() * total;
+    let idx = 0;
+    for (; idx < restantes.length - 1; idx++) {
+      roll -= weights[idx];
+      if (roll <= 0) break;
+    }
+    picked.push(restantes[idx].id);
+    restantes.splice(idx, 1);
+  }
+  return picked;
+}
+
+/**
+ * LOS AFIJOS DE UNA RAREZA, SORTEADOS DEL CATÁLOGO (F97).
+ *
+ * Es el `pickAffixes()` sin padres: la cantidad fija de la tabla y los *cuáles*
+ * al azar con los raros pesando menos (los mismos pesos del paso 2 de la
+ * mezcla). Lo usan el generador —tienda y cajas sacan de aquí— y la migración
+ * de items viejos, que no tienen de dónde heredar. La forja NO lo usa: ella
+ * hereda con `pickAffixes()`, que es lo que la hace forja y no lotería.
+ */
+export function afijosParaRareza(
+  rarity: string,
+  rng: () => number = Math.random
+): string[] {
+  const objetivo = AFIX_MIN_POR_RARIDAD[rarity] ?? 0;
+  const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));
+  if (tope <= 0) return [];
+  // Sin semilla ni orden: cada llamante tira su propio dado, como `rollPotentialFrom()`.
+  return sorteaAfijos(tope, [], rng);
+}
+
+/**
+ * TODO RECOLECTOR CON AFIJOS LOS DE SU RAREZA, NI UNO MÁS NI UNO MENOS (F97).
+ *
+ * Va en cada carga, como `migraPotenciales()`, y es idempotente: lo que ya
+ * cumple la tabla no se toca y devuelve el mismo array.
+ *
+ * Tres casos, y cada uno tiene su motivo:
+ * - **Sin campo** (tienda y cajas viejas, que nunca lo traían): se sortean los
+ *   de su rareza. Sin esto, un Épico viejo con 0 afijos conviviría con uno nuevo
+ *   con 2 y la regla mentiría por la mitad del almacén.
+ * - **Con campo**: se quitan los ids que no están en el catálogo (`aff_luck` y
+ *   cualquier invento) y se recorta o rellena hasta la tabla. El recorte duele
+ *   en un caso —un Común forjado con afijos de linaje los pierde— y es lo
+ *   pedido: Común son 0 siempre.
+ * - **Rareza desconocida**: no se inventa nada; se limpia lo desconocido y se
+ *   deja lo que hay. Una rareza que nadie conoce no puede pedir una cantidad.
+ */
+export function migraAfijosPorRareza(
+  items: any[],
+  rng: () => number = Math.random
+): { items: any[]; changed: boolean } {
+  let changed = false;
+  const salida = items.map((w) => {
+    if (w?.type !== 'collector') return w;
+    const objetivo = AFIX_MIN_POR_RARIDAD[w.rarity];
+    const conocidos = Array.isArray(w.affixes)
+      ? (w.affixes as any[]).filter(id => AFFIXES.some(a => a.id === id))
+      : null;
+    if (objetivo === undefined) {
+      // Rareza que no está en la tabla: solo limpieza, sin asignar ni recortar.
+      if (conocidos !== null && conocidos.length !== (w.affixes as any[]).length) {
+        changed = true;
+        return { ...w, affixes: conocidos };
+      }
+      return w;
+    }
+    const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));
+    let lista = conocidos ?? [];
+    // Relleno con lo que no esté ya, con el mismo sorteo de arriba.
+    if (lista.length < tope) {
+      lista = [...lista, ...sorteaAfijos(tope - lista.length, lista, rng)];
+    } else if (lista.length > tope) {
+      lista = lista.slice(0, tope);
+    }
+    const antes = Array.isArray(w.affixes) ? (w.affixes as any[]) : null;
+    if (antes !== null && antes.length === lista.length && antes.every((id, i) => id === lista[i])) return w;
+    if (antes === null && lista.length === 0) {
+      // Sin campo y con tabla en 0 (Común): se escribe el [] para que la
+      // invariante "todo recolector trae su lista" valga en todo el almacén.
+      changed = true;
+      return { ...w, affixes: [] };
+    }
+    changed = true;
+    return { ...w, affixes: lista };
+  });
+  if (!changed) return { items, changed: false };
+  return { items: salida, changed: true };
 }

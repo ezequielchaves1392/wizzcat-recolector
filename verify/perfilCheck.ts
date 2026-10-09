@@ -336,6 +336,9 @@ async function main() {
   //  y el día que el recorte cambie el banco seguiría en verde.
   {
     // Dos recolectores y dos compañeros, **uno de cada en activo y otro guardado**.
+    // **EL ÉPICO TRAE SUS 2 (F97).** La fixture trae 1 y la migración la completa
+    // al cargar: lo que se mide aquí es que la tarjeta publica los del item, y
+    // el número exacto es negocio de la tabla, que ya ata `forjaCheck`.
     const g = await boot(baseSave([
       collector('guardado', 9, {}),
       collector('puesto', 3, { level: 7, potential: 4, rarity: 'Épico', forgedBy: 'Alguien',
@@ -363,12 +366,13 @@ async function main() {
     );
 
     // Y lo que se lleva el item entero, que es lo que hace falta para la ficha completa:
-    // descripcion, afijos y quien lo forjo.
+    // descripcion, afijos y quien lo forjo. El primero es el de la fixture; el
+    // segundo lo pone la migración hasta los 2 del Épico.
     const r = t.recolectores[0];
     check(
       'perfil: el item publica su descripcion, sus afijos y quien lo forjo',
       typeof r.details === 'string' && r.details.length > 0 && /\d/.test(r.details)
-        && r.affixes.length === 1 && r.affixes[0] === 'aff_crit',
+        && r.affixes.length === 2 && r.affixes[0] === 'aff_crit',
       JSON.stringify({ d: r.details, f: r.forgedBy, a: r.affixes })
     );
 

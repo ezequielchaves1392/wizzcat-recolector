@@ -378,7 +378,7 @@ export function danoFinalDeTarjeta(
   if (!arma) return vacio;
   const nivel = Math.max(0, Math.floor(Number(arma.level) || 0));
   const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(arma.damage) || 0);
-  const multAfijos = 1 + efectoDeAfijos(arma.affixes, nivel).clickMult;
+  const multAfijos = 1 + efectoDeAfijos(arma.affixes, nivel, arma.tier).clickMult;
   let multCompaneros = 1;
   for (const c of t?.companeros ?? []) {
     if (c?.tipo === 'multiplier' && c?.equipado) multCompaneros += Number(c?.power) || 0;

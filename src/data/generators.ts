@@ -18,7 +18,7 @@
 
 import { TIER_SYSTEM } from './tiers';
 import { nombreDe } from './nombres';
-import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom, techoDeNivel } from './crafting';
+import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom, techoDeNivel, afijosParaRareza } from './crafting';
 import { baseAleatoriaSegura } from './bases';
 
 /**
@@ -60,22 +60,27 @@ export function generateCompanionByTier(
 export function generateCollectorByTier(
   tier: number,
   rng: () => number = Math.random
-): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number; potential: number; baseId?: string; maxLevel: number } {
+): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number; potential: number; affixes: string[]; baseId?: string; maxLevel: number } {
   const potential = rollPotentialFrom(rng);
   // F74 · Todo lo que nace trae base: sorteo ponderado de su tabla, daño con
   // base y techo con base. Sin tabla (tier más allá del contenido) sale neutro.
   const base = baseAleatoriaSegura(tier, 'recolector', rng);
   const power = danioDeRango(tier, potential, base);
+  // F97 · Todo lo que nace trae sus afijos: los de su rareza, sorteados. Es el
+  // mismo generador para tienda y cajas (R2), así que un T7 comprado y uno de
+  // caja traen la misma regla. La forja no pasa por aquí: hereda.
+  const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
   return {
     id: `collector_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
     name: nombreDe('collector', tier, rng),
     type: 'collector',
     details: `Recolección por click: +${power}`,
-    rarity: TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común',
+    rarity,
     tier,
     level: 0,
     damage: power,
     potential,
+    affixes: afijosParaRareza(rarity, rng),
     baseId: base?.id,
     maxLevel: techoDeNivel(potential, base?.posicion ?? 6)
   };

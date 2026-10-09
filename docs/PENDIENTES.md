@@ -1953,13 +1953,15 @@ más alto": los estás haciendo tú.*
 
 **Bugs (se elige uno y se reproduce antes de arreglar):**
 
-- [ ] **B41 · Resto del afijo 10 % de forja en el mock de tarjeta.**
+- [x] **B41 · Resto del afijo 10 % de forja en el mock de tarjeta.**
       > "los recolectores tienen un afijo 10% de forja es mucho no me gusta sacalo... porque aparte se pueden guardar ese afijo y equipar y desequipar a gusto"
       El afijo ya está fuera del catálogo justo por ese motivo (swap: equiparlo
       solo para tirar) y la migración lo quita de los saves viejos. Lo que queda
       es el mock de `previewTarjeta.ts`, que lo mete a mano. Si además se quiere
       quitar el +2 % por afijo del material, es decisión de balance con banco,
       no limpieza.
+      Hecho en v1.15.22 con el Lote 0 de F97: fuera del catálogo, fuera del
+      mock y fuera de los saves viejos; no queda ningún `aff_luck` en código.
 - [ ] **B42 · La barra de próximo prestigio queda al máximo.**
       > "La barra de progreso para proximo prestigio debe mostrar cuanto necesito para el que sigue ... actualmente queda al maximo"
       Un progreso clavado al 100 % es un número que miente (criterio 1): tiene
@@ -4188,4 +4190,5 @@ de núcleos va en el parche grande y es una sola vez.*
   grande atómico (~10 nodos/rama + 5+6+7+8) → Lote 3 las 20 restantes.
   Abierto: sacar `core_yield` o no (F70 sigue abierto); paridad por coste total,
   no por tarjetas (Fortuna nace con 1-2 de más).
+   **Lote 0 hecho en v1.15.22** (motor, sin tocar el árbol). Quedan Lotes 1, 2 y 3.
 

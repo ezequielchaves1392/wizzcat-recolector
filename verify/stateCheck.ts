@@ -129,7 +129,7 @@ async function main() {
       // y la migración de G4 lo puso en su sitio al recargar. Un fixture
       // incoherente no mide lo que dice medir —mide la contradicción del autor—,
       // así que aquí el número sale de `danioDeRango()`, como el de cualquier otro.
-      collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['a'], potential: 3, baseId: 'base_rec_t4_6' }),
+      collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['aff_bulwark', 'aff_sharp'], potential: 3, baseId: 'base_rec_t4_6' }),
       crate('c1', 6, 2),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T2', type: 'companion', details: 'x', rarity: 'Épico', tier: 2, sellPrice: 500 }
@@ -182,7 +182,7 @@ async function main() {
     check('guardar: el recolector conserva nivel, dano, afijos y potencial', (() => {
       const r = find(g2, 'r1');
       return r?.level === 5 && r?.damage === danioDeRango(4, 3)
-        && r?.potential === 3 && JSON.stringify(r?.affixes) === '["a"]';
+        && r?.potential === 3 && JSON.stringify(r?.affixes) === '["aff_bulwark","aff_sharp"]';
     })(), JSON.stringify(find(g2, 'r1')));
     check('guardar: el companero activo sigue activo', t.activeCompanions.join(',') === 'm1',
       t.activeCompanions.join(','));
@@ -2679,7 +2679,10 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
   {
     // Sin nivel no hay fila de nivel: una fila con +0 es ruido. Y sin afijos ni
     // bonos tampoco hay filas suyas: la lista de un item neutro es la de antes.
-    const g2 = await boot(baseSave([collector('r2', 2, 5)]));
+    // **EL NEUTRO ES COMÚN (F97).** Desde F97 todo Épico trae 2 afijos al cargar,
+    // así que el item neutro de esta prueba es Común, que son 0 por tabla —igual
+    // que un T2 de verdad, que es Común por `rarityByTier`.
+    const g2 = await boot(baseSave([collector('r2', 2, { rarity: 'Común' })]));
     const f2 = g2.getStatFilas('r2');
     check('filas: sin nivel no sale la fila del nivel',
       !f2.filas.some((f: any) => f.nombre.startsWith('Nivel')),

@@ -33,7 +33,7 @@ const TARJETA_DE_EJEMPLO = {
   recolectores: [
     // **SOLO EL EQUIPADO**, que es lo que se publica. El resto sigue en su almacén.
     { id: 'a', name: 'Espuela de Confín', tier: 9, level: 14, maxLevel: 29, potential: 5, rarity: 'Divino', equipado: true,
-      damage: 340, affixes: ['aff_crit', 'aff_luck'], forgedBy: 'CyberKnight', details: 'Daño base: +340' }
+      damage: 340, affixes: ['aff_crit', 'aff_focus'], forgedBy: 'CyberKnight', details: 'Daño base: +340' }
   ],
   companeros: [
     { id: 'p', name: 'Vigía', tier: 6, power: 42, rarity: 'Legendario', equipado: true, tipo: 'companion' },

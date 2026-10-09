@@ -29,7 +29,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, aporteDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado } from '../data/crafting';
 import { pctDe, PROB_SUBE_POTENCIAL, BONO_ETTER } from '../data/constants';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -346,18 +346,12 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   const piedrasNecesarias = ready && matTier
     ? game.previewPiedrasNecesarias?.(matTier, affixLuck) ?? null
     : null;
-  // F51 · CUÁNTOS AFIJOS APORTAN TUS MATERIALES. Lo único de la regla que depende de
-  // ti, y lo único que se puede decir **antes** de tirar el dado.
-  //
-  // **NO ES EL TECHO DEL ITEM, Y POR ESO NO SE ENSEÑA COMO TAL.** El techo de verdad
-  // es el suelo de la rareza **más** esto, y el suelo depende del potencial que
-  // todavía no ha salido del dado. Un banco lo detectó: la vista decía 2 y la regla
-  // daba 5, y solo por cómo estaba redactado —"hasta N"— parecía que no mentía.
-  //
-  // Por eso la línea de la pantalla dice **aportan** y no "lleva hasta": son los afijos
-  // que los padres ponen en el item, que es exactamente lo que premia buscar buenos
-  // materiales en vez de la primera pareja que se vea.
-  const aportan = ui.tipo === 'collector' ? aporteDeAfijos(elegidos) : null;
+  // F97 · LA CANTIDAD LA PONE LA RAREZA QUE SALGA, Y TODAVÍA NO HA SALIDO. Antes
+  // esta línea decía cuántos afijos "aportaban" los materiales, porque el linaje
+  // subía el techo. Ahora el número es fijo por rareza y la rareza depende del
+  // potencial que aún no ha salido del dado: no hay cantidad que enseñar sin
+  // mentir. Lo que sí se enseña —abajo— son los compartidos, que entran primero,
+  // y la explicación de la tabla, que es la única cifra que ya se sabe.
 
   // F60 · LO COMPARTIDO, Y POR QUÉ SE ENSEÑA ANTES DE TIRAR. La forja conserva
   // la rareza compartida 3 de cada 4 y los afijos compartidos entran primero:
@@ -534,17 +528,16 @@ function nivelDe(w: any): number {
           Y va **debajo del desglose de probabilidad** porque es el otro número que se
           está decidiendo en esta pantalla y porque tiene la misma forma: la cifra grande
           es el resultado y la línea de debajo es de dónde sale. Aquí la línea dice de
-          dónde sale el número de afijos.
+          dónde sale el número de afijos: de la tabla por rareza, que es lo único que
+          ya se sabe antes de tirar.
 
-          **EL NÚMERO SALE DE LA REGLA, NO DE AQUÍ.** AporteDeAfijos() es la mitad de
-          rangoDeAfijosForjados(): la media de los afijos de los dos padres, acotada por
-          el tope del juego. Es la misma cuenta, así que no puede enseñar una aportación
-          que la forja no vaya a respetar —y no dice "hasta" por lo que explica el
-          comentario del dato de arriba.
+          **EL NÚMERO SALE DE LA REGLA, NO DE AQUÍ.** Es explicacionDeAfijos(), la
+          misma pieza que usa la regla. Los compartidos van en su propia línea
+          debajo, con sus nombres.
         -->
-        ${aportan !== null && ready ? `
+        ${ready && ui.tipo === 'collector' ? `
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
-            ${aportan > 0 ? `Aportan ${aportan} afijos` : 'Tus materiales no traen afijos'} · ${explicacionDeAfijos()}
+            Lleva los afijos de su rareza · ${explicacionDeAfijos()}
           </p>
         ` : ''}
         ${rarezaCompartida && ready ? `

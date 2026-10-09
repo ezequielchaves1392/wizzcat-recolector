@@ -195,7 +195,7 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
   },
   stabilityNano: {
     what: 'Sube la rareza del recolector forjado un escalón, la mitad de las veces.',
-    detail: 'Solo sirve en la forja de recolectores: ahí decide la rareza del resultado —y la rareza es la que pone el suelo de afijos—, y en compañeros no hace nada porque su rareza la pone el tier. Sube hasta Divino. Sale de las cajas desde la T3.'
+    detail: 'Solo sirve en la forja de recolectores: ahí decide la rareza del resultado —y la rareza es la que pone el número de afijos—, y en compañeros no hace nada porque su rareza la pone el tier. Sube hasta Divino. Sale de las cajas desde la T3.'
   },
   refiningEther: {
     what: `Añade ${pctDe(BONO_ETTER)} puntos a la probabilidad de que la fusión suba el potencial una estrella.`,

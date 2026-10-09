@@ -28,12 +28,12 @@
 //
 //    · Solo se fusionan **exactamente 2** del **mismo tier**.
 //    · El potencial sale de la **media** de los dos.
-//    · Los afijos los deciden **los padres**, y ahora también en cantidad.
+//    · Los afijos los decide **la rareza en cantidad y los padres en cuáles**.
 //
-//  La última es nueva: `rangoDeAfijosForjados()` le da al item un suelo (la
-//  rareza) y un techo (lo que arrastran los dos materiales) y tira el dado
-//  entre los dos. Con un solo número fijo, los dos materiales solo servían para
-//  decidir *cuáles* afijos, y se podían haber gastado en cualquier otra cosa.
+//  La última es F97: `rangoDeAfijosForjados()` da el número fijo de la tabla
+//  para la rareza (si lleva 2 es Épico, por construcción) y `pickAffixes()`
+//  reparte con los compartidos primero. Ya no hay dado de cantidad: con uno,
+//  un Mítico saldría a veces con 2 y "lleva 4" mentiría.
 //
 //  Y hay un motivo para que este banco mida la regla y no el resultado: el
 //  resultado lleva un `Math.random()` dentro —el éxito, el potencial y los
@@ -69,8 +69,10 @@ import {
   AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION,
   valorDeUnCristal, cristalesDeConsuelo, rarezaFusionada, afijosCompartidos,
   PROB_CONSERVA_RAREZA, subirRareza, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION,
-  rarezaCalculadaDeForja, potencialFusionado
+  rarezaCalculadaDeForja, potencialFusionado, afijosParaRareza, migraAfijosPorRareza,
+  efectoDeAfijos, potenciaDeAfijoPorTier
 } from '../src/data/crafting';
+import { generateCollectorByTier } from '../src/data/generators';
 import { basePorId } from '../src/data/bases';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
@@ -242,7 +244,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  //  4. LOS AFIJOS: SUELO EL DE LA RAREZA, TECHO EL DEL LINAJE
+  //  4. LOS AFIJOS: LA RAREZA PONE EL NÚMERO, FIJO
   // -------------------------------------------------------------------------
   {
     // **CADA MATERIAL CON SU ID.** Con los dos mirando al mismo id, la forja
@@ -252,51 +254,44 @@ async function main() {
     // detrás de otro con el mismo id parece correcto y no lo es.
     const con = (n: number, i = 0) => collector(`p${i}`, 3, { affixes: TODOS_LOS_AFIJOS.slice(0, n) });
 
-    // El suelo no se negocia: es la regla de "más rareza, más afijos".
+    // El número es el de la tabla y no lo mueve ni el linaje más pobre.
     const pobre = con(0);
     const lineaLlena = con(AFIX_MAX);
-    check('forja: el suelo es el de la rareza y no lo baja ni el linaje más pobre',
-      Object.keys(AFIX_MIN_POR_RARIDAD).every(r =>
-        rangoDeAfijosForjados([pobre, pobre], r).minimo === AFIX_MIN_POR_RARIDAD[r]),
+    check('forja: el número es el de la tabla, con padres pobres o ricos',
+      Object.keys(AFIX_MIN_POR_RARIDAD).every(r => {
+        const rango = rangoDeAfijosForjados([pobre, pobre], r);
+        const rico = rangoDeAfijosForjados([lineaLlena, lineaLlena], r);
+        return rango.minimo === AFIX_MIN_POR_RARIDAD[r]
+          && rango.maximo === AFIX_MIN_POR_RARIDAD[r]
+          && rico.minimo === AFIX_MIN_POR_RARIDAD[r]
+          && rico.maximo === AFIX_MIN_POR_RARIDAD[r];
+      }),
       JSON.stringify(Object.keys(AFIX_MIN_POR_RARIDAD).map(r =>
         `${r}:${rangoDeAfijosForjados([pobre, pobre], r).minimo}`)));
 
-    // El techo SÍ depende de los padres, y esa es la parte nueva.
+    // **LA NANO SIGUE SIN TOCAR ESTE RANGO: SU EFECTO ES LA RAREZA.** La
+    // nanopartícula sube la rareza y la rareza trae su número desde la tabla;
+    // sumarlo aquí también sería pagar dos veces por lo mismo. La comprobación
+    // es que el rango no depende de los materiales: con pobres o con ricos da
+    // lo mismo, porque el parámetro ya ni mueve la cuenta.
     const sinLinea = rangoDeAfijosForjados([pobre, pobre], 'Raro');
-    const conLinea = rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro');
-    check('forja: los padres suben el TECHO, que antes no existía',
-      conLinea.maximo > sinLinea.maximo,
-      `sin linaje=${sinLinea.maximo} con linaje=${conLinea.maximo}`);
-    check('forja: y el techo nunca pasa del tope del juego',
-      conLinea.maximo === AFIX_MAX,
-      `techo con dos materiales perfectos=${conLinea.maximo} tope=${AFIX_MAX}`);
+    check('forja: ni los padres ni la nano mueven el número de un Raro',
+      sinLinea.minimo === AFIX_MIN_POR_RARIDAD['Raro']
+        && sinLinea.maximo === AFIX_MIN_POR_RARIDAD['Raro'],
+      `suelo=${sinLinea.minimo} techo=${sinLinea.maximo}`);
 
-    // Y es la MEDIA, no el mayor: con eso, un solo material bueno bastaría y el
-    // otro sería decorativo, que es justo lo que la forja no debe ser.
-    const unoBueno = rangoDeAfijosForjados([lineaLlena, pobre], 'Raro');
-    const medioBueno = rangoDeAfijosForjados([lineaLlena, collector('q', 3, { affixes: TODOS_LOS_AFIJOS.slice(0, 3) })], 'Raro');
-    check('forja: el techo es la MEDIA de los dos, no el mejor',
-      unoBueno.maximo === sinLinea.maximo + 3 && medioBueno.maximo === sinLinea.maximo + 4,
-      `uno bueno=${unoBueno.maximo} · 6 y 0 media 3 → ${unoBueno.maximo}, ` +
-      `6 y 3 media 4 → ${medioBueno.maximo}, base=${sinLinea.maximo}`);
-
-    // **LA NANO YA NO TOCA ESTE RANGO: SU EFECTO ES LA RAREZA.** Antes sumaba uno
-    // al suelo y al techo, y eso se pagaba dos veces —subir la rareza ya sube el
-    // suelo desde la tabla—. Ahora la comprobación es la contraria: el mismo rango
-    // con el parámetro puesto y sin él es idéntico, porque el parámetro ya ni
-    // existe en la firma. Si volviera a colarse por aquí, esto lo canta.
-    const sinNano = rangoDeAfijosForjados([pobre, pobre], 'Raro');
-    check('forja: la nanopartícula ya no toca el suelo ni el techo de afijos',
-      sinNano.minimo === AFIX_MIN_POR_RARIDAD['Raro']
-        && rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro').maximo === conLinea.maximo,
-      `suelo=${sinNano.minimo} techo=${rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Raro').maximo}`);
-
-    // Un Divino tiene el suelo pegado al tope: el dado no tira nada y sale
-    // completo. Es lo que hace que "más rareza, más afijos" tenga final.
+    // Un Divino tiene el número pegado al tope: sale siempre completo. Es lo
+    // que hace que "más rareza, más afijos" tenga final.
     const divino = rangoDeAfijosForjados([pobre, pobre], 'Divino');
-    check('forja: y un Divino sale siempre completo, porque su suelo ES el tope',
+    check('forja: y un Divino sale siempre completo, porque su número ES el tope',
       divino.minimo === divino.maximo && divino.maximo === AFIX_MAX,
       `min=${divino.minimo} max=${divino.maximo}`);
+
+    // Y un Común sale siempre pelado, aunque sus padres fueran buenos.
+    const comun = rangoDeAfijosForjados([lineaLlena, lineaLlena], 'Común');
+    check('forja: y un Común no lleva ninguno aunque sus padres trajeran',
+      comun.minimo === 0 && comun.maximo === 0,
+      `min=${comun.minimo} max=${comun.maximo}`);
   }
 
   // -------------------------------------------------------------------------
@@ -348,16 +343,16 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  //  5b · EL TECHO SE ALCANZA Y EL SUELO SE CUMPLE, CON DADO CONTROLADO
+  //  5b · EL NÚMERO ES EL DE LA RAREZA QUE SALGA, CON EL DADO QUE SEA
   // -------------------------------------------------------------------------
-  //  La sección anterior comprueba que nada se sale del rango. Esta comprueba lo
-  //  contrario, que es lo que hace que el rango signifique algo: **que las dos
-  //  puntas son alcanzables**. Si el techo fuera inalcanzable, la sección
-  //  anterior pasaría igual y esta regla nueva sería decorativa.
+  //  La sección anterior comprueba que nada se sale del número que le toca.
+  //  Esta comprueba que el número es el de la tabla **para la rareza que haya
+  //  salido**, con el dado arriba o abajo: sin dado de cantidad, los extremos
+  //  no pueden dar cantidades distintas para la misma rareza.
   //
   //  **UN SOLO `rng` NO SIRVE, Y POR QUÉ.** El primer uso del dado es el acierto
   //  y va contra una probabilidad que llega a 0.95, así que con `0.999` la forja
-  //  falla y no hay item del que mirar la cantidad. Hace falta una **secuencia**:
+  //  falla y no hay item del que mirar nada. Hace falta una **secuencia**:
   //  acierto seguro y, a partir de ahí, el valor que interese para el reparto.
   {
     const linea = (n: number, i: number) => collector(`p${i}`, 3, { affixes: TODOS_LOS_AFIJOS.slice(0, n) });
@@ -371,23 +366,104 @@ async function main() {
 
     const abajo = conRng(secuencia(0.001, 0));
     const arriba = conRng(secuencia(0.001, 0.999));
-    const { minimo, maximo } = rangoDeAfijosForjados(
-      [linea(AFIX_MAX, 1), linea(AFIX_MAX, 2)], abajo.collector?.rarity ?? 'Raro'
-    );
+    const tablaAbajo = AFIX_MIN_POR_RARIDAD[abajo.collector?.rarity ?? ''] ?? -1;
+    const tablaArriba = AFIX_MIN_POR_RARIDAD[arriba.collector?.rarity ?? ''] ?? -1;
 
     check('forja: el dado es el primero que se tira, así que el acierto va primero',
       abajo.success === true && arriba.success === true,
       `abajo=${abajo.error ?? 'ok'} arriba=${arriba.error ?? 'ok'}`);
-    check('forja: con el dado al mínimo sale el suelo, ni uno menos',
-      (abajo.collector?.affixes.length ?? -1) === minimo,
-      `${abajo.collector?.affixes.length} afijos, suelo=${minimo}`);
-    check('forja: y con el dado al máximo sale el techo, ni uno más',
-      (arriba.collector?.affixes.length ?? -1) === maximo,
-      `${arriba.collector?.affixes.length} afijos, techo=${maximo}`);
-    check('forja: los dos extremos son distintos, si no el dado no hace nada',
-      minimo !== maximo, `suelo=${minimo} techo=${maximo}`);
-    check('forja: y el techo es alcanzable de verdad, no un número de adorno',
-      maximo > minimo, `suelo=${minimo} techo=${maximo}`);
+    check('forja: con el dado abajo, la cantidad es la de la rareza que salió',
+      (abajo.collector?.affixes.length ?? -1) === tablaAbajo,
+      `${abajo.collector?.affixes.length} afijos, ${abajo.collector?.rarity}=${tablaAbajo}`);
+    check('forja: y con el dado arriba, la de la suya',
+      (arriba.collector?.affixes.length ?? -1) === tablaArriba,
+      `${arriba.collector?.affixes.length} afijos, ${arriba.collector?.rarity}=${tablaArriba}`);
+    // Y lo compartido entra el primero aunque el número sea 1: forzar es elegir.
+    const padre = (id: string) => collector(id, 3, {
+      potential: 3, rarity: 'Raro', damage: danioDeRango(3, 3),
+      affixes: ['aff_bulwark', 'aff_sharp']
+    });
+    const forzado = conSec(0.001, 0, () => attemptForge([padre('s1'), padre('s2')], 3, 'X', opts()));
+    check('forja: dos Raros que comparten Baluarte lo traen, porque entra primero',
+      forzado.success === true && (forzado.collector?.affixes ?? []).join(',') === 'aff_bulwark',
+      `rarity=${forzado.collector?.rarity} afijos=${(forzado.collector?.affixes ?? []).join(',')}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  5c · F97: UNIVERSALES, FIJOS POR RAREZA Y CON POTENCIA POR TIER
+  // -------------------------------------------------------------------------
+  //  Tres reglas nuevas y las tres se miden aquí porque las tres viven en
+  //  `data/crafting`: la cantidad fija por rareza en la generación, la magnitud
+  //  por tier en el efecto y la migración de lo viejo en la carga.
+  {
+    // La cantidad es la de la tabla, salga de donde salga el sorteo.
+    for (const [rareza, n] of Object.entries(AFIX_MIN_POR_RARIDAD)) {
+      const sorteo = afijosParaRareza(rareza, () => 0.5);
+      check(`f97: un ${rareza} sorteado lleva ${n} afijos`,
+        sorteo.length === n && new Set(sorteo).size === sorteo.length
+          && sorteo.every(id => TODOS_LOS_AFIJOS.includes(id)),
+        `${rareza}=${sorteo.length} esperados=${n}`);
+    }
+    check('f97: una rareza que no existe no sortea nada, no un número roto',
+      afijosParaRareza('Rarisima', () => 0.5).length === 0, 'sorteó algo');
+
+    // El generador —tienda y cajas— trae la misma regla, porque es el mismo.
+    const t1 = generateCollectorByTier(1, () => 0.5);
+    const t5 = generateCollectorByTier(5, () => 0.5);
+    const t10 = generateCollectorByTier(10, () => 0.5);
+    check('f97: el T1 (Común) nace sin afijos',
+      t1.affixes.length === 0, `t1=${t1.affixes.length}`);
+    check('f97: el T5 (Épico) nace con 2',
+      t5.affixes.length === 2, `t5=${t5.affixes.length}`);
+    check('f97: el T10 (Divino) nace con 6',
+      t10.affixes.length === 6, `t10=${t10.affixes.length}`);
+
+    // La magnitud sube con el tier y el crítico no se mueve.
+    const t3 = efectoDeAfijos(['aff_bulwark', 'aff_focus'], 0, 3).clickMult;
+    const t5b = efectoDeAfijos(['aff_bulwark', 'aff_focus'], 0, 5).clickMult;
+    const t10b = efectoDeAfijos(['aff_bulwark', 'aff_focus'], 0, 10).clickMult;
+    check('f97: el mismo afijo pega más en tier alto',
+      t3 < t5b && t5b < t10b, `T3=${t3} T5=${t5b} T10=${t10b}`);
+    check('f97: y en T5 rinde lo nominal, ni más ni menos',
+      t5b === 0.35, `T5=${t5b}`);
+    check('f97: el crítico no escala por tier, que es probabilidad y no stat',
+      efectoDeAfijos(['aff_focus'], 0, 3).critChance === efectoDeAfijos(['aff_focus'], 0, 10).critChance
+        && efectoDeAfijos(['aff_focus'], 0, 10).critChance === 0.14,
+      `T3=${efectoDeAfijos(['aff_focus'], 0, 3).critChance}`);
+    check('f97: sin tier el factor es 1, la cuenta de siempre',
+      efectoDeAfijos(['aff_bulwark'], 0).clickMult === 0.35
+        && potenciaDeAfijoPorTier(5) === 1,
+      `sinTier=${efectoDeAfijos(['aff_bulwark'], 0).clickMult}`);
+
+    // La migración: asigna, recorta, limpia y no toca dos veces.
+    const viejo = { id: 'viejo', type: 'collector', name: 'V', tier: 5, rarity: 'Épico', level: 0, damage: danioDeRango(5, 3), potential: 3 };
+    const m1 = migraAfijosPorRareza([viejo], () => 0.5);
+    check('f97: un Épico viejo sin campo recibe sus 2',
+      m1.changed === true && m1.items[0].affixes.length === 2
+        && m1.items[0].affixes.every((id: string) => TODOS_LOS_AFIJOS.includes(id)),
+      `afijos=${JSON.stringify(m1.items[0].affixes)}`);
+    const m2 = migraAfijosPorRareza(m1.items, () => 0.5);
+    check('f97: y a la segunda pasada no se toca nada',
+      m2.changed === false, `changed=${m2.changed}`);
+    const forjadoComun = { id: 'fc', type: 'collector', name: 'C', tier: 3, rarity: 'Común', level: 0, damage: danioDeRango(3, 3), potential: 3, affixes: ['aff_bulwark', 'aff_inventado'] };
+    const m3 = migraAfijosPorRareza([forjadoComun], () => 0.5);
+    check('f97: un Común forjado con afijos de linaje los pierde, que son 0',
+      m3.items[0].affixes.length === 0, `afijos=${JSON.stringify(m3.items[0].affixes)}`);
+    const conSuerte = { id: 'cs', type: 'collector', name: 'S', tier: 5, rarity: 'Épico', level: 0, damage: danioDeRango(5, 3), potential: 3, affixes: ['aff_luck', 'aff_bulwark'] };
+    const m4 = migraAfijosPorRareza([conSuerte], () => 0.5);
+    check('f97: aff_luck se va de los items guardados sin dejar hueco',
+      !m4.items[0].affixes.includes('aff_luck') && m4.items[0].affixes.length === 2,
+      `afijos=${JSON.stringify(m4.items[0].affixes)}`);
+
+    // Y sobrevive a la recarga con los mismos ids, no con otros.
+    const gMig = await boot(baseSave([viejo]));
+    const trasCarga = wh(gMig).find((w: any) => w.id === 'viejo');
+    const gRe = await reload();
+    const trasRecarga = wh(gRe).find((w: any) => w.id === 'viejo');
+    check('f97: lo migrado se guarda y recarga con los mismos afijos',
+      Array.isArray(trasCarga?.affixes) && trasCarga.affixes.length === 2
+        && JSON.stringify(trasCarga.affixes) === JSON.stringify(trasRecarga?.affixes),
+      `carga=${JSON.stringify(trasCarga?.affixes)} recarga=${JSON.stringify(trasRecarga?.affixes)}`);
   }
 
   // -------------------------------------------------------------------------
@@ -606,11 +682,17 @@ async function main() {
       nanoTras?.stackCount === 3, `stack=${nanoTras?.stackCount}`);
 
     // --- La misma probabilidad que el recolector -----------------------------------
+    // **LOS PADRES SON COMUNES A PROPÓSITO (F97).** La suerte de la tirada suma
+    // +2 % por afijo de los materiales, y desde F97 todo Épico trae 2: con los
+    // padres de antes (Épicos sin campo) la migración los rellenaba y el
+    // recolector salía con +0,08 sobre el compañero. Lo que se mide aquí es que
+    // la fórmula es la misma, así que los padres tienen que ser neutros —cero
+    // afijos—, que es la doctrina de RAREZA_NEUTRA de `kit.ts`.
     const gc = await boot(baseSave([
       companion('y1', 3, { potential: 5 }), companion('y2', 3, { potential: 5 }),
       ficha('y1', 3, { potential: 5 }), ficha('y2', 3, { potential: 5 }),
-      collector('r1', 3, { potential: 5, damage: 100 }),
-      collector('r2', 3, { potential: 5, damage: 100 }),
+      collector('r1', 3, { potential: 5, damage: 100, rarity: 'Común' }),
+      collector('r2', 3, { potential: 5, damage: 100, rarity: 'Común' }),
       // **Nueve piedras y cinco nanopartículas, y no cinco y cinco.** Esta partida hace
       // las DOS fusiones: la de compañero y la de recolector. Con cinco, la
       // primera se las gastaba y la segunda se comía un "solo tienes 2" — y una

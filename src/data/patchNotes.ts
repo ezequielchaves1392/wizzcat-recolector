@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.22',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Los afijos salen en todos lados y pesan según el tier',
+    lineas: [
+      'Los recolectores de tienda y de caja traen afijos como los forjados: cada rareza lleva siempre los suyos.',
+      'El mismo afijo pega más en un tier alto, así que un tier alto con buenos afijos vale doble.',
+      'El afijo de suerte de forja se fue del juego: prometía una probabilidad que nunca daba.',
+      'Los Comunes forjados pierden sus afijos, que ahora son cero por regla.'
+    ]
+  },
+  {
     version: '1.15.21',
     fecha: '9 de octubre de 2026',
     titulo: 'La Wiki busca y el juego enseña su ritmo',
