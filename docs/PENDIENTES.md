@@ -1727,6 +1727,10 @@ feature que falta):**
       tiene item, y las cuatro cosas de arriba tienen que salir vacías sin dejar
       separadores sueltos. Lo dice el mismo criterio que `tierDeFila()` en el resumen
       de apertura.
+      **Para después (9 de octubre, con captura): que salga la rareza y el icono vaya
+      en su color, como en el almacén.** La fila ya trae icono, estrellas, tier y tags
+      de afijos, pero no la rareza en texto; y el icono lleva `rarityClass` tapado por
+      el fondo de acento. El dato viaja (`it.rarity`), solo falta pintarlo.
 - [ ] **F75 · Los expansores viejos se convierten en Inicial.**
       > "Converti las antiguas t1 , t2 , t3 y t4 que posean los usuarios a iniciales."
       **Cuidado, que "convertir" tiene dos lecturas y la mala rompe partidas:**
