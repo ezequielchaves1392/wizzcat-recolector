@@ -87,7 +87,13 @@ function partidaConAutoClick(nivel = 3) {
     totalNanitesProduced: 0,
     equippedCollectorId: 'w_col',
     bonuses: { autoClick: nivel },
-    nodeLevels: { auto_clicker: nivel }
+    nodeLevels: { auto_clicker: nivel },
+    // **CON `first_click` YA DESBLOQUEADO (F97).** Da +2 % al extraer 100
+    // nanitas, y tres ticks de autos lo cruzan: sin pre-desbloquearlo, los
+    // eventos de después del desbloqueo llevarían un +2 % que los de antes no,
+    // y ninguna comparación "todos iguales" valdría. Es el mismo patrón que el
+    // bloque de crítico de `senalCheck`.
+    unlockedAchievements: ['first_click']
   });
 }
 
@@ -271,6 +277,45 @@ async function main() {
     check('B25: el companero de tipo click es tasa por segundo, sin eventos ni dado',
       tasa > 0 && eventos === 0,
       `+${tasa}/s de tasa, ${eventos} eventos de click (R10: cobrar sin mirar no genera señales)`);
+  }
+
+  // ---- 6. Y LOS AUTOS NO USAN LAS TARJETAS x2/x3, QUE SON DEL JUGADOR (F97) ----
+  //
+  // **LA MÁQUINA NO LEE TU TARJETA.** El click del jugador cobra x2/x3 y el
+  // automático no: con buff, decenas de autos pegando el triple eran presencia
+  // sin juego. El crítico sí vale para los dos (B25): es del arma, no de la
+  // tarjeta. Lo que se comprueba son las dos mitades a la vez, porque una sin
+  // la otra es medio arreglo: autos sin buff Y jugador con buff.
+  {
+    const cap = capturarIntervalos();
+    const g: any = await boot(partidaConAutoClick());
+    const tick = tickDe(cap.lista);
+    // **EL DANO PURO SE MIDE SIN BUFF.** `getClickDamage()` lleva el x2/x3
+    // puesto (es lo que enseña el panel), así que con la tarjeta ya encendida
+    // mediría el doble y la comparación diría que el automático paga la mitad
+    // por un error de la prueba, no del motor. Se mide antes de encenderla.
+    const d = g.getClickDamage?.() ?? 0;
+    // La tarjeta se enciende como en el juego: con el buff vigente de verdad,
+    // no con un flag que el motor no lea.
+    g.updateState({ buffs: { ...(g.getState().buffs as any), clickX2ExpiresAt: Date.now() + 30_000 } });
+    let eventos: number[] = [];
+    let jugador = 0;
+    await conRoll(0.999, async () => {
+      g.drainClickEvents?.();
+      g.drainClickEvents?.();
+      tick(); tick(); tick();
+      eventos = (g.drainClickEvents?.() ?? []).map((e: any) => e.cantidad);
+      jugador = (g.click() as any).cantidad;
+    });
+    cap.restaurar();
+    await g.cleanup?.();
+
+    check('F97: con x2 puesta, el automatico paga lo mismo que sin buff',
+      d > 0 && eventos.length > 0 && eventos.every((v: number) => v === d),
+      `dano=${d}, eventos=[${eventos.join(', ')}]`);
+    check('F97: y el click del jugador SI cobra el x2 (el buff no se ha roto)',
+      jugador === d * 2 || jugador === d * 2 + 1,
+      `jugador=${jugador} dano=${d} (el +1 es el suelo de cada lado)`);
   }
 
   resumen('B25: los clics automáticos del árbol también critican');

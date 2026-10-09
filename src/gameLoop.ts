@@ -4428,8 +4428,13 @@ const RITMO_GUARDADO_MS = 60_000;
           // **LA PROBABILIDAD ES LA DEL RECOLECTOR EQUIPADO**, igual que en el click del
           // jugador, porque es el mismo click: los afijos que dicen "+X% de crítico"
           // tienen que aplicar a los dos o el afijo miente sobre lo que afecta.
+          // **LOS AUTOS NO USAN LAS TARJETAS x2/x3 (F97).** Esas tarjetas son "tu
+          // dedo", no la máquina: el click del jugador las cobra y el automático
+          // no. Con buff, 37 autos por segundo pegando el triple era presencia
+          // sin juego —la máquina sustituía al jugador en vez de ayudarlo—. El
+          // crítico sí vale para los dos (B25): es del arma, no de la tarjeta.
           const critico = Math.random() < equippedAffixEffect().critChance;
-          const dmg = calculateClickDamage() * calculateMultiplier()
+          const dmg = calculateClickDamage()
             * (critico ? MULTIPLICADOR_CRITICO : 1);
           state.nanites += dmg;
           state.totalNanitesProduced += dmg;
@@ -6816,7 +6821,10 @@ const RITMO_GUARDADO_MS = 60_000;
       };
     },
 
-    forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0, eterUsed = 0) => {
+    // B41 · `opciones` es la misma convención de F49: la forja en serie forja con
+    // `sinGuardar` y `sinRepintar`, y el guardado y el repintado van una vez al
+    // final. De a una se llama igual que siempre.
+    forgeCollector: (materialIds: string[], stonesUsed = 0, nanoUsed = 0, eterUsed = 0, opciones?: { sinGuardar?: boolean; sinRepintar?: boolean }) => {
       handleUserActivity();
 
       // Las tres comprobaciones y el cobro salen de las cuentas internas: las
@@ -6846,8 +6854,8 @@ const RITMO_GUARDADO_MS = 60_000;
         state.forgedCount += 1;
         recalculatePassiveIncome();
         checkAchievements();
-        onUpdate(state, isAfk);
-        saveToFirebase();
+        if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+        if (!opciones?.sinGuardar) saveToFirebase();
         return {
           success: true,
           collector: w,
@@ -6887,8 +6895,8 @@ const RITMO_GUARDADO_MS = 60_000;
       // poco.
       const consuelo = intentos * valorDeUnCristal(mat.tier!);
       if (consuelo > 0) grantCrystals(consuelo);
-      onUpdate(state, isAfk);
-      saveToFirebase();
+      if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+      if (!opciones?.sinGuardar) saveToFirebase();
       return {
         success: false,
         crystals: consuelo,

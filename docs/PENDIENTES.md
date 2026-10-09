@@ -4154,6 +4154,8 @@ por codigo es que el numero que promete el modal sale del motor y es el que se c
 
 - [x] **B40 · Modo pruebas que no paga la tabla.** Paso 1 (jugador, sin codigo): 30 min de juego normal contra 30 min de testeo en la consola de Firebase + tamano real del doc `users/{uid}`; si el testeo multiplica x10, hipotesis confirmada. Paso 2 (codigo): flag `cyberforge_modo_pruebas` en `localStorage` que publica la partida igual pero se salta ranking + tarjeta; apagado por defecto, sin UI, con banco en `guardadoCheck`. Hecho en v1.15.20: `guardadoCheck` 40/40 en solitario (+3). Full suite pendiente del otro agente: su refactor F97 de afijos rompe `tsc`, el bundle de `verify` (3 MISSING_EXPORT de `crafting.ts`) y un check de `perfilCheck` (afijos del item forjado, 41/42); nada de eso toca este cambio.
 
+- [ ] **B41 · La forja en serie guardaba una vez por pareja.** El pico de la mañana (407 escrituras en una hora, con el pico justo al forjar compañeros): `autoForge()` llamaba a `forgeCollector()/forgeCompanion()` de a una y cada una guardaba y repintaba, más un guardado final. N parejas = N+1 guardados = hasta 2N+2 escrituras, porque cada guardado escribe partida + ranking. Causa raíz: el comentario decía "se guarda una vez al final" pero el código no lo hacía; la mejora automática (F49) ya resolvió lo mismo con `sinGuardar/sinRepintar` y la serie no lo usaba.
+
 ### Lote J · ENCARGO DEL 9 DE OCTUBRE (cuatro ramas de pasivas)
 
 *Lo pedido, con tus palabras. **Diseño cerrado en conversación el 9 de octubre**: no
@@ -4190,5 +4192,6 @@ de núcleos va en el parche grande y es una sola vez.*
   grande atómico (~10 nodos/rama + 5+6+7+8) → Lote 3 las 20 restantes.
   Abierto: sacar `core_yield` o no (F70 sigue abierto); paridad por coste total,
   no por tarjetas (Fortuna nace con 1-2 de más).
-   **Lote 0 hecho en v1.15.22** (motor, sin tocar el árbol). Quedan Lotes 1, 2 y 3.
+   **Lote 0 hecho en v1.15.22** (motor, sin tocar el árbol). **Lote 1 hecho en
+   v1.15.23** (autos domados). Quedan Lotes 2 y 3.
 

@@ -217,11 +217,11 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { clickMult: 0.18, passiveMult: 0.18 }, x: 4, y: 1
   },
   {
-    id: 'full_automation', name: 'Automatización Total', description: '+4 clics automáticos por segundo.',
+    id: 'full_automation', name: 'Automatización Total', description: '+1 clic automático por segundo.',
     lore: 'Que la base juegue sola. Se ha arreglado todo lo que hacia falta para dejarlo.',
     icon: 'bolt', category: 'automatizacion', tier: 4, requires: ['auto_clicker2', 'multiplier_amp'],
-    baseCost: 180, costGrowth: 1.9, maxLevel: 5,
-    bonus: { autoClick: 4 }, x: 4, y: 0
+    baseCost: 180, costGrowth: 1.9, maxLevel: 3,
+    bonus: { autoClick: 1 }, x: 4, y: 0
   },
   {
     id: 'void_hoard', name: 'Almacén del Vacío', description: '+8 ranuras de almacén por nivel.',

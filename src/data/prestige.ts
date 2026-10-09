@@ -129,12 +129,18 @@ export function aggregateBonuses(nodeLevels: Record<string, number>): PassiveBon
     if (!level) continue;
     const node: TreeNode | undefined = TREE_BY_ID[id];
     if (!node) continue;
+    // **EL NIVEL EFECTIVO TOPA EN EL MÁXIMO (F97).** Si un techo baja —`full_automation`
+    // pasó de 5 a 3—, quien tenga niveles de más los conserva guardados pero no
+    // cobran: es el mismo trato que `offline_ops` y `blueprint`, y evita que una
+    // partida vieja rinda por encima del techo que ve en la hoja. Como
+    // `coresGastadosEnArbol()`, que ya recortaba por el mismo motivo.
+    const efectivo = Math.min(level, node.maxLevel);
     for (const [key, value] of Object.entries(node.bonus)) {
       const k = key as keyof PassiveBonuses;
       if (typeof value !== 'number') continue;
       // `afkHours` y `offlineClicks` son absolutos, el resto son fracciones:
       // sumar funciona igual en ambos casos.
-      (out as unknown as Record<string, number>)[k] += value * level;
+      (out as unknown as Record<string, number>)[k] += value * efectivo;
     }
   }
   return out;

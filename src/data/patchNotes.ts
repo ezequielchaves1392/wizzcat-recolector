@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.23',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Los clics automáticos rinden menos y no usan tus tarjetas',
+    lineas: [
+      'La Automatización Total da un clic por segundo en vez de cuatro, y llega a tres niveles en vez de cinco.',
+      'Los clics automáticos ya no usan tus tarjetas de clics: esas son para tu dedo, la máquina cobra lo suyo.',
+      'Si tenías niveles de más en ese nodo, se quedan guardados pero cuentan hasta el techo nuevo.'
+    ]
+  },
+  {
     version: '1.15.22',
     fecha: '9 de octubre de 2026',
     titulo: 'Los afijos salen en todos lados y pesan según el tier',

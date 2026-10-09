@@ -198,6 +198,22 @@ async function main() {
       /Ahora \(/.test(sinNivel) ? 'SALTA: la fila sale con nivel 0' : 'ok');
   }
 
+  // -------------------------------------------------------------------------
+  //  EL NIVEL EFECTIVO TOPA EN EL MÁXIMO (F97)
+  // -------------------------------------------------------------------------
+  //  Si un techo baja —`full_automation` pasó de 5 niveles a 3—, quien tenga
+  //  niveles de más los conserva guardados pero no cobran: una partida vieja no
+  //  puede rendir por encima del techo que la hoja enseña. Lo que se comprueba
+  //  es el agregador, que es el único que convierte niveles en bonus.
+  {
+    const capado: any = aggregateBonuses({ full_automation: 5 });
+    check('arbol: un nivel por encima del maximo cobra como el maximo, no mas',
+      capado.autoClick === 3, `autoClick=${capado.autoClick} (techo=3)`);
+    const dentro: any = aggregateBonuses({ full_automation: 2 });
+    check('arbol: y por debajo del maximo cada nivel cuenta',
+      dentro.autoClick === 2, `autoClick=${dentro.autoClick}`);
+  }
+
   resumen('lore del arbol y su hoja');
 }
 
