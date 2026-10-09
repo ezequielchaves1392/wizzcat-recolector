@@ -19,7 +19,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, AFFIX_BY_ID, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, danoFinalDeRecolector } from './data/crafting';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -3041,24 +3041,14 @@ function sePuedeGuardar(): boolean {
    * aquí y el que tira el dado es `click()`.
    */
   function equippedAffixEffect(): { clickMult: number; passiveMult: number; critChance: number } {
-    const out = { clickMult: 0, passiveMult: 0, critChance: 0 };
-    if (!state.equippedCollectorId) return out;
+    const nada = { clickMult: 0, passiveMult: 0, critChance: 0 };
+    if (!state.equippedCollectorId) return nada;
     const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
-    if (!item?.affixes?.length) return out;
-    const nivel = item.level || 0;
-    for (const affixId of item.affixes) {
-      const affix = AFFIX_BY_ID[affixId];
-      if (!affix) continue;
-      out.clickMult += affix.effect.clickMult || 0;
-      out.passiveMult += affix.effect.passiveMult || 0;
-      out.critChance += affix.effect.critChance || 0;
-      // Los que dependen del nivel suman un PORCENTAJE por nivel, no un número
-      // plano: es lo que hace que subir de nivel siga valiendo sin que un
-      // "+8 por nivel" turned un T1 en un T10. Ver el comentario de AFFIXES.
-      out.clickMult += (affix.effect.clickMultPorNivel || 0) * nivel;
-      out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nivel / 5);
-    }
-    return out;
+    if (!item?.affixes?.length) return nada;
+    // **LA CUENTA VIVE EN `data/crafting` (F83).** La ficha de un arma no equipada,
+    // la tarjeta de perfil y el recálculo ajeno necesitan el efecto de UNOS afijos
+    // con UN nivel, no el del equipado. Esta función es ese caso con el equipado.
+    return efectoDeAfijos(item.affixes, item.level);
   }
 
   /**
@@ -3106,12 +3096,17 @@ function sePuedeGuardar(): boolean {
     const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, item.damage || 0);
     const levelMultiplier = multiplicadorDeNivel(item.level);
     const conNivel = base * levelMultiplier;
-    const total = base
-      * levelMultiplier
-      * calculateCompanionMultiplier()
-      * (1 + achievementState.clickBonus)
-      * (1 + state.bonus.clickMult)
-      * (1 + affixes.clickMult);
+    // **EL TOTAL SALE DE LA MISMA FUNCIÓN QUE LA FICHA, EL PERFIL Y EL RANKING
+    // (F83).** Mismo orden de factores, mismo suelo: el número que se cobra y el
+    // que se enseña no se pueden separar en el último decimal.
+    const total = danoFinalDeRecolector(
+      base,
+      item.level,
+      1 + affixes.clickMult,
+      calculateCompanionMultiplier(),
+      1 + achievementState.clickBonus,
+      1 + state.bonus.clickMult
+    );
     return { total, base, conNivel };
   }
 
@@ -3129,8 +3124,6 @@ function sePuedeGuardar(): boolean {
    * recolector**, y eso es lo que debe pasar: el suelo quita el bloqueo, no quita la
    * consecuencia de haberlo perdido.
    */
-  const DANIO_MINIMO_SIN_RECOLECTOR = 1;
-
   /** El suelo, pasando por los mismos multiplicadores que un daño normal. */
   function sueloDeClick(): { total: number; base: number; conNivel: number } {
     const base = DANIO_MINIMO_SIN_RECOLECTOR;
@@ -3282,6 +3275,73 @@ function sePuedeGuardar(): boolean {
       total,
       filas
     };
+  }
+
+  /**
+   * LAS FILAS DE UN RECOLECTOR CUALQUIERA, Y POR QUÉ ES UNA FUNCIÓN Y NO UN MÉTODO.
+   *
+   * La usan `getStatFilas()` (el hover de la ficha) y `getStatPrincipal()` (el número
+   * grande): si cada uno llevara su cadena, el número y su desglose se separarían en
+   * el último dígito. Una sola cadena, dos lectores.
+   *
+   * **Y ES LA MISMA CUENTA QUE COBRA EL CLIC, SIN EL BUFF.** El orden de factores es
+   * el de `cuentaDeClickSinBuff()`: base, potencial, nivel, afijos, compañeros, logros
+   * y árbol. En la equipada el total es exactamente lo que se cobra sin buff; en una
+   * no equipada es el valor al equiparla, con sus propios afijos.
+   */
+  function filasDeRecolector(w: any): { base: number; total: number; filas: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }>; delArma: number; deLaPartida: number } {
+    const pot = potencialNormalizado(w.potential);
+    const multPot = 1 + 0.2 * pot;
+    const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
+    // **LA BASE ES EL DAÑO GUARDADO PARTIDO POR EL POTENCIAL.** El campo `damage` ya
+    // lleva el potencial aplicado, así que para que "base + potencial = daño guardado"
+    // hay que deshacerlo. Igual que en `danosDeClick()`.
+    const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(w.damage) || 0) / multPot;
+
+    const filas: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }> = [];
+    let acum = base;
+    let mostrado = Math.floor(acum);
+    // **CADA FILA DICE DE QUÉ GRUPO ES (F83).** La ficha tiene que partir cuánto
+    // es del arma y cuánto de la partida, y el pie del hover suma los dos grupos:
+    // sin el grupo en la fila, la vista tendría que adivinarlo por el nombre.
+    const anota = (nombre: string, detalle: string, mult: number, grupo: 'item' | 'partida') => {
+      if (Math.abs(mult - 1) <= 0.0001) return;
+      acum *= mult;
+      const ahora = Math.floor(acum);
+      // Un bono que no mueve el suelo no se pinta: una fila con un +0 es ruido.
+      if (ahora === mostrado) return;
+      filas.push({ nombre, detalle, suma: ahora - mostrado, grupo });
+      mostrado = ahora;
+    };
+
+    anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más`, multPot, 'item');
+    if (nivel > 0) anota(`Nivel ${nivel}`, 'del recolector', multiplicadorDeNivel(nivel), 'item');
+    // **F83 · EL FINAL LLEGA A LA FICHA, Y CON ÉL LOS AFIJOS Y LA PARTIDA.**
+    //
+    // Antes esta lista se quedaba en el nivel a propósito: su total era "lo que da
+    // este objeto por sí mismo". El jugador pidió que la ficha enseñe el daño final
+    // —base más potencia más pasivos—, así que la lista sigue hasta el final y el
+    // número grande es su total. El orden es el de `danosDeClick()`: primero el
+    // grupo del item y después el de la partida.
+    //
+    // **LOS AFIJOS CUENTAN CON LOS DEL ITEM, ESTÉ EQUIPADO O NO.** Es el valor al
+    // equiparla, y en la equipada es exacto: la misma cuenta que cobra el clic.
+    // Sin afijos o sin bonos no sale fila, por la regla de siempre —la lista de
+    // un item neutro queda igual que antes—.
+    //
+    // La regla que queda, y que un banco comprueba: **las filas suman el total**.
+    anota('Afijos', 'del item', 1 + efectoDeAfijos(w.affixes, nivel).clickMult, 'item');
+    anota('Compañeros', 'de la partida', calculateCompanionMultiplier(), 'partida');
+    anota('Logros', 'de la partida', 1 + achievementState.clickBonus, 'partida');
+    anota('Árbol de pasivas', 'de la partida', 1 + state.bonus.clickMult, 'partida');
+
+    // **EL PARTIDO YA SUMADO (F83).** La ficha, el perfil y el ranking parten lo
+    // mismo —cuánto es del arma y cuánto de la partida— y si cada vista sumara
+    // las filas por su cuenta habría tres copias de la misma suma. Sale de aquí
+    // con la lista, y las tres lo leen.
+    const delArma = Math.floor(base) + filas.reduce((a, f) => a + (f.grupo === 'item' ? f.suma : 0), 0);
+    const deLaPartida = filas.reduce((a, f) => a + (f.grupo === 'partida' ? f.suma : 0), 0);
+    return { base: Math.floor(base), total: Math.floor(acum), filas, delArma, deLaPartida };
   }
 
   function calculateMultiplier() {
@@ -3542,6 +3602,20 @@ function sePuedeGuardar(): boolean {
       // puede perder. La firma se calcula con lo que la fila **enseña**, no con el
       // estado entero: cambiar un contador que la fila ni enseña no es un motivo para
       // escribirla, y escribir una fila idéntica le cobra igual a Firestore.
+      // F83 · EL DAÑO FINAL VIAJA EN LA FILA, SIN TEMPORALES. La fila del ranking
+      // enseña el daño final del arma equipada con sus pasivos, y al apoyar parte
+      // arma y partida. Sin temporales: caducan y la fila se escribe cada minutos,
+      // así que un x2 publicado sería un número que nadie pega. Salen de la misma
+      // cadena que la ficha (`filasDeRecolector`), no de una segunda cuenta. Y no
+      // es dato nuevo: la tarjeta pública ya trae el arma, los nodos y los logros
+      // con los que cualquiera lo calcularía igual.
+      // Sin arma equipada no hay daño: cero, no un suelo inventado.
+      const armaPub: any = state.equippedCollectorId
+        ? state.warehouse.find((w: any) => w.id === state.equippedCollectorId)
+        : null;
+      const filasPub = armaPub && armaPub.type === 'collector' ? filasDeRecolector(armaPub) : null;
+      const danoFinalPub = filasPub ? filasPub.total : 0;
+      const danoArmaPub = filasPub ? filasPub.delArma : 0;
       const firma = [
         state.totalNanitesProduced,
         state.totalClicks,
@@ -3550,7 +3624,9 @@ function sePuedeGuardar(): boolean {
         state.totalCores,
         state.cosmetics.title,
         state.cosmetics.frame ?? '',
-        state.cosmetics.banner ?? ''
+        state.cosmetics.banner ?? '',
+        danoFinalPub,
+        danoArmaPub
       ].join('|');
       const ahora = Date.now();
       // Y solo una vez por periodo: la fila no necesita nivel de frames.
@@ -3582,6 +3658,10 @@ function sePuedeGuardar(): boolean {
           // el saldo ni el inventario. Y `totalCores`, no `cores`: los núcleos que
           // gastas en el árbol no son menos Ascensión hecha.
           cores: state.totalCores,
+          // F83 · El daño final y cuánto es del arma, para la fila. Sin temporales
+          // (ver arriba): la fila enseña lo sostenido, y el hover lo parte.
+          danoFinal: danoFinalPub,
+          danoArma: danoArmaPub,
           title: state.cosmetics.title,
           frame: state.cosmetics.frame ?? 'frame_none',
           banner: state.cosmetics.banner ?? 'banner_none',
@@ -4367,13 +4447,13 @@ const RITMO_GUARDADO_MS = 30_000;
      * y `poderEfectivoDeCompanio()`, que es la del compañero. Si mañana cambia el 0,10,
      * cambia en los tres sitios a la vez porque los tres llaman.
      *
-     * **LO QUE NO ENTRA, Y POR QUÉ NO ENTRA.** Ni los buffs, ni los logros, ni el
-     * multiplicador del árbol, ni los afijos, ni los compañeros activos: eso son
-     * bonificaciones *de la partida*, no del objeto. Un recolector con tres cartas de
-     * clic x2 teachla 24, pero ese 24 no es suyo: es suyo la mitad, y si la ficha lo
-     * dijera, cambiar de carta cambiaría el stat del item y no habría forma de comparar
-     * dos recolectores. Lo que sí entra es **lo que el item es y lo que se le ha subido
-     * con cristales**, que es lo único que hace que un item valga más que otro.
+      * **LO QUE NO ENTRA, Y POR QUÉ NO ENTRA.** Solo los buffs temporales: son de la
+      * partida y además caducan, y una ficha enseñando un x2 que ya expiró es un número
+      * que nadie pega. Todo lo demás —potencial, nivel, afijos del item, compañeros,
+      * logros y árbol— sí entra desde F83: el número grande es el daño final del arma
+      * y el hover parte cuánto es del arma y cuánto de la partida. Antes la lista se
+      * quedaba en el nivel para que el stat fuera "lo que da el objeto por sí mismo";
+      * el jugador pidió el final, y un banco ata que las filas lo suman.
      *
      * `etiqueta` dice **qué es** el número, y no es decorativo: el compañero tiene tres
      * tipos con reglas distintas y sin la etiqueta el 35 del `multiplier` se lee igual
@@ -4418,22 +4498,19 @@ const RITMO_GUARDADO_MS = 30_000;
      * mismas filas que la card de la base** y no hay dos Criminal: es la misma función
      * con el mismo reparto desde el total hacia atrás, sin redondeos intermedios.
      *
-     * Y **SIN el grupo de la partida**, que es lo que el jugador pidió: aquí van solo lo
-     * que es del objeto —potencial, nivel y afijos—, porque el número grande de al lado
-     * es el del item y no el del click con las bonificaciones. Meter las de la partida
-     * sería mostrar en el hover filas cuya suma no da el número que está al lado.
+      * Y **CON el grupo de la partida desde F83**, que es lo que el jugador pidió ahora:
+      * el número grande de al lado es el daño final y el hover parte cuánto es del arma
+      * y cuánto de la partida. Cada fila dice su grupo y el pie suma los dos.
      *
      * La suma se lleva en coma flotante y lo que se pinta es el suelo, igual que en
      * `danosDeClick()`: el daño que se cobra también lo es, y redondear por pasos haría
      * que la última fila no cuadrara con el número grande.
      */
-    getStatFilas: (itemId: string): { base: number; total: number; filas: Array<{ nombre: string; detalle: string; suma: number }> } => {
+    getStatFilas: (itemId: string): { base: number; total: number; filas: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }>; delArma: number; deLaPartida: number } => {
       const w: any = (state.warehouse as any[]).find((x: any) => x.id === itemId);
-      const vacio = { base: 0, total: 0, filas: [] as any[] };
+      const vacio = { base: 0, total: 0, filas: [] as any[], delArma: 0, deLaPartida: 0 };
       if (!w) return vacio;
       const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
-      const pot = potencialNormalizado(w.potential);
-      const multPot = 1 + 0.2 * pot;
 
       const esRecolector = w.type === 'collector';
       // **EL COMPAÑERO TIENE SU PROPIA LISTA, PORQUE SUS MULTIPLICADORES SON
@@ -4457,7 +4534,7 @@ const RITMO_GUARDADO_MS = 30_000;
         const multPotExtra = multiplicadorPorPotencialDeCompanero(potC);
         const multRareza = multiplicadorDeRarezaDeCompanero(rarezaC);
         const multNivelC = multiplicadorDeNivel(nivel);
-        const filasC: Array<{ nombre: string; detalle: string; suma: number }> = [];
+        const filasC: Array<{ nombre: string; detalle: string; suma: number; grupo: 'item' | 'partida' }> = [];
         let acumC = powerC;
         let mostradoC = Math.round(acumC);
         const anotaC = (nombre: string, detalle: string, mult: number) => {
@@ -4466,67 +4543,35 @@ const RITMO_GUARDADO_MS = 30_000;
           const ahora = Math.round(acumC);
           // Un bono que no mueve el entero no se pinta: una fila con un +0 es ruido.
           if (ahora === mostradoC) return;
-          filasC.push({ nombre, detalle, suma: ahora - mostradoC });
+          // Todo es del item: el poder ya trae la posición en el rango y la base
+          // oculta, y la rareza y el extra multiplican ese poder, no la partida.
+          filasC.push({ nombre, detalle, suma: ahora - mostradoC, grupo: 'item' });
           mostradoC = ahora;
         };
         anotaC(`Potencial ${potC}★`, `${Math.round((multPotExtra - 1) * 100)}% extra`, multPotExtra);
         anotaC(`Rareza ${rarezaC}`, `${Math.round((multRareza - 1) * 100)}% más`, multRareza);
         if (nivel > 0) anotaC(`Nivel ${nivel}`, 'del compañero', multNivelC);
-        return { base: Math.round(powerC), total: mostradoC, filas: filasC };
+        return { base: Math.round(powerC), total: mostradoC, filas: filasC, delArma: mostradoC, deLaPartida: 0 };
       }
-      // **LA BASE DEL RECOLECTOR ES EL DAÑO GUARDADO PARTIDO POR EL POTENCIAL.** Es el
-      // mismo razonamiento que `danosDeClick()`: el campo `damage` ya lleva el potencial
-      // aplicado, así que para que "base + potencial = daño guardado" hay que deshacerlo.
-      // En el compañero la base es el poder, que no lleva nada aplicado encima.
-      const base = esRecolector
-        ? Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(w.damage) || 0) / multPot
-        : Number(w.power) || 0;
-
-      const filas: Array<{ nombre: string; detalle: string; suma: number }> = [];
-      let acum = base;
-      let mostrado = Math.floor(acum);
-      const anota = (nombre: string, detalle: string, mult: number) => {
-        if (Math.abs(mult - 1) <= 0.0001) return;
-        acum *= mult;
-        const ahora = Math.floor(acum);
-        // Un bono que no mueve el suelo no se pinta: una fila con un +0 es ruido.
-        if (ahora === mostrado) return;
-        filas.push({ nombre, detalle, suma: ahora - mostrado });
-        mostrado = ahora;
-      };
-
-      anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más`, multPot);
-      if (nivel > 0) anota(`Nivel ${nivel}`, esRecolector ? 'del recolector' : 'del compañero', multiplicadorDeNivel(nivel));
-      // **LOS AFIJOS NO ESTAN, Y SU AUSENCIA ES LA RAZON DE QUE ESTA LISTA CUADRE.**
-      //
-      // La primera version metia una fila de afijos, y la cuenta se rompia de la forma
-      // mas visible que hay: 23 de base, +14 de potencial, +44 de nivel y +15 de afijos,
-      // con un total arriba que decia 81. 23+14+44+15 son **96**. Las filas estan para
-      // explicar el numero de al lado, asi que una fila que no esta en ese numero es una
-      // mentira con forma de tabla.
-      //
-      // Y no es que los afijos no cuenten: es que **`getStatPrincipal()` no los
-      // incluye, a proposito**. Su total es 'lo que da este objeto por si mismo', y el
-      // afijo solo cuenta mientras el objeto esta equipado: si la ficha lo metiera,
-      // cambiar de arma cambiaria el stat del item y no habria forma de comparar dos
-      // recolectores en el almacen. Los afijos salen en el desglose del **dano del clic**
-      // --`getClickDamageParts()`--, que si es el dano real con todo puesto. Son dos
-      // preguntas distintas y por eso son dos listas.
-      //
-      // La regla que queda, y que un banco comprueba: **las filas suman el total**.
-
-      return { base: Math.floor(base), total: Math.floor(acum), filas };
+      // **LA BASE DEL RECOLECTOR SALE DE SU PROPIA FUNCIÓN.** Ver `filasDeRecolector()`:
+      // una sola cadena para el hover y el número grande, para que no se separen.
+      return filasDeRecolector(w);
     },
     getStatPrincipal: (itemId: string) => {
       const w: any = (state.warehouse as any[]).find((x: any) => x.id === itemId);
       if (!w) return null;
       if (w.type === 'collector') {
-        const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(w.damage) || 0);
-        const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
-        const pot = potencialNormalizado(w.potential);
+        // **EL NÚMERO GRANDE ES EL TOTAL DE LA LISTA (F83).** Antes era el daño por
+        // nivel y la lista se quedaba ahí; ahora la lista sigue hasta el daño final
+        // —con afijos y pasivos— y el número es su total, así que no hay dos cuentas
+        // que puedan separarse en el último dígito. La etiqueta no lleva los bonos
+        // porque el hover ya parte cuánto es del arma y cuánto de la partida.
+        // (`desglose` no va: era la lista vieja de multiplicadores sin la partida, y
+        // no lo lee nadie.)
+        const f = filasDeRecolector(w);
         return {
           tipo: 'collector' as const,
-          valor: Math.round(base * multiplicadorDeNivel(nivel)),
+          valor: f.total,
           etiqueta: 'Recolección por click',
           // **EL "+" PORQUE ES LO QUE APORTA, Y NO UNA CIFRA SUELTA.** Un 174 a secas en
           // una esquina de celda se lee como un identificador, como un número de serie o
@@ -4538,8 +4583,7 @@ const RITMO_GUARDADO_MS = 30_000;
           // del daño del recolector haría comparables dos números que no lo son. La
           // primera versión de la esquina de la celda la puso igual para los dos y
           // cualquier T5 salió con "84/s", que es mentira en la propia etiqueta.
-          sufijo: '',
-          desglose: desgloseDeStat(w.tier, base, pot, nivel, Math.round(base * multiplicadorDeNivel(nivel)))
+          sufijo: ''
         };
       }
       if (w.type === 'companion') {

@@ -804,8 +804,18 @@ function statPrincipalHTML(stat: any, game?: any, itemId?: string): string {
   // de multiplicadores que traía el stat se queda como respaldo: sin ella, un stat sin
   // desglose se quedaría sin lista en vez de quedarse con la cuenta antigua, que es peor.
   const filas = (game && itemId ? game.getStatFilas?.(itemId) : null)
-    ?? { base: 0, total: 0, filas: [] as any[] };
+    ?? { base: 0, total: 0, filas: [] as any[], delArma: 0, deLaPartida: 0 };
   const conDesglose = !esMult && filas.filas.length > 0;
+  // **F83 · EL PIE PARTE ARMA Y PARTIDA.** El partido ya viene sumado del motor
+  // (`delArma`/`deLaPartida`): es el "cuánto es de arma y cuánto de buffs" sin
+  // tener que sumar filas a mano. Sin filas de partida no hay pie: en el
+  // compañero todo es del item y el pie sería repetir el total con otras
+  // palabras. Las filas viejas sin grupo cuentan como del arma, que es lo que
+  // eran todas antes de F83.
+  const delArma = filas.delArma
+    ?? filas.base + filas.filas.reduce((a: number, f: any) => a + ((f.grupo ?? 'item') === 'item' ? f.suma : 0), 0);
+  const deLaPartida = filas.deLaPartida
+    ?? filas.filas.reduce((a: number, f: any) => a + (f.grupo === 'partida' ? f.suma : 0), 0);
   return `
     <div class="${conDesglose ? 'group relative cursor-help' : ''} rounded-xl px-3 py-2 mb-2.5"
          style="border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
@@ -841,6 +851,10 @@ function statPrincipalHTML(stat: any, game?: any, itemId?: string): string {
                 </span>
               </li>`).join('')}
           </ul>
+          ${deLaPartida > 0 ? `
+          <div class="flex items-baseline justify-between gap-2 mt-1.5">
+            <span class="text-[9px] font-mono text-[var(--text-muted)]">Del arma +${formatNumber(delArma)} · De la partida +${formatNumber(deLaPartida)}</span>
+          </div>` : ''}
           <div class="flex items-baseline justify-between gap-2 mt-1.5 pt-1.5 border-t border-[var(--border-color)]">
             <span class="text-[9px] font-mono accent-text font-bold">${stat.etiqueta}</span>
             <span class="text-[10px] font-mono font-bold tabular accent-text">${cifra}</span>

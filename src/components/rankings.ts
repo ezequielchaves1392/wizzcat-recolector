@@ -232,12 +232,25 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
     secretAchievements: r.secretAchievements ?? 0,
     forgedCount: r.forgedCount ?? 0,
     cores: r.cores ?? 0,
+    danoFinal: r.danoFinal ?? 0,
+    danoArma: r.danoArma ?? 0,
     title: r.title,
     frame: frameId,
     banner: bannerId
   });
   const valor = boardValue(r, kind);
   const unidades = unidadesDe(kind);
+  // **F83 · EL DAÑO FINAL EN LA FILA, Y AL APOYAR EL PARTIDO.** Sale de los campos
+  // que el dueño publica en su fila (`danoFinal`/`danoArma`), no de una cuenta de
+  // aquí: la fila no puede recalcular bonos ajenos sin leer su tarjeta, y cuarenta
+  // lecturas por vista es cuota que no hay. Sin campos no hay cifra —una fila vieja
+  // enseña lo mismo que antes—. Es el sostenido, sin temporales: un x2 caducado en
+  // una foto no es un número que nadie pegue, y el detalle lo dice.
+  const danoFila = Number(r.danoFinal) || 0;
+  const armaFila = Number(r.danoArma) || 0;
+  const detalleDano = danoFila > 0
+    ? `Del arma +${formatNumber(armaFila)} · De la partida +${formatNumber(Math.max(0, danoFila - armaFila))} · sin buffs temporales`
+    : '';
 
   // **EL BANNER DE FONDO DE LA FILA ENTERA, Y POR QUÉ ES UNA CAPA SUELTA.**
   //
@@ -275,6 +288,10 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
           ${r.forgedCount ? `<span class="medal text-cyan-300" title="Recolectores forjados">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>` : ''}
           ${r.cores ? `<span class="medal text-emerald-300" title="Núcleos ganados ascendiendo">${ic('recycle', 'w-3 h-3')} ${r.cores}</span>` : ''}
         </div>
+        ${danoFila > 0 ? `<div class="mt-1 text-[10px] font-mono tabular" title="${detalleDano}">
+          <span class="text-[var(--text-muted)]">Daño</span>
+          <span class="accent-text font-bold">+${formatNumber(danoFila)}</span>
+        </div>` : ''}
       </div>
 
       <div class="text-right flex-shrink-0">

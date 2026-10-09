@@ -1078,6 +1078,90 @@ export function nivelMaximoDeCompanio(potential?: number | null, maxLevel?: numb
 export function multiplicadorDeNivel(level: number | undefined | null): number {
   return 1 + Math.max(0, Math.floor(Number(level) || 0)) * 0.10;
 }
+
+/**
+ * EL SUELO DE DAÑO, Y POR QUÉ ES 1 Y VIVE AQUÍ.
+ *
+ * Sin recolector equipado no hay de dónde sacar un daño, y con un cero la partida
+ * quedaba bloqueada sin salida (la tienda no vende recolectores). El suelo es el
+ * daño del recolector más débil que existe: no hay un estado raro al que llegar,
+ * hay el peor objeto del juego sin ninguna ventaja. Vive aquí y no en el motor
+ * porque el daño final de cualquier arma —equipada o no, propia o ajena— lo usa,
+ * y dos unos en dos sitios son dos oportunidades de que uno cambie.
+ */
+export const DANIO_MINIMO_SIN_RECOLECTOR = 1;
+
+/**
+ * EL EFECTO DE UNOS AFIJOS CON UN NIVEL, SIN MIRAR QUÉ HAY EQUIPADO (F83).
+ *
+ * Es la cuenta de `equippedAffixEffect()` del motor, sacada a `data/` porque la
+ * necesitan tres sitios que no son el equipado: la ficha de un arma no equipada
+ * (sus afijos contarían al equiparla), la tarjeta de perfil y el recálculo del
+ * daño ajeno desde la tarjeta pública. El motor delega en ella para lo equipado,
+ * así que no hay dos cuentas que puedan separarse.
+ *
+ * **LOS IDS QUE NO ESTÁN EN EL CATÁLOGO NO CUENTAN.** Igual que ya filtraba la
+ * herencia de la forja: un afijo inventado no puede multiplicar nada.
+ */
+export function efectoDeAfijos(
+  affixIds: Array<string> | undefined | null,
+  nivel: number | undefined | null
+): { clickMult: number; passiveMult: number; critChance: number } {
+  const out = { clickMult: 0, passiveMult: 0, critChance: 0 };
+  const ids = Array.isArray(affixIds) ? affixIds : [];
+  const nv = Number(nivel) || 0;
+  for (const affixId of ids) {
+    const affix = AFFIX_BY_ID[affixId];
+    if (!affix) continue;
+    out.clickMult += affix.effect.clickMult || 0;
+    out.passiveMult += affix.effect.passiveMult || 0;
+    out.critChance += affix.effect.critChance || 0;
+    // Los que dependen del nivel suman un PORCENTAJE por nivel, no un número
+    // plano: es lo que hace que subir de nivel siga valiendo sin que un
+    // "+8 por nivel" convierta un T1 en un T10. Ver el comentario de AFFIXES.
+    out.clickMult += (affix.effect.clickMultPorNivel || 0) * nv;
+    out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nv / 5);
+  }
+  return out;
+}
+
+/**
+ * EL DAÑO FINAL DE UN RECOLECTOR, SIN BUFFS TEMPORALES (F83).
+ *
+ * Daño base por nivel por compañeros por logros por árbol por afijos, con el
+ * suelo abajo. Es la cuenta de `cuentaDeClickSinBuff()` del motor, en el mismo
+ * orden de factores: el motor la llama para lo equipado y la ficha, el perfil y
+ * el ranking la llaman para cualquier arma, y el recálculo ajeno para la de otro
+ * jugador. Un solo orden significa que el número de la ficha y el que se cobra
+ * no se pueden separar en el último decimal.
+ *
+ * **LOS PARÁMETROS SON MULTIPLICADORES YA SUMADOS** (`1 + bono`), no bonos: lo
+ * que multiplica es lo que entra, y así ni la vista ni el recálculo tienen que
+ * saber dónde va el `1 +`.
+ *
+ * **Y SIN EL BUFF TEMPORAL A PROPÓSITO.** El buff se aplica fuera, una sola vez,
+ * donde se cobra (clic y Base). Meterlo aquí lo duplicaría —es el bug que rompió
+ * `playthroughCheck` una vez— y haría que una foto del ranking enseñara un x2
+ * caducado como si pegara.
+ */
+export function danoFinalDeRecolector(
+  damage: number | undefined | null,
+  nivel: number | undefined | null,
+  multAfijos: number,
+  multCompaneros: number,
+  multLogros: number,
+  multArbol: number
+): number {
+  const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(damage) || 0);
+  return Math.floor(
+    base
+      * multiplicadorDeNivel(nivel)
+      * multCompaneros
+      * multLogros
+      * multArbol
+      * multAfijos
+  );
+}
 /**
  * LOS TÉRMINOS DE LA SUMA DEL STAT, Y POR QUÉ SE DERIVAN Y NO SE REPITEN.
  *

@@ -43,7 +43,7 @@ import { TREE_CATEGORY_META } from '../data/tree';
 import { rarityClass } from '../components/crateLoot';
 import { leerTarjeta, registrarVisita } from '../services/profileService';
 import { tarjetaDesdeRanking, type DatosDeRanking } from '../data/perfilParcial';
-import { type TarjetaPublica } from '../data/profile';
+import { type TarjetaPublica, danoFinalDeTarjeta } from '../data/profile';
 import { sfx } from '../utils/audio';
 
 /** El uid del jugador que está mirando, para no contarse a sí mismo. */
@@ -330,6 +330,15 @@ function bloqueDeRecolectores(t: TarjetaPublica): string {
   if (t.recolectores.length === 0) return vacio('collector', 'No tiene ningún recolector equipado');
   const maxTier = t.recolectores[0].tier;
   const mostrados = t.recolectores.length;
+  // **F83 · EL DAÑO FINAL, RECALCULADO DE SU TARJETA.** La tarjeta trae el arma
+  // equipada con su nivel y sus afijos, más los nodos, los logros y los compañeros
+  // activos: con eso sale lo que pega sin temporales, por las mismas funciones que
+  // lo propio. Sin arma no hay cifra ('--'), y el detalle parte arma y partida.
+  const finalAjeno = danoFinalDeTarjeta(t);
+  const valorAjeno = finalAjeno.total > 0 ? `+${formatNumber(finalAjeno.total)}` : '--';
+  const detalleAjeno = finalAjeno.total > 0
+    ? `Del arma +${formatNumber(finalAjeno.intrinseco)} · De la partida +${formatNumber(finalAjeno.partida)} · sin buffs temporales`
+    : 'Daño por clic, con el potencial ya aplicado';
   return `
     ${subtitulo('Recolector', '')}
     <div class="flex flex-col gap-2">
@@ -337,8 +346,8 @@ function bloqueDeRecolectores(t: TarjetaPublica): string {
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">
           ${fichaDeRecolector(r, {
             etiqueta: 'Recolección por click',
-            valor: Number(r.damage) > 0 ? `+${formatNumber(Number(r.damage))}` : '--',
-            title: 'Daño por clic, con el potencial ya aplicado'
+            valor: valorAjeno,
+            title: detalleAjeno
           })}
         </div>`).join('')}
     </div>`;

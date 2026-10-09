@@ -2408,51 +2408,37 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
       // puesto a mano. La primera versión de esta comprobación comparaba contra la
       // función de la carga y falló: lo que la carga deja en un item guardado no es esa
       // cifra, y rehacer la regla de la carga aquí no era el trabajo.
-      const danoA = (s(g).warehouse as any[]).find((w: any) => w.id === 'a').damage;
       const danoB = (s(g).warehouse as any[]).find((w: any) => w.id === 'b').damage;
 
-      const sinNivel = g.getStatPrincipal('a');
-      const conNivel = g.getStatPrincipal('b');
-
-      // **SIN NIVEL EL STAT ES EL DANO DEL ITEM, Y ESO LO FIJA.** Con el nivel a
-      //  cero no hay mejora que aplicar, así que la cifra tiene que ser exactamente la
-      //  que el item guarda: si aquí salía otra, el stat no sería el del item.
-      check('stat: sin nivel, el stat es el dano del item',
-        sinNivel?.valor === danoA && sinNivel.etiqueta === 'Recolecci\u00f3n por click',
-        'stat=' + sinNivel?.valor + ' dano=' + danoA + ' etiqueta=' + sinNivel?.etiqueta);
-
-      // **CON NIVEL ES EL MISMO +10 % POR NIVEL, Y NO UN NUMERO PUESTO.** La regla la
-      //  tiene que dar la funcion de multiplicador, que es la misma que usa el clic. Si
-      //  aquí se escribiera el 2,0 a mano, las dos cifras se separarian el dia que
-      //  cambiara ese 0,10, y nadie lo veria hasta que un jugador se quejara del
-      //  inventario.
-      check('stat: con nivel, sube con la misma regla del clic',
-        conNivel?.valor === danoB * multiplicadorDeNivel(10),
-        'stat=' + conNivel?.valor + ' esperado=' + danoB * multiplicadorDeNivel(10));
-
-      // **Y EL STAT ES LO QUE EL CLIC COBRA, PERO NO LE TIENE QUE IGUALAR.**
-      //
-      //  La primera versión de esta comprobación decía que las dos cifras iban
-      //  iguales, y fallaron: 114 contra 148. La razón es el motivo por el que el stat
-      //  **no** lleva las bonificaciones de la partida. El clic multiplica por el árbol,
-      //  los logros, los afijos y los compañeros; el stat es **lo que el objeto es y lo
-      //  que se le ha subido con cristales**, y si llevara lo otro, cambiar de carta
-      //  cambiaría el stat del item y no habría forma de comparar dos recolectores.
-      //
-      //  Así que lo que se comprueba es lo que de verdad importa: **con la partida sin
-      //  bonificaciones, las dos cifras coinciden**. Es el mismo item y la misma regla,
-      //  de modo que si algún día el stat deja de ser lo que el clic cobra, aquí se ve.
-      //
-      //  **Y OJO CON `equipCollector`: ES UN CONMUTADOR.** La primera versión traía el
-      //  item con la bandera de equipado puesta y llamaba a `equipCollector` para
-      //  asegurarse, y el efecto fue el contrario del que se quería: lo desequipó y el
-      //  clic se quedó a 1. Equipar es un interruptor, no un "poner".
+      // F83: EL STAT ES EL FINAL, NO EL DANO. Con la partida trayendo pasivos
+      // (esta fixture los autodesbloquea al cargar: el almacen de 30 abre
+      // deep_pockets), la cifra tiene que ser la del clic sin buff, no la del item.
+      // El 114 contra 148 que documentaba lo contrario queda como historia: era la
+      // decision anterior, y esta la revierte a peticion del jugador.
       g.equipCollector('a');
       check('stat: equipar deja equipado el que toca, y no lo quita',
         s(g).equippedCollectorId === 'a', 'equipado=' + s(g).equippedCollectorId);
-      check('stat: con las bonificaciones de la partida, el clic es MAYOR que el stat',
-        g.getClickDamage() > Math.floor(g.getStatPrincipal('a').valor),
-        'stat=' + Math.floor(g.getStatPrincipal('a').valor) + ' clic=' + g.getClickDamage());
+      check('stat: el stat es el dano del clic sin buff, no el dano del item',
+        g.getStatPrincipal('a')?.valor === g.getClickDamage()
+          && g.getStatPrincipal('a')?.etiqueta === 'Recolección por click',
+        'stat=' + g.getStatPrincipal('a')?.valor + ' clic=' + g.getClickDamage());
+
+      // CON NIVEL: la fila esta, mueve el numero y la equipada clava el clic. La
+      // regla del 10 % la fija su funcion y la cobra el clic; aqui lo que se ata
+      // es que la ficha la aplica y que el numero final es el que se cobra.
+      const filasB = g.getStatFilas('b');
+      check('stat: con nivel, la fila del nivel esta y mueve el numero',
+        filasB.filas.some((f: any) => f.nombre === 'Nivel 10' && f.suma > 0),
+        filasB.filas.map((f: any) => f.nombre + ':' + f.suma).join(' '));
+      g.equipCollector('b');
+      check('stat: y con la equipada de nivel alto, stat y clic coinciden',
+        g.getStatPrincipal('b')?.valor === g.getClickDamage(),
+        'stat=' + g.getStatPrincipal('b')?.valor + ' clic=' + g.getClickDamage());
+
+      // Y `a` se vuelve a equipar UNA vez: `equipCollector` es un conmutador y
+      // llamarlo con el ya equipado lo apaga. El bloque de abajo mide el clic
+      // con 'a' puesta, asi que sin esta linea mediria el suelo.
+      g.equipCollector('a');
 
       // **LA PROPORCIÓN ES LA QUE TIENE QUE SER LA MISMA, Y ESO SÍ SE COMPRUEBA.**
       //
@@ -2655,10 +2641,22 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
       filas.total === stat?.valor,
       `filas=${filas.total} stat=${stat?.valor}`);
 
-    // **Y LA FILA QUE NO ESTA, PORQUE ES LA QUE ROMPIA LA CUENTA.**
-    check('filas: los afijos NO salen en la lista del item, ni equipado',
-      !filas.filas.some((f: any) => f.nombre === 'Afijos'),
+    // **Y LA FILA QUE AHORA SI ESTA (F83).** Antes los afijos no salian en la lista
+    // del item ni equipado, porque el total era "lo que da el objeto por si mismo".
+    // El jugador pidio el dano final en la ficha, asi que la lista sigue hasta el
+    // final con los afijos del item y la partida, y el numero grande es su total.
+    // Lo que sigue valiendo es la regla de verdad: **las filas suman el total**.
+    check('filas: los afijos SI salen cuando mueven el numero, con los del item',
+      filas.filas.some((f: any) => f.nombre === 'Afijos' && f.detalle === 'del item' && f.grupo === 'item'),
       filas.filas.map((f: any) => f.nombre).join(' '));
+
+    // **Y EL NUMERO GRANDE ES LO QUE SE COBRA SIN BUFF (F83).** La ficha ya no dice
+    // "lo que da el objeto": dice el final con pasivos, que en la equipada es
+    // exactamente el dano del clic sin temporales. Sin buff activo en la prueba,
+    // los dos tienen que ser el mismo numero.
+    check('filas: y el stat de la equipada es el dano del clic, sin buff',
+      stat?.valor === g.getClickDamage(),
+      `stat=${stat?.valor} clic=${g.getClickDamage()}`);
 
     // Y que la lista del dano del clic **si** los lleve, porque esa si es la del dano
     // real. Las dos son distintas a proposito, y esta comprobacion es la que lo fija.
@@ -2671,16 +2669,57 @@ function unidadesDeUnaCaja(tier: number): { min: number; max: number; medio: num
       `base=${partes.base} total=${partes.total}`);
   }
   {
-    // Sin nivel no hay fila de nivel: una fila con +0 es ruido.
+    // Sin nivel no hay fila de nivel: una fila con +0 es ruido. Y sin afijos ni
+    // bonos tampoco hay filas suyas: la lista de un item neutro es la de antes.
     const g2 = await boot(baseSave([collector('r2', 2, 5)]));
     const f2 = g2.getStatFilas('r2');
     check('filas: sin nivel no sale la fila del nivel',
       !f2.filas.some((f: any) => f.nombre.startsWith('Nivel')),
       f2.filas.map((f: any) => f.nombre).join(' '));
+    check('filas: sin afijos no sale la fila de afijos',
+      !f2.filas.some((f: any) => f.nombre === 'Afijos'),
+      f2.filas.map((f: any) => f.nombre).join(' '));
+    // F83: NI LA PARTIDA "NEUTRA" ES NEUTRA. Al cargar se autodesbloquean logros
+    // (el almacen de 30 abre deep_pockets, y el potencial 5 abre overclocked), asi
+    // que la lista trae su fila de Logros aunque la fixture no pida ningun bono.
+    // Es comportamiento correcto —la ficha ensena los bonos reales— y lo que se
+    // ata es que cuadren, no que falten.
+    check('filas: los bonos autodesbloqueados salen en la lista, con su grupo',
+      f2.filas.some((f: any) => f.nombre === 'Logros' && f.grupo === 'partida'),
+      f2.filas.map((f: any) => f.nombre).join(' '));
     check('filas: y sigue cuadrando con el stat',
       f2.base + f2.filas.reduce((a: number, f: any) => a + f.suma, 0) === f2.total &&
       f2.total === g2.getStatPrincipal('r2')?.valor,
       `base=${f2.base} total=${f2.total} stat=${g2.getStatPrincipal('r2')?.valor}`);
+  }
+  {
+    // F83 · LA LISTA ENTERA, CON LOS SEIS MULTIPLICADORES. Arbol con filo (16 %),
+    // un logro de clic (2 %), un multiplicador activo (+50 %), nivel y un afijo:
+    // las seis filas tienen que estar, cada una en su grupo, y la suma tiene que
+    // dar el stat y el dano del clic a la vez.
+    const g3 = await boot(baseSave([
+      collector('r3', 5, { potential: 3, damage: danioDeRango(5, 3), level: 4, affixes: ['aff_bulwark'] })
+    ], {
+      equippedCollectorId: 'r3',
+      nodeLevels: { core_edge: 2 },
+      unlockedAchievements: ['first_click'],
+      activeCompanions: ['mp'],
+      companions: [{ id: 'mp', name: 'Multi', type: 'multiplier', power: 0.5, tier: 1 }]
+    }));
+    const f3 = g3.getStatFilas('r3');
+    const nombres = f3.filas.map((f: any) => f.nombre);
+    check('filas: con todo puesto salen las seis filas, en orden de grupos',
+      nombres.join(',') === 'Potencial 3★,Nivel 4,Afijos,Compañeros,Logros,Árbol de pasivas',
+      nombres.join(','));
+    check('filas: y cada fila va en su grupo, item antes que partida',
+      f3.filas.slice(0, 3).every((f: any) => f.grupo === 'item')
+        && f3.filas.slice(3).every((f: any) => f.grupo === 'partida'),
+      f3.filas.map((f: any) => f.nombre + ':' + f.grupo).join(' '));
+    check('filas: y la lista entera cuadra con el stat y con el clic',
+      f3.base + f3.filas.reduce((a: number, f: any) => a + f.suma, 0) === f3.total
+        && f3.total === g3.getStatPrincipal('r3')?.valor
+        && f3.total === g3.getClickDamage(),
+      `base=${f3.base} total=${f3.total} stat=${g3.getStatPrincipal('r3')?.valor} clic=${g3.getClickDamage()}`);
   }
   {
     // F77 · EL HOVER DEL COMPANERO USA SUS MULTIPLICADORES DE VERDAD. La lista

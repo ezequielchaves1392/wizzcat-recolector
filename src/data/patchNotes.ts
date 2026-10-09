@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.16',
+    fecha: '9 de octubre de 2026',
+    titulo: 'El daño final suma arma y pasivos',
+    lineas: [
+      'El daño del arma ahora suma tus pasivos: la ficha enseña el daño final, no solo el del arma.',
+      'Al apoyar el número se parte en dos: cuánto es del arma y cuánto de la partida.',
+      'El perfil y el ranking enseñan ese mismo final; los buffs temporales solo se cuentan donde se cobran.'
+    ]
+  },
+  {
     version: '1.15.15',
     fecha: '8 de octubre de 2026',
     titulo: 'La forja anuncia la rareza y el compañero explica su número',

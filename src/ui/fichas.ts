@@ -105,9 +105,10 @@ export function aplicarPestana(): void {
 /**
  * LA FICHA DEL RECOLECTOR, con el aspecto del panel del inicio.
  *
- * `columnaDerecha` es lo que va donde en el inicio va el daño: **quien mira un perfil
- * ajeno no puede recibir esa cifra**, así que la hoja le pasa otra cosa —el potencial, que
- * es lo que el dueño sí publicó— o nada, y la ficha se queda con el nombre a la derecha.
+ * `columnaDerecha` es lo que va donde en el inicio va el daño. Desde F83, quien mira
+ * un perfil ajeno sí recibe una cifra: el daño final recalculado de su tarjeta
+ * (arma más pasivos, sin temporales), con el partido en el `title`. Si no hay arma
+ * no hay cifra y la ficha se queda con el nombre a la derecha.
  */
 export function fichaDeRecolector(
   w: RecolectorPintable,

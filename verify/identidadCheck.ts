@@ -19,7 +19,7 @@
 //  el `avatar-stack` de verdad y es `preview.html` con viewport real.
 // ==========================================================================
 
-import { check, resumen, boot, baseSave, reload, s, collector } from './kit';
+import { check, resumen, boot, baseSave, reload, s, collector, companion, ficha } from './kit';
 import { miniIdentity, rellenoDeBanner, titleStyleFor } from '../src/ui/identity';
 import { identityCard, unlockHint } from '../src/ui/profilePage';
 import {
@@ -32,6 +32,8 @@ import {
   BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT, FILAS_DE_EJEMPLO
 } from '../src/services/rankingService';
 import { coresGastadosEnArbol } from '../src/data/tree';
+import { danioDeRango } from '../src/data/crafting';
+import { tarjetaDesdeEstado, danoFinalDeTarjeta } from '../src/data/profile';
 import { techoDeExpansor, EXPANSOR_TIERS } from '../src/data/store';
 import { iconoDeCosmetico, ICONO_BASE } from '../src/data/avatarIcons';
 
@@ -753,6 +755,60 @@ async function main() {
       sinPremio.length === 0, sinPremio.join(',') || 'los doce tienen premio');
     check('logros: y el premio se abre de verdad al desbloquear el logro',
       queNoAbren.length === 0, queNoAbren.join(',') || `${ids.length} premios abiertos`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  F83 · LO PUBLICADO ALCANZA PARA RECALCULAR EL DANO AJENO
+  // -------------------------------------------------------------------------
+  //
+  //  La fila del ranking y la tarjeta ajena ensenan el dano final sin temporales,
+  //  recalculado de lo publicado: el arma equipada con su nivel y sus afijos, los
+  //  nodos con su nivel, los logros y los companeros activos. Si la tarjeta no
+  //  trajera alguna entrada, el recalculado mentiria, y esta es la prueba que ata
+  //  que lo publicado y lo cobrado son el mismo numero por los dos caminos.
+  {
+    const g = await boot(baseSave([
+      collector('r9', 5, { potential: 3, damage: danioDeRango(5, 3), level: 4, affixes: ['aff_bulwark'] })
+    ], {
+      equippedCollectorId: 'r9',
+      nodeLevels: { core_edge: 2 },
+      unlockedAchievements: ['first_click'],
+      activeCompanions: ['mp'],
+      companions: [{ id: 'mp', name: 'Multi', type: 'multiplier', power: 0.5, tier: 1 }]
+    }));
+    const t = tarjetaDesdeEstado(s(g), 'test', 'T');
+    const d = danoFinalDeTarjeta(t);
+    check('dano ajeno: lo recalculado de la tarjeta es el dano del clic sin buff',
+      d.total === g.getClickDamage(),
+      `tarjeta=${d.total} clic=${g.getClickDamage()}`);
+    check('dano ajeno: y es el stat de la ficha, que es el mismo final',
+      d.total === g.getStatPrincipal('r9')?.valor,
+      `tarjeta=${d.total} stat=${g.getStatPrincipal('r9')?.valor}`);
+    check('dano ajeno: y el partido suma el total',
+      d.intrinseco + d.partida === d.total && d.intrinseco > 0 && d.partida > 0,
+      `arma=${d.intrinseco} partida=${d.partida} total=${d.total}`);
+
+    // **Y LA FILA DEL RANKING PUBLICA ESOS DOS NUMEROS.** Salen de la misma cadena
+    // que la ficha, asi que la fila pinta lo mismo que la ficha del dueno.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    const doc = (globalThis as any).__MEM_DB__?.[RANK_DOC] ?? {};
+    const filas = g.getStatFilas('r9');
+    check('dano ajeno: la fila publica el final de la ficha',
+      doc.danoFinal === filas.total,
+      `fila=${doc.danoFinal} ficha=${filas.total}`);
+    check('dano ajeno: y publica cuanto es del arma',
+      doc.danoArma === filas.delArma,
+      `arma=${doc.danoArma} ficha=${filas.delArma}`);
+
+    // **Y SIN ARMA NO HAY CIFRA, NI EN LA TARJETA NI EN LA FILA.** Un perfil sin
+    // recolector no pega: cero, no un suelo inventado ni un undefined.
+    const g0 = await boot(baseSave([], {}));
+    const d0 = danoFinalDeTarjeta(tarjetaDesdeEstado(s(g0), 'test', 'T'));
+    check('dano ajeno: sin arma equipada el recalculado es cero',
+      d0.total === 0 && d0.intrinseco === 0 && d0.partida === 0,
+      `total=${d0.total}`);
   }
 }
 

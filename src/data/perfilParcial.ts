@@ -53,6 +53,8 @@ export interface DatosDeRanking {
   secretAchievements: number;
   forgedCount: number;
   cores: number;
+  danoFinal?: number;
+  danoArma?: number;
   title?: string;
   frame?: string;
   banner?: string;

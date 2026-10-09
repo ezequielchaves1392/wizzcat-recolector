@@ -1758,7 +1758,7 @@ feature que falta):**
       decisión grande —si la rareza pasa a derivarse de la base— sigue abierta, y es
       economy, no texto: no se toca aquí.
 
-- [ ] **[PRIORIDAD] F83 · El daño final suma arma y buffs, y se ve en ranking y menú.**
+- [x] **[PRIORIDAD] F83 · El daño final suma arma y buffs, y se ve en ranking y menú.** Hecho en v1.15.16.
       > "El daño del arma debe sumar tambien al daño final la influencia de los pasivos, en el perfil se esta haciendo bien en el resto de lados no., en el ranking al igual que en el menu principal se debe mostrar el daño del arma mas las bonificaciones de las partidas del jugador en cuestion y el daño final, y al apoyarme decirme cuanto es de arma y cuanto de buffs, con el detalle como en el main o la base."
       **Para después, con prioridad: pedido el 8 de octubre con tres capturas.** La ficha
       del almacén y la tarjeta de MEJOR RECOLECTOR FORJADO enseñan +689, que es solo el
@@ -1771,7 +1771,25 @@ feature que falta):**
       pendiente y es la que trae esos datos; sin ella no hay de dónde leerlos. (2) La
       tarjeta MEJOR RECOLECTOR muestra el arma, no el arma EQUIPADA: el daño final solo
       existe del equipado, y arma + bonos de una no equipada es un número hipotético que
-      habría que rotular como tal o no mostrar.
+      habría que rotular como tal o no mostrar. **Y dos precisiones del 9 de octubre:** el arma no
+      equipada cuenta sus propios afijos (es el valor al equiparla) y el ranking compara
+      sin buffs temporales para todos —con ellos solo la Base, que es donde se cobran—,
+      porque un temporal caducado en una foto de hace minutos es un número que nadie pega.
+      **Hecho en v1.15.16, con las dos decisiones del 9 de octubre.** El número grande
+      de la ficha es el final y su lista llega hasta él: una sola cadena (`filasDeRecolector`)
+      para el hover y el número, y el pie parte arma y partida. La cuenta del clic delega
+      en la misma función pura, así que lo cobrado y lo enseñado no se separan.
+      **Dos ajustes honestos:** el ranking compara sin temporales para todos —con ellos
+      solo la Base, donde se cobran—, y lo ajeno se recalcula de su tarjeta (los bonos
+      salían todos publicados menos el tipo real del compañero, que se arregló) sin
+      temporales porque no se publican, y rotulado. Un banco ata el ida y vuelta:
+      tarjeta recalculada, clic, ficha y fila del ranking dan el mismo número.
+      **Decidido el 9 de octubre: el daño final del arma es base + potencia +
+      pasivos, y así se ve en almacén y perfil; en la Base y en el ranking se ve
+      con los buffs de partida aplicados.** Los pasivos permanentes van con el
+      arma en su ficha; los temporales solo donde se cobran (Base propia y fila
+      propia del ranking). Propio y ajeno: lo ajeno se recalcula desde su tarjeta
+      pública, sin buffs temporales porque no se publican, y rotulado.
 
 ### Lote I · ENCARGO DEL 8 DE OCTUBRE
 
@@ -2589,7 +2607,7 @@ falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiemp
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **45 bancos, 2393**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **45 bancos, 2405**, todas en verde._
 
 ### El sistema que se ha quitado entero
 

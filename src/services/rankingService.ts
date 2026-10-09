@@ -61,6 +61,13 @@ export interface LeaderboardEntry {
   forgedCount?: number;
   /** Núcleos de Ascensión acumulados. Es lo que cuenta la pestaña propia. */
   cores?: number;
+  /**
+   * Daño final sin temporales del arma equipada, y cuánto es del arma (F83).
+   * Los publica el dueño en su fila; las filas viejas no los traen y no enseñan
+   * cifra en vez de enseñar un cero. Son los que la fila pinta y parte al apoyar.
+   */
+  danoFinal?: number;
+  danoArma?: number;
   title?: string;
   frame?: string;
   banner?: string;

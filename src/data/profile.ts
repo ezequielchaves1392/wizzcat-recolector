@@ -41,6 +41,9 @@
 
 import { SECRET_ACHIEVEMENTS, type AchievementId } from './achievements';
 import { TREE_BY_ID, TREE_NODES } from './tree';
+import { aggregateBonuses } from './prestige';
+import { ACHIEVEMENTS } from '../achievements';
+import { efectoDeAfijos, danoFinalDeRecolector, multiplicadorDeNivel, DANIO_MINIMO_SIN_RECOLECTOR } from './crafting';
 import { formatNumber } from '../utils/format';
 
 // --------------------------------------------------------------------------
@@ -97,6 +100,8 @@ export interface RecolectorPublico {
   damage?: number;
   /** Si es el recolector que este jugador tiene equipado ahora mismo. */
   equipado?: boolean;
+  /** Los afijos del arma, que cuentan al equiparla (F83: el recálculo los usa). */
+  affixes?: string[];
 }
 
 export interface CompanionPublico {
@@ -107,7 +112,7 @@ export interface CompanionPublico {
   rarity: string;
   /** Si este compañero está en la lista de activos. */
   equipado?: boolean;
-  /** 'companion' o 'multiplier': un multiplicador enseña ×1,5 y no ingreso. */
+  /** 'click', 'passive' o 'multiplier': el de la ficha, que es el que multiplica. */
   tipo: string;
   /**
    * Nivel y potencial, publicados solo para el brillo.
@@ -263,7 +268,15 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         power: num(fichaDe(w.id)?.power ?? w?.power),
         equipado: true,
         rarity: String(w.rarity ?? ''),
-        tipo: String(w.type ?? 'companion'),
+        // **EL TIPO DE LA FICHA, NO EL DEL ITEM (F83).** El item del almacén es
+        // 'companion' para todos; lo que multiplica el clic es el 'multiplier' de
+        // la ficha. Antes se publicaba el del item y todos salían 'companion': el
+        // recálculo del daño ajeno no tenía de dónde sacar el multiplicador de
+        // compañeros. Se coacciona al conjunto conocido; lo desconocido es 'click',
+        // que es lo que no multiplica.
+        tipo: (['click', 'passive', 'multiplier'] as string[]).includes(String(fichaDe(w.id)?.type))
+          ? String(fichaDe(w.id)?.type)
+          : 'click',
         // **DE LA FICHA, COMO EL POWER.** El nivel y el potencial del compañero viven en
         // `state.companions`; el item del almacén es otra copia y puede no traerlos. Leerlos
         // del item daría 0 y el halo de la tarjeta saldría siempre apagado.
@@ -320,6 +333,67 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
     visitantes: [],
     updatedAt: Date.now()
   };
+}
+
+/**
+ * EL BONO DE CLIC DE UNOS LOGROS CONCRETOS (F83).
+ *
+ * El motor suma `ACHIEVEMENTS[].reward` sobre sus desbloqueados; para recalculuar
+ * el daño de OTRO jugador hay que sumar la misma tabla sobre los que trae su
+ * tarjeta. Los ids que no están en el catálogo no suman: una tarjeta vieja o
+ * corrupta no puede multiplicar.
+ */
+export function bonoDeClickDeLogros(ids: Array<string> | undefined | null): number {
+  let bonus = 0;
+  const lista = Array.isArray(ids) ? ids : [];
+  for (const ach of ACHIEVEMENTS) {
+    if (!lista.includes(ach.id)) continue;
+    bonus += ach.reward?.clickBonus || 0;
+  }
+  return bonus;
+}
+
+/**
+ * EL DAÑO FINAL DEL ARMA EQUIPADA DE UNA TARJETA, SIN BUFFS TEMPORALES (F83).
+ *
+ * Es lo que pega ese jugador por clic sin temporales: su daño por nivel por
+ * afijos por compañeros por logros por árbol, con el suelo abajo. Cada entrada
+ * sale de la tarjeta —el arma equipada, los compañeros activos, los nodos con
+ * su nivel y los logros— y por las mismas funciones puras que usa el motor para
+ * lo propio, en el mismo orden. Si la tarjeta no trae arma, es cero: un perfil
+ * sin recolector no pega, y pintarlo como otra cosa sería inventar un dato.
+ *
+ * **SIN TEMPORALES PORQUE NO SE PUBLICAN.** `state.buffs` no va en la tarjeta a
+ * propósito (es volátil: un x2 caducado en una foto de hace minutos es un número
+ * que nadie pega). Quien enseñe este número lo rotula sin temporales.
+ *
+ * Devuelve el trío como `danosDeClick()`: el total y cuánto es del arma y cuánto
+ * de la partida, que es lo que el hover parte al apoyar.
+ */
+export function danoFinalDeTarjeta(
+  t: TarjetaPublica | null | undefined
+): { total: number; intrinseco: number; partida: number } {
+  const vacio = { total: 0, intrinseco: 0, partida: 0 };
+  const arma = t?.recolectores?.[0];
+  if (!arma) return vacio;
+  const nivel = Math.max(0, Math.floor(Number(arma.level) || 0));
+  const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(arma.damage) || 0);
+  const multAfijos = 1 + efectoDeAfijos(arma.affixes, nivel).clickMult;
+  let multCompaneros = 1;
+  for (const c of t?.companeros ?? []) {
+    if (c?.tipo === 'multiplier' && c?.equipado) multCompaneros += Number(c?.power) || 0;
+  }
+  multCompaneros = Math.max(1, multCompaneros);
+  const multLogros = 1 + bonoDeClickDeLogros(t?.logros);
+  const niveles: Record<string, number> = {};
+  for (const n of t?.nodos ?? []) {
+    if (!n?.id) continue;
+    niveles[String(n.id)] = Math.max(0, Math.floor(Number(n?.nivel) || 0));
+  }
+  const multArbol = 1 + (aggregateBonuses(niveles).clickMult || 0);
+  const intrinseco = Math.floor(base * multiplicadorDeNivel(nivel) * multAfijos);
+  const total = danoFinalDeRecolector(arma.damage, nivel, multAfijos, multCompaneros, multLogros, multArbol);
+  return { total, intrinseco, partida: total - intrinseco };
 }
 
 /**

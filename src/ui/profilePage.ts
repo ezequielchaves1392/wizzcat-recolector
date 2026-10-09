@@ -154,6 +154,17 @@ export function renderProfilePage(
   const bestForged = collectors
     .filter((w: any) => w.forgedBy)
     .reduce((a: any, w: any) => (!a || (w.damage || 0) > (a.damage || 0) ? w : a), null as any);
+  // **F83 · LA TARJETA ENSEÑA EL DAÑO FINAL, NO EL DEL ARMA SOLA.** Sale del motor
+  // (`getStatPrincipal`: la misma cadena que la ficha y lo que se cobra sin buff),
+  // con los afijos del propio item —en la equipada es exacto, en otra es el valor
+  // al equiparla—. Sin motor o sin cifra, el daño guardado, que es lo que había.
+  const bestStat = bestCollector ? game.getStatPrincipal?.(bestCollector.id) : null;
+  const bestDano = bestStat && Number.isFinite(Number(bestStat.valor))
+    ? Math.floor(Number(bestStat.valor)) : Math.floor(Number(bestCollector?.damage) || 0);
+  const bestFilas = bestCollector ? game.getStatFilas?.(bestCollector.id) : null;
+  const bestParte = bestFilas && (bestFilas.deLaPartida ?? 0) > 0
+    ? `Del arma +${formatNumber(bestFilas.delArma ?? bestDano)} · De la partida +${formatNumber(bestFilas.deLaPartida)} · sin buffs temporales`
+    : '';
 
   const unlockedCosmetics = state.cosmetics.unlocked as string[];
 
@@ -361,9 +372,9 @@ export function renderProfilePage(
               ${bestCollector.forgedBy ? ` · de <span class="accent-text">${bestCollector.forgedBy}</span>` : ''}
             </div>
           </div>
-          <div class="text-right flex-shrink-0">
+          <div class="text-right flex-shrink-0" ${bestParte ? `title="${bestParte}"` : ''}>
             <div class="label-caps leading-none">Daño</div>
-            <div class="font-['Orbitron'] font-bold text-[13px] accent-text tabular">+${formatNumber(bestCollector.damage)}</div>
+            <div class="font-['Orbitron'] font-bold text-[13px] accent-text tabular">+${formatNumber(bestDano)}</div>
           </div>
         </div>
       </section>
