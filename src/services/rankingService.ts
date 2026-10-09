@@ -30,6 +30,7 @@
 
 import { db } from '../firebase';
 import { collection, doc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { contarOp } from './contadorOps';
 import { VENTANA_MS } from './sessionService';
 
 /** Peso de cada logro público en la puntuación global. */
@@ -380,6 +381,8 @@ export async function getTopRankings(limitRows = 40): Promise<LeaderboardEntry[]
       const querySnapshot = await getDocs(q);
       const rows: LeaderboardEntry[] = [];
       querySnapshot.forEach((d) => rows.push({ ...(d.data() as any), uid: d.id }));
+      // F96 · N filas traídas son N lecturas cobradas: el detalle dice cuántas.
+      contarOp('lectura', 'rankings', 'ranking-tabla', rows.length);
       if (rows.length === 0) return fallbackData;
 
       // LAS FILAS SE DEVOLUEN TAL CUAL. Antes se sobrescribía aquí

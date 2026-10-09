@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.21',
+    fecha: '9 de octubre de 2026',
+    titulo: 'La Wiki busca y el juego enseña su ritmo',
+    lineas: [
+      'La Wiki ahora tiene buscador: escribes lo que buscas y te lleva a la sección que lo explica.',
+      'Los conceptos se enlazan entre sí, así que desde una explicación saltas a la que sigue sin perderte.',
+      'Mientras juegas ves un numerito con el ritmo de operaciones de la partida, en verde, naranja o rojo.'
+    ]
+  },
+  {
     version: '1.15.20',
     fecha: '9 de octubre de 2026',
     titulo: 'Un modo para probar sin gastar',

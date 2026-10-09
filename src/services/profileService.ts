@@ -33,6 +33,7 @@
 
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { contarOp } from './contadorOps';
 import {
   tarjetaDesdeEstado, documentoDeTarjeta, coaccionaTarjeta, TARJETA_VACIA,
   type TarjetaPublica
@@ -98,6 +99,9 @@ function esPermisoDenegado(e: unknown): boolean {
 export async function leerTarjeta(uid: string): Promise<LecturaDeTarjeta> {
   try {
     const snap = await getDoc(refDeTarjeta(uid));
+    // F96 · Abrir un perfil ajeno es la lectura más cara del juego después
+    // de la tabla: que se vea en el numerito.
+    contarOp('lectura', 'perfiles', 'tarjeta-lectura');
     if (!snap.exists()) return { ok: false, motivo: 'no-existe' };
     return { ok: true, tarjeta: coaccionaTarjeta(snap.data(), uid) };
   } catch (e) {
@@ -131,6 +135,8 @@ export async function publicarTarjeta(state: any, uid: string, username: string)
   try {
     const tarjeta = tarjetaDesdeEstado(state, uid, username);
     await setDoc(refDeTarjeta(uid), documentoDeTarjeta(tarjeta), { merge: true });
+    // F96 · Se cuenta aquí y no en el motor: este es el único sitio que la escribe.
+    contarOp('escritura', 'perfiles', 'tarjeta');
   } catch (e) {
     console.warn('[perfil] No se ha podido publicar la tarjeta.', e);
   }
@@ -213,6 +219,8 @@ export async function registrarVisita(perfilUid: string, visitanteUid: string, c
       visitas: tarjeta.visitas + 1,
       visitantes
     }, { merge: true });
+    // F96 · Cada visita ajena es una escritura: mirar perfiles caros sale caro.
+    contarOp('escritura', 'perfiles', 'visita');
   } catch (e) {
     console.warn('[perfil] No se ha podido anotar la visita.', e);
   }

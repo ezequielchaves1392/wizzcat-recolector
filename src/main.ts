@@ -36,6 +36,8 @@ import {
 } from './utils/audio';
 import { renderLayoutHTML } from './ui/layout';
 import { updateResourceBar } from './ui/appHeader';
+import { montarOpsOverlay } from './ui/opsOverlay';
+import { resumenOps } from './services/contadorOps';
 import { miniIdentity } from './ui/identity';
 import { ic, icSafe } from './ui/icons';
 
@@ -788,6 +790,12 @@ async function initGame(user: any, username?: string) {
     mostrarFalloDeCarga(cuotaAgotadaComoError());
     return;
   }
+
+  // F96 · El registro de operaciones vive en memoria y se lee desde la
+  // consola con `__ops()`, con o sin overlay. Solo lectura: no toca nada.
+  (window as any).__ops = () => resumenOps();
+  // El numerito estilo FPS sale solo con `?ops=1` en la URL.
+  montarOpsOverlay();
 
   // Handle de depuración solo en dev: permite inspeccionar y probar el estado
   // desde la consola. Se elimina del build de producción.

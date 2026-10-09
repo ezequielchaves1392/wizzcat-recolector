@@ -41,6 +41,7 @@
 // ==========================================================================
 
 import { doc, getDoc, setDoc, deleteField, updateDoc } from 'firebase/firestore';
+import { contarOp } from './contadorOps';
 import { db } from '../firebase';
 import { conTiempoLimite } from '../utils/timeout';
 
@@ -139,6 +140,8 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
       PLAZO_DE_LECTURA_MS,
       'consultarSesion'
     );
+    // F96 · Preguntar quién tiene la cuenta también es una lectura.
+    contarOp('lectura', 'users', 'sesion-check');
     if (!snap.exists()) return SIN_SESION;
 
     // **EL LATIDO VIVE DENTRO DE LA PARTIDA, EN LA CLAVE `sesion`.** No en un
@@ -301,6 +304,8 @@ export async function anotarLatido(uid: string, miId: string): Promise<void> {
         campo,
         { merge: true }
       ), PLAZO_DE_LECTURA_MS, 'anotarLatido');
+      // F96 · Junto a la confirmación del reloj: lo que no se escribió no se cuenta.
+      contarOp('escritura', 'users', 'latido');
       // **SOLO AQUÍ, Y SOLO SI NO HA LANZADO.** El reloj se mueve después de la
       // escritura, no antes: si el `setDoc` falla, el siguiente latido tiene que volver a
       // intentarlo, porque el cerrojo **no** se ha refrescado.
@@ -332,6 +337,7 @@ export async function soltarSesion(uid: string, miId: string): Promise<void> {
   try {
     const ref = doc(db, 'users', uid);
     const snap = await conTiempoLimite(getDoc(ref), PLAZO_DE_LECTURA_MS, 'soltarSesion');
+    contarOp('lectura', 'users', 'soltar-sesion');
     if (!snap.exists()) return;
     const sesion = (snap.data() as any)?.sesion;
     if (!sesion) return;
@@ -340,6 +346,8 @@ export async function soltarSesion(uid: string, miId: string): Promise<void> {
     // reemplaza, no se fusiona, asi que esto es lo unico que deja la partida sin rastro
     // de la sesion.
     await updateDoc(ref, { sesion: deleteField() });
+    // F96 · Soltar el cerrojo también es una escritura, aunque sea al cerrar.
+    contarOp('escritura', 'users', 'soltar-sesion');
   } catch (e) {
     // Al cerrar la pestaña puede que la red ya no esté. El reloj de expiración
     // es la red de seguridad: aunque esto falle, la cuenta se libera sola.
@@ -382,6 +390,8 @@ export async function anotarPresencia(uid: string): Promise<void> {
       PLAZO_DE_LECTURA_MS,
       'anotarPresencia'
     );
+    // F96 · El punto verde del ranking también paga escritura.
+    contarOp('escritura', 'rankings', 'presencia');
   } catch (e) {
     console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
   }

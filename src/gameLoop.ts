@@ -3,6 +3,7 @@ import { showToast } from './utils/toast';
 import { formatNumber } from './utils/format';
 import { db } from './firebase';
 import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
+import { contarOp } from './services/contadorOps';
 import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
 import { esCuotaAgotada, renderCuotaAgotada } from './components/blocked';
@@ -1643,6 +1644,9 @@ function sePuedeGuardar(): boolean {
 
   try {
     const docSnap = await getDoc(userRef);
+    // F96 · La carga también es una lectura de cuota, y sin anotarla el
+    // numerito diría que arrancar es gratis.
+    contarOp('lectura', 'users', 'carga');
     if (docSnap.exists()) {
       const data = docSnap.data();
       // La versión que TRAJO el documento, no la que va a salir de aquí. Es lo
@@ -3602,6 +3606,9 @@ function sePuedeGuardar(): boolean {
       if (!forzar && firmaPartida === ultimaFirma) return;
 
       await setDoc(userRef, gameData, { merge: true });
+      // F96 · Se cuenta DESPUÉS del `setDoc`, como la firma: contar antes
+      // sería afirmar una escritura que quizá no ocurrió.
+      contarOp('escritura', 'users', 'guardado-users');
 
       // **B30 · EL LATIDO QUE VIAJABA AQUÍ, AHORA QUE ESTÁ DE VERDAD ESCRITO.**
       //
@@ -3727,6 +3734,9 @@ function sePuedeGuardar(): boolean {
           },
           updatedAt: new Date()
         }, { merge: true });
+        // F96 · La fila del ranking es la escritura que más se repite en AFK,
+        // porque su firma se mueve con lo producido.
+        contarOp('escritura', 'rankings', 'guardado-ranking');
 
         // **Y LA TARJETA PÚBLICA, EN EL MISMO `if` PORQUE ES LA MISMA PREGUNTA.**
         //

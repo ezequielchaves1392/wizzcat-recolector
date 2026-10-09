@@ -1918,7 +1918,7 @@ secciones; el probador queda anotado y no se toca.*
       y logros, y que el daño y el pasivo los calcule el motor de verdad
       (`getClickDamage` y el reparto del pasivo), no una copia. Si calcula por su cuenta,
       es la segunda fuente que se queda vieja.
-- [x] **F95 · Buscador en la Wiki y enlaces entre conceptos.** Hecha, con el
+- [x] **F95 · Buscador en la Wiki y enlaces entre conceptos.** Hecha en v1.15.21, con el
       documento entero enriquecido de paso (era lo pedido: no solo un sector).
       > "Meter un buscador en la wiki, y moverse automáticamente a conceptos por hipervinculos"
       Un campo encima de las pestañas que busca en las siete secciones a la vez —
@@ -2000,7 +2000,7 @@ más alto": los estás haciendo tú.*
 
 - [x] **F96 · Contador de operaciones en vivo (ritmos y picos mientras se juega).**
       > "si encontras alguna estrategia para medir ritmos o picos de escrituras mientras alguien este jugando es bienvenido"
-      **Hecho (sin versión: sale en la próxima).** Lo pedido más dos cosas que
+      **Hecho en v1.15.21.** Lo pedido más dos cosas que
       se decidieron en conversación: el numerito estilo FPS con semáforo
       (verde ≤6, naranja 7–12, rojo >12, con histéresis de 3 s) y `window.__ops()`.
       **De dónde sale:** captura del 9 de octubre, ~10 min solo AFK sin forjar ni

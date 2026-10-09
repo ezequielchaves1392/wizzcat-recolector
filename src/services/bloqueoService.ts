@@ -14,6 +14,7 @@
 
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { contarOp } from './contadorOps';
 
 export interface EstadoBloqueo {
   bloqueado: boolean;
@@ -38,6 +39,8 @@ const SIN_BLOQUEO: EstadoBloqueo = { bloqueado: false, motivo: '', desde: 0 };
 export async function consultarBloqueo(uid: string): Promise<EstadoBloqueo> {
   try {
     const snap = await getDoc(doc(db, 'bloqueos', uid));
+    // F96 · También cuenta aunque el documento no exista: Firestore la cobra igual.
+    contarOp('lectura', 'bloqueos', 'bloqueo');
     if (!snap.exists()) return SIN_BLOQUEO;
 
     const d = snap.data() as any;

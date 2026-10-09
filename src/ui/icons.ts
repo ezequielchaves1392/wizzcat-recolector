@@ -88,6 +88,7 @@ export const ICONS = {
   grid: svg('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
   monitor: svg('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'),
   star: svg('<path d="m12 2 3 6.5 7 .8-5.2 4.7 1.5 6.9L12 17.3 5.7 21l1.5-7L2 9.3l7-.8L12 2Z"/>'),
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/>'),
   // Iconos de los marcos ("iconos de perfil"). Uno por nombre del catálogo, con
   // la forma que el ojo reconoce antes que el color: átomo, gema, prisma...
   atom: svg('<circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(0 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="4" transform="rotate(120 12 12)"/>'),

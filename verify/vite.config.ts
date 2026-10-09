@@ -92,7 +92,9 @@ export default defineConfig({
         autoventaCheck: resolve(here, 'autoventaCheck.ts'),
         arbolLoreCheck: resolve(here, 'arbolLoreCheck.ts'),
         // F86 · La Wiki enseña reglas, y este banco ata que sean las del juego.
-        wikiCheck: resolve(here, 'wikiCheck.ts')
+        wikiCheck: resolve(here, 'wikiCheck.ts'),
+        // F96 · El contador cuenta lo que se cobra y el semáforo dice lo que hay.
+        opsCheck: resolve(here, 'opsCheck.ts')
       },
       formats: ['es']
     }

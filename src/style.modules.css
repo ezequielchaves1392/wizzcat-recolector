@@ -1034,3 +1034,69 @@
     transition: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Wiki: párrafos, cajas, subtítulos de concepto, enlaces y destino señalado
+   `wiki-p` y `wiki-box` se usaban en la página sin definición: con el
+   preflight los párrafos quedaban pegados sin ningún aire. El resto es F95:
+   cada concepto con su subtítulo, cada mención con su enlace y cada salto
+   con su destello.
+   -------------------------------------------------------------------------- */
+
+.wiki-p {
+  margin: 0 0 0.55rem;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+.wiki-p:last-child { margin-bottom: 0; }
+
+/* El subtítulo de cada concepto: el nombre arriba, la explicación debajo. */
+.wiki-sub {
+  margin: 0.85rem 0 0.3rem;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.wiki-sub:first-child { margin-top: 0; }
+
+/* Las filas de cifras, sangradas en su caja. */
+.wiki-box {
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  margin: 0 0 0.55rem;
+  background: rgb(148 163 184 / 0.06);
+}
+
+.wiki-box:last-child { margin-bottom: 0; }
+
+/* Los enlaces entre conceptos: el acento del tema, siempre subrayados para
+   que no parezcan texto enfatizado. */
+.wiki-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wiki-link:hover { color: var(--text-main); }
+
+/* El destino de un salto se señala un momento. Sin animación con
+   `prefers-reduced-motion`: menos movimiento, no menos confirmación. */
+.wiki-flash { animation: wiki-destello 1.6s ease-out; }
+
+@keyframes wiki-destello {
+  0% { background-color: rgb(56 189 248 / 0.28); }
+  100% { background-color: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiki-flash {
+    animation: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}

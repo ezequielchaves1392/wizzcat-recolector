@@ -17,6 +17,9 @@
 //    · Los logros son 27 y los difíciles no dan números.
 //    · El árbol no tiene requisitos imposibles ni costes que no salgan de
 //      `nodeCost()`.
+//    · El buscador (F95) indexa lo que el juego tiene —si un dato nuevo no
+//      está en el índice sale en rojo—, busca con "y" entre términos y sin
+//      tildes, y cada ancla del índice es una que la página escribe.
 //
 //  Si alguna de estas se mueve, la Wiki miente y este banco lo canta el mismo
 //  día, en vez de tres meses después mirando la pantalla.
@@ -33,7 +36,13 @@ import { ICONS } from '../src/ui/icons';
 import { NOTAS } from '../src/data/patchNotes';
 import {
   CRATE_TIERS, CRATE_TYPES, costeDeCaja, COSTE_POR_TIER,
-  EXPANSOR_TIERS, expansorDeCaja, STORE_ITEMS
+  EXPANSOR_TIERS, expansorDeCaja, STORE_ITEMS,
+  // POR QUÉ EL ALIAS. Este banco importa `store` directamente Y a través de
+  // `wikiIndex`, y con ese doble camino el bundle (solo y completo) dejaba el
+  // `CONSUMABLES` de este fichero sin declarar —`ReferenceError` en la primera
+  // línea que lo tocaba— mientras el resto de nombres del mismo módulo llegaba
+  // bien. Con el alias el banco vuelve a compilar y las pruebas cantan igual.
+  CONSUMABLES as CONSUMIBLES
 } from '../src/data/store';
 import {
   CRATE_LOOT, CRATE_META, CRATE_ONLY_COMPANIONS, tablaDePesos,
@@ -54,6 +63,11 @@ import {
 } from '../src/data/achievements';
 import { TREE_NODES, nodeCost } from '../src/data/tree';
 import { pendingCores } from '../src/data/prestige';
+import {
+  ANCLA, anclaAfijo, anclaBase, anclaCaja, anclaConsumible, anclaExclusivo,
+  anclaExpansor, anclaGrupoBases, anclaLogro, anclaNodo, anclaTier,
+  anclaVersion, buscarEnWiki, construirIndiceWiki, normalizaWiki
+} from '../src/data/wikiIndex';
 
 async function main() {
   // ------------------------------------------------------------------
@@ -266,6 +280,94 @@ async function main() {
     check('wiki: las versiones empiezan en el inicio (1.1.0)',
       NOTAS.length > 0 && NOTAS[NOTAS.length - 1].version === '1.1.0',
       NOTAS[NOTAS.length - 1]?.version ?? 'vacía');
+  }
+
+  // ------------------------------------------------------------------
+  // 10 · El buscador (F95): índice completo, búsqueda y anclas íntegras
+  // ------------------------------------------------------------------
+  {
+    const indice = construirIndiceWiki();
+    const porSeccion = (s: string) => indice.filter(e => e.seccion === s);
+    check('wiki: el índice cubre las siete secciones',
+      ['mecanicas', 'cajas', 'bases', 'items', 'logros', 'pasivas', 'versiones']
+        .every(s => porSeccion(s).length > 0),
+      [...new Set(indice.map(e => e.seccion))].join(','));
+    check('wiki: cinco bloques de mecánicas', porSeccion('mecanicas').length === 5,
+      `${porSeccion('mecanicas').length}`);
+    check('wiki: once entradas de cajas (intro + diez)', porSeccion('cajas').length === 11,
+      `${porSeccion('cajas').length}`);
+    const deBases = porSeccion('bases');
+    check('wiki: las doscientas bases están en el índice',
+      deBases.filter(e => e.ancla.startsWith('base-')).length === TODAS_LAS_BASES.length,
+      `${deBases.filter(e => e.ancla.startsWith('base-')).length} bases`);
+    check('wiki: veinte grupos de bases (diez por lado)',
+      deBases.filter(e => e.ancla.startsWith('bases-rec-') || e.ancla.startsWith('bases-com-')).length === 20,
+      `${deBases.length} en bases`);
+    check('wiki: un logro por entrada (más la intro)', porSeccion('logros').length === ACHIEVEMENTS.length + 1,
+      `${porSeccion('logros').length} frente a ${ACHIEVEMENTS.length}`);
+    check('wiki: un nodo por entrada (más la intro)', porSeccion('pasivas').length === TREE_NODES.length + 1,
+      `${porSeccion('pasivas').length} frente a ${TREE_NODES.length}`);
+    const deItems = porSeccion('items');
+    check('wiki: un afijo por entrada', deItems.filter(e => e.ancla.startsWith('afijo-')).length === AFFIXES.length,
+      `${AFFIXES.length} afijos`);
+    check('wiki: los diez tiers en items', deItems.filter(e => e.ancla.startsWith('tier-')).length === 10,
+      'revisados');
+    check('wiki: los seis exclusivos en items', deItems.filter(e => e.ancla.startsWith('exclusivo-')).length === 6,
+      'revisados');
+    check('wiki: los cuatro expansores en items', deItems.filter(e => e.ancla.startsWith('expansor-')).length === 4,
+      'revisados');
+    const nConsumibles = Object.values(CONSUMIBLES as Record<string, any>)
+      .filter(c => !(EXPANSOR_TIERS as any[]).some(e => e.buffId === c.buffId)).length;
+    check('wiki: un consumible por entrada', deItems.filter(e => e.ancla.startsWith('consumible-')).length === nConsumibles,
+      `${nConsumibles} consumibles`);
+    check('wiki: una entrada por parche (más la intro)', porSeccion('versiones').length === NOTAS.length + 1,
+      `${NOTAS.length} parches`);
+
+    // Integridad de los saltos: sin repetidos, sin raros, y cada ancla del
+    // índice es una que la página escribe (bloques fijos o ayudantes sobre
+    // datos). Una escrita a mano que no exista caería en silencio al
+    // principio de la sección.
+    const anclas = indice.map(e => e.ancla);
+    check('wiki: ningún ancla se repite', new Set(anclas).size === anclas.length,
+      `${anclas.length} anclas`);
+    check('wiki: anclas sin espacios ni raros', anclas.every(a => /^[A-Za-z0-9_.-]+$/.test(a)),
+      anclas.filter(a => !/^[A-Za-z0-9_.-]+$/.test(a)).join(',') || 'todas valen');
+    const deAyudantes = new Set<string>([
+      ...Object.values(ANCLA),
+      ...(CRATE_TIERS as readonly number[]).map(anclaCaja),
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(t => [anclaGrupoBases('rec', t), anclaGrupoBases('com', t)]),
+      ...TODAS_LAS_BASES.map(b => anclaBase((b as any).id)),
+      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(anclaTier),
+      ...(CRATE_ONLY_COMPANIONS as readonly unknown[]).map((_, i) => anclaExclusivo(i)),
+      ...Object.values(CONSUMIBLES as Record<string, any>)
+        .filter(c => !(EXPANSOR_TIERS as any[]).some(e => e.buffId === c.buffId))
+        .map(c => anclaConsumible(c.buffId)),
+      ...(EXPANSOR_TIERS as any[]).map((_, i) => anclaExpansor(i)),
+      ...AFFIXES.map(a => anclaAfijo(a.id)),
+      ...ACHIEVEMENTS.map(a => anclaLogro(a.id)),
+      ...TREE_NODES.map(n => anclaNodo(n.id)),
+      ...NOTAS.map(n => anclaVersion(n.version))
+    ]);
+    const huerfanas = anclas.filter(a => !deAyudantes.has(a));
+    check('wiki: cada ancla del índice la escribe la página', huerfanas.length === 0,
+      huerfanas.join(',') || `${anclas.length} atadas`);
+
+    // Comportamiento: "y" entre términos, sin tildes, vacío que no lo devuelve todo.
+    check('wiki: "forja" lleva al bloque de la forja',
+      buscarEnWiki('forja').some(e => e.ancla === ANCLA.mecanicaForja),
+      `${buscarEnWiki('forja').length} resultados`);
+    check('wiki: sin tildes ("calibracion" encuentra la Piedra)',
+      buscarEnWiki('calibracion').some(e => e.titulo.includes('Calibración')),
+      buscarEnWiki('calibracion').map(e => e.titulo).join(' | ') || 'nada');
+    check('wiki: varias palabras son "y" ("caja t10" abre la T10)',
+      buscarEnWiki('caja t10')[0]?.ancla === anclaCaja(10),
+      buscarEnWiki('caja t10')[0]?.ancla ?? 'nada');
+    check('wiki: vacío no devuelve el índice entero', buscarEnWiki('   ').length === 0, 'vacío');
+    check('wiki: lo inexistente no devuelve nada', buscarEnWiki('zzzsinconcepto').length === 0, 'nada');
+    check('wiki: normaliza tildes y mayúsculas',
+      normalizaWiki('Calibración FORJA') === 'calibracion forja',
+      normalizaWiki('Calibración FORJA'));
+    check('wiki: el set trae el icono del buscador', 'search' in ICONS, 'search');
   }
 
   resumen('wiki: la base de conocimiento enseña las reglas que el juego aplica');

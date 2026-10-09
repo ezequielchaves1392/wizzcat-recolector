@@ -80,7 +80,9 @@ const BANCOS = [
   'arbolLoreCheck',
   'leyendaCheck',
   'contadorCheck',
-  'wikiCheck'
+  'wikiCheck',
+  // F96 · El numerito dice la verdad: el contador cuenta lo que se cobra.
+  'opsCheck'
 ];
 
 // ==========================================================================
