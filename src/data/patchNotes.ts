@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.24',
+    fecha: '9 de octubre de 2026',
+    titulo: 'La forja en serie gasta menos cuota',
+    lineas: [
+      'Forjar toda una fila de compañeros de golpe escribía la partida una vez por pareja; ahora la escribe una sola vez al terminar.',
+      'El resultado es el mismo y se enseña igual: la lista de lo que salió de cada par no cambia.',
+      'Si forjas mucho seguido lo notas en el numerito de operaciones: ya no se dispara, sube una vez por serie.'
+    ]
+  },
+  {
     version: '1.15.23',
     fecha: '9 de octubre de 2026',
     titulo: 'Los clics automáticos rinden menos y no usan tus tarjetas',

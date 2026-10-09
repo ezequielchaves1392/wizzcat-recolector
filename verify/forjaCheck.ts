@@ -1280,6 +1280,81 @@ const falloCon = async () => {
       rB.hechos === 2 && rB.resultados.every((x: any) => x.item?.potential === 3),
       `potenciales=${rB.resultados.map((x: any) => x.item?.potential).join(',')}`);
   }
+
+  // --- B43 · LA SERIE GUARDA UNA VEZ, NO UNA POR PAREJA ------------------
+  // **ESTA ES LA PRUEBA DEL PICO DE LA MAÑANA.** `autoForge()` llamaba a la
+  // forja de a una por tirada y cada una guardaba y repintaba, más el guardado
+  // final: N parejas eran N+1 guardados, y cada guardado escribe partida +
+  // ranking. Forjar compañeros en serie quemó la cuota con el mismo documento
+  // escrito decenas de veces seguidas.
+  //
+  // **SE MIDE CON EL CONTADOR DEL STUB, NO CON UNA CUENTA.** `db.escrituras`
+  // es la partida y `db.filas` la fila del ranking: lo que Firestore cobra. El
+  // contador se pone a cero DESPUÉS del arranque y de una forja manual previa,
+  // que ya escribe lo suyo —y de paso desbloquea `first_forge`, para que la
+  // serie medida no estrene ningún logro a mitad y su guardado no ensucie la
+  // cuenta—. La escritura del final ya está pedida: se espera a que llegue con
+  // un turno al bucle, sin `flush()`, que pediría OTRO guardado y correría la
+  // carrera de la discrepancia 14 contra el que está en vuelo.
+  {
+    const seis = () => [
+      companion('m0', 2, { potential: 2 }),
+      companion('m1', 2, { potential: 2 }),
+      companion('c1', 2, { potential: 2 }),
+      companion('c2', 2, { potential: 2 }),
+      companion('c3', 2, { potential: 2 }),
+      companion('c4', 2, { potential: 2 })
+    ];
+    const g = await boot(baseSave(seis(), { warehouseCapacity: 40 }));
+    const manual: any = conRoll(0.001, () => g.forgeCompanion(['m0', 'm1']));
+    await g.flush();
+    await new Promise((res) => setTimeout(res, 20));
+    check('autoforge: la forja manual previa sale y desbloquea el logro de forja',
+      manual.success === true && (s(g).unlockedAchievements ?? []).includes('first_forge'),
+      `success=${manual.success} logros=${JSON.stringify(s(g).unlockedAchievements ?? [])}`);
+
+    const db = (globalThis as any).__MEM_DB__;
+    db.escrituras = 0;
+    db.filas = 0;
+    const logrosAntes = [...(s(g).unlockedAchievements ?? [])];
+    const r = conRoll(0.001, () => g.autoForge('companion', 2));
+    // **SIN `flush()`: ESO SERÍA OTRO GUARDADO.** `flush()` dispara su propio
+    // `saveToFirebase()`, y con el de la serie todavía en vuelo los dos pasan
+    // el filtro de "¿cambió algo?" a la vez y escriben los dos: la misma
+    // carrera de la discrepancia 14. La escritura ya está pedida; solo se
+    // espera a que llegue.
+    await new Promise((res) => setTimeout(res, 20));
+    check('autoforge: la serie de dos parejas forja las dos',
+      r.hechos === 2 && r.resultados.length === 2,
+      `hechos=${r.hechos} resultados=${r.resultados.length}`);
+    // **3 SON UNA PARTIDA + UNA FILA + UNA TARJETA: UN SOLO GUARDADO.** Cada
+    // `saveToFirebase()` escribe esos tres documentos cuando algo cambió; dos
+    // parejas con el código viejo eran hasta siete (una por tirada más la
+    // final). Lo que se ata es que la serie cuesta un guardado, haya una o
+    // cincuenta parejas.
+    check('autoforge: y la serie cuesta un solo guardado, no uno por pareja',
+      db.escrituras === 3,
+      `escrituras=${db.escrituras}`);
+    check('autoforge: y la fila del ranking también, una sola vez',
+      db.filas === 1,
+      `filas=${db.filas}`);
+    check('autoforge: y la serie no estrena logros a mitad, que guardarían de más',
+      JSON.stringify(s(g).unlockedAchievements ?? []) === JSON.stringify(logrosAntes),
+      `logros=${JSON.stringify(s(g).unlockedAchievements ?? [])}`);
+    const g2 = await recargar(g);
+    // **EL CONTEO VA POR `forgedCount`, NO POR ITEMS.** Con el dado fijado los
+    // tres ids salen del mismo milisegundo con el mismo sufijo (`conRoll` clava
+    // la parte aleatoria), así que dos forjados pueden compartir id y su espejo
+    // en el almacén es uno solo: contar items es contar una lotería de
+    // milisegundos. El contador sube uno por acierto sí o sí, en memoria y en
+    // el documento, y eso es lo que demuestra que la serie llegó al disco.
+    check('autoforge: y los tres aciertos quedan anotados tras recargar',
+      (s(g2).forgedCount ?? 0) === 3,
+      `forgedCount=${(s(g2).forgedCount ?? 0)}`);
+    check('autoforge: y el almacén recargado trae los forjados',
+      wh(g2).filter((w: any) => w.type === 'companion' && (w.tier ?? 0) === 3).length >= 2,
+      `T3=${wh(g2).filter((w: any) => w.type === 'companion' && (w.tier ?? 0) === 3).length}`);
+  }
   {
     // **Y EN RECOLECTORES LA NANO SIGUE GASTÁNDOSE POR PAREJA: SI NO ALCANZA, LA
     // PAREJA SE QUEDA.** Es la misma regla de siempre, pero ahora en el único

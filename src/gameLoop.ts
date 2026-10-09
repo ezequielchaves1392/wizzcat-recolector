@@ -6723,9 +6723,13 @@ const RITMO_GUARDADO_MS = 60_000;
         // acabaría cobrando una nanopartícula que no hace nada.
         const nanoDeEstePar = plan.nanoPorTirada;
 
+        // B43 · Sin guardar ni repintar por tirada: N guardados intermedios son
+        // N escrituras de partida + N de ranking sobre el mismo documento, que
+        // es lo que quemó la cuota al forjar compañeros. La misma convención
+        // de F49: el guardado y el repintado van una vez al final.
         const r: any = tipoForge === 'collector'
-          ? estado.forgeCollector(ids, piedrasDeEstePar, nanoDeEstePar)
-          : estado.forgeCompanion(ids, piedrasDeEstePar, nanoDeEstePar);
+          ? estado.forgeCollector(ids, piedrasDeEstePar, nanoDeEstePar, 0, { sinGuardar: true, sinRepintar: true })
+          : estado.forgeCompanion(ids, piedrasDeEstePar, nanoDeEstePar, 0, { sinGuardar: true, sinRepintar: true });
 
         // **LO COBRADO DE VERDAD, NO LO PLANEADO.** Si la nano se agota a mitad
         // de la serie, las parejas que siguen fallan sin gastar ni materiales ni
@@ -6744,6 +6748,11 @@ const RITMO_GUARDADO_MS = 60_000;
       }
 
       const hechos = resultados.filter(r => r.exito).length;
+      // B43 · El único guardado (y repintado) de la serie. Cada tirada ya dejó
+      // el estado listo y el pasivo se recalcula aquí una vez en vez de N: con
+      // dos escrituras —partida + ranking— sale cualquier serie, de 1 o de 50.
+      recalculatePassiveIncome();
+      onUpdate(state, isAfk);
       saveToFirebase();
       return {
         success: true,
@@ -6927,7 +6936,7 @@ const RITMO_GUARDADO_MS = 60_000;
      * que esta pantalla no se puede permitir, así que la solicitud se suelta y el
      * almacén no se toca. La vista tampoco la ofrece para esta fusión.
      */
-    forgeCompanion: (materialIds: string[], stonesUsed = 0, nanoUsed = 0, eterUsed = 0) => {
+    forgeCompanion: (materialIds: string[], stonesUsed = 0, nanoUsed = 0, eterUsed = 0, opciones?: { sinGuardar?: boolean; sinRepintar?: boolean }) => {
       handleUserActivity();
 
       const mat = materialesDeForja(materialIds, 'companion');
@@ -6960,8 +6969,8 @@ const RITMO_GUARDADO_MS = 60_000;
         state.forgedCount += 1;
         recalculatePassiveIncome();
         checkAchievements();
-        onUpdate(state, isAfk);
-        saveToFirebase();
+        if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+        if (!opciones?.sinGuardar) saveToFirebase();
         return {
           success: true,
           companion: c,
@@ -6983,8 +6992,8 @@ const RITMO_GUARDADO_MS = 60_000;
       // ramas de fallo dan lo mismo**, y eso tiene una prueba que las compara.
       const consuelo = intentos * valorDeUnCristal(mat.tier!);
       if (consuelo > 0) grantCrystals(consuelo);
-      onUpdate(state, isAfk);
-      saveToFirebase();
+      if (!opciones?.sinRepintar) onUpdate(state, isAfk);
+      if (!opciones?.sinGuardar) saveToFirebase();
       return {
         success: false,
         crystals: consuelo,
