@@ -9,23 +9,33 @@
 //   1. Estado de la ascensión: cuántos núcleos hay y cuántos daría el reinicio
 //   2. Botón de reciclar, con un resumen explícito de lo que se pierde
 //   3. Resumen de bonificaciones activas (lo que el árbol ya te da)
-//   4. El árbol: 5 columnas de 4-5 nodos, con enlaces entre ramas
+//   4. Las ramas: cuatro pestañas (Asalto / Manada / Fortuna / Forja)
 //   5. Bottom sheet de detalle al tocar un nodo
 //
-// El árbol se pinta por columnas (tier), no por ramas, porque en móvil una
-// rejilla de 5 columnas se lee como una progresión izquierda-derecha sin
-// necesidad de explaining las conexiones cruzadas con líneas SVG.
+// Cada pestaña enseña UNA rama y sus requisitos no salen de ella: lo que se ve
+// es lo que hay que decidir. El fondo de cada rama se abre por puntos —niveles
+// comprados en ella—, no por nodos sueltos.
 // ==========================================================================
 
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip } from './pageShell';
 import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META } from '../data/tree';
-import { canBuyNode, nextCores, coreProgress, nanitesToNextCore, treeCompletion } from '../data/prestige';
+import { canBuyNode, nextCores, coreProgress, nanitesToNextCore, treeCompletion, puntosEnRama, UMBRAL_PUNTOS_RAMA } from '../data/prestige';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
 import { htmlToNode } from '../utils/modal';import { showConfirmModal } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import type { PassiveBonuses } from '../types/domain';
+
+// **LA PESTAÑA ABIERTA SOBREVIVE AL RE-RENDER (R6).** Comprar un nodo repinta
+// la página entera y sin este estado volvería siempre a la primera pestaña,
+// que es justo lo que rompía el selector de la forja (A5): decidir algo no
+// puede devolverte a otro sitio.
+const ui: { tab: string } = { tab: 'asalto' };
+
+// Las ramas en el orden en que se enseñan: el del catálogo, que es el que
+// decide la identidad de cada una.
+const RAMAS = Object.keys(TREE_CATEGORY_META);
 
 /** Etiqueta legible de una bonificación, con su valor. */
 function bonusLabel(key: keyof PassiveBonuses, value: number): string {
@@ -96,14 +106,18 @@ export function renderPrestigePage(
   const completion = treeCompletion(state.nodeLevels || {});
   const canRecycle = pending > 0;
 
-  // Distribución de nodos por columna (tier)
-  const byTier: Record<number, typeof TREE_NODES> = {};
+  // Nodos por rama, con sus tiers en orden: cada pestaña enseña una rama.
+  const byRama: Record<string, typeof TREE_NODES> = {};
   for (const node of TREE_NODES) {
-    (byTier[node.tier] ||= []).push(node);
+    (byRama[node.category] ||= []).push(node);
   }
-  for (const tier of Object.keys(byTier)) {
-    byTier[Number(tier)].sort((a, b) => a.y - b.y);
+  for (const rama of Object.keys(byRama)) {
+    byRama[rama].sort((a, b) => a.tier - b.tier || a.y - b.y);
   }
+  // Si el guardado trae una pestaña que ya no existe (rama renombrada), se
+  // vuelve a la primera en vez de pintar una pestaña vacía. `ui` vive en
+  // memoria y no se guarda, así que esto solo pasa en caliente.
+  if (!byRama[ui.tab]) ui.tab = RAMAS[0];
 
   const nodeCell = (node: typeof TREE_NODES[number]) => {
     const level = state.nodeLevels[node.id] || 0;
@@ -228,34 +242,63 @@ export function renderPrestigePage(
       ${activeBonusList(bonus)}
     </section>
 
-    <!-- El árbol -->
+    <!-- El árbol, por ramas -->
     <section class="card-glass rounded-2xl p-3 md:p-4">
-      <div class="flex items-center justify-between gap-2 mb-3">
-        <h2 class="label-caps flex items-center gap-1.5">
-          <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('tree')}</span>
-          Árbol de pasivas
-        </h2>
-        <div class="flex items-center gap-1.5 flex-wrap justify-end">
-          ${Object.values(TREE_CATEGORY_META).map(c => `
-            <span class="text-[9px] font-mono ${c.color} hidden sm:inline">${c.label}</span>
-          `).join('')}
-        </div>
+      <div class="flex items-center gap-1.5 mb-3">
+        <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('tree')}</span>
+        <h2 class="label-caps">Árbol de pasivas</h2>
       </div>
 
-      <div class="tree-wrap">
-        <div class="tree-grid">
-          ${[0, 1, 2, 3, 4].map(tier => `
-            <div class="flex flex-col gap-1.5 min-w-0">
-              <div class="label-caps text-center pb-0.5">T${tier}</div>
-              ${(byTier[tier] || []).map(node => nodeCell(node)).join('')}
-            </div>
-          `).join('')}
-        </div>
+      <!--
+        Las pestañas son las ramas, y cada una enseña solo la suya (R8: la rama
+        viaja en data-rama, no en la clase). Con role=tablist porque lo son:
+        un lector de pantalla anuncia "pestaña Asalto" y no cuatro botones.
+      -->
+      <div class="flex gap-1.5 mb-3 overflow-x-auto" role="tablist" aria-label="Ramas de pasivas" style="overscroll-behavior-x: contain">
+        ${RAMAS.map(rama => {
+          const cat = TREE_CATEGORY_META[rama];
+          const puntos = puntosEnRama(state.nodeLevels || {}, rama);
+          const activa = ui.tab === rama;
+          return `
+          <button role="tab" aria-selected="${activa ? 'true' : 'false'}" data-rama="${rama}"
+                  class="flex-1 min-w-0 min-h-[44px] px-2 rounded-xl border font-mono text-[10px] leading-tight
+                         ${activa ? '' : 'opacity-60'}"
+                  style="${activa
+                    ? `border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent)`
+                    : 'border-color: var(--border-color)'}">
+            <span class="block font-bold text-[11px] ${cat?.color || ''}">${cat?.label || rama}</span>
+            <span class="block text-[var(--text-muted)] tabular">${puntos} pts</span>
+          </button>`;
+        }).join('')}
       </div>
+
+      ${(() => {
+        const nodos = byRama[ui.tab] || [];
+        const porTier: Record<number, typeof nodos> = {};
+        for (const n of nodos) (porTier[n.tier] ||= []).push(n);
+        const puntos = puntosEnRama(state.nodeLevels || {}, ui.tab);
+        const tiers = Object.keys(porTier).map(Number).sort((a, b) => a - b);
+        const siguiente = tiers.find(t => puntos < (UMBRAL_PUNTOS_RAMA[t] ?? 0));
+        return `
+        <p class="text-[10px] font-mono text-[var(--text-muted)] mb-2 leading-relaxed">
+          ${puntos} puntos en ${TREE_CATEGORY_META[ui.tab]?.label || ui.tab}
+          ${siguiente !== undefined
+            ? ` · T${siguiente} pide ${UMBRAL_PUNTOS_RAMA[siguiente]}`
+            : ' · rama abierta entera'}
+        </p>
+        ${tiers.map(tier => `
+          <div class="label-caps mt-2 mb-1.5 ${puntos < (UMBRAL_PUNTOS_RAMA[tier] ?? 0) ? 'opacity-50' : ''}">
+            T${tier}${puntos < (UMBRAL_PUNTOS_RAMA[tier] ?? 0) ? ` · pide ${UMBRAL_PUNTOS_RAMA[tier]}` : ''}
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            ${(porTier[tier] || []).map(node => nodeCell(node)).join('')}
+          </div>
+        `).join('')}`;
+      })()}
 
       <p class="text-[10px] text-[var(--text-muted)] mt-3 leading-relaxed text-center">
-        Los nodos se desbloquean de izquierda a derecha. Las ramas caras exigen
-        dos nodos previos: la forja se planea, no se tapsa.
+        Cada rama se abre por puntos: compra niveles en ella para bajar de fila.
+        Los puntos son niveles, no núcleos —lo que compromete es quedarse.
       </p>
     </section>
   `;
@@ -379,6 +422,7 @@ export function nodeSheetHTML(node: any, level: number, opts: {
           ${opts.coste} ◆${opts.ok ? '' : ` · tienes ${opts.cores}`}
         </span>
         ${opts.categoria?.label ? `<span class="px-2 h-6 inline-flex items-center rounded-md border border-[var(--border-color)]">${opts.categoria.label}</span>` : ''}
+        ${(opts.requiere ?? []).length > 0 ? `<span class="px-2 h-6 inline-flex items-center rounded-md border border-[var(--border-color)]">Pide: ${(opts.requiere ?? []).map(id => TREE_BY_ID[id]?.name ?? id).join(', ')}</span>` : ''}
       </div>
 
       ${alMaximo ? `
@@ -433,6 +477,19 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
       },
       { sublabel: 'Confirmar reciclaje', confirmText: 'Reciclar', danger: true }
     );
+  });
+
+  // --- Pestañas de rama ---
+  // Van sobre el nodo montado (R5) y solo cambian `ui.tab`: el re-render es el
+  // mismo de comprar un nodo, así que el scroll se conserva igual (A5).
+  container.querySelectorAll<HTMLElement>('[data-rama]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rama = btn.dataset.rama!;
+      if (!rama || rama === ui.tab) return;
+      ui.tab = rama;
+      sfx.click();
+      renderPrestigePage(container, game, go);
+    });
   });
 
   // --- Nodos del árbol ---

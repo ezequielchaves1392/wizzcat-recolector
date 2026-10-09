@@ -11,7 +11,7 @@
 //  de `verify/vite.config.ts` (`lib.entry`) y de `verify/run.mjs`.
 // ==========================================================================
 
-import { createGameLoop } from '../src/gameLoop';
+import { createGameLoop, SAVE_VERSION } from '../src/gameLoop';
 import { countOccupiedSlots } from '../src/data/stacking';
 import { CRATE_TYPES, CRATE_TIERS, type CrateType } from '../src/data/store';
 // El cristal ya no tiene niveles, así que la fábrica de abajo escribe un nombre y un
@@ -445,11 +445,14 @@ export function baseSave(items: any[], extra: any = {}) {
   }
 
   return {
-    // 9, no 7. Con 7 no se cruzaba la redención de las llaves, así que un banco que
-    // montaba llaves las tenía en el almacén; y con 9 tampoco se cruzaba la del
-    // cristal. El número tiene que estar por encima de las dos migraciones para que
-    // `baseSave()` simule una partida actual.
-    saveVersion: 9,
+    // La versión vigente, no un número: `baseSave()` simula una partida actual
+    // y las migraciones irreversibles las gobierna la versión. Con un número
+    // fijo, cada subida obligaba a cazar los bancos que montaban `nodeLevels`
+    // porque la devolución los vaciaba; así solo la prueban quienes pasan una
+    // versión vieja a propósito. Lo que sí sigue fijo: estar por encima de las
+    // migraciones viejas (llaves, cristales), que es lo que hace que esto
+    // simule una partida actual y no una redención.
+    saveVersion: SAVE_VERSION,
     nanites: 1000,
     totalNanitesProduced: 0,
     warehouse: items,

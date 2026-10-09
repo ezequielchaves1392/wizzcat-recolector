@@ -20,6 +20,7 @@
 import { STORE_ITEMS } from '../src/gameLoop';
 import { CATEGORIES } from '../src/components/store';
 import { TREE_BY_ID, nodeCost } from '../src/data/tree';
+import { puntosEnRama, UMBRAL_PUNTOS_RAMA } from '../src/data/prestige';
 // Para las ranuras: el número que da cada carta sale de esta tabla, no de un 4
 // escrito aquí. Con el modelo viejo de dos cartas, el 5 estaba en el motor, en el
 // texto de la tarjeta y en estas dos aserciones.
@@ -751,28 +752,73 @@ async function main() {
     check('arbol: y no se cobran nucleos', s(g).cores === antes, 'cores=' + s(g).cores);
   }
   {
-    // **LA RAMA DE CRAFTEO EMPIEZA EN `forge_luck`, Y NO EN UN NODO ANTERIOR.**
+    // **LA RAMA DE FORJA EMPIEZA EN EL ALCORNOQUE (T0).**
     //
-    // Aqui hubo cinco comprobaciones sobre `blueprint`: que existia, que daba +3% de
+    // Aquí hubo cinco comprobaciones sobre `blueprint`: que existia, que daba +3% de
     // `craftLuck`, que el efecto sobrevivia a recargar, y que sus dos hijos lo
     // requerian. El nodo se ha borrado --pagaba por una restriccion que ya no existia,
     // porque la forja se abrio desde el inicio-- y las cinco se han ido con el.
     //
-    // **Y ESTAS DOS LA SUSTITUYEN, CON EL MISMO MOTIVO DE FONDO.** Lo que este banco
-    // quiere decir del arbol de crafteo es que **el primer nodo de la rama sube la
-    // probabilidad y su efecto sobrevive a recargar**. Esa pregunta sigue siendo buena
-    // y no tiene nada que ver con cuantos nodos haya: si mañana el primero se llama
-    // de otra manera, estas dos siguen diciendo lo que deben.
+    // **Y ESTAS LA SUSTITUYEN, CON EL MISMO MOTIVO DE FONDO.** Lo que este banco
+    // quiere decir del arbol de forja es que **la rama se puede empezar y el
+    // primer nodo con suerte se compra**. Desde F97 las filas se abren por
+    // puntos: el T1 pide 1 punto en Forja, así que antes hay que comprar el T0
+    // (el Alcornoque). Esa es la pregunta buena ahora: que la puerta se abre
+    // jugando la rama, no que el primer nodo esté regalado.
     const g = await boot(baseSave([], { cores: 100 }));
+    const r0 = g.buyNode('shard_sifter');
     const antes = g.getForgeInfo().craftLuck;
     const r = g.buyNode('forge_luck');
     const despues = g.getForgeInfo().craftLuck;
+    check('arbol: la rama de forja se empieza por su raiz sin puntos',
+      r0.success, r0.msg ?? '');
+    check('arbol: y con el punto el primer nodo de suerte se compra',
+      r.success, r.msg ?? '');
     check('arbol: el primer nodo de la rama de crafteo sube la probabilidad',
-      r.success && despues > antes,
+      despues > antes,
       `success=${r.success} antes=${antes} despues=${despues} msg=${r.msg ?? ''}`);
     check('arbol: y el efecto sigue ahi tras recargar',
       Math.abs((await reload()).getForgeInfo().craftLuck - despues) < 1e-9,
       `recargado=${(await reload()).getForgeInfo().craftLuck}`);
+  }
+
+  // =========================================================================
+  //  7b. LAS FILAS SE ABREN POR PUNTOS EN LA RAMA (F97)
+  // =========================================================================
+  //  El tier no se abre por nodos sueltos sino por niveles comprados en la
+  //  rama. Lo que se comprueba son las tres caras: que sin puntos no se entra,
+  //  que el motivo dice cuántos faltan y dónde, y que con puntos la puerta se
+  //  abre. Y que los puntos son niveles topados, no núcleos: lo que compromete
+  //  es quedarse.
+  {
+    check('puntos: la tabla empieza en cero y sube por tier',
+      UMBRAL_PUNTOS_RAMA[0] === 0 && UMBRAL_PUNTOS_RAMA[1] === 1
+        && UMBRAL_PUNTOS_RAMA[2] === 3 && UMBRAL_PUNTOS_RAMA[3] === 6
+        && UMBRAL_PUNTOS_RAMA[4] === 9,
+      JSON.stringify(UMBRAL_PUNTOS_RAMA));
+    check('puntos: cuentan niveles, topados por maximo e ignorando inventos',
+      puntosEnRama({ core_sink: 3, inventado: 99 }, 'manada') === 3
+        && puntosEnRama({ full_automation: 5 }, 'asalto') === 3
+        && puntosEnRama({}, 'forja') === 0,
+      `manada=${puntosEnRama({ core_sink: 3 }, 'manada')}`);
+
+    // T2 sin puntos: con la raíz y sus requisitos cumplidos, la que frena es
+    // la puerta. `bulk_buy` pide `refinery` y `scrapyard` y están cumplidos (2
+    // puntos de Fortuna); lo que falta es el tercero.
+    const g = await boot(baseSave([], { cores: 10_000, nodeLevels: { refinery: 1, scrapyard: 1 } }));
+    const r = g.buyNode('bulk_buy');
+    check('arbol: sin puntos no se entra aunque los requisitos esten',
+      !r.success && /Requiere 3 puntos en Fortuna/.test(r.msg ?? ''), r.msg ?? '');
+    check('arbol: y no se cobran nucleos',
+      s(g).cores === 10_000, 'cores=' + s(g).cores);
+
+    // Y con puntos de otra rama no vale: son de la rama, no del árbol. Con los
+    // requisitos cumplidos (si no, frenaría antes por ellos), lo único que
+    // frena son los 3 puntos de Fortuna aunque Manada vaya sobrada.
+    const g2 = await boot(baseSave([], { cores: 10_000, nodeLevels: { refinery: 1, scrapyard: 1, core_sink: 5 } }));
+    const r2 = g2.buyNode('bulk_buy');
+    check('arbol: los puntos de otra rama no abren esta',
+      !r2.success && /Fortuna/.test(r2.msg ?? ''), r2.msg ?? '');
   }
 
   // =========================================================================

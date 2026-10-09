@@ -6,12 +6,19 @@
 // dan multiplicadores que se aplican a otros multiplicadores, así que el
 // crecimiento es compuesto en vez de aditivo.
 //
-// Estructura deliberada:
-//   - 5 columnas (tiers). El columnado vertical es el tiempo de una partida.
+// Estructura deliberada (F97):
+//   - 4 RAMAS (Asalto / Manada / Fortuna / Forja), una por forma de jugar. La
+//     pestaña enseña una rama y sus flechas no salen de ella: lo que se ve es
+//     lo que hay que decidir.
+//   - 5 TIERS por rama. El tier NO se abre por nodos sueltos sino por PUNTOS
+//     gastados en la rama (niveles comprados): 0/1/3/6/9. La columna vertebral
+//     de cada rama es barata y el fondo es caro.
 //   - Cada rama tiene un nodo raíz sin requisitos, así que siempre hay algo
 //     comprable desde el primer reinicio: nunca hay un minuto sin objetivo.
-//   - Las ramas caras exigen dos ramas distintas abiertas (requisitos
-//     cruzados). Es lo que impide que se haga "todo click" y obliga a decidir.
+//   - Los `requires` son intra-rama a propósito: un requisito de otra pestaña
+//     obligaría a comprar a ciegas lo que no se ve. Los cruces murieron con las
+//     columnas; lo que obliga a decidir ahora es repartir los núcleos entre
+//     ramas, porque completar las cuatro cuesta cuatro veces.
 //
 // Económicamente: el coste crece 1.55x por nivel, pero los niveles 2..5 de un
 // nodo cuestan la mitad por unidad de bonificación que el nivel 1. Se premia
@@ -27,28 +34,28 @@ export const TREE_NODES: TreeNode[] = [
   {
     id: 'core_sink', name: 'Sumidero de Núcleos', description: '+8% al ingreso pasivo por nivel.',
     lore: 'Un pozo que no se llena: todo lo que cae por el, se queda. Cuanto mas hondo, mas fondo traga.',
-    icon: 'chip', category: 'multiplicador', tier: 0, requires: [],
+    icon: 'chip', category: 'manada', tier: 0, requires: [],
     baseCost: 1, costGrowth: G, maxLevel: 10,
     bonus: { passiveMult: 0.08 }, x: 0, y: 0
   },
   {
     id: 'core_edge', name: 'Filo Afilado', description: '+8% al daño de click por nivel.',
     lore: 'El filo se afila solo. Solo hay que acordarse de no cortarse con el.',
-    icon: 'collector', category: 'multiplicador', tier: 0, requires: [],
+    icon: 'collector', category: 'asalto', tier: 0, requires: [],
     baseCost: 1, costGrowth: G, maxLevel: 10,
     bonus: { clickMult: 0.08 }, x: 0, y: 1
   },
   {
     id: 'scrapyard', name: 'Chatarrería', description: '+12% al precio de venta por nivel.',
     lore: 'Nada sobra si sabes donde mirar. El mismo monton de acero vale mas si buscas donde toca.',
-    icon: 'trash', category: 'economia', tier: 0, requires: [],
+    icon: 'trash', category: 'fortuna', tier: 0, requires: [],
     baseCost: 2, costGrowth: G, maxLevel: 5,
     bonus: { sellMult: 0.12 }, x: 0, y: 2
   },
   {
     id: 'refinery', name: 'Refinado', description: '-4% al coste de la tienda por nivel.',
     lore: 'La chatarra cruda no se vende: se depura. Lo que sale de aqui pesa menos y vale mas.',
-    icon: 'crystal', category: 'economia', tier: 0, requires: [],
+    icon: 'crystal', category: 'fortuna', tier: 0, requires: [],
     baseCost: 3, costGrowth: G, maxLevel: 6,
     bonus: { costReduction: 0.04 }, x: 0, y: 3
   },
@@ -83,23 +90,23 @@ export const TREE_NODES: TreeNode[] = [
   {
     id: 'auto_clicker', name: 'Autómata de Clicks', description: '+0.5 clics automáticos por segundo.',
     lore: 'Un brazo mecanico que golpea aunque nadie este delante. No se cansa y no mira el reloj.',
-    icon: 'bolt', category: 'automatizacion', tier: 1, requires: ['core_edge'],
+    icon: 'bolt', category: 'asalto', tier: 1, requires: ['core_edge'],
     baseCost: 3, costGrowth: 1.6, maxLevel: 10,
     bonus: { autoClick: 0.5 }, x: 1, y: 0
   },
   {
     id: 'passive_loop', name: 'Bucle de Extracción', description: '+10% al ingreso pasivo por nivel.',
     lore: 'El circuito se cierra solo: lo que extrae vuelve a entrar en vez de quedarse en el suelo.',
-    icon: 'companion', category: 'multiplicador', tier: 1, requires: ['core_sink'],
+    icon: 'companion', category: 'manada', tier: 1, requires: ['core_sink'],
     baseCost: 3, costGrowth: G, maxLevel: 8,
     bonus: { passiveMult: 0.10 }, x: 1, y: 1
   },
   {
-    id: 'forge_luck', name: 'Instinto de Forja', description: '+6% a la probabilidad de crafteo.',
+    id: 'forge_luck', name: 'Instinto de Forja', description: '+2% a la probabilidad de crafteo por nivel.',
     lore: 'Treinta anos de golpear metal frio hasta que el hierro decide colaborar.',
-    icon: 'sparkle', category: 'crafteo', tier: 1, requires: [],
+    icon: 'sparkle', category: 'forja', tier: 1, requires: [],
     baseCost: 4, costGrowth: 1.5, maxLevel: 5,
-    bonus: { craftLuck: 0.06 }, x: 1, y: 2
+    bonus: { craftLuck: 0.02 }, x: 1, y: 2
   },
   {
     // EL IDENTIFICADOR SE LLAMA TODAVÍA `shard_sifter` Y NO SE CAMBIA, PORQUE ES UNA
@@ -109,14 +116,14 @@ export const TREE_NODES: TreeNode[] = [
     // el premio del fallo de forja, que son los cristales.
     id: 'shard_sifter', name: 'Alcornoque', description: '+25% de cristales por fallo de forja.',
     lore: 'Ceniza de un horno que fallo. Toda ceniza guarda algo: solo hay que cribarla.',
-    icon: 'crystal', category: 'crafteo', tier: 1, requires: [],
+    icon: 'crystal', category: 'forja', tier: 0, requires: [],
     baseCost: 3, costGrowth: G, maxLevel: 4,
     bonus: { consolationBonus: 0.25 }, x: 1, y: 3
   },
   {
     id: 'storage_rack', name: 'Estantería Extra', description: '+3 ranuras de almacén por nivel.',
     lore: 'Otro estante. El problema nunca fue el espacio, era que no habia donde colgarlo.',
-    icon: 'warehouse', category: 'economia', tier: 1, requires: ['scrapyard'],
+    icon: 'warehouse', category: 'fortuna', tier: 1, requires: ['scrapyard'],
     baseCost: 3, costGrowth: G, maxLevel: 6,
     bonus: { storageSlots: 3 }, x: 1, y: 4
   },
@@ -125,35 +132,35 @@ export const TREE_NODES: TreeNode[] = [
   {
     id: 'auto_clicker2', name: 'Dedo de Acero', description: '+1.5 clics automáticos por segundo.',
     lore: 'Cuatro brazos mas y el mismo gesto. La cadencia ya no la marca una persona.',
-    icon: 'bolt', category: 'automatizacion', tier: 2, requires: ['auto_clicker'],
+    icon: 'bolt', category: 'asalto', tier: 2, requires: ['auto_clicker'],
     baseCost: 10, costGrowth: 1.7, maxLevel: 8,
     bonus: { autoClick: 1.5 }, x: 2, y: 0
   },
   {
-    id: 'multiplier_amp', name: 'Amplificador Global', description: '+6% a TODOS los multiplicadores por nivel.',
-    lore: 'Un amplificador que no amplifica una cosa: amplifica todo lo que ya tengas. Por eso se paga tan caro.',
-    icon: 'sparkle', category: 'multiplicador', tier: 2, requires: ['passive_loop', 'core_edge'],
+    id: 'multiplier_amp', name: 'Amplificador de Asalto', description: '+6% al daño de click por nivel.',
+    lore: 'Todo el ruido del taller metido en un solo golpe. No hace más cosas: hace una, más fuerte.',
+    icon: 'sparkle', category: 'asalto', tier: 2, requires: ['core_edge'],
     baseCost: 12, costGrowth: 1.65, maxLevel: 8,
-    bonus: { clickMult: 0.06, passiveMult: 0.06 }, x: 2, y: 1
+    bonus: { clickMult: 0.06 }, x: 2, y: 1
   },
   {
     id: 'crate_sight', name: 'Ojo de Caja', description: '+10% de probabilidad de que la caja dé un tier más por nivel.',
     lore: 'Ver la costura antes de que se abra. La caja siempre ha dado lo que tenia; ahora lo ves venir.',
-    icon: 'crate', category: 'economia', tier: 2, requires: ['shard_sifter'],
+    icon: 'crate', category: 'fortuna', tier: 2, requires: ['bulk_buy'],
     baseCost: 8, costGrowth: G, maxLevel: 5,
     bonus: { crateLuck: 0.10 }, x: 2, y: 2
   },
   {
     id: 'bulk_buy', name: 'Compra a Granel', description: '-5% adicional al coste de tienda.',
     lore: 'Comprar por docenas mejora el precio de la unidad sin tocar el de venta. El margen esta en el medio.',
-    icon: 'store', category: 'economia', tier: 2, requires: ['refinery', 'scrapyard'],
+    icon: 'store', category: 'fortuna', tier: 2, requires: ['refinery', 'scrapyard'],
     baseCost: 9, costGrowth: G, maxLevel: 5,
     bonus: { costReduction: 0.05 }, x: 2, y: 3
   },
   {
     id: 'squad_slots', name: 'Cuadrilla', description: '+1 ranura de compañero activa.',
     lore: 'Uno mas que dispara. No es un Companero nuevo: es sitio para el que ya tienes.',
-    icon: 'companion', category: 'exclusivo', tier: 2, requires: ['passive_loop'],
+    icon: 'companion', category: 'manada', tier: 2, requires: ['passive_loop'],
     baseCost: 25, costGrowth: 1, maxLevel: 4,
     bonus: { companionSlots: 1 }, x: 2, y: 4
   },
@@ -180,30 +187,30 @@ export const TREE_NODES: TreeNode[] = [
   // sin eso, el nodo seria inalcanzable para quien no lo tuviera ya comprado.
   // ---------------------------------------------------------------------------
   {
-    id: 'quantum_amp', name: 'Amplificador Cuántico', description: '+10% a todos los multiplicadores.',
-    lore: 'La misma idea del amplificador, pero medida en otro sitio: aqui no hay midiendo nada.',
-    icon: 'crystal', category: 'multiplicador', tier: 3, requires: ['multiplier_amp', 'crate_sight'],
+    id: 'quantum_amp', name: 'Amplificador de Manada', description: '+10% al ingreso pasivo por nivel.',
+    lore: 'El gemelo tranquilo del de asalto: no toca tu mano, toca tu enjambre.',
+    icon: 'crystal', category: 'manada', tier: 3, requires: ['passive_loop'],
     baseCost: 60, costGrowth: 1.75, maxLevel: 6,
-    bonus: { clickMult: 0.10, passiveMult: 0.10 }, x: 3, y: 1
+    bonus: { passiveMult: 0.10 }, x: 3, y: 1
   },
   {
     id: 'afk_extend', name: 'Suspensión Prolongada', description: '+30 min de buff AFK por tarjeta por nivel.',
     lore: 'La tarjeta caducaba siempre a mitad del segundo que mas falta hacia. Ahora dura un poco mas.',
-    icon: 'card', category: 'automatizacion', tier: 3, requires: ['shard_sifter', 'refinery'],
+    icon: 'card', category: 'fortuna', tier: 3, requires: ['refinery'],
     baseCost: 20, costGrowth: G, maxLevel: 4,
     bonus: { afkHours: 0.5 }, x: 3, y: 2
   },
   {
-    id: 'master_smith', name: 'Maestro Forjador', description: '+12% a la probabilidad de crafteo.',
+    id: 'master_smith', name: 'Maestro Forjador', description: '+2,5% a la probabilidad de crafteo por nivel.',
     lore: 'El taller ya no es un homogeneity con dos cosas. Hay alguien que ha tardado.',
-    icon: 'collector', category: 'crafteo', tier: 3, requires: ['forge_luck', 'multiplier_amp'],
+    icon: 'collector', category: 'forja', tier: 3, requires: ['forge_luck'],
     baseCost: 45, costGrowth: 1.7, maxLevel: 5,
-    bonus: { craftLuck: 0.12 }, x: 3, y: 3
+    bonus: { craftLuck: 0.025 }, x: 3, y: 3
   },
   {
     id: 'core_yield', name: 'Rendimiento del Núcleo', description: '+20% de núcleos por reinicio.',
     lore: 'Reciclar no es tirar: es traducir. Con el mismo monton sale mas si sabes lo que haces.',
-    icon: 'sparkle', category: 'economia', tier: 3, requires: ['core_sink', 'bulk_buy'],
+    icon: 'sparkle', category: 'fortuna', tier: 3, requires: ['bulk_buy'],
     baseCost: 40, costGrowth: 1.8, maxLevel: 5,
     bonus: { coreGain: 0.20 }, x: 3, y: 4
   },
@@ -212,30 +219,30 @@ export const TREE_NODES: TreeNode[] = [
   {
     id: 'singularity', name: 'Singularidad', description: '+18% a todos los multiplicadores. No tiene tope.',
     lore: 'El ultimo nodo del arbol. Ponerlo es una decision: para por aqui.',
-    icon: 'sparkle', category: 'multiplicador', tier: 4, requires: ['quantum_amp', 'master_smith'],
+    icon: 'sparkle', category: 'asalto', tier: 4, requires: ['multiplier_amp'],
     baseCost: 220, costGrowth: 2.0, maxLevel: 5,
     bonus: { clickMult: 0.18, passiveMult: 0.18 }, x: 4, y: 1
   },
   {
     id: 'full_automation', name: 'Automatización Total', description: '+1 clic automático por segundo.',
     lore: 'Que la base juegue sola. Se ha arreglado todo lo que hacia falta para dejarlo.',
-    icon: 'bolt', category: 'automatizacion', tier: 4, requires: ['auto_clicker2', 'multiplier_amp'],
+    icon: 'bolt', category: 'asalto', tier: 4, requires: ['auto_clicker2'],
     baseCost: 180, costGrowth: 1.9, maxLevel: 3,
     bonus: { autoClick: 1 }, x: 4, y: 0
   },
   {
     id: 'void_hoard', name: 'Almacén del Vacío', description: '+8 ranuras de almacén por nivel.',
     lore: 'Un almacen que no necesita ranuras porque no guarda: Fabrica el hueco.',
-    icon: 'warehouse', category: 'economia', tier: 4, requires: ['storage_rack', 'core_yield'],
+    icon: 'warehouse', category: 'fortuna', tier: 4, requires: ['storage_rack', 'core_yield'],
     baseCost: 90, costGrowth: 1.7, maxLevel: 5,
     bonus: { storageSlots: 8 }, x: 4, y: 2
   },
   {
-    id: 'chaos_forge', name: 'Forja del Caos', description: '+20% a la probabilidad de crafteo, el peldaño más alto.',
+    id: 'chaos_forge', name: 'Forja del Caos', description: '+3% a la probabilidad de crafteo por nivel, el peldaño más alto.',
     lore: 'La forja ya sin red de seguridad. Sale lo que sale.',
-    icon: 'collector', category: 'crafteo', tier: 4, requires: ['master_smith', 'core_yield'],
+    icon: 'collector', category: 'forja', tier: 4, requires: ['master_smith'],
     baseCost: 260, costGrowth: 2.1, maxLevel: 4,
-    bonus: { craftLuck: 0.20 }, x: 4, y: 3
+    bonus: { craftLuck: 0.03 }, x: 4, y: 3
   }
 ];
 
@@ -246,11 +253,10 @@ export const TREE_BY_ID: Record<string, TreeNode> = Object.fromEntries(
 export const TREE_TIERS = [0, 1, 2, 3, 4];
 
 export const TREE_CATEGORY_META: Record<string, { label: string; color: string; icon: string }> = {
-  automatizacion: { label: 'Automatización', color: 'text-cyan-400', icon: 'bolt' },
-  multiplicador: { label: 'Multiplicadores', color: 'text-purple-400', icon: 'sparkle' },
-  economia: { label: 'Economía', color: 'text-amber-400', icon: 'store' },
-  crafteo: { label: 'Crafteo', color: 'text-rose-400', icon: 'collector' },
-  exclusivo: { label: 'Exclusivos', color: 'text-emerald-400', icon: 'crystal' }
+  asalto: { label: 'Asalto', color: 'text-red-400', icon: 'bolt' },
+  manada: { label: 'Manada', color: 'text-emerald-400', icon: 'companion' },
+  fortuna: { label: 'Fortuna', color: 'text-amber-400', icon: 'store' },
+  forja: { label: 'Forja', color: 'text-rose-400', icon: 'collector' }
 };
 
 /** Coste del siguiente nivel de un nodo. */

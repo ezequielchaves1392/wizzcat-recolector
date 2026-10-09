@@ -23,7 +23,7 @@
 // ==========================================================================
 
 import type { PassiveBonuses, TreeNode } from '../types/domain';
-import { TREE_BY_ID, nodeCost } from './tree';
+import { TREE_BY_ID, TREE_NODES, TREE_CATEGORY_META, nodeCost } from './tree';
 
 export const EMPTY_BONUSES: PassiveBonuses = {
   clickMult: 0,
@@ -161,9 +161,49 @@ export function canBuyNode(
     const names = missing.map(id => TREE_BY_ID[id]?.name ?? id).join(', ');
     return { ok: false, reason: `Requiere: ${names}` };
   }
+  // **LA PUERTA POR PUNTOS (F97).** El tier no se abre por nodos sueltos sino
+  // por niveles comprados EN LA RAMA: 0/1/3/6/9 para T0..T4. Es la mitad WoW
+  // del rediseño —profundizar en una rama abre su fondo— y va DESPUÉS de los
+  // requisitos para que el motivo siga nombrando lo que falta primero: un
+  // requisito sin cumplir se dice con su nombre, no con puntos.
+  const puntos = puntosEnRama(nodeLevels, node.category);
+  const umbral = UMBRAL_PUNTOS_RAMA[node.tier] ?? 0;
+  if (puntos < umbral) {
+    const nombre = TREE_CATEGORY_META[node.category]?.label ?? node.category;
+    return { ok: false, reason: `Requiere ${umbral} puntos en ${nombre} (llevas ${puntos}).` };
+  }
   const cost = nodeCost(node, level);
   if (cores < cost) return { ok: false, reason: `Faltan ${cost - cores} núcleos.` };
   return { ok: true };
+}
+
+/**
+ * PUNTOS QUE HAY QUE TENER EN UNA RAMA PARA ABRIR CADA TIER (F97).
+ *
+ * Son NIVELES comprados, no núcleos: lo que compromete es quedarse, no pagar.
+ * La escala sale del tamaño de las ramas de hoy (~5 nodos): T1 se abre con un
+ * nivel de la raíz —la entrada siempre está abierta—, T4 pide 9, que en Forja
+ * (16 niveles en total) es más de la mitad de la rama. Si las ramas crecen
+ * (Lote 3: 15 nodos), estos mínimos siguen valiendo porque son suelos.
+ */
+export const UMBRAL_PUNTOS_RAMA: Record<number, number> = { 0: 0, 1: 1, 2: 3, 3: 6, 4: 9 };
+
+/**
+ * Niveles comprados en una rama, topados por máximo como el agregador.
+ *
+ * Un nivel por encima del techo cuenta como el techo: si no, una partida vieja
+ * con un máximo recortado abriría filas que la hoja dice cerradas.
+ */
+export function puntosEnRama(nodeLevels: Record<string, number> | undefined, categoria: string): number {
+  if (!nodeLevels) return 0;
+  let total = 0;
+  for (const nodo of TREE_NODES) {
+    if (nodo.category !== categoria) continue;
+    const nivel = Math.floor(Number((nodeLevels as Record<string, number>)[nodo.id]) || 0);
+    if (nivel <= 0) continue;
+    total += Math.min(nivel, nodo.maxLevel);
+  }
+  return total;
 }
 
 /** Nodos cuyo requisito acaba de ser satisfecho, para sugerir el siguiente paso. */

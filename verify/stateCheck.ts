@@ -27,6 +27,7 @@ import { chanceDeSintonizacion } from '../src/data/items';
 import { costeDeCaja , techoDeExpansor } from '../src/data/store';
 import { formatNumber } from '../src/utils/format';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
+import { coresGastadosEnArbol } from '../src/data/tree';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom, poderDeCompanero, techoDeNivel } from '../src/data/crafting';
 import { basePorId } from '../src/data/bases';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
@@ -532,7 +533,7 @@ async function main() {
     check('click: pero el click se cuenta igualmente', s(g).totalClicks === 1, 'clicks=' + s(g).totalClicks);
   }
   {
-    const g = await boot(baseSave([collector('r1', 3, { damage: 60 })], { nanites: 0 }));
+    const g = await boot(baseSave([collector('r1', 3, { damage: 60, rarity: 'Común' })], { nanites: 0 }));
     g.equipCollector('r1');
     const danio = g.getClickDamage();
     check('click: con recolector hay dano', danio > 0, 'danio=' + danio);
@@ -543,6 +544,11 @@ async function main() {
     // desbloquear un logro, y un logro con bonificacion de click sube el
     // multiplicador. Por eso se compara con el dano vigente en cada momento, en
     // vez de con el del principio.
+    //
+    // **Y EL DADO VIVO NO PUEDE CRITICAR (F97).** La fixture es Común a propósito:
+    // sin campo de afijos, la migración sorteaba los del Épico al cargar y si
+    // caía uno de crítico el primer click pagaba el doble 1 de cada varias
+    // corridas. Con 0 afijos la probabilidad es cero y el dado no existe.
     const d2 = g.getClickDamage();
     g.click();
     check('click: el segundo click da el dano de ese momento',
@@ -1092,6 +1098,49 @@ async function main() {
     check('prestigio: el resultado sobrevive a la recarga',
       s(g2).resets === 4 && s(g2).cores === 7 + esperado && s(g2).crates[1] === 2,
       `resets=${s(g2).resets} cores=${s(g2).cores} cajas=${s(g2).crates[1]}`);
+  }
+  {
+    // F97 · DEVOLUCIÓN ÚNICA DEL ÁRBOL AL REESCRIBIRLO.
+    //
+    // El árbol cambió entero (ramas, suerte nerfeada, multis partidos): lo
+    // comprado ya no es lo que se pagó. Al cargar una partida de versión 10 o
+    // menos, lo gastado vuelve a la cartera con la misma función que cobra y
+    // los niveles se vacían para recomprar. Lo que se comprueba son las cuatro
+    // esquinas: que devuelve lo exacto, que vacía, que el histórico no se
+    // mueve y que no se repite.
+    const niveles = { core_sink: 2, scrapyard: 1, forge_luck: 3 };
+    const devuelto = coresGastadosEnArbol(niveles);
+    const g = await boot({
+      ...baseSave([]),
+      saveVersion: 10,
+      cores: 5, totalCores: 40, resets: 1,
+      nodeLevels: niveles, unlockedNodes: ['core_sink', 'scrapyard', 'forge_luck']
+    });
+    check('devolucion: lo gastado vuelve a la cartera, exacto',
+      s(g).cores === 5 + devuelto && devuelto > 0,
+      `cores=${s(g).cores} devuelto=${devuelto}`);
+    check('devolucion: y los niveles se vacian para recomprar',
+      Object.keys(s(g).nodeLevels).length === 0,
+      JSON.stringify(s(g).nodeLevels));
+    check('devolucion: el historico no se toca (tocarlo regalaria nucleos)',
+      s(g).totalCores === 40, `totalCores=${s(g).totalCores}`);
+    check('devolucion: y los bonus se recalculan a cero con el arbol vacio',
+      s(g).bonus.passiveMult === 0 && s(g).bonus.craftLuck === 0,
+      `pasivo=${s(g).bonus.passiveMult} forja=${s(g).bonus.craftLuck}`);
+
+    // Y no se repite: recargar no devuelve otra vez, porque el documento ya
+    // sale en versión 11. Sin esto, cada arranque sería una devolución.
+    const g2 = await reload();
+    check('devolucion: recargar no devuelve dos veces',
+      s(g2).cores === 5 + devuelto && Object.keys(s(g2).nodeLevels).length === 0,
+      `cores=${s(g2).cores} niveles=${JSON.stringify(s(g2).nodeLevels)}`);
+
+    // Y una partida nueva (versión vigente) no devuelve nada: no hay nada que
+    // devolver y sus niveles se quedan donde están.
+    const g3 = await boot(baseSave([], { cores: 5, nodeLevels: { core_sink: 2 } }));
+    check('devolucion: una partida vigente conserva sus niveles',
+      (s(g3).nodeLevels as any).core_sink === 2 && s(g3).cores === 5,
+      `nivel=${(s(g3).nodeLevels as any).core_sink} cores=${s(g3).cores}`);
   }
   {
     // Reciclar dos veces seguidas no duplica nada.

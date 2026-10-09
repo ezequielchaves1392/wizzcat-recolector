@@ -529,7 +529,7 @@ function seccionPasivas(): string {
   const porTier: Record<number, typeof TREE_NODES> = {};
   for (const n of TREE_NODES) (porTier[n.tier] ||= []).push(n);
   const columnas = Object.keys(porTier).map(Number).sort((a, b) => a - b).map(tier => `
-    <h3 class="label-caps mt-4 mb-2">Columna ${tier}</h3>
+    <h3 class="label-caps mt-4 mb-2">Tier ${tier}</h3>
     ${(porTier[tier] ?? []).map(n => {
       const cat = (TREE_CATEGORY_META as Record<string, { label: string; color: string }>)[n.category];
       const catColor = cat?.color ?? 'accent-text';
@@ -552,9 +552,9 @@ function seccionPasivas(): string {
 
   return `
     ${bloqueWiki('El árbol', 'tree', `
-      <p class="wiki-p">${TREE_NODES.length} nodos en cinco columnas, que se pagan con ${enlaceWiki('mecanicas', ANCLA.mecanicaAscension, 'núcleos')}.
-      El coste sube por nivel dentro del nodo, y las ramas caras piden nodos de dos ramas
-      distintas: hay que elegir camino. Los efectos se suman a todo lo demás —click, pasivo,
+      <p class="wiki-p">${TREE_NODES.length} nodos en cuatro ramas, que se pagan con ${enlaceWiki('mecanicas', ANCLA.mecanicaAscension, 'núcleos')}.
+      Cada rama se abre por puntos: compra niveles en ella para bajar de fila.
+      Los efectos se suman a todo lo demás —click, pasivo,
       tienda, forja, cajas y almacén—.</p>
       ${columnas}
     `, ANCLA.pasivasArbol)}

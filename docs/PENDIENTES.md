@@ -2802,7 +2802,7 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **47 bancos, 2604**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **47 bancos, 2631**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -4193,7 +4193,8 @@ de núcleos va en el parche grande y es una sola vez.*
   Abierto: sacar `core_yield` o no (F70 sigue abierto); paridad por coste total,
   no por tarjetas (Fortuna nace con 1-2 de más).
    **Lote 0 hecho en v1.15.22** (motor, sin tocar el árbol). **Lote 1 hecho en
-   v1.15.23** (autos domados). Quedan Lotes 2 y 3.
+   v1.15.23** (autos domados). **Lote 2a hecho en v1.15.25** (ramas, puerta por
+   puntos y devolución). Quedan Lotes 2b, 2c y 3.
 
 ### Encontrado haciendo B43 (9 de octubre, para quien lleve F97)
 

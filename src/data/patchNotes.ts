@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.25',
+    fecha: '9 de octubre de 2026',
+    titulo: 'El árbol se divide en cuatro ramas',
+    lineas: [
+      'Las pasivas ahora viven en cuatro ramas con su nombre: Asalto, Manada, Fortuna y Forja.',
+      'Cada rama se abre por puntos: compra niveles en ella para bajar de fila.',
+      'Al entrar verás tus núcleos devueltos y el árbol vacío: es para recomprarlo en las ramas nuevas.',
+      'La suerte de forja del árbol suma menos que antes: las piedras vuelven a importar.'
+    ]
+  },
+  {
     version: '1.15.24',
     fecha: '9 de octubre de 2026',
     titulo: 'La forja en serie gasta menos cuota',

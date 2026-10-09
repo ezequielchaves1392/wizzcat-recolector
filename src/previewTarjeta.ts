@@ -43,10 +43,10 @@ const TARJETA_DE_EJEMPLO = {
   nodosTotales: 24,
   nivelesDeArbol: 31,
   nodos: [
-    { id: 'core_sink', name: 'Sumidero de Núcleos', nivel: 10, maxLevel: 10, categoria: 'multiplicador' },
-    { id: 'passive_loop', name: 'Bucle de Extracción', nivel: 8, maxLevel: 10, categoria: 'automatizacion' },
-    { id: 'scrapyard', name: 'Chatarrería', nivel: 7, maxLevel: 10, categoria: 'economia' },
-    { id: 'forge_luck', name: 'Instinto de Forja', nivel: 6, maxLevel: 10, categoria: 'crafteo' }
+    { id: 'core_sink', name: 'Sumidero de Núcleos', nivel: 10, maxLevel: 10, categoria: 'manada' },
+    { id: 'passive_loop', name: 'Bucle de Extracción', nivel: 8, maxLevel: 10, categoria: 'manada' },
+    { id: 'scrapyard', name: 'Chatarrería', nivel: 7, maxLevel: 10, categoria: 'fortuna' },
+    { id: 'forge_luck', name: 'Instinto de Forja', nivel: 5, maxLevel: 5, categoria: 'forja' }
   ],
   logros: ['first_click', 'collector_10', 'first_forge', 'ascendant', 'jackpot', 'tycoon'],
   totalLogros: 34,

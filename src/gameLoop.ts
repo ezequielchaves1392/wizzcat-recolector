@@ -181,7 +181,7 @@ import {
  * una cantidad que ya justifica una pulsación y no un cálculo.
  */
 export const MAX_INTENTOS_AUTOMATICOS = 400;
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /**
  * B40 · LA LLAVE DEL MODO PRUEBAS, Y POR QUÉ ESTÁ EXPORTADA.
@@ -2095,6 +2095,42 @@ function sePuedeGuardar(): boolean {
       state.resets = data.resets ?? 0;
       state.unlockedNodes = data.unlockedNodes ?? [];
       state.nodeLevels = data.nodeLevels ?? {};
+      // F97 · DEVOLUCIÓN ÚNICA DEL ÁRBOL, Y POR QUÉ VA CON VERSIÓN.
+      //
+      // El árbol se reescribió entero (cuatro ramas, suerte de forja nerfeada,
+      // multis partidos): lo comprado ya no es lo que se pagó. Al cargar una
+      // partida de versión 10 o menos, lo gastado vuelve a la cartera con la
+      // MISMA función que cobra (`coresGastadosEnArbol()`, nivel a nivel) y los
+      // niveles se vacían para recomprar en las ramas nuevas.
+      //
+      // **VA CON `if (savedVersion < 11)` Y NO CON UN FLAG, POR R11.** Las
+      // migraciones irreversibles las gobierna la versión: una partida nueva ya
+      // nace en 11 y no devuelve nada, y una vieja devuelve una sola vez porque
+      // al guardar sale con 11. Un flag sería una clave más que viaja para
+      // siempre por un evento que pasa una vez.
+      //
+      // **LO QUE NO SE TOCA, Y POR QUÉ.** `totalCores` es el histórico de lo
+      // ganado y `nextCores` lo resta: tocarlo regalaría núcleos (el exploit de
+      // F70). Los logros y cosméticos ya ganados se quedan. Los ids que ya no
+      // existen en el catálogo (`blueprint`, `offline_ops`) no se pueden
+      // valorar y no devuelven nada: eran calderilla (decenas de núcleos) y
+      // ponerles precio inventado sería peor.
+      if (savedVersion < 11) {
+        const devuelto = coresGastadosEnArbol(data.nodeLevels);
+        const habiaNiveles = Object.keys(data.nodeLevels ?? {}).length > 0;
+        if (devuelto > 0) {
+          state.cores += devuelto;
+        }
+        // Se guarda si cambió algo: sin persistir, el documento seguiría en
+        // versión 10 con los niveles puestos y la próxima carga devolvería OTRA
+        // VEZ —una devolución por arranque—. Con el guardado, sale en 11 y no
+        // se repite nunca.
+        if (devuelto > 0 || habiaNiveles) {
+          warehouseNeedsMigration = true;
+        }
+        state.nodeLevels = {};
+        state.unlockedNodes = [];
+      }
       state.forgedCount = data.forgedCount ?? 0;
       state.cosmetics = {
         title: data.cosmetics?.title ?? 'title_default',

@@ -13,6 +13,7 @@
 // ==========================================================================
 
 import { TREE_NODES, TREE_BY_ID, nodeCost } from '../src/data/tree';
+import { UMBRAL_PUNTOS_RAMA } from '../src/data/prestige';
 import { aggregateBonuses } from '../src/data/prestige';
 import { nodeSheetHTML } from '../src/ui/prestigePage';
 import { check, resumen } from './kit';
@@ -212,6 +213,33 @@ async function main() {
     const dentro: any = aggregateBonuses({ full_automation: 2 });
     check('arbol: y por debajo del maximo cada nivel cuenta',
       dentro.autoClick === 2, `autoClick=${dentro.autoClick}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  LA ESTRUCTURA DE LAS CUATRO RAMAS (F97)
+  // -------------------------------------------------------------------------
+  //  El árbol se lee por pestañas y cada pestaña enseña solo su rama: un
+  //  requisito de otra rama obligaría a comprar a ciegas lo que no se ve. Lo
+  //  que se comprueba es la estructura que lo sostiene: requisitos dentro de
+  //  la rama, una raíz comprable en cada una y umbrales que suben por tier.
+  {
+    const porId: Record<string, any> = Object.fromEntries(TREE_NODES.map(n => [n.id, n]));
+    const cruzados = TREE_NODES.filter(n =>
+      (n.requires ?? []).some((r: string) => porId[r] && porId[r].category !== n.category));
+    check('ramas: ningun requisito cruza de rama (la pestaña enseña lo exigible)',
+      cruzados.length === 0, cruzados.map(n => n.id).join(',') || 'ninguno cruza');
+
+    const ramas = [...new Set(TREE_NODES.map(n => n.category))];
+    const sinRaiz = ramas.filter(rama =>
+      !TREE_NODES.some(n => n.category === rama && n.tier === 0 && (n.requires ?? []).length === 0));
+    check('ramas: cada rama tiene una raiz comprable sin puntos ni requisitos',
+      ramas.length === 4 && sinRaiz.length === 0,
+      `ramas=${ramas.join(',')} sin raiz=${sinRaiz.join(',') || 'ninguna'}`);
+
+    const tiers = [0, 1, 2, 3, 4].map(t => UMBRAL_PUNTOS_RAMA[t] ?? -1);
+    check('ramas: los umbrales empiezan en cero y suben por tier',
+      tiers[0] === 0 && tiers.every((u, i) => i === 0 || u > tiers[i - 1]),
+      `umbrales=${tiers.join(',')}`);
   }
 
   resumen('lore del arbol y su hoja');

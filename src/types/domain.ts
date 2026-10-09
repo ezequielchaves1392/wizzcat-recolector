@@ -155,7 +155,7 @@ export interface PassiveBonuses {
   companionSlots: number;
 }
 
-export type NodeCategory = 'automatizacion' | 'multiplicador' | 'economia' | 'crafteo' | 'exclusivo';
+export type NodeCategory = 'asalto' | 'manada' | 'fortuna' | 'forja';
 
 export interface TreeNode {
   id: string;
