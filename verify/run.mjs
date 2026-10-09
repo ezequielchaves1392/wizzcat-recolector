@@ -79,7 +79,8 @@ const BANCOS = [
   'autoventaCheck',
   'arbolLoreCheck',
   'leyendaCheck',
-  'contadorCheck'
+  'contadorCheck',
+  'wikiCheck'
 ];
 
 // ==========================================================================

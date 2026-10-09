@@ -959,6 +959,17 @@ function instalaDelegacionDeAjustes() {
       return;
     }
 
+    // F86 · LA WIKI SE ABRE APARTE. Va por delegación como todo lo de la
+    // cabecera porque la hoja se reconstruye en cada vista. Es `window.open`
+    // y no una ruta: dentro del juego pararía el tick de la vista y esta
+    // forma deja la partida intacta en su pestaña.
+    if (target.closest('[data-wiki-externo]')) {
+      e.preventDefault();
+      sfx.nav();
+      window.open('wiki.html', '_blank', 'noopener');
+      return;
+    }
+
     if (target.closest('[data-cerrar-ajustes]')) {
       e.preventDefault();
       // **EL NODO SE BUSCA AQUÍ Y NO SE GUARDA.** Ver el párrafo de arriba: la hoja se

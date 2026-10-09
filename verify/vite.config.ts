@@ -90,7 +90,9 @@ export default defineConfig({
         // separador decimal del juego y el tramo en la frontera del logaritmo.
         contadorCheck: resolve(here, 'contadorCheck.ts'),
         autoventaCheck: resolve(here, 'autoventaCheck.ts'),
-        arbolLoreCheck: resolve(here, 'arbolLoreCheck.ts')
+        arbolLoreCheck: resolve(here, 'arbolLoreCheck.ts'),
+        // F86 · La Wiki enseña reglas, y este banco ata que sean las del juego.
+        wikiCheck: resolve(here, 'wikiCheck.ts')
       },
       formats: ['es']
     }

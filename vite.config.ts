@@ -67,12 +67,16 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: paraPages
-        ? { main: resolve(aqui, 'index.html') }
+        // En Pages tampoco se publica `admin.html`, pero la Wiki sí: es solo
+        // lectura sobre datos, sin botones que escriban ni terminal alguna.
+        ? { main: resolve(aqui, 'index.html'), wiki: resolve(aqui, 'wiki.html') }
         : {
             // La página del juego.
             main: resolve(aqui, 'index.html'),
             // La terminal de administración. SOLO en local.
-            admin: resolve(aqui, 'admin.html')
+            admin: resolve(aqui, 'admin.html'),
+            // La Wiki en pestaña aparte. Sin game loop ni Firebase.
+            wiki: resolve(aqui, 'wiki.html')
           }
     }
   }

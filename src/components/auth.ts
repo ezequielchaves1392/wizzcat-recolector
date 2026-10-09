@@ -156,6 +156,18 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
         <p class="text-[9px] font-mono text-[var(--text-muted)] text-center mt-3 leading-relaxed">
           El progreso se guarda en la nube y se restaura al volver.
         </p>
+        <!--
+          LA WIKI SIN CUENTA (F86). Abre wiki.html en otra pestaña, que no
+          pide auth ni toca la partida: es solo lectura sobre datos. Va aquí
+          y no solo en la cabecera para que un jugador nuevo pueda leer las
+          reglas antes de registrarse.
+        -->
+        <div class="text-center mt-2">
+          <button type="button" id="auth-wiki"
+                  class="text-[11px] font-mono text-[var(--text-muted)] hover:accent-text transition cursor-pointer">
+            ¿Cómo se juega? <span class="accent-text underline">Abrir la Wiki</span>
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -331,6 +343,13 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
   setTheme(getSavedTheme());
 
   themeSelect?.addEventListener('change', () => setTheme(themeSelect.value as any));
+
+  // La Wiki en pestaña aparte, sin cuenta. Mismo destino que el botón de la
+  // cabecera (`data-wiki-externo` en `main.ts`), pero aquí no hay delegación
+  // instalada todavía: la pantalla se monta una vez y el listener va directo.
+  $('#auth-wiki')?.addEventListener('click', () => {
+    window.open('wiki.html', '_blank', 'noopener');
+  });
 
   // Mostrar contraseña. Sin esto, un error de tecleo obliga a vaciar el campo.
   const togglePass = $('#toggle-pass');

@@ -653,17 +653,40 @@ Solo las reglas de Firestore deciden. `src/admin.ts` lo dice en su cabecera y lo
 repite al final: publicar `admin.html` no concede nada, pero construirlo tampoco lo
 protege.
 
+## 2.8 Wiki
+
+### R32. Cada commit que toque reglas revisa la Wiki
+
+La Wiki (`wiki.html`, `src/wiki.ts`, `src/ui/wikiPage.ts`) enseña las reglas del
+juego leyéndolas de `src/data/`, nunca con números escritos al lado. Eso la hace
+correcta por construcción, pero solo mientras nadie le enseñe un número a mano:
+**un commit que cambie una tabla, una fórmula o un precio tiene que releer la
+sección que lo enseña** y comprobar que sigue diciendo lo mismo.
+
+La parte mecánica la ata `verify/wikiCheck.ts`: que la cabecera traiga el botón,
+que las diez cajas repartan el 100 %, que los exclusivos, las bases, los logros
+y los nodos sigan siendo los que el juego reparte, y que los iconos que la Wiki
+pinta existan en el set. Si una regla cambia y la Wiki no, el banco lo canta. Lo
+que ningún banco mira —el texto, el orden y que quepa en un móvil— se mira en
+`wiki.html` con viewport real, como cualquier pantalla.
+
+Y la sección de Versiones no tiene su propia lista: lee `NOTAS` de
+`src/data/patchNotes.ts`, que es la misma que enseña el cartel al entrar. Una
+segunda lista de versiones es la forma más rápida de que dos historias del
+juego dejen de coincidir.
+
 ---
 
 # PARTE 3 — MAPA DE FICHEROS
 
 ```
-index.html / admin.html          Los dos entry points que se construyen.
+index.html / admin.html / wiki.html   Las tres entradas que se construyen.
 firestore.rules                  Seguridad de los datos. Comentada en español.
 vite.config.ts                   Solo el input multipágina. Sin plugins.
 
 src/
   main.ts                        Composition root: auth → initGame → rutas → updateUI.
+  wiki.ts                        Entrada de la Wiki en pestaña aparte. Sin game loop.
   gameLoop.ts                    EL MOTOR. Estado, tick, I/O, migraciones. ~2900 líneas.
   firebase.ts                    initializeApp + auth + db. 20 líneas.
   achievements.ts                Definiciones de logro + evaluador.
@@ -696,6 +719,7 @@ src/
   ui/                           Cromo y páginas.
     router.ts / layout.ts / pageShell.ts
     forgePage.ts / prestigePage.ts / profilePage.ts
+    wikiPage.ts                    La Wiki: siete secciones de solo lectura.
     playerPanel.ts / buffHud.ts / icons.ts
 
   services/                     Backend.

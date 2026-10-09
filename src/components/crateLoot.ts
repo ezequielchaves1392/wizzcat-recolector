@@ -867,7 +867,13 @@ const PESO_COMPANERO = 62;
  * exclusivos compiten entre ellos por su peso de autor— pero importa para que la
  * caja no prometa una rareza que su mejor premio no tiene.
  */
-const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
+
+/**
+ * F86 · Exportado para la Wiki: el reparto de exclusivos por caja es una
+ * decisión de balance en una línea por caja, y la Wiki lo enseña leyéndolo
+ * de aquí y no con una lista escrita al lado.
+ */
+export const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
   7: [0, 3],
   8: [1, 4],
   9: [5],

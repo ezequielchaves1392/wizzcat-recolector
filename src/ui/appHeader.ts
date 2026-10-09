@@ -553,6 +553,21 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
 
         ${navDesktopHTML(opts.route)}
 
+        <!--
+          LA WIKI, EN PESTAÑA APARTE Y NO COMO RUTA (F86).
+
+          Es un botón de 36 px fijos, como el de ajustes que va detrás: detrás
+          del nav solo puede ir ancho fijo, o el nav se mueve (ver la regla de
+          arriba). Y abre wiki.html en otra pestaña en vez de navegar dentro
+          del juego, así leerla no para el tick ni toca la partida —la pestaña
+          del juego queda oculta y el juego se pausa solo por presencia—.
+        -->
+        <button data-wiki-externo
+                class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
+                aria-label="Wiki" title="Wiki (se abre en otra pestaña)">
+          <span class="[&>span>svg]:w-[18px] [&>span>svg]:h-[18px]">${ic('scroll')}</span>
+        </button>
+
         ${headerSettingsButton()}
       </div>
 
