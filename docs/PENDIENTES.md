@@ -642,6 +642,9 @@ Es una decisión de diseño discutible, y es tuya. Si se quiere redondear hacia 
 - [ ] **F84 · El contador de ranuras del almacén, más grande o recuadrado.** *(Para después, 9 de octubre, con captura.)*
       > "hacer este texto del almacen mas grande o recuadrarlo"
       *La captura: "91/94 (60+34) ranuras" en texto chico y sin caja, al pie del almacén. Lo pinta la línea de capacidad del almacén.*
+- [ ] **F85 · El tier en la ficha del compañero, ajena y propia.** *(Para después, 9 de octubre, con dos capturas.)*
+      > "falta mostrar el tier de los compañeros , al igual que en la base"
+      *La tarjeta ajena enseña nombre, rareza e ingreso pero no el tier; el recolector de al lado sí lleva su pastilla T4. En la rejilla de Escuadrón de la base tampoco sale. El dato viaja en los dos sitios (`tier` en la tarjeta y en el item), solo falta pintarlo.*
 
 ### Lote 9 · CAJAS
 
