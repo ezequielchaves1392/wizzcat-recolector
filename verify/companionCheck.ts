@@ -28,9 +28,11 @@
 //     estricto y el precio por punto no se desploma.
 // ==========================================================================
 
-import { boot, check, resumen, s, baseSave, companion, ficha, RAREZA_NEUTRA } from './kit';
+import { boot, check, resumen, s, wh, baseSave, companion, ficha, RAREZA_NEUTRA, conRoll } from './kit';
 import {
-  poderDeCompanero, poderEfectivoDeCompanio,
+  poderDeCompanero, poderEfectivoDeCompanio, efectoDeAfijosDeCompanero,
+  afijosParaCompanero, migraAfijosDeCompaneros, POOL_AFIJOS_COMPANERO,
+  costeDeNivelDeCompanio, AFIX_MIN_POR_RARIDAD, desgloseDeStat,
   multiplicadorDeCalidadDeCompanero, multiplicadorPorPotencialDeCompanero,
   multiplicadorDeRarezaDeCompanero, rarezaDeCompanionForjado, crearCompanioDeTier,
   MULTIPLICADOR_POR_RAREZA
@@ -130,12 +132,22 @@ async function main() {
 
     // **LO QUE COBRA Y LO QUE SE PINTA, DEL MISMO NÚMERO.** El stat se pide al motor
     // por el id del item, que es el camino que usa la rejilla del almacén.
+    // F97 Lote 2d · La ficha trae sus 6 afijos de la migración (Divino): el
+    // ingreso los cobra cruzando por id, así que lo esperado los lleva con la
+    // misma función pura. Lo que se ata aquí es el cableado —migración,
+    // cruce e igualdad—, no el valor de un sorteo.
+    const fichaMc: any = wh(g).find((w: any) => w.id === 'mc');
+    const multAfMc = 1 + efectoDeAfijosDeCompanero(fichaMc?.affixes, 0, 5, 'passive');
+    const esperadoMc = poderEfectivoDeCompanio(
+      { power: poderMc(5), rarity: 'Divino', potential: 5 }, { multAfijos: multAfMc });
     const ingreso = s(g).passiveIncome;
     const stat: any = g.getStatPrincipal?.('mc');
-    check('companero: el ingreso pasivo paga la rareza y el potencial',
-      ingreso === poderEfectivoDeCompanio({ power: poderMc(5), rarity: 'Divino', potential: 5 }),
-      'ingreso=' + ingreso + ' esperado='
-        + poderEfectivoDeCompanio({ power: poderMc(5), rarity: 'Divino', potential: 5 }));
+    check('companero: la ficha migrada trae sus 6 afijos de Divino',
+      Array.isArray(fichaMc?.affixes) && fichaMc.affixes.length === 6,
+      `afijos=${JSON.stringify(fichaMc?.affixes)}`);
+    check('companero: el ingreso pasivo paga la rareza, el potencial y los afijos',
+      ingreso === esperadoMc,
+      'ingreso=' + ingreso + ' esperado=' + esperadoMc);
 
     check('companero: y el stat dice exactamente lo mismo que el ingreso',
       stat && stat.valor === ingreso,
@@ -319,6 +331,131 @@ async function main() {
     check('companero: lo anunciado, lo del tier y lo forjado son la misma rareza',
       otra === '',
       otra || 'T1-T10: las tres dicen lo mismo');
+  }
+
+  // -------------------------------------------------------------------------
+  //  6b. AFIJOS DE COMPAÑERO (F97 Lote 2d)
+  // -------------------------------------------------------------------------
+  //  Los compañeros ahora llevan afijos innatos por rareza, como los
+  //  recolectores, pero con su propio pool (sin crítico) y su propio efecto
+  //  según el tipo (passive/click). Sin herencia de forja.
+  {
+    // El pool excluye crítico puro: un compañero no critica.
+    const conCrit = POOL_AFIJOS_COMPANERO.filter(a => a.id === 'aff_crit' || a.id === 'aff_focus');
+    check('afijos companero: el pool no lleva crítico puro',
+      conCrit.length === 0, conCrit.map(a => a.id).join(','));
+
+    // Sortea según rareza, con rng controlado para determinismo.
+    const sorteados = afijosParaCompanero('Divino', () => 0.5);
+    const tabla = AFIX_MIN_POR_RARIDAD['Divino'] ?? 0;
+    check('afijos companero: sortea la cantidad de su rareza',
+      sorteados.length === tabla, `sorteados=${sorteados.length} tabla=${tabla}`);
+    check('afijos companero: y sin repetidos',
+      new Set(sorteados).size === sorteados.length,
+      sorteados.join(','));
+    const comunes = afijosParaCompanero('Común', () => 0.5);
+    check('afijos companero: Común no sortea ninguno',
+      comunes.length === 0, `comunes=${comunes.length}`);
+
+    // Efecto por tipo: passive lee pasivo, click lee click, multiplier nada.
+    const unPasivo = POOL_AFIJOS_COMPANERO.find(a => (a.effect.passiveMult || 0) > 0);
+    if (unPasivo) {
+      const ePasivo = efectoDeAfijosDeCompanero([unPasivo.id], 0, 5, 'passive');
+      const eClick = efectoDeAfijosDeCompanero([unPasivo.id], 0, 5, 'click');
+      const eMulti = efectoDeAfijosDeCompanero([unPasivo.id], 0, 5, 'multiplier');
+      check('afijos companero: el passive lee su pasivo',
+        ePasivo > 0, `afijo=${unPasivo.id} efecto=${ePasivo}`);
+      check('afijos companero: y el click no lee el pasivo',
+        eClick === 0, `afijo=${unPasivo.id} comoClick=${eClick}`);
+      check('afijos companero: y el multiplier no lee nada',
+        eMulti === 0, `afijo=${unPasivo.id} comoMulti=${eMulti}`);
+    } else {
+      check('afijos companero: hay al menos uno de pasivo en el pool', false, 'ninguno');
+    }
+
+    // Sin afijos no suma nada, en ningún tipo.
+    check('afijos companero: sin afijos no suma nada',
+      efectoDeAfijosDeCompanero(undefined, 5, 5, 'passive') === 0
+        && efectoDeAfijosDeCompanero([], 5, 5, 'click') === 0
+        && efectoDeAfijosDeCompanero(['no_existe'], 5, 5, 'passive') === 0,
+      'afijos vacíos o inventados');
+
+    // La magnitud escala por tier: el mismo afijo pega más en tier alto.
+    if (unPasivo) {
+      const bajo = efectoDeAfijosDeCompanero([unPasivo.id], 0, 1, 'passive');
+      const alto = efectoDeAfijosDeCompanero([unPasivo.id], 0, 10, 'passive');
+      check('afijos companero: la magnitud escala con el tier',
+        alto > bajo, `T1=${bajo} T10=${alto}`);
+    }
+
+    // Poder efectivo con extras: multArbol y multAfijos multiplican al final.
+    const base = { power: 100, level: 0, rarity: 'Común', potential: 3 };
+    const sin = poderEfectivoDeCompanio(base);
+    const con = poderEfectivoDeCompanio(base, { multArbol: 1.12, multAfijos: 1.05 });
+    check('afijos companio: el poder efectivo aplica los extras',
+      con === Math.round(sin * 1.12 * 1.05), `sin=${sin} con=${con} esperado=${Math.round(sin * 1.12 * 1.05)}`);
+
+    // Migración: una ficha sin campo recibe los suyos según rareza.
+    const fichas = [
+      { id: 'a', type: 'companion', tier: 5, rarity: 'Divino', companionType: 'passive' },
+      { id: 'b', type: 'companion', tier: 1, rarity: 'Común', companionType: 'passive' },
+      { id: 'c', type: 'companion', tier: 3, rarity: 'Raro', companionType: 'multiplier' },
+      { id: 'd', type: 'collector', tier: 5, rarity: 'Divino' },
+    ];
+    const migradas = migraAfijosDeCompaneros(fichas, () => 0.5);
+    const fa = migradas.fichas.find((f: any) => f.id === 'a');
+    const fb = migradas.fichas.find((f: any) => f.id === 'b');
+    const fc = migradas.fichas.find((f: any) => f.id === 'c');
+    const fd = migradas.fichas.find((f: any) => f.id === 'd');
+    check('afijos companero: la migración sortea según rareza',
+      (fa?.affixes?.length ?? -1) === (AFIX_MIN_POR_RARIDAD['Divino'] ?? -1),
+      `divino=${fa?.affixes?.length}`);
+    check('afijos companero: Común queda vacío',
+      Array.isArray(fb?.affixes) && fb.affixes.length === 0, `comun=${fb?.affixes?.length}`);
+    check('afijos companero: multiplier no recibe',
+      fc?.affixes === undefined, `multi=${JSON.stringify(fc?.affixes)}`);
+    check('afijos companero: recolector no se toca',
+      fd?.affixes === undefined, `recolector=${JSON.stringify(fd?.affixes)}`);
+
+    // Y si ya trae todos los de su rareza, se conservan sin relleno ni recorte.
+    const todos = afijosParaCompanero('Divino', () => 0.5);
+    const previa = [{ id: 'x', type: 'companion', tier: 5, rarity: 'Divino', companionType: 'passive', affixes: todos }];
+    const otra = migraAfijosDeCompaneros(previa, () => 0.5);
+    check('afijos companero: conserva los suyos si ya trae todos',
+      otra.fichas[0].affixes.length === todos.length
+        && otra.fichas[0].affixes.every((id: string, i: number) => id === todos[i]),
+      JSON.stringify(otra.fichas[0].affixes));
+
+    // Desglose con filas extra: se colocan antes del total.
+    const conExtras = desgloseDeStat(5, 100, 5, 0, 117, [
+      { texto: 'Afijos', valor: '×1.05' },
+      { texto: 'Rama', valor: '×1.12' },
+    ]);
+    const total = conExtras.find(f => f.texto === 'Total');
+    const afijosFila = conExtras.find(f => f.texto === 'Afijos');
+    const ramaFila = conExtras.find(f => f.texto === 'Rama');
+    check('afijos companero: el desglose coloca las filas extra antes del total',
+      conExtras.indexOf(afijosFila!) < conExtras.indexOf(total!)
+        && conExtras.indexOf(ramaFila!) < conExtras.indexOf(total!),
+      conExtras.map(f => f.texto).join(' → '));
+    check('afijos companero: y el total no cambia',
+      total?.valor === '117', `total=${total?.valor}`);
+
+    // El ingreso cobra los afijos cruzando por id con la ficha.
+    const g = await boot(baseSave([
+      companion('c1', 3, { rarity: 'Divino', potential: 5 }),
+      ficha('c1', 3, { rarity: 'Divino', potential: 5 })
+    ], {
+      activeCompanions: ['c1'],
+      companions: [{ id: 'c1', name: 'C1', type: 'passive', power: 100, level: 0, rarity: 'Divino', potential: 5 }],
+      warehouse: [{ id: 'c1', name: 'C1', type: 'companion', tier: 3, companionType: 'passive', power: 100, rarity: 'Divino', potential: 5 }]
+    }));
+    const fichaC1: any = wh(g).find((w: any) => w.id === 'c1');
+    const multAf = 1 + efectoDeAfijosDeCompanero(fichaC1?.affixes, 0, 3, 'passive');
+    const esperado = poderEfectivoDeCompanio({ power: 100, level: 0, rarity: 'Divino', potential: 5 }, { multAfijos: multAf });
+    check('afijos companero: el ingreso cobra los afijos de la ficha',
+      s(g).passiveIncome === esperado,
+      `ingreso=${s(g).passiveIncome} esperado=${esperado} afijos=${JSON.stringify(fichaC1?.affixes)}`);
   }
 
   resumen('multiplicador del compañero');

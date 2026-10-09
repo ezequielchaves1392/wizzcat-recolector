@@ -62,6 +62,10 @@ function bonusLabel(key: keyof PassiveBonuses, value: number): string {
     case 'licenciaT2': return `vende cajas T2 en la tienda`;
     case 'licenciaT3': return `vende cajas T3 en la tienda`;
     case 'ecoDoble': return `${pct(value)} de botín doble en cajas`;
+    case 'compPasivo': return `${pct(value)} poder de pasivos`;
+    case 'compClick': return `${pct(value)} poder de clicks`;
+    case 'compMulti': return `${pct(value)} efecto multiplier`;
+    case 'compDescuento': return `−${Math.round(value * 100)}% coste de mejora`;
     default: return `${key} +${value}`;
   }
 }

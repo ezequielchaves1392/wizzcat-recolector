@@ -18,7 +18,7 @@
 
 import { TIER_SYSTEM } from './tiers';
 import { nombreDe } from './nombres';
-import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom, techoDeNivel, afijosParaRareza } from './crafting';
+import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom, techoDeNivel, afijosParaRareza, afijosParaCompanero } from './crafting';
 import { baseAleatoriaSegura } from './bases';
 
 /**
@@ -41,7 +41,11 @@ export function generateCompanionByTier(
   // para que la forja de compañeros pueda usarlo sin un ciclo de importaciones. Si
   // aquí se construyera el objeto a mano, el día que se añadiese un campo al
   // compañero la tienda y la caja se lo saltarían sin que nada lo dijera.
-  return crearCompanioDeTier(tier, rollPotentialFrom(rng), rng) as any;
+  // F97 Lote 2d · Con sus afijos innatos por rareza, como el recolector: la
+  // forja no los hereda (su eje es el potencial), pero el ingreso sí los cobra.
+  const hecho = crearCompanioDeTier(tier, rollPotentialFrom(rng), rng) as any;
+  hecho.affixes = afijosParaCompanero(hecho.rarity, rng);
+  return hecho;
 }
 
 /**

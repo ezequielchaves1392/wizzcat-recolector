@@ -164,6 +164,40 @@ export const TREE_NODES: TreeNode[] = [
     baseCost: 25, costGrowth: 1, maxLevel: 4,
     bonus: { companionSlots: 1 }, x: 2, y: 4
   },
+  // ---------------------------------------------------------------- MANADA EXTRA (F97 Lote 2d)
+  //
+  // Los compañeros iban desnudos frente al recolector: sin poderes propios, sin
+  // mejora barata y sin afijos. Estos cuatro son su rama de verdad: poder por
+  // tipo y descuento de mejora. Los afijos innatos (pool propio, magnitud por
+  // tier) vienen del sorteo, no de un nodo, y la forja sigue en potencial.
+  {
+    id: 'comp_pasivo', name: 'Enjambre', description: '+12% al poder de pasivos por nivel.',
+    lore: 'Más bocas comiendo del mismo cable: cada una muerde más fuerte.',
+    icon: 'companion', category: 'manada', tier: 2, requires: ['passive_loop'],
+    baseCost: 10, costGrowth: 1.6, maxLevel: 6,
+    bonus: { compPasivo: 0.12 }, x: 2, y: 5
+  },
+  {
+    id: 'comp_click', name: 'Sincronía', description: '+12% al poder de clicks por nivel.',
+    lore: 'Los que golpean aprenden el ritmo de los que golpean al lado.',
+    icon: 'companion', category: 'manada', tier: 2, requires: ['passive_loop'],
+    baseCost: 10, costGrowth: 1.6, maxLevel: 6,
+    bonus: { compClick: 0.12 }, x: 2, y: 6
+  },
+  {
+    id: 'comp_descuento', name: 'Cuidador', description: '−10% al coste de mejora de compañeros por nivel.',
+    lore: 'Conoce cada dron por su ruido. Arreglarlo sale más barato.',
+    icon: 'wrench', category: 'manada', tier: 2, requires: ['passive_loop'],
+    baseCost: 8, costGrowth: 1.6, maxLevel: 3,
+    bonus: { compDescuento: 0.10 }, x: 2, y: 7
+  },
+  {
+    id: 'comp_multi', name: 'Mando', description: '+15% al efecto multiplier por nivel.',
+    lore: 'Alguien tiene que gritar las órdenes. Grita mejor cada vez.',
+    icon: 'companion', category: 'manada', tier: 3, requires: ['squad_slots'],
+    baseCost: 40, costGrowth: 1.7, maxLevel: 4,
+    bonus: { compMulti: 0.15 }, x: 3, y: 5
+  },
 
   // ---------------------------------------------------------------- TIER 3
   //

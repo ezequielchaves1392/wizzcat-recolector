@@ -12,7 +12,7 @@
 //     distintas del mismo objeto.
 
 import { TIER_SYSTEM } from '../data/tiers';
-import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal, techoDeNivel } from '../data/crafting';
+import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal, techoDeNivel, afijosParaCompanero } from '../data/crafting';
 import { baseAleatoriaSegura } from '../data/bases';
 import { generateCollectorByTier } from '../data/generators';
 import { CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, textoDeExpansor, expansorDeCaja } from '../data/store';
@@ -808,6 +808,9 @@ export function makeCrateCompanion(
       name: nombre, type: 'companion', details: detalles,
       rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
       companionType: 'passive', power: p, potential, baseId: baseSalto?.id,
+      // F97 Lote 2d · Afijos innatos por rareza, como en la entrada normal:
+      // el salto también es un compañero de caja con tier.
+      affixes: afijosParaCompanero((TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], rng),
       maxLevel: techoDeNivel(potential, baseSalto?.posicion ?? 6),
       sellPrice: Math.floor(p * 62), sellPriceTope: tope
     }
@@ -1108,6 +1111,9 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
           id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           name: nombre, type: 'companion', details: detalles,
           rarity: rareza, tier, companionType: 'passive', power: p, potential,
+          // F97 Lote 2d · Afijos innatos por rareza: el compañero de caja cobra
+          // sus afijos como el recolector los suyos, cada uno en su tipo.
+          affixes: afijosParaCompanero(rareza),
           baseId: baseCaja?.id, maxLevel: techoDeNivel(potential, baseCaja?.posicion ?? 6),
           sellPrice: Math.floor(p * 62), sellPriceTope: tope
         }

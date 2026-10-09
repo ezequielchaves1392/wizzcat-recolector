@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.28',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Los compañeros llevan afijos',
+    lineas: [
+      'Los compañeros ahora tienen afijos según su rareza, como los recolectores.',
+      'Cada tipo usa los suyos: los pasivos leen afijos de pasivo y los de clic, de clic.',
+      'Las fichas viejas reciben sus afijos al cargar la partida.'
+    ]
+  },
+  {
     version: '1.15.27',
     fecha: '9 de octubre de 2026',
     titulo: 'La tienda vende cajas altas con licencia y las cajas hacen eco',

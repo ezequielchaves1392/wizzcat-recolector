@@ -105,6 +105,12 @@ export interface CompanionItem {
   baseId?: string;
   /** Obra Maestra de la forja: dos ★5 dieron este ★5 con el nodo comprado. */
   obraMaestra?: boolean;
+  /**
+   * Afijos innatos (tienda y cajas, nunca forja). Solo los lee el ingreso,
+   * cruzando por id con la ficha: en `state.companions` vive lo que paga y
+   * aquí no hay segundo campo que sincronizar.
+   */
+  affixes?: string[];
 }
 
 export interface StackableItem {
@@ -173,6 +179,14 @@ export interface PassiveBonuses {
   licenciaT3: number;
   /** Probabilidad de botín doble en cajas (Eco, por nivel). */
   ecoDoble: number;
+  /** Multiplicador del poder de compañeros pasivos, por nivel (Manada). */
+  compPasivo: number;
+  /** Multiplicador del poder de compañeros de click, por nivel (Manada). */
+  compClick: number;
+  /** Multiplicador del efecto de compañeros multiplier, por nivel (Manada). */
+  compMulti: number;
+  /** Reducción del coste de mejora de compañeros, fracción (Cuidador). */
+  compDescuento: number;
 }
 
 export type NodeCategory = 'asalto' | 'manada' | 'fortuna' | 'forja';

@@ -1063,7 +1063,7 @@ function detailContent(item: any, state: any, game: any): string {
 
         ${affixList ? `
           <div class="mb-2.5">
-            <div class="label-caps mb-1">Afijos heredados</div>
+            <div class="label-caps mb-1">Afijos</div>
             <ul class="space-y-1">${affixList}</ul>
           </div>
         ` : ''}

@@ -46,7 +46,11 @@ export const EMPTY_BONUSES: PassiveBonuses = {
   obraMaestra: 0,
   licenciaT2: 0,
   licenciaT3: 0,
-  ecoDoble: 0
+  ecoDoble: 0,
+  compPasivo: 0,
+  compClick: 0,
+  compMulti: 0,
+  compDescuento: 0
 };
 
 /** Umbral mínimo de producción para que un reinicio tenga sentido. */

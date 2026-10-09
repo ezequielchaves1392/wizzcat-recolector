@@ -20,7 +20,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraAfijosDeCompaneros, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, efectoDeAfijosDeCompanero, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
 import { basePorPosicion } from './data/bases';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
@@ -657,7 +657,8 @@ export async function createGameLoop(
       craftLuck: 0, consolationBonus: 0, autoClick: 0, afkHours: 0,
       offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0,
       sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0,
-      licenciaT2: 0, licenciaT3: 0, ecoDoble: 0
+      licenciaT2: 0, licenciaT3: 0, ecoDoble: 0,
+      compPasivo: 0, compClick: 0, compMulti: 0, compDescuento: 0
     },
     // --- Cosméticos equipados ---
     cosmetics: {
@@ -2092,6 +2093,14 @@ function sePuedeGuardar(): boolean {
         state.warehouse = conAfijos.items;
         warehouseNeedsMigration = true;
       }
+      // F97 Lote 2d · Lo mismo para los compañeros, en sus fichas: los innatos
+      // por rareza, sin tocar forjados (su eje es el potencial), multipliers
+      // ni rarezas desconocidas. El ingreso los cruza por id al recalcular.
+      const compConAfijos = migraAfijosDeCompaneros(state.warehouse);
+      if (compConAfijos.changed) {
+        state.warehouse = compConAfijos.fichas;
+        warehouseNeedsMigration = true;
+      }
       const compConPotencial = migraPotencialesDeCompaneros(state.companions, state.warehouse);
       if (compConPotencial.changed) {
         state.companions = compConPotencial.companeros;
@@ -2717,7 +2726,9 @@ function sePuedeGuardar(): boolean {
     state.activeCompanions.forEach(compId => {
       const comp = state.companions.find(c => c.id === compId);
       if (comp && comp.type === 'multiplier') {
-        multiplier += comp.power;
+        // F97 Lote 2d · Mando: la rama sube el aura. El poder sigue siendo el
+        // fijo de la carta; lo que mueve el nodo es cuánto multiplica.
+        multiplier += comp.power * (1 + (state.bonus.compMulti || 0));
       }
     });
     return Math.max(1, multiplier);
@@ -3069,6 +3080,16 @@ function sePuedeGuardar(): boolean {
     state.activeCompanions.forEach(compId => {
       const comp = state.companions.find(c => c.id === compId);
       if (comp && comp.type !== 'multiplier') {
+        // F97 Lote 2d · LA FICHA MANDA EN AFIJOS Y LA RAMA EN PODER. Los afijos
+        // viven en la ficha del almacén (como el potencial) y se cruzan por id:
+        // en `state.companions` no hay segundo campo que sincronizar. El poder
+        // de la rama depende del tipo: pasivos con pasivos y clicks con clicks.
+        const ficha = (state.warehouse as any[]).find((w: any) => w.id === compId);
+        const multArbol = comp.type === 'passive'
+          ? 1 + (state.bonus.compPasivo || 0)
+          : 1 + (state.bonus.compClick || 0);
+        const multAfijos = 1 + efectoDeAfijosDeCompanero(
+          ficha?.affixes, comp.level, ficha?.tier ?? comp.tier, comp.type);
         // **EL NIVEL MULTIPLICA AQUÍ, Y NO AL ESCRIBIR `power`.** El poder guardado
         // es `poderDeCompanero(tier, potencial)`, que es lo que comparan los bancos y
         // lo que dice la ficha. Si el nivel se escribiera dentro, ese número dejaría
@@ -3089,7 +3110,7 @@ function sePuedeGuardar(): boolean {
           level: comp.level,
           rarity: comp.rarity,
           potential: comp.potential
-        });
+        }, { multArbol, multAfijos });
         contributors.push(comp);
       }
     });
@@ -4741,6 +4762,17 @@ const RITMO_GUARDADO_MS = 60_000;
         anotaC(`Potencial ${potC}★`, `${Math.round((multPotExtra - 1) * 100)}% extra`, multPotExtra);
         anotaC(`Rareza ${rarezaC}`, `${Math.round((multRareza - 1) * 100)}% más`, multRareza);
         if (nivel > 0) anotaC(`Nivel ${nivel}`, 'del compañero', multNivelC);
+        // F97 Lote 2d · Afijos y rama, con las mismas funciones que cobra el
+        // ingreso: la ficha enseña de dónde sale lo que el stat ya incluye. Si
+        // no mueven el entero no salen (la regla de `anotaC`), así que una ficha
+        // sin bonus sigue igual que antes.
+        const fichaC = (state.warehouse as any[]).find((x: any) => x.id === w.id);
+        const tipoC = comp?.type ?? (fichaC as any)?.companionType ?? 'click';
+        anotaC('Afijos', 'del compañero',
+          1 + efectoDeAfijosDeCompanero(fichaC?.affixes, nivel, (fichaC as any)?.tier ?? comp?.tier, tipoC));
+        anotaC('Rama', 'de Manada', tipoC === 'passive'
+          ? 1 + (state.bonus.compPasivo || 0)
+          : 1 + (state.bonus.compClick || 0));
         return { base: Math.round(powerC), total: mostradoC, filas: filasC, delArma: mostradoC, deLaPartida: 0 };
       }
       // **LA BASE DEL RECOLECTOR SALE DE SU PROPIA FUNCIÓN.** Ver `filasDeRecolector()`:
@@ -4782,6 +4814,14 @@ const RITMO_GUARDADO_MS = 60_000;
         const power = Number(comp?.power ?? w.power) || 0;
         const nivel = Math.max(0, Math.floor(Number(w.level) || 0));
         const esMult = tipo === 'multiplier';
+        // F97 Lote 2d · Los mismos multis que cobra el ingreso: poder de rama
+        // según tipo y afijos de la ficha. Sin ellos el número grande diría
+        // menos que la cuenta, que es justo lo que F83 quitó del recolector.
+        const multArbolC = esMult ? 1 : tipo === 'passive'
+          ? 1 + (state.bonus.compPasivo || 0)
+          : 1 + (state.bonus.compClick || 0);
+        const multAfijosC = esMult ? 1 : 1 + efectoDeAfijosDeCompanero(
+          w.affixes, nivel, (w as any).tier ?? comp?.tier, tipo);
         const valor = esMult
           // El multiplicador **no lleva nivel**: multiplicar el ingreso el doble y
           // además por un 1,3 sería una regla nueva que nadie pidió. Sale de aquí y no
@@ -4795,7 +4835,7 @@ const RITMO_GUARDADO_MS = 60_000;
             // potencial guardado: leerlo del item daría 0 y el stat no pagaría la rareza.
             rarity: comp?.rarity ?? (w as any).rarity,
             potential: comp?.potential ?? (w as any).potential
-          });
+          }, { multArbol: multArbolC, multAfijos: multAfijosC });
         return {
           tipo: 'companion' as const,
           subtipo: tipo,
@@ -4816,7 +4856,13 @@ const RITMO_GUARDADO_MS = 60_000;
           // El multiplicador **no lleva desglose porque no hay suma que desglosar**: sale
           // entero de su `power`. Una lista de un solo término para explicar de dónde
           // sale 1,75 es relleno, y el hover vacío se lee como que falta el dato.
-          desglose: esMult ? [] : desgloseDeStat(w.tier, power, potencialNormalizado(w.potential), nivel, valor)
+          // F97 Lote 2d · Afijos y rama con sus cifras: son los mismos multis que
+          // ya lleva el número de arriba, y sin estas filas la lista no diría de
+          // dónde salen.
+          desglose: esMult ? [] : desgloseDeStat(w.tier, power, potencialNormalizado(w.potential), nivel, valor, [
+            ...(multAfijosC !== 1 ? [{ texto: 'Afijos', valor: '×' + multAfijosC.toFixed(2) }] : []),
+            ...(multArbolC !== 1 ? [{ texto: 'Rama', valor: '×' + multArbolC.toFixed(2) }] : [])
+          ])
         };
       }
       return null;
@@ -5713,7 +5759,12 @@ const RITMO_GUARDADO_MS = 60_000;
       // **EL COSTE ES LA MISMA FUNCIÓN QUE EL DEL RECOLECTOR, CON SU TIER PUESTO.**
       // `costeDeNivelDeCompanio` es un alias de `costeDeNivel`, no una curva propia, y
       // ya no tiene sentido ni tener dos: hay un recurso y una curva.
-      const crystalCost = costeDeNivelDeCompanio(tierItem, level);
+      // F97 Lote 2d · Cuidador: la rama abarata la mejora. Se aplica aquí y no
+      // en la curva porque es un descuento, no un precio: la curva sigue
+      // diciendo lo que vale el nivel y el nodo lo que perdona. Con suelo en 1
+      // para que un descuento no regale niveles en los tiers baratos.
+      const crystalCost = Math.max(1, Math.floor(
+        costeDeNivelDeCompanio(tierItem, level) * (1 - (state.bonus.compDescuento || 0))));
       const units = state.crystals;
       if (units < crystalCost) {
         return {
@@ -6247,6 +6298,10 @@ const RITMO_GUARDADO_MS = 60_000;
           // estrellas en el panel es el descuadre de R3 en su forma más difícil de
           // ver, porque las dos cifras son del mismo objeto.
           potential: comp.potential,
+          // F97 Lote 2d · Y los afijos viajan igual: la ficha es la que el
+          // ingreso cruza por id, y sin ellos cobraría de menos lo que la ficha
+          // promete.
+          affixes: (comp as any).affixes ?? [],
           sellPrice: Math.floor(item.cost / 4)
         };
         // Un compañero SIEMPRE necesita ranura propia —dos Dron Explorador son

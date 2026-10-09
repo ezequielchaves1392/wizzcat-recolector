@@ -121,6 +121,17 @@ export const AFFIXES: Affix[] = [
 export const AFFIX_BY_ID: Record<string, Affix> = Object.fromEntries(AFFIXES.map(a => [a.id, a]));
 
 /**
+ * EL POOL DE AFIJOS DE COMPAÑERO (F97 Lote 2d).
+ *
+ * El mismo catálogo menos los de crítico puro (`aff_crit`, `aff_focus`): un
+ * compañero no critica, así que sortearle un afijo que solo da crítico sería
+ * sortearle un hueco vacío. Una sola lista para el sorteo, la migración y el
+ * banco: tres filtros escritos a mano son tres ocasiones de que uno incluya lo
+ * que los otros quitan.
+ */
+export const POOL_AFIJOS_COMPANERO: Affix[] = AFFIXES.filter(a => a.id !== 'aff_crit' && a.id !== 'aff_focus');
+
+/**
  * EL MULTIPLICADOR DE CRÍTICO, Y POR QUÉ ES UN NÚMERO Y NO PARTE DE CADA AFIJO.
  *
  * Las tres descripciones que lo prometen dicen "×2 daño". Si el ×2 viviera dentro de
@@ -1353,7 +1364,8 @@ export function desgloseDeStat(
   baseDelItem: number,
   potencial: number,
   nivel: number,
-  total: number
+  total: number,
+  extras?: Array<{ texto: string; valor: string }>
 ): Array<{ texto: string; valor: string }> {
   const multPot = 1 + 0.2 * potencial;
   const multNivel = multiplicadorDeNivel(nivel);
@@ -1374,6 +1386,12 @@ export function desgloseDeStat(
   }
   if (nivel > 0) {
     filas.push({ texto: 'Nivel ' + nivel, valor: '×' + multNivel.toFixed(2) });
+  }
+  // F97 Lote 2d · Filas extra ya calculadas (afijos, rama): las pone quien las
+  // cobra, con sus números, y aquí solo se colocan antes del total. Sin ellas
+  // la lista es la de siempre.
+  for (const extra of extras ?? []) {
+    filas.push(extra);
   }
   // El último término es el total, y la vista lo pinta en negrita: cierra la cuenta.
   filas.push({ texto: 'Total', valor: String(total) });
@@ -1551,10 +1569,16 @@ export function poderEfectivoDeCompanio(comp: {
   level?: number;
   rarity?: string;
   potential?: number;
-}): number {
+}, extras?: { multArbol?: number; multAfijos?: number }): number {
   const bruto = (comp.power || 0)
     * multiplicadorDeNivel(comp.level)
-    * multiplicadorDeCalidadDeCompanero(comp.rarity, comp.potential);
+    * multiplicadorDeCalidadDeCompanero(comp.rarity, comp.potential)
+    // F97 Lote 2d · Los multis de la rama y de los afijos entran aquí para
+    // que el número que cobra el ingreso sea el que enseña la ficha: son
+    // parámetros opcionales para que los bancos que miden el poder base no
+    // cambien. Sin ellos, el poder de siempre.
+    * (extras?.multArbol ?? 1)
+    * (extras?.multAfijos ?? 1);
   return Math.round(bruto);
 }
 /**
@@ -1628,19 +1652,26 @@ export function validaMateriales(
 /**
  * La tirada: la probabilidad, y el premio del fallo.
  *
- * Sale de aquí en las dos fusiones, así que **la probabilidad de fundir dos
- * compañeros es exactamente la de fundir dos recolectores** con los mismos
- * consumibles. No es una coincidencia: es que el yunque es el mismo y el
- * escribano es el mismo.
+ * Sale de aquí en las dos fusiones, así que **a igualdad de materiales la
+ * probabilidad es la misma** en las dos: el yunque es el mismo y el escribano
+ * es el mismo. Lo que cambia son los materiales que cada una acepta, y por eso
+ * la suerte de afijos solo cuenta en recolectores (ver abajo).
  */
 export function tiraDeForja(
   tier: number,
   materials: Array<{ affixes?: string[]; rarity?: string }>,
-  options: IntentosDeForja
+  options: IntentosDeForja,
+  cuentaAfijos = true
 ): { acierto: boolean; chance: number; crystals: number } {
   // Los compañeros no tienen afijos, así que aquí aportan cero. No es que se les
   // dé un trato peor: es que no tienen la entrada que suma esto.
-  const afixLuck = materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0);
+  // F97 Lote 2d · Y CON AFIJOS INNATOS, TAMPOCO. Los de compañero son de
+  // ingreso y no heredan en la forja (su eje es el potencial): contarlos aquí
+  // pagaría suerte por algo que sale gratis en cada caja. Solo cuentan los de
+  // recolector, que es lo que el plan de la serie promete al calcular piedras.
+  const afixLuck = cuentaAfijos
+    ? materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0)
+    : 0;
   const chance = successChance(tier, options.craftLuck, options.stonesUsed, afixLuck);
   const rng = options.rng ?? Math.random;
   if (rng() <= chance) return { acierto: true, chance, crystals: 0 };
@@ -1847,7 +1878,9 @@ export function attemptForgeCompanion(
   const error = validaMateriales(materials, tier, 'compañeros', maxTier);
   if (error) return { success: false, error };
 
-  const tira = tiraDeForja(tier, materials, options);
+  // Sin suerte de afijos: los innatos del compañero son de ingreso y no
+  // heredan, y contarlos pagaría probabilidad por algo gratis.
+  const tira = tiraDeForja(tier, materials, options, false);
   if (!tira.acierto) {
     return { success: false, crystals: tira.crystals, chanceUsed: tira.chance };
   }
@@ -2198,9 +2231,10 @@ function pickAffixes(
 function sorteaAfijos(
   cantidad: number,
   excluidos: string[],
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  pool: Affix[] = AFFIXES
 ): string[] {
-  const restantes = AFFIXES.filter(a => !excluidos.includes(a.id));
+  const restantes = pool.filter(a => !excluidos.includes(a.id));
   const picked: string[] = [];
   while (picked.length < cantidad && restantes.length > 0) {
     const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
@@ -2294,4 +2328,101 @@ export function migraAfijosPorRareza(
   });
   if (!changed) return { items, changed: false };
   return { items: salida, changed: true };
+}
+
+/**
+ * EL POOL DE AFIJOS DE COMPAÑERO (F97 Lote 2d).
+ *
+ * El mismo catálogo menos los de crítico puro (`aff_crit`, `aff_focus`): un
+ * compañero no critica, así que sortearle un afijo que solo da crítico sería
+ * sortearle un hueco vacío. `aff_void` se queda porque sus multis sí aplican.
+ * El sorteo y los pesos son los de siempre (`sorteaAfijos()` con otro pool).
+ */
+export function afijosParaCompanero(
+  rarity: string,
+  rng: () => number = Math.random
+): string[] {
+  const objetivo = AFIX_MIN_POR_RARIDAD[rarity] ?? 0;
+  const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));
+  if (tope <= 0) return [];
+  return sorteaAfijos(tope, [], rng, POOL_AFIJOS_COMPANERO);
+}
+
+/**
+ * EL EFECTO DE LOS AFIJOS DE UN COMPAÑERO, SEGÚN SU TIPO (F97 Lote 2d).
+ *
+ * Los afijos hablan dos idiomas y el compañero solo entiende uno: en un
+ * `passive` cuenta lo de pasivo (base y por niveles), en un `click` lo de
+ * click, y en un `multiplier` nada —su aura es fija y no lleva afijos—.
+ * La magnitud escala por tier como en el recolector (`potenciaDeAfijoPorTier`):
+ * el mismo afijo pega más en un tier alto. El crítico no se lee en ningún
+ * tipo: los compañeros no critican.
+ */
+export function efectoDeAfijosDeCompanero(
+  affixIds: Array<string> | undefined | null,
+  nivel: number | undefined | null,
+  tier: number | undefined | null,
+  tipo: string | undefined | null
+): number {
+  const ids = Array.isArray(affixIds) ? affixIds : [];
+  const nv = Number(nivel) || 0;
+  const potencia = tier === null || tier === undefined ? 1 : potenciaDeAfijoPorTier(tier);
+  let out = 0;
+  for (const affixId of ids) {
+    const affix = AFFIX_BY_ID[affixId];
+    if (!affix) continue;
+    if (tipo === 'passive') {
+      out += (affix.effect.passiveMult || 0) * potencia;
+      out += (affix.effect.passiveMultPorNiveles || 0) * (nv / 5) * potencia;
+    } else if (tipo === 'click') {
+      out += (affix.effect.clickMult || 0) * potencia;
+      out += (affix.effect.clickMultPorNivel || 0) * nv * potencia;
+    }
+    // `multiplier` y lo desconocido: 0. El aura es fija y un tipo inventado
+    // no puede multiplicar nada.
+  }
+  return out;
+}
+
+/**
+ * LOS AFIJOS INNATOS DE LOS COMPAÑEROS, EN CADA CARGA (F97 Lote 2d).
+ *
+ * Solo fichas del almacén (`type === 'companion'`): en `state.companions`
+ * vive lo que paga y el ingreso cruza por id, así que no hay segundo campo
+ * que sincronizar. Se salta lo forjado (lleva `forgedBy` y la forja no da
+ * afijos: su eje es el potencial), los `multiplier` y los sin tier (los
+ * exclusivos de caja, de poder fijo y hechos a mano). Lo demás sigue la
+ * tabla universal: si es Épico lleva 2.
+ */
+export function migraAfijosDeCompaneros(
+  fichas: any[],
+  rng: () => number = Math.random
+): { fichas: any[]; changed: boolean } {
+  let changed = false;
+  const pool = POOL_AFIJOS_COMPANERO;
+  const salida = (fichas ?? []).map((f) => {
+    if (f?.type !== 'companion') return f;
+    if (typeof (f as any).forgedBy === 'string' && (f as any).forgedBy) return f;
+    if ((f as any).companionType === 'multiplier') return f;
+    const tier = Number((f as any).tier);
+    if (!Number.isFinite(tier) || tier < 1) return f;
+    const objetivo = AFIX_MIN_POR_RARIDAD[(f as any).rarity];
+    if (objetivo === undefined) return f;
+    const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));
+    const conocidos = Array.isArray((f as any).affixes)
+      ? ((f as any).affixes as any[]).filter(id => AFFIXES.some(a => a.id === id))
+      : [];
+    let lista = conocidos;
+    if (lista.length < tope) {
+      lista = [...lista, ...sorteaAfijos(tope - lista.length, lista, rng, pool)];
+    } else if (lista.length > tope) {
+      lista = lista.slice(0, tope);
+    }
+    const antes = Array.isArray((f as any).affixes) ? ((f as any).affixes as any[]) : null;
+    if (antes !== null && antes.length === lista.length && antes.every((id, i) => id === lista[i])) return f;
+    changed = true;
+    return { ...f, affixes: lista };
+  });
+  if (!changed) return { fichas, changed: false };
+  return { fichas: salida, changed: true };
 }
