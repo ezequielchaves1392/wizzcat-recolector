@@ -4196,7 +4196,8 @@ de núcleos va en el parche grande y es una sola vez.*
    v1.15.23** (autos domados). **Lote 2a hecho en v1.15.25** (ramas, puerta por
    puntos y devolución). **Lote 2b hecho en v1.15.26** (cuatro keystones).
    **Lote 2c hecho en v1.15.27** (licencias y Eco). **Lote 2d (1ª parte) hecho en
-   v1.15.28** (afijos de compañero). Quedan Lote 2d (2ª parte: buffers) y 3.
+   v1.15.28** (afijos de compañero). **Lote 2d (2ª parte) hecho en v1.15.29**
+   (buffers de compañero). Queda Lote 3.
 
 ### Encontrado haciendo B43 (9 de octubre, para quien lleve F97)
 

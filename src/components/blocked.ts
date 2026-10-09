@@ -312,40 +312,61 @@ export function renderErrorDeCarga(
  * Si esta pantalla saliera por ese motivo, le estaríamos enseñando una factura a alguien
  * cuyo juego va perfecto, y esa es la forma más rápida de que se vaya y no vuelva.
  */
-export function renderCuotaAgotada(
-  container: HTMLElement,
-  onReintentar: () => void
-): void {
+export function renderCuotaAgotada(container: HTMLElement): void {
   container.innerHTML = `
-    <div class="min-h-screen flex items-center justify-center p-6 bg-[var(--bg-app)]">
-      <div class="card-glass border rounded-2xl p-6 max-w-sm w-full flex flex-col gap-4">
-        <div class="label-caps text-amber-400">Límite del día alcanzado</div>
-        <div class="font-['Orbitron'] font-bold text-base leading-tight">
-          El servidor ha llegado a su límite de hoy
-        </div>
-        <div class="text-xs text-[var(--text-muted)] leading-relaxed">
-          No es un fallo de tu equipo ni de tu cuenta, y <strong>tu partida está intacta</strong>:
-          no se ha perdido nada de lo que tenías guardado. Lo que hayas jugado desde entonces
-          se queda en este dispositivo y subirá solo en cuanto vuelva el servicio.
-        </div>
-        <div class="text-xs text-[var(--text-muted)] leading-relaxed">
-          El límite se repone por sí solo al día siguiente. Puedes dejarlo y volver mañana,
-          o reintentar ahora mismo si ya ha pasado.
-        </div>
-        <button data-reintentar
-                class="w-full py-2.5 accent-bg text-slate-950 font-['Orbitron'] font-bold text-xs
-                       rounded-xl hover:opacity-90 transition cursor-pointer">
-          REINTENTAR
-        </button>
-        <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
-          El aviso sale solo cuando el servidor dice que se pasó el límite, no por un fallo
-          de conexión. Si es la conexión, lo que funciona es reintentar.
+    <div class="auth-scene w-screen h-dvh app-bg flex flex-col items-center justify-center p-4 font-sans overflow-hidden">
+      <div class="auth-bg" aria-hidden="true">
+        <div class="auth-glow auth-glow-1"></div>
+        <div class="auth-grid"></div>
+        <div class="auth-vignette"></div>
+      </div>
+
+      <div class="relative z-10 w-full max-w-md">
+        <div class="auth-card card-glass rounded-3xl p-6 sm:p-8 flex flex-col gap-5 text-center items-center">
+
+          <div class="auth-logo" style="background:#f59e0b;color:#fff">
+            <span class="[&>span>svg]:w-6 [&>span>svg]:h-6">${ic('wrench')}</span>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <h1 class="font-['Orbitron'] font-black text-lg tracking-[0.18em] text-amber-400">
+              SERVIDOR EN MANTENIMIENTO
+            </h1>
+            <p class="text-[10px] font-mono text-[var(--text-muted)] tracking-[0.12em]">
+              EL JUEGO NO ESTÁ DISPONIBLE
+            </p>
+          </div>
+
+          <div role="status"
+               class="w-full rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4
+                      flex flex-col gap-2 text-left">
+            <p class="text-[13px] font-sans leading-relaxed text-[var(--text-main)]">
+              El servidor está en mantenimiento y el juego no está disponible
+              ahora mismo. Tu partida sigue guardada y no se ha perdido nada.
+            </p>
+            <p class="text-[13px] font-sans leading-relaxed text-[var(--text-main)]">
+              Mientras tanto, puedes leer la <strong>Wiki</strong> para aprender
+              las reglas, ver las cajas o planificar tu próxima partida.
+            </p>
+          </div>
+
+          <button type="button" id="abrir-wiki"
+                  class="btn-ghost w-full h-11 rounded-xl font-['Orbitron'] font-bold text-[11px]
+                         tracking-[0.12em] cursor-pointer transition flex items-center justify-center gap-2">
+            <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('scroll')}</span>
+            ABRIR LA WIKI
+          </button>
+
+          <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+            La Wiki es solo lectura y no toca tu partida. El juego volverá cuando
+            termine el mantenimiento.
+          </p>
         </div>
       </div>
     </div>
   `;
 
-  // Mismo `addEventListener` sobre el nodo nuevo y no `onclick`, por R5: este nodo vive
-  // dentro de `#app`, que se recrea, y un atributo inline ahí se acumula con cada montaje.
-  container.querySelector('[data-reintentar]')?.addEventListener('click', onReintentar);
+  container.querySelector('#abrir-wiki')?.addEventListener('click', () => {
+    window.open('wiki.html', '_blank', 'noopener');
+  });
 }

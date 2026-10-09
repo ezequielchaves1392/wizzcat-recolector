@@ -714,7 +714,7 @@ switch (vista) {
     //
     // **Y POR QUÉ SE PIDE CON EL ANCHO Y EL ALTO EN LA URL.** Porque lo que hay que mirar
     // es el móvil, no el escritorio. En un monitor todo cabe; en 390×844 es donde falla.
-    renderCuotaAgotada(app, () => { /* el botón recarga; aquí no recarga nada */ });
+    renderCuotaAgotada(app);
     break;
   case 'almacen':
     renderWarehouseTab(app, fakeGame, noop, ir);

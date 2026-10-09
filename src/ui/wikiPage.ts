@@ -744,9 +744,9 @@ function tabsHTML(): string {
  *
  * No usa `pageShell` ni el router del juego a propósito: no hay partida, no
  * hay navegación a sectores y no hay nada que guardar. La cáscara es mínima
- * —título, aviso de solo lectura, buscador y botón de cerrar— y el contenido
- * se repinta dentro de su propio nodo, así que cambiar de pestaña no mueve el
- * scroll de la página: se vuelve arriba, que es donde empieza cada sección.
+ * —título, aviso de solo lectura y buscador— y el contenido se repinta dentro
+ * de su propio nodo, así que cambiar de pestaña no mueve el scroll de la
+ * página: se vuelve arriba, que es donde empieza cada sección.
  */
 export function renderWikiStandalone(container: HTMLElement) {
   container.innerHTML = `
@@ -760,13 +760,7 @@ export function renderWikiStandalone(container: HTMLElement) {
             <h1 class="font-['Orbitron'] font-bold text-[15px] md:text-lg accent-text truncate leading-tight">Wiki</h1>
             <p class="text-[10px] font-mono text-[var(--text-muted)] truncate">Solo lectura: no toca tu partida</p>
           </div>
-          <button data-wiki-cerrar
-                  class="h-9 px-3 rounded-lg btn-ghost text-[11px] font-mono font-bold cursor-pointer
-                         flex items-center gap-1.5 flex-shrink-0"
-                  aria-label="Cerrar la Wiki">
-            <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic('close')}</span>
-            Cerrar
-          </button>
+
         </div>
       </header>
       <div class="flex-shrink-0 w-full max-w-[68rem] mx-auto px-3 md:px-4 pt-2">
@@ -795,14 +789,6 @@ export function renderWikiStandalone(container: HTMLElement) {
   // Un solo delegado en el contenedor: pestañas, enlaces y resultados se
   // recrean en cada pintado. El campo de búsqueda sobrevive (ver `vista`).
   container.addEventListener('click', (e) => {
-    if ((e.target as HTMLElement).closest('[data-wiki-cerrar]')) {
-      e.preventDefault();
-      // Si se abrió desde el juego, se puede cerrar; si se llegó directa,
-      // volver al juego es lo único que tiene sentido ofrecer.
-      if (window.opener) window.close();
-      else location.href = 'index.html';
-      return;
-    }
     if ((e.target as HTMLElement).closest('[data-wiki-limpiar]')) {
       e.preventDefault();
       ui.q = '';

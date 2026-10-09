@@ -57,6 +57,26 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.30',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Pantalla de mantenimiento',
+    lineas: [
+      'El aviso de cuota agotada ahora dice que el servidor está en mantenimiento.',
+      'La pantalla de mantenimiento tiene un botón para abrir la Wiki.',
+      'La Wiki ya no tiene el botón de cerrar que volvía al juego.'
+    ]
+  },
+  {
+    version: '1.15.29',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Las cajas dan buffers de compañero',
+    lineas: [
+      'Las cajas dan tres buffers que suben el ingreso de un tipo de compañero.',
+      'Cada buffer dura 30 minutos y se gasta desde el almacén.',
+      'El buffer global sube el ingreso de todos los compañeros.'
+    ]
+  },
+  {
     version: '1.15.28',
     fecha: '9 de octubre de 2026',
     titulo: 'Los compañeros llevan afijos',

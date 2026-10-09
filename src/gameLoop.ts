@@ -53,9 +53,10 @@ import {
   type CrateType
 } from './data/store';
 import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, sePuedeCancelar, type BuffKey } from './data/buffs';
+import { rollBufferCompañero } from './components/crateLoot';
 import {
   cuantasVecesCabe, pasoDeConsumible, anotaTotalDeBuff, topeDeConsumible,
-  BUFF_TOTAL_CAMPOS, BUFF_TOTAL_FIELDS
+  BUFF_TOTAL_CAMPOS, BUFF_TOTAL_FIELDS, expiracionDe
 } from './data/buffs';
 import {
   AUTO_VENTA_POR_DEFECTO, coaccionaAutoVenta, debeVenderseAuto,
@@ -658,7 +659,8 @@ export async function createGameLoop(
       offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0,
       sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0,
       licenciaT2: 0, licenciaT3: 0, ecoDoble: 0,
-      compPasivo: 0, compClick: 0, compMulti: 0, compDescuento: 0
+      compPasivo: 0, compClick: 0, compMulti: 0, compDescuento: 0,
+      compPassivoBuffMult: 0, compClickBuffMult: 0, compGlobalBuffMult: 0
     },
     // --- Cosméticos equipados ---
     cosmetics: {
@@ -756,6 +758,10 @@ export async function createGameLoop(
       passiveBoostExpiresAt: 0,
       clickX2ExpiresAt: 0, // Tarjeta Click x2 (30s)
       clickX3ExpiresAt: 0, // Tarjeta Click x3 (30s)
+      // F97 Lote 2d · Los tres buffers de compañero.
+      compPassiveBoostExpiresAt: 0,
+      compClickBoostExpiresAt: 0,
+      compGlobalBoostExpiresAt: 0,
       // **Y LO QUE SE CONCEDIÓ EN EL ÚLTIMO USO, QUE ES EL DENOMINADOR DE LA BARRA.**
       // La barra del HUD es `restante / esto`, y con la duración de una tarjeta el
       // denominador es treinta segundos para un buff que dura treinta minutos: la
@@ -764,7 +770,10 @@ export async function createGameLoop(
       clickBoostTotalMs: 0,
       passiveBoostTotalMs: 0,
       clickX2TotalMs: 0,
-      clickX3TotalMs: 0
+      clickX3TotalMs: 0,
+      compPassiveBoostTotalMs: 0,
+      compClickBoostTotalMs: 0,
+      compGlobalBoostTotalMs: 0
     },
     /** Lo mismo para el AFK, que vive fuera de `buffs`. La barra también lo mira. */
     afkTotalMs: 0
@@ -1593,7 +1602,7 @@ let rankingUltimoEnvio = 0;
     try {
       const app = typeof document === 'undefined' ? null : document.querySelector('#app');
       if (!app) return;
-      renderCuotaAgotada(app as HTMLElement, () => { location.reload(); });
+      renderCuotaAgotada(app as HTMLElement);
     } catch (e) {
       console.error('[cuota] No se ha podido pintar el aviso de cuota:', e);
     }
@@ -2230,12 +2239,18 @@ function sePuedeGuardar(): boolean {
         passiveBoostExpiresAt: data.buffs?.passiveBoostExpiresAt ?? 0,
         clickX2ExpiresAt: data.buffs?.clickX2ExpiresAt ?? 0,
         clickX3ExpiresAt: data.buffs?.clickX3ExpiresAt ?? 0,
+        compPassiveBoostExpiresAt: data.buffs?.compPassiveBoostExpiresAt ?? 0,
+        compClickBoostExpiresAt: data.buffs?.compClickBoostExpiresAt ?? 0,
+        compGlobalBoostExpiresAt: data.buffs?.compGlobalBoostExpiresAt ?? 0,
         // Los totalizadores no se coaccionan aquí sino en el bucle de abajo, con la
         // tabla: escribirlos en los dos sitios es la forma de que se queden a medias.
         clickBoostTotalMs: 0,
         passiveBoostTotalMs: 0,
         clickX2TotalMs: 0,
-        clickX3TotalMs: 0
+        clickX3TotalMs: 0,
+        compPassiveBoostTotalMs: 0,
+        compClickBoostTotalMs: 0,
+        compGlobalBoostTotalMs: 0
       };
 
       /**
@@ -3105,12 +3120,20 @@ function sePuedeGuardar(): boolean {
         // cálculo**. Con la rareza añadida a una y no a la otra, el número grande habría
         // dicho una cosa y el ingreso otra. Ahora los dos llaman a la misma función, que
         // es la razón de que la firma de esa lleve la rareza y el potencial.
+        // F97 Lote 2d · LOS BUFFERS DE COMPAÑERO. Cada uno da boost a un tipo:
+        // pasivos con pasivos, clicks con clicks, global con todos. Se aplican
+        // aquí, sobre el poder ya calculado con afijos y rama, porque son
+        // multiplicadores temporales que se suman a los permanentes.
+        const multBuff = comp.type === 'passive'
+          ? 1 + state.bonus.compPassivoBuffMult
+          : 1 + state.bonus.compClickBuffMult;
+        const multGlobal = 1 + state.bonus.compGlobalBuffMult;
         base += poderEfectivoDeCompanio({
           power: comp.power,
           level: comp.level,
           rarity: comp.rarity,
           potential: comp.potential
-        }, { multArbol, multAfijos });
+        }, { multArbol, multAfijos }) * multBuff * multGlobal;
         contributors.push(comp);
       }
     });
@@ -4953,6 +4976,9 @@ const RITMO_GUARDADO_MS = 60_000;
         clickX2: 'Clics x2 (tarjeta)',
         clickX3: 'Clics x3 (tarjeta)',
         passiveBoost: 'Pasivo x2',
+        compPassiveBoost: 'Buffer Pasivo',
+        compClickBoost: 'Buffer Click',
+        compGlobalBoost: 'Buffer Global',
         afk: 'AFK'
       };
       // LA NEGACION VIENE DE LA REGLA, NO DE UN `if` ESCRITO AQUI.
@@ -5554,6 +5580,26 @@ const RITMO_GUARDADO_MS = 60_000;
             state.buffs.clickX3ExpiresAt = Math.min(base + 30_000, ahora + 30 * 60_000);
             break;
           }
+          // F97 Lote 2d · LOS TRES BUFFERS DE COMPAÑERO.
+          //
+          // Cada uno da boost a un tipo de compañero: pasivos, clicks o global.
+          // Se aplican sobre el poder ya calculado con afijos y rama, porque
+          // son multiplicadores temporales que se suman a los permanentes.
+          case 'compPassiveBoost': {
+            const base = Math.max(ahora, state.buffs.compPassiveBoostExpiresAt);
+            state.buffs.compPassiveBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 2 * 60 * 60_000);
+            break;
+          }
+          case 'compClickBoost': {
+            const base = Math.max(ahora, state.buffs.compClickBoostExpiresAt);
+            state.buffs.compClickBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 2 * 60 * 60_000);
+            break;
+          }
+          case 'compGlobalBoost': {
+            const base = Math.max(ahora, state.buffs.compGlobalBoostExpiresAt);
+            state.buffs.compGlobalBoostExpiresAt = Math.min(base + 30 * 60_000, ahora + 60 * 60_000);
+            break;
+          }
           case 'calibrationStone':
           case 'stabilityNano':
           case 'refiningEther':
@@ -5625,6 +5671,17 @@ const RITMO_GUARDADO_MS = 60_000;
       // sería lo mismo, porque cada paso parte del anterior, pero anotarlo aquí
       // hace claro que es "lo que hay ahora", no "lo que se ha usado".
       anotaTotalDeBuff(state, buffId, ahora);
+
+      // F97 Lote 2d · LOS BUFFERS DE COMPAÑERO actualizan los multiplicadores
+      // temporales. Se recalculan aquí, después de aplicar, porque dependen de
+      // si el buff está activo ahora mismo. Sin ellos el ingreso no sube.
+      if (buffId === 'compPassiveBoost') {
+        state.bonus.compPassivoBuffMult = Date.now() < state.buffs.compPassiveBoostExpiresAt ? 0.5 : 0;
+      } else if (buffId === 'compClickBoost') {
+        state.bonus.compClickBuffMult = Date.now() < state.buffs.compClickBoostExpiresAt ? 0.5 : 0;
+      } else if (buffId === 'compGlobalBoost') {
+        state.bonus.compGlobalBuffMult = Date.now() < state.buffs.compGlobalBoostExpiresAt ? 0.25 : 0;
+      }
 
       consumeWarehouseItem(item.id, aplicadas);
 
@@ -6489,6 +6546,31 @@ const RITMO_GUARDADO_MS = 60_000;
         }
       }, state.bonus.crateLuck ?? 0, state.bonus.jackpotChance ?? 0, state.bonus.ecoDoble ?? 0);
 
+      // F97 Lote 2d · LOS BUFFERS DE COMPAÑERO como segunda tirada (fuera de la tabla).
+      // Si toca, se aplica con el mismo aplicador: entra al almacén como cualquier consumible.
+      const buffer = rollBufferCompañero(crateType);
+      if (buffer) {
+        const applier = {
+          nanites: (n: number) => { state.nanites += n; state.totalNanitesProduced += n; },
+          crystals: (n: number) => { grantCrystals(n); },
+          unlockCosmetic: (cosmeticId: string) => desbloquearCosmetico(cosmeticId),
+          ownedCosmetics: () => state.cosmetics.unlocked,
+          addItem: (item: any) => {
+            if (item.type === 'companion' && !state.companions.some((c: any) => c.id === item.id)) {
+              state.companions.push({ id: item.id, name: item.name, type: item.companionType || 'passive', power: typeof item.power === 'number' ? item.power : 1, rarity: item.rarity, tier: item.tier });
+            }
+            if (!addToWarehouse(item)) return { ok: false };
+            return { ok: true };
+          }
+        };
+        if (buffer.kind === 'nanites') applier.nanites(buffer.amount);
+        else if (buffer.kind === 'crystals') applier.crystals(buffer.amount);
+        else if (buffer.kind === 'consumable' && buffer.item) {
+          const r = applier.addItem(buffer.item);
+          if (!r.ok) return { ok: false, msg: 'No queda espacio en el almacén para el buffer.' };
+        }
+      }
+
       // Los contadores se recalculan DESPUÉS de aplicar el botín, para que
       // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el
       // almacén y los contadores desincronizados.
@@ -6679,7 +6761,11 @@ const RITMO_GUARDADO_MS = 60_000;
             sellPrice: 250
           }
         ],
-        buffs: { clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 },
+        buffs: {
+          clickBoostExpiresAt: 0, passiveBoostExpiresAt: 0,
+          clickX2ExpiresAt: 0, clickX3ExpiresAt: 0,
+          compPassiveBoostExpiresAt: 0, compClickBoostExpiresAt: 0, compGlobalBoostExpiresAt: 0
+        },
         // Lo permanente
         cores: keptCores,
         totalCores: keptTotalCores,

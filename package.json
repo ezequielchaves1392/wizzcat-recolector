@@ -1,7 +1,7 @@
 {
   "name": "cyber-forge",
   "private": true,
-  "version": "1.15.28",
+  "version": "1.15.30",
   "type": "module",
   "scripts": {
     "dev": "vite",
