@@ -78,6 +78,8 @@ export interface CollectorItem {
   sellPrice?: number;
   /** Base oculta F74 (`base_rec_t{tier}_{pos}`). Sin ella, el stat va sin base. */
   baseId?: string;
+  /** Obra Maestra de la forja: dos ★5 dieron este ★5 con el nodo comprado. */
+  obraMaestra?: boolean;
 }
 
 export interface CompanionItem {
@@ -101,6 +103,8 @@ export interface CompanionItem {
   sellPrice?: number;
   /** Base oculta F74 (`base_com_t{tier}_{pos}`). Sin ella, el poder va sin base. */
   baseId?: string;
+  /** Obra Maestra de la forja: dos ★5 dieron este ★5 con el nodo comprado. */
+  obraMaestra?: boolean;
 }
 
 export interface StackableItem {
@@ -153,6 +157,16 @@ export interface PassiveBonuses {
   storageSlots: number;
   /** Ranuras extra de compañeros equipables. */
   companionSlots: number;
+  /** Cada cuántos clics (tuyos + autos) el siguiente critica asegurado (Sobrecarga). 0 = apagado. */
+  sobrecargaCada: number;
+  /** Multiplicador del crítico asegurado de Sobrecarga. */
+  sobrecargaMult: number;
+  /** Fracción de pasivo extra por cada compañero activo además del primero (Mente Colmena). */
+  colmenaPorComp: number;
+  /** Probabilidad de que una caja suba un tier su premio (Jackpot). */
+  jackpotChance: number;
+  /** 1 si la forja puede firmar Obras Maestras (dos ★5 en un ★5). */
+  obraMaestra: number;
 }
 
 export type NodeCategory = 'asalto' | 'manada' | 'fortuna' | 'forja';

@@ -957,12 +957,33 @@ const FORGE_PREFIX = ['Forja de', 'Espuela de', 'Nucleo de', 'Herencia de', 'Sel
 const FORGE_NOUN = ['Vórtice', 'Éclipsis', 'Confín', 'Ceniza', 'Éter', 'Nébula', 'Duna', 'Ónix', 'Zafiro', 'Cobalto'];
 
 /** Nombre generado: "Forja de Ceniza" + sufijo de linaje. */
-export function forgeCollectorName(potential: number, tier: number, rng = Math.random): string {
+export function forgeCollectorName(potential: number, tier: number, rng = Math.random, obra = false): string {
   const p = FORGE_PREFIX[Math.floor(rng() * FORGE_PREFIX.length)];
   const n = FORGE_NOUN[Math.floor(rng() * FORGE_NOUN.length)];
   const tierSuffix = tier >= 11 ? ' PRIMIGENIA' : tier >= 9 ? ' SINGULAR' : '';
-  const potSuffix = potential >= 5 ? '·Absoluta' : potential >= 4 ? '·Prima' : '';
+  // La obra firma en el nombre para que se pueda buscar en el almacén: es el
+  // mismo sufijo donde ya van `·Absoluta` y `·Prima`, no un campo aparte que
+  // solo vería quien abriera la ficha.
+  const potSuffix = obra ? '·Obra Maestra' : potential >= 5 ? '·Absoluta' : potential >= 4 ? '·Prima' : '';
   return `${p} ${n}${tierSuffix}${potSuffix}`;
+}
+
+/**
+ * SI UN FORJADO ES OBRA MAESTRA, Y POR QUÉ SON TRES CONDICIONES Y NO UNA.
+ *
+ * Hacen falta las tres: el nodo comprado (sin él no hay firma que poner),
+ * los dos materiales en ★5 (es lo que la hace obra y no suerte) y el
+ * resultado en ★5 (un 4 con un 5 que sube por Éter es un ★5 afortunado, no una
+ * obra). Un item viejo sin potencial cuenta como ★3 y no dispara nunca.
+ */
+export function esObraMaestra(
+  materiales: Array<{ potential?: number }>,
+  potencialFinal: number,
+  activa: boolean
+): boolean {
+  if (!activa || potencialFinal < 5) return false;
+  if (materiales.length !== MATERIALES_POR_FUSION) return false;
+  return materiales.every(m => potencialNormalizado(m.potential) === 5);
 }
 
 // --------------------------------------------------------------------------
@@ -1567,6 +1588,8 @@ interface IntentosDeForja {
    */
   eterUsed?: number;
   maxTier?: number;
+  /** 1 si el nodo Obra Maestra permite firmar (dos ★5 en un ★5). */
+  obraMaestra?: number;
   /** El dado. Sin él ninguna de las dos reglas se puede comprobar. */
   rng?: () => number;
 }
@@ -1734,7 +1757,8 @@ export function attemptForge(
     if (rng() < probSubida) potential += 1;
   }
   const newTier = tier + 1;
-  const name = forgeCollectorName(potential, newTier, rng);
+  const obra = esObraMaestra(materials, potential, (options.obraMaestra ?? 0) > 0);
+  const name = forgeCollectorName(potential, newTier, rng, obra);
 
   // F74 · LA BASE FORJADA ES LA MEDIA DE LAS POSICIONES. Dos bases 10 dan un 10
   // y dos 5 dan un 5: promediar nunca sube, igual que el potencial. Si el tier
@@ -1786,7 +1810,8 @@ export function attemptForge(
     forgedBy: authorName,
     forgedAt: Date.now(),
     lineage: materials.map(m => m.rarity),
-    sellPrice: 0 // se calcula dinámicamente
+    sellPrice: 0, // se calcula dinámicamente
+    ...(obra ? { obraMaestra: true as const } : {})
   };
 
   return { success: true, collector, chanceUsed: tira.chance };
@@ -1848,7 +1873,14 @@ export function attemptForgeCompanion(
   );
   const baseNueva = basePorPosicion(newTier, posNueva, 'companero') ?? null;
 
-  return { success: true, companion: crearCompanioDeTier(newTier, potential, rng, baseNueva), chanceUsed: tira.chance };
+  const forjado: any = crearCompanioDeTier(newTier, potential, rng, baseNueva);
+  // La obra también se firma aquí, con la misma regla y el mismo sufijo: un
+  // compañero perfecto de padres perfectos es tan obra como un recolector.
+  if (esObraMaestra(materials, potential, (options.obraMaestra ?? 0) > 0)) {
+    forjado.obraMaestra = true;
+    forjado.name = `${forjado.name}·Obra Maestra`;
+  }
+  return { success: true, companion: forjado, chanceUsed: tira.chance };
 }
 
 function collectorRarity(tier: number, potential: number): Rarity {

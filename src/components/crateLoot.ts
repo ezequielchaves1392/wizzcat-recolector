@@ -59,6 +59,10 @@ export interface CrateReward {
    * una caja común da cristal básico y una legendaria, uno de Fase.
    */
   materialTier?: number;
+  /** Salto: este premio ya es un tier por encima de su caja. */
+  up?: boolean;
+  /** Jackpot: este premio subió un tier por el nodo, después del sorteo. */
+  jackpot?: boolean;
 }
 
 // Colores de rareza. Devolvemos la clase de texto y la de borde por separado:
@@ -772,6 +776,42 @@ function nombreDeArriba(origen: 'companion' | 'collector', tier: number): string
  * La razón de "+1" y no "+2" es la de siempre: el salto se nota sin dejar de ser
  * del mismo juego. Un T2 dentro de una caja T1 ya es imposible por el precio.
  */
+/**
+ * UN COMPAÑERO DE CAJA DEL TIER PEDIDO, CON TOPE DE REVENTA Y TODO.
+ *
+ * Lo usan el salto y el Jackpot: los dos dan "un tier por encima" y los dos
+ * tienen que dar el mismo objeto —potencial tirado, base sorteada, tope del
+ * origen—. Dos constructores serían dos tablas de botín que se separan en
+ * silencio. El tipo es `passive` a propósito: el `multiplier` no sale por
+ * aquí, sale de su bolsa de exclusivos.
+ */
+export function makeCrateCompanion(
+  tier: number,
+  tope: number,
+  rng: () => number = Math.random
+): { kind: 'companion'; amount: 1; name: string; label: string; details: string; rarity: string; icon: string; tier: number; potential: number; item: any; up?: boolean; jackpot?: boolean } {
+  const potential = rollPotentialFrom(rng);
+  // F74 · Base sorteada de su tabla y poder con base, como todo lo demás.
+  const baseSalto = baseAleatoriaSegura(tier, 'companero', rng);
+  const p = poderDeCompanero(tier, potential, baseSalto);
+  const nombre = nombreDeArriba('companion', tier);
+  const detalles = `Recolección por segundo: +${p}/s`;
+  return {
+    kind: 'companion', amount: 1, name: nombre, label: nombre,
+    details: detalles,
+    rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier],
+    icon: 'companion', tier, potential,
+    item: {
+      id: `crate_up_${Date.now()}_${rng().toString(36).substring(2, 7)}`,
+      name: nombre, type: 'companion', details: detalles,
+      rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
+      companionType: 'passive', power: p, potential, baseId: baseSalto?.id,
+      maxLevel: techoDeNivel(potential, baseSalto?.posicion ?? 6),
+      sellPrice: Math.floor(p * 62), sellPriceTope: tope
+    }
+  };
+}
+
 function subirNTier(crateType: CrateType, pasos: number): any {
   const tier = Math.min(MAX_CRATE_TIER, crateType + pasos);
 
@@ -787,27 +827,7 @@ function subirNTier(crateType: CrateType, pasos: number): any {
   // perfecta y deja de serlo.
   const tope = topeDeVenta(crateType);
   if (Math.random() < 0.5) {
-    const potential = rollPotentialFrom();
-    // F74 · El salto también trae base: sorteo de su tabla y poder con base.
-    const baseSalto = baseAleatoriaSegura(tier, 'companero');
-    const p = poderDeCompanero(tier, potential, baseSalto);
-    const nombre = nombreDeArriba('companion', tier);
-    const detalles = `Recolección por segundo: +${p}/s`;
-    return {
-      kind: 'companion', amount: 1, name: nombre, label: nombre,
-      details: detalles,
-      rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier],
-      icon: 'companion', tier, potential,
-      item: {
-        id: `crate_up_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: nombre, type: 'companion', details: detalles,
-        rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
-        companionType: 'passive', power: p, potential, baseId: baseSalto?.id,
-        maxLevel: techoDeNivel(potential, baseSalto?.posicion ?? 6),
-        sellPrice: Math.floor(p * 62), sellPriceTope: tope
-      },
-      up: true
-    };
+    return { ...makeCrateCompanion(tier, tope), up: true };
   }
 
   const w = makeCrateCollector(tier, tope);
@@ -1424,7 +1444,48 @@ export function lootAmountText(reward: CrateReward): string {
  * Decide el premio y lo aplica. Si el almacén está lleno y el drop es un item,
  * se compensa en nanitas para no perderlo nunca.
  */
-export function rollCrateReward(crateType: CrateType, applier: LootApplier, suerte = 0): CrateReward {
+/**
+ * EL JACKPOT: UN TIER MÁS DESPUÉS DEL SORTEO (F97 Lote 2b).
+ *
+ * Con el nodo comprado, cada premio de recolector o compañero tiene una
+ * probabilidad pequeña de subir un tier ANTES de aplicarse: se reconstruye
+ * entero en el tier de arriba (nombre, poder, potencial, base y afijos
+ * sorteados de nuevo) con el tope de reventa de la caja de origen. No se apila
+ * sobre el salto (eso sería +2) ni toca exclusivos (convertiría un único en
+ * genérico) ni pasa del T10. En T10 no hay tier por encima y no hace nada.
+ *
+ * Va DESPUÉS de `resolveLootAmount` y ANTES del `switch` que aplica: así el
+ * veto de espacio, la autoventa y la compensación valen para el item subido
+ * sin una segunda cuenta. Y no toca la tabla: el salto mide lo mismo con nodo
+ * que sin él, porque esto no es una entrada más sino una segunda tirada.
+ */
+export function aplicarJackpot(
+  crateType: CrateType,
+  reward: CrateReward,
+  chance: number,
+  rng: () => number = Math.random
+): CrateReward {
+  if (!(chance > 0)) return reward;
+  if (reward.up || reward.exclusive) return reward;
+  const item: any = (reward as any).item;
+  if (!item || (item.type !== 'collector' && item.type !== 'companion')) return reward;
+  const tier = Math.max(1, Math.floor(Number(item.tier) || 1));
+  if (tier >= MAX_CRATE_TIER) return reward;
+  if (rng() >= chance) return reward;
+  const tope = topeDeVenta(crateType);
+  if (item.type === 'collector') {
+    const w = makeCrateCollector(tier + 1, tope, rng);
+    return {
+      kind: 'collector', amount: 1, name: w.name, label: w.name,
+      details: w.details, rarity: w.rarity, icon: 'collector', tier: tier + 1,
+      potential: w.item.potential, item: w.item, jackpot: true
+    } as CrateReward;
+  }
+  const c = makeCrateCompanion(tier + 1, tope, rng);
+  return { ...c, jackpot: true } as CrateReward;
+}
+
+export function rollCrateReward(crateType: CrateType, applier: LootApplier, suerte = 0, jackpotChance = 0): CrateReward {
   const entry = pickLoot(crateType, tablaDePesos(crateType, suerte));
   const ctx: LootBuildContext = { ownedCosmetics: applier.ownedCosmetics() };
   const built = entry.build(ctx);
@@ -1439,7 +1500,7 @@ export function rollCrateReward(crateType: CrateType, applier: LootApplier, suer
     return dup;
   }
 
-  const reward = resolveLootAmount(crateType, built);
+  const reward = aplicarJackpot(crateType, resolveLootAmount(crateType, built), jackpotChance);
 
   switch (reward.kind) {
     case 'nanites': {

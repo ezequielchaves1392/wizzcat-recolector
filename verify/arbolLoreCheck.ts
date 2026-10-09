@@ -7,7 +7,7 @@
 //  preguntas que un jugador tiene al mirar un nodo son otras: qué hace esto y
 //  para qué me sirve.
 //
-//  Lo que se comprueba aquí son las dos mitades: que **los 22 nodos tienen
+//  Lo que se comprueba aquí son las dos mitades: que **todos los nodos tienen
 //  lore** y que el lore habla del nodo, y que la hoja lo enseña junto al
 //  efecto y el motivo del veto.
 // ==========================================================================
@@ -29,7 +29,7 @@ async function main() {
     // para qué sirve, y un hueco en la hoja es peor que no tener el bloque: el resto
     // sube y parece un fallo de maquetación.
     const sinLore = TREE_NODES.filter((n: any) => !n.lore || !String(n.lore).trim());
-    check('arbol: los 22 nodos tienen lore, ninguno se dejo sin escribir',
+    check('arbol: todos los nodos tienen lore, ninguno se dejo sin escribir',
       sinLore.length === 0,
       sinLore.map((n: any) => n.id).join(',') || `nodos=${TREE_NODES.length}`);
 

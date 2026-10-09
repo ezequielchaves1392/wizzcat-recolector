@@ -955,6 +955,7 @@ function detailContent(item: any, state: any, game: any): string {
               <span class="text-[10px] font-mono ${rarityClass(item.rarity)}">${item.rarity}</span>
               ${item.tier ? `<span class="text-[10px] font-mono text-[var(--text-muted)]">T${item.tier}</span>` : ''}
               <span class="text-[10px] font-mono text-[var(--text-muted)]">${TYPE_LABEL[item.type] ?? 'Objeto'}</span>
+              ${item.obraMaestra ? `<span class="text-[10px] font-mono text-amber-300">◆ Obra maestra</span>` : ''}
               <!--
                 LAS ESTRELLAS SOLO PARA LO QUE TIENE POTENCIAL. Se pintaban siempre, y
                 la función de estrellas con un potencial ausente devuelve el valor por
@@ -983,6 +984,20 @@ function detailContent(item: any, state: any, game: any): string {
             <span class="text-[10px] font-mono text-[var(--text-main)] truncate">
               Forjada por <span class="accent-text">${item.forgedBy}</span>
             </span>
+          </div>
+        ` : ''}
+
+        <!--
+          OBRA MAESTRA: DOS PERFECTOS QUE SE VOLVIERON UNO. La marca sale del
+          item (obraMaestra): recalcular aquí si dos ★5 dan ★5 sería repetir
+          la regla de la forja en la vista (R1). El texto es fijo
+          y no promete números: es sabor sobre lo que ya pasó, no una regla.
+        -->
+        ${item.obraMaestra ? `
+          <div class="rounded-lg px-2.5 py-1.5 mb-2.5"
+               style="background: color-mix(in srgb, #fbbf24 8%, transparent);
+                      border: 1px solid color-mix(in srgb, #fbbf24 30%, transparent)">
+            <p class="text-[11px] italic leading-relaxed" style="color: var(--text-main)">“El yunque también firma.”</p>
           </div>
         ` : ''}
 

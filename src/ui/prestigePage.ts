@@ -54,6 +54,11 @@ function bonusLabel(key: keyof PassiveBonuses, value: number): string {
     case 'coreGain': return `${pct(value)} núcleos por reinicio`;
     case 'storageSlots': return `+${value} slots de almacén`;
     case 'companionSlots': return `+${value} slots de compañero`;
+    case 'sobrecargaCada': return `crítico asegurado cada ${value} clics`;
+    case 'sobrecargaMult': return `el asegurado pega ×${value}`;
+    case 'colmenaPorComp': return `${pct(value)} pasivo por compañero activo`;
+    case 'jackpotChance': return `${pct(value)} de subida de tier en cajas`;
+    case 'obraMaestra': return `firma Obras Maestras al forjar`;
     default: return `${key} +${value}`;
   }
 }

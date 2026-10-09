@@ -81,6 +81,8 @@ const BANCOS = [
   'leyendaCheck',
   'contadorCheck',
   'wikiCheck',
+  // F97 Lote 2b · Uno por rama, cada uno con su mecánica.
+  'keystoneCheck',
   // F96 · El numerito dice la verdad: el contador cuenta lo que se cobra.
   'opsCheck'
 ];

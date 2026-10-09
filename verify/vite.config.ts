@@ -93,6 +93,8 @@ export default defineConfig({
         arbolLoreCheck: resolve(here, 'arbolLoreCheck.ts'),
         // F86 · La Wiki enseña reglas, y este banco ata que sean las del juego.
         wikiCheck: resolve(here, 'wikiCheck.ts'),
+        // F97 Lote 2b · Uno por rama, cada uno con su mecánica.
+        keystoneCheck: resolve(here, 'keystoneCheck.ts'),
         // F96 · El contador cuenta lo que se cobra y el semáforo dice lo que hay.
         opsCheck: resolve(here, 'opsCheck.ts')
       },

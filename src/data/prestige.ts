@@ -38,7 +38,12 @@ export const EMPTY_BONUSES: PassiveBonuses = {
   crateLuck: 0,
   coreGain: 0,
   storageSlots: 0,
-  companionSlots: 0
+  companionSlots: 0,
+  sobrecargaCada: 0,
+  sobrecargaMult: 0,
+  colmenaPorComp: 0,
+  jackpotChance: 0,
+  obraMaestra: 0
 };
 
 /** Umbral mínimo de producción para que un reinicio tenga sentido. */

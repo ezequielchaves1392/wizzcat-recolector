@@ -243,6 +243,40 @@ export const TREE_NODES: TreeNode[] = [
     icon: 'collector', category: 'forja', tier: 4, requires: ['master_smith'],
     baseCost: 260, costGrowth: 2.1, maxLevel: 4,
     bonus: { craftLuck: 0.03 }, x: 4, y: 3
+  },
+  // ---------------------------------------------------------------- TIER 4 · KEYSTONES (F97 Lote 2b)
+  //
+  // Uno por rama, al fondo de cada una: son la maestría de la rama, no un
+  // número más. Cada uno trae UNA mecánica con sus cifras dentro del bonus —
+  // la descripción las nombra y el banco las lee de ahí—, y todos son de un
+  // solo nivel: un keystone no se sube, se consigue.
+  {
+    id: 'sobrecarga', name: 'Sobrecarga', description: 'Cada 50 clics, el siguiente critica ×3.',
+    lore: 'Cincuenta golpes cargando el mismo condensador. El cincuenta y uno no golpea: detona.',
+    icon: 'bolt', category: 'asalto', tier: 4, requires: ['singularity'],
+    baseCost: 300, costGrowth: 1, maxLevel: 1,
+    bonus: { sobrecargaCada: 50, sobrecargaMult: 3 }, x: 4, y: 4
+  },
+  {
+    id: 'colmena', name: 'Mente Colmena', description: '+4% al ingreso por cada compañero activo además del primero.',
+    lore: 'Ninguna abeja hace miel sola. Cada una que se suma endulza el trabajo de las demás.',
+    icon: 'companion', category: 'manada', tier: 4, requires: ['quantum_amp'],
+    baseCost: 280, costGrowth: 1, maxLevel: 1,
+    bonus: { colmenaPorComp: 0.04 }, x: 4, y: 4
+  },
+  {
+    id: 'jackpot', name: 'Jackpot', description: 'Un 1% de las cajas sube un tier su premio.',
+    lore: 'A veces la caja se equivoca a tu favor. Nadie reclama.',
+    icon: 'crate', category: 'fortuna', tier: 4, requires: ['void_hoard'],
+    baseCost: 320, costGrowth: 1, maxLevel: 1,
+    bonus: { jackpotChance: 0.01 }, x: 4, y: 4
+  },
+  {
+    id: 'obra_maestra', name: 'Obra Maestra', description: 'Fundir dos potenciales máximos en otro firma una Obra Maestra.',
+    lore: 'El yunque también firma. Cuando dos perfectos se vuelven uno, lo saben todos.',
+    icon: 'collector', category: 'forja', tier: 4, requires: ['chaos_forge'],
+    baseCost: 350, costGrowth: 1, maxLevel: 1,
+    bonus: { obraMaestra: 1 }, x: 4, y: 4
   }
 ];
 

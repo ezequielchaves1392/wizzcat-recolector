@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.26',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Cuatro keystones, uno por rama',
+    lineas: [
+      'Cada rama tiene su maestría al fondo: Sobrecarga, Mente Colmena, Jackpot y Obra Maestra.',
+      'Sobrecarga asegura un crítico triple cada cincuenta clics, tuyos y de la máquina.',
+      'Mente Colmena hace que cada compañero activo mejore a los demás.',
+      'Jackpot puede subir un tier el premio de una caja, y la forja de dos perfectos firma una Obra Maestra.'
+    ]
+  },
+  {
     version: '1.15.25',
     fecha: '9 de octubre de 2026',
     titulo: 'El árbol se divide en cuatro ramas',

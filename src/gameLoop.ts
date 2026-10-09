@@ -649,11 +649,13 @@ export async function createGameLoop(
     unlockedNodes: [] as string[], // Nodos comprados
     nodeLevels: {} as Record<string, number>, // Nivel por nodo
     forgedCount: 0, // Recolectores forjadas con exito
+    sobrecargaCuenta: 0, // Clics hacia el próximo crítico asegurado (Sobrecarga)
     // --- Bonificaciones agregadas del arbol (se recalculan al cargar) ---
     bonus: {
       clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
       craftLuck: 0, consolationBonus: 0, autoClick: 0, afkHours: 0,
-      offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0
+      offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0,
+      sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0
     },
     // --- Cosméticos equipados ---
     cosmetics: {
@@ -2132,6 +2134,7 @@ function sePuedeGuardar(): boolean {
         state.unlockedNodes = [];
       }
       state.forgedCount = data.forgedCount ?? 0;
+      state.sobrecargaCuenta = Math.max(0, Math.floor(Number(data.sobrecargaCuenta) || 0));
       state.cosmetics = {
         title: data.cosmetics?.title ?? 'title_default',
         frame: data.cosmetics?.frame ?? 'frame_none',
@@ -2333,6 +2336,7 @@ function sePuedeGuardar(): boolean {
         unlockedNodes: state.unlockedNodes,
         nodeLevels: state.nodeLevels,
         forgedCount: state.forgedCount,
+        sobrecargaCuenta: state.sobrecargaCuenta,
         cosmetics: state.cosmetics,
         autoVenta: state.autoVenta,
         updatedAt: new Date()
@@ -3075,7 +3079,14 @@ function sePuedeGuardar(): boolean {
     const withAchievements = base * state.passiveMultiplier
       * (1 + achievementState.passiveBonus)
       * (1 + state.bonus.passiveMult);
-    state.passiveIncome = Math.floor(withAchievements);
+    // **MENTE COLMENA: CADA ACTIVO DA +4 % A LOS DEMÁS (F97 Lote 2b).** Con N
+    // compañeros produciendo, cada uno cobra (N−1) veces el extra: el total
+    // multiplica por 1 + extra × (N−1). Va sobre el total y no por compañero
+    // para no romper el reparto exacto de abajo (los floors no suman). Con 0 o
+    // 1 activo no hay "demás" y no suma nada.
+    const withColmena = withAchievements
+      * (1 + (state.bonus.colmenaPorComp || 0) * Math.max(0, contributors.length - 1));
+    state.passiveIncome = Math.floor(withColmena);
 
     repartirPorCompanion(contributors, state.passiveIncome);
   }
@@ -3146,6 +3157,33 @@ function sePuedeGuardar(): boolean {
     // la tarjeta de perfil y el recálculo ajeno necesitan el efecto de UNOS afijos
     // con UN nivel, no el del equipado. Esta función es ese caso con el equipado.
     return efectoDeAfijos(item.affixes, item.level, item.tier);
+  }
+
+  /**
+   * EL CRÍTICO DE UN CLICK, CON SOBRECARGA SI TOCA (F97 Lote 2b).
+   *
+   * El dado del afijo es el de siempre; la Sobrecarga manda encima: cada N
+   * clics (tuyos y autos comparten contador) el siguiente critica ASEGURADO
+   * con su multiplicador, salga lo que salga en el dado. Sin el nodo, el
+   * contador no se mueve —uno que corriera sin premio daría el asegurado en
+   * la primera compra—.
+   *
+   * Vive fuera de `calculateClickDamage()` por B16: esa función la leen el
+   * panel y el desglose, y un dado dentro haría parpadear lo enseñado. La
+   * llaman los dos únicos sitios que cobran clics, y `conRoll` la clava igual
+   * porque el dado sigue siendo `Math.random`.
+   */
+  function tiraCriticoDeClick(): { critico: boolean; mult: number } {
+    const cada = state.bonus.sobrecargaCada || 0;
+    if (cada > 0) {
+      state.sobrecargaCuenta = (state.sobrecargaCuenta || 0) + 1;
+      if (state.sobrecargaCuenta >= cada) {
+        state.sobrecargaCuenta = 0;
+        return { critico: true, mult: state.bonus.sobrecargaMult || MULTIPLICADOR_CRITICO };
+      }
+    }
+    const critico = Math.random() < equippedAffixEffect().critChance;
+    return { critico, mult: critico ? MULTIPLICADOR_CRITICO : 1 };
   }
 
   /**
@@ -3548,6 +3586,7 @@ function sePuedeGuardar(): boolean {
         unlockedNodes: state.unlockedNodes,
         nodeLevels: state.nodeLevels,
         forgedCount: state.forgedCount,
+        sobrecargaCuenta: state.sobrecargaCuenta,
         cosmetics: state.cosmetics,
         autoVenta: state.autoVenta,
         updatedAt: new Date(),
@@ -4469,9 +4508,11 @@ const RITMO_GUARDADO_MS = 60_000;
           // no. Con buff, 37 autos por segundo pegando el triple era presencia
           // sin juego —la máquina sustituía al jugador en vez de ayudarlo—. El
           // crítico sí vale para los dos (B25): es del arma, no de la tarjeta.
-          const critico = Math.random() < equippedAffixEffect().critChance;
-          const dmg = calculateClickDamage()
-            * (critico ? MULTIPLICADOR_CRITICO : 1);
+          // ...pero el multiplicador sale del tiro, no del ×2 fijo: el asegurado
+          // de Sobrecarga pega ×3 y aquí es donde se cobra.
+          const tiro = tiraCriticoDeClick();
+          const critico = tiro.critico;
+          const dmg = calculateClickDamage() * tiro.mult;
           state.nanites += dmg;
           state.totalNanitesProduced += dmg;
           state.totalClicks += 1;
@@ -5535,13 +5576,16 @@ const RITMO_GUARDADO_MS = 60_000;
       // (`equippedAffixEffect().critChance`) y el premio es `MULTIPLICADOR_CRITICO`.
       // Se tira con `Math.random` para que los bancos lo claven con `conRoll`.
       //
-      // Y solo aquí, no en `calculateClickDamage`: esa función es pura y la leen el
+      // Y solo aquí y en el bucle de autos, no en `calculateClickDamage`: esa función es pura y la leen el
       // panel, el desglose y los clics automáticos del árbol. Un dado dentro haría
-      // que el número enseñado cambiara en cada lectura. Los automáticos del árbol
-      // no critican: el crítico es un evento que se VE (el flotante), y los
-      // automáticos entran en silencio por su propia cola.
-      const critico = Math.random() < equippedAffixEffect().critChance;
-      const totalGain = Math.floor(collectorDamage * multiplier * (critico ? MULTIPLICADOR_CRITICO : 1));
+      // que el número enseñado cambiara en cada lectura. El crítico es un evento
+      // que se VE (el flotante), y los automáticos entran en silencio por su propia cola.
+      //
+      // **CON SOBRECARGA, EL MULT SALE DEL TIRO.** El asegurado pega ×3 y no ×2:
+      // cobrarlo con el fijo sería prometer una cosa en la rama y pagar otra.
+      const tiro = tiraCriticoDeClick();
+      const critico = tiro.critico;
+      const totalGain = Math.floor(collectorDamage * multiplier * tiro.mult);
       state.nanites += totalGain;
       state.totalNanitesProduced += totalGain;
       state.totalClicks += 1;
@@ -6253,6 +6297,9 @@ const RITMO_GUARDADO_MS = 60_000;
       // **Y LA SUERTE DEL OJO DE CAJA ENTRA AQUÍ.** `state.bonus.crateLuck` (0,10
       // por nivel) multiplica la parte del salto en la tabla. Sin nodo es 0 y el
       // sorteo es el de siempre: el camino sin bonus no cambia ni un decimal.
+      // **Y EL JACKPOT VIAJA COMO CUARTO ARGUMENTO.** Es la segunda tirada,
+      // después del sorteo: sin nodo es 0 y `aplicarJackpot()` devuelve el premio
+      // intacto.
       const premio = rollCrateReward(crateType, {
         nanites: (n) => { state.nanites += n; state.totalNanitesProduced += n; },
         // El segundo argumento es el NIVEL que anuncia el botín, y se respetaba antes.
@@ -6344,7 +6391,7 @@ const RITMO_GUARDADO_MS = 60_000;
           }
           return { ok: true };
         }
-      }, state.bonus.crateLuck ?? 0);
+      }, state.bonus.crateLuck ?? 0, state.bonus.jackpotChance ?? 0);
 
       // Los contadores se recalculan DESPUÉS de aplicar el botín, para que
       // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el
@@ -6886,7 +6933,8 @@ const RITMO_GUARDADO_MS = 60_000;
         consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
         nanoUsed: pago.nano,
-        eterUsed: pago.eter
+        eterUsed: pago.eter,
+        obraMaestra: state.bonus.obraMaestra
       });
 
       if (result.error) return { success: false, msg: result.error };
@@ -6987,7 +7035,8 @@ const RITMO_GUARDADO_MS = 60_000;
         craftLuck: state.bonus.craftLuck,
         consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
-        eterUsed: pago.eter
+        eterUsed: pago.eter,
+        obraMaestra: state.bonus.obraMaestra
       });
 
       if (result.error) return { success: false, msg: result.error };
