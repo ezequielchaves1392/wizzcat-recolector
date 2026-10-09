@@ -1359,6 +1359,17 @@ feature que falta):**
       hay un plan de pago, esto deja de ser un problema**; si no lo hay, el camino es
       agrupan latido y presencia en el mismo documento, que es el mismo truco que B30 y que
       **no se ha hecho porque toca el diseño del cerrojo**.
+- [ ] **B37 · En el menú no salen bien los núcleos al reiniciar.** *(Para después,
+      reportado el 9 de octubre con dos capturas.)*
+      > "en el menu principal no me salen correctamente los nucleos al reiniciar"
+      *La evidencia: la pantalla de Ascensión dice "AL REINICIAR +1,166 K" y el botón
+      "RECICLAR Y GANAR 1,166 K NÚCLEOS" (producido 10,769 B, 5 reinicios), pero el
+      menú dice "Ascensión: 2 núcleos disponibles".*
+      **El mecanismo, sin reproducir todavía:** la píldora (`#prestige-hint`) enseña el
+      **saldo** (`state.cores`) cuando es mayor que cero, y solo si es cero enseña el
+      **pendiente**. Con 2 en cartera y 1,166 K por ganar, el pendiente queda oculto en
+      el menú. Falta reproducir y decidir si se enseñan los dos o el pendiente manda.
+
 - [x] **B33 · El cerrojo se apaga cuando no hay nadie mirando.** `[v1.15.5]`
       > "hace lo que creas mas conveniente y que mejore esta situacion"
       **Hecho, y son las dos cosas que se propusieron. Con 3 jugadores, la cuenta sale así:**
