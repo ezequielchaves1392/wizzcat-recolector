@@ -71,6 +71,7 @@ import {
   PROB_CONSERVA_RAREZA, subirRareza, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION,
   rarezaCalculadaDeForja, potencialFusionado
 } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 
 const TODOS_LOS_AFIJOS = AFFIXES.map(a => a.id);
 
@@ -535,8 +536,12 @@ async function main() {
     const forja = async (p1: number, p2: number,
       extra: { nano?: 0 | 1; eter?: 0 | 1 } = {}, tirada = 1) => {
       const j = await boot(baseSave([
-        companion('x1', 3, { potential: p1 }), companion('x2', 3, { potential: p2 }),
-        ficha('x1', 3, { potential: p1 }), ficha('x2', 3, { potential: p2 }),
+        // F74 · Base explícita e igual en los dos: sin ella la migración sortea
+        // una por material y el poder forjado varía con el dado.
+        companion('x1', 3, { potential: p1, baseId: 'base_com_t3_6' }),
+        companion('x2', 3, { potential: p2, baseId: 'base_com_t3_6' }),
+        ficha('x1', 3, { potential: p1, baseId: 'base_com_t3_6' }),
+        ficha('x2', 3, { potential: p2, baseId: 'base_com_t3_6' }),
         ...(extra.nano ? [consumable('n1', 'stabilityNano', 3, { name: NOMBRE_NANO })] : []),
         ...(extra.eter ? [consumable('e1', 'refiningEther', 3, { name: NOMBRE_ETER })] : [])
       ], { warehouseCapacity: 20 }));
@@ -760,9 +765,12 @@ async function main() {
     // la forja: si cada uno construyera el objeto, el día que se añadiese un campo
     // la forja se quedaría sin él sin que nada lo dijera.
     const rPow: any = await forja(5, 5);
+    // F74 · Con las dos bases en 6, la fusionada es 6 (×1,00): el poder es el del
+    // constructor con esa base, y la base viaja en el forjado.
     check('compañero: el poder sale del constructor común, no de una cuenta propia',
-      rPow.companion?.power === poderDeCompanero(4, 5),
-      `power=${rPow.companion?.power} esperado=${poderDeCompanero(4, 5)}`);
+      rPow.companion?.power === poderDeCompanero(4, 5, basePorId('base_com_t4_6'))
+        && rPow.companion?.baseId === 'base_com_t4_6',
+      `power=${rPow.companion?.power} esperado=${poderDeCompanero(4, 5, basePorId('base_com_t4_6'))} base=${rPow.companion?.baseId}`);
   }
 // =========================================================================
 //  EL FALLO DE FORJA DEJA CRISTALES

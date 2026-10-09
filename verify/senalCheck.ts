@@ -93,6 +93,10 @@ async function conTick(fn: (tick: () => void, g: any) => Promise<void>, save: an
 
 /** Una partida con varios compañeros activos y todo lo demás a cero. */
 function partidaCon(...fichas: any[]) {
+  // F74 · Sin tier a propósito: estos bancos miden matemática de ingreso con
+  // poderes fijos (3+3, ×1,5), y con tier la migración los recalcularía con base
+  // sorteada. Es la forma de poder fijo, como los exclusivos.
+  for (const f of fichas) delete f?.tier;
   return baseSave([collector('r1')], {
     nanites: 0,
     totalNanitesProduced: 0,

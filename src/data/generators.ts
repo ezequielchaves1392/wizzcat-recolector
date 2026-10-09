@@ -18,7 +18,8 @@
 
 import { TIER_SYSTEM } from './tiers';
 import { nombreDe } from './nombres';
-import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom } from './crafting';
+import { crearCompanioDeTier, danioDeRango, potencialNormalizado, rollPotentialFrom, techoDeNivel } from './crafting';
+import { baseAleatoriaSegura } from './bases';
 
 /**
  * Un compañero nuevo del tier pedido.
@@ -59,9 +60,12 @@ export function generateCompanionByTier(
 export function generateCollectorByTier(
   tier: number,
   rng: () => number = Math.random
-): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number; potential: number } {
+): { id: string; name: string; type: string; details: string; rarity: string; tier: number; level: number; damage: number; potential: number; baseId?: string; maxLevel: number } {
   const potential = rollPotentialFrom(rng);
-  const power = danioDeRango(tier, potential);
+  // F74 · Todo lo que nace trae base: sorteo ponderado de su tabla, daño con
+  // base y techo con base. Sin tabla (tier más allá del contenido) sale neutro.
+  const base = baseAleatoriaSegura(tier, 'recolector', rng);
+  const power = danioDeRango(tier, potential, base);
   return {
     id: `collector_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
     name: nombreDe('collector', tier, rng),
@@ -71,6 +75,8 @@ export function generateCollectorByTier(
     tier,
     level: 0,
     damage: power,
-    potential
+    potential,
+    baseId: base?.id,
+    maxLevel: techoDeNivel(potential, base?.posicion ?? 6)
   };
 }

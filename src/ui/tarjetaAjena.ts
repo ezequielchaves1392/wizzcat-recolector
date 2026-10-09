@@ -179,7 +179,11 @@ async function carga(
 
   // El contador va **después** de pintar, para que abrir un perfil no espere a una
   // escritura. Y solo si no es el tuyo: eso ya está dentro de la función.
-  window.setTimeout(() => { void registrarVisita(uid, miUid); }, 400);
+  // B39 · Se pasa la tarjeta que se acaba de leer: `registrarVisita` la reutiliza
+  // en vez de volver a pedir el mismo documento (una lectura cobrada de menos
+  // por apertura, con el mismo conteo).
+  const tarjetaPintada = lectura.tarjeta;
+  window.setTimeout(() => { void registrarVisita(uid, miUid, tarjetaPintada); }, 400);
 
   sfx.nav();
   cuerpo.innerHTML = cuerpoDeTarjeta(lectura.tarjeta);

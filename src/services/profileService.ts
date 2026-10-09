@@ -167,20 +167,30 @@ export async function publicarTarjeta(state: any, uid: string, username: string)
  * La tarjeta del propio dueño se salta antes de nada, y el mismo `visitanteUid` dos
  * veces tampoco cuenta dos veces. Escriben una tarjeta propia con estas reglas.
  */
-export async function registrarVisita(perfilUid: string, visitanteUid: string): Promise<void> {
+export async function registrarVisita(perfilUid: string, visitanteUid: string, conocida?: TarjetaPublica): Promise<void> {
   // **EL DUEÑO NO SE CUENTA, Y EL PRIMER FILTRO ES ESTE.** Ni una escritura, ni un
   // día que refuse: abrir tu propio perfil no es una visita de nadie.
   if (!perfilUid || !visitanteUid || perfilUid === visitanteUid) return;
 
-  // La tarjeta **ya está leída** cuando se pinta, que es quien llama, así que volver a
-  // leerla para no perder la cuenta no cuesta una red de más.
-  const lectura = await leerTarjeta(perfilUid);
-  // **SI NO HAY TARJETA NO SE ESCRIBE NADA.** Escribir crearía un documento con solo el
-  // contador, que es lo peor que puede hacer esta función: un perfil vacío con visitas
-  // contadas que parece un perfil de verdad. Mirar a alguien que no publica tarjeta no es
-  // una visita a su perfil, porque su perfil no existe.
-  if (!lectura.ok) return;
-  const tarjeta = lectura.tarjeta;
+  // B39 · SI QUIEN LLAMA YA TIENE LA TARJETA, NO SE VUELVE A LEER.
+  //
+  // Abrir un perfil ya costó una lectura (`leerTarjeta`), y esta función volvía a
+  // pedir el mismo documento para contar: dos lecturas cobradas por una apertura.
+  // La hoja (`tarjetaAjena`) pasa la que acaba de pintar, que es el mismo
+  // documento; sin ella se lee como antes, así que los bancos y las llamadas
+  // viejas no cambian de comportamiento.
+  let tarjeta: TarjetaPublica | null = conocida ?? null;
+  if (!tarjeta) {
+    // La tarjeta **ya está leída** cuando se pinta, que es quien llama, así que volver a
+    // leerla para no perder la cuenta no cuesta una red de más.
+    const lectura = await leerTarjeta(perfilUid);
+    // **SI NO HAY TARJETA NO SE ESCRIBE NADA.** Escribir crearía un documento con solo el
+    // contador, que es lo peor que puede hacer esta función: un perfil vacío con visitas
+    // contadas que parece un perfil de verdad. Mirar a alguien que no publica tarjeta no es
+    // una visita a su perfil, porque su perfil no existe.
+    if (!lectura.ok) return;
+    tarjeta = lectura.tarjeta;
+  }
 
   // **LAS DOS CIFRAS CUENTAN COSAS DISTINTAS, Y AHORA CADA UNA CUENTA LO SUYO.**
   //

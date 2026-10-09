@@ -246,6 +246,84 @@ async function main() {
   }
 
   // =========================================================================
+  //  B39 · La visita reutiliza la tarjeta ya leída, y el ranking cachea la tabla
+  // =========================================================================
+  //
+  // Cada apertura de un perfil ajeno costaba DOS lecturas del mismo documento: una
+  // al abrir (`leerTarjeta`) y otra al contar (`registrarVisita` lo volvía a pedir).
+  // Y cada apertura del ranking hasta 40. Las dos se pagan de la misma cuota que se
+  // agotó, así que van aquí con contador del stub, no con cálculo.
+  {
+    const { registrarVisita: anotar } = await import('../src/services/profileService');
+    db()['perfiles/otro2'] = {
+      userId: 'otro2', username: 'otro2', visitas: 10, visitantes: ['a'],
+      recolectores: [], companeros: [], nodos: [], logros: [],
+      cosmetics: { title: '', frame: 'frame_none', banner: 'banner_none' }
+    };
+    // La que la hoja acaba de pintar: ya coaccionada, como la deja `leerTarjeta`.
+    const conocida = coaccionaTarjeta(db()['perfiles/otro2'], 'otro2');
+
+    db().escrituras = 0;
+    db().lecturas = 0;
+    await anotar('otro2', 'b', conocida);
+    check(
+      'cuota: con la tarjeta ya leida no se vuelve a leer',
+      db().lecturas === 0,
+      'lecturas=' + db().lecturas
+    );
+    check(
+      'cuota: ...pero la visita cuenta igual y una sola escritura',
+      db()['perfiles/otro2'].visitas === 11
+        && db().escrituras === 1
+        && db()['perfiles/otro2'].visitantes.includes('b'),
+      `visitas=${db()['perfiles/otro2'].visitas} escrituras=${db().escrituras}`
+    );
+
+    // Y sin ella se lee como antes: el tercer parámetro es opcional y las
+    // llamadas viejas no cambian de comportamiento.
+    db().lecturas = 0;
+    await anotar('otro2', 'c');
+    check(
+      'cuota: sin tarjeta conocida se sigue leyendo una vez',
+      db().lecturas === 1 && db()['perfiles/otro2'].visitas === 12,
+      `lecturas=${db().lecturas} visitas=${db()['perfiles/otro2'].visitas}`
+    );
+  }
+
+  // La tabla se sirve de memoria dos minutos: entrar, mirar un perfil y volver
+  // no puede costar otras 40 lecturas idénticas.
+  {
+    const { getTopRankings, limpiarCacheRanking } = await import('../src/services/rankingService');
+    limpiarCacheRanking();
+    (db() as any).__rankingDocs = [
+      { uid: 'j1', username: 'Una', score: 5000 },
+      { uid: 'j2', username: 'Otra', score: 3000 }
+    ];
+    db().consultas = 0;
+    const primera = await getTopRankings();
+    const segunda = await getTopRankings();
+    check(
+      'cuota: la segunda apertura seguida no pide la red',
+      db().consultas === 1 && segunda.length === 2 && segunda[0].uid === 'j1',
+      `consultas=${db().consultas} filas=${segunda.length}`
+    );
+    check(
+      'cuota: y lo servido es lo que trajo la red, no los ejemplos',
+      primera[0].username === 'Una' && segunda[0].username === 'Una',
+      `nombres=${primera[0]?.username},${segunda[0]?.username}`
+    );
+    limpiarCacheRanking();
+    await getTopRankings();
+    check(
+      'cuota: ...pero tras limpiar vuelve a pedirla',
+      db().consultas === 2,
+      'consultas=' + db().consultas
+    );
+    limpiarCacheRanking();
+    delete (db() as any).__rankingDocs;
+  }
+
+  // =========================================================================
   // =========================================================================
   // =========================================================================
   //  6. En la tarjeta va SOLO lo que tiene puesto

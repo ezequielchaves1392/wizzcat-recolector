@@ -27,6 +27,8 @@
 // ==========================================================================
 
 import { check, resumen, boot, baseSave, ficha } from './kit';
+import { poderDeCompanero } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import { CONSUMABLES, STORE_ITEMS } from '../src/data/store';
 
 async function main() {
@@ -123,10 +125,12 @@ async function main() {
     // 4a. Una partida vieja con el buff de pasivo activo sigue cobrando el doble.
     // `ficha()` es el helper de `kit.ts`; el clave es `passive`, que es lo único
     // que necesita el cálculo del ingreso.
+    // F74 · Poder y base explícitos: sin base la migración sortea y recalcula.
+    const poderC1 = poderDeCompanero(1, 3, basePorId('base_com_t1_6'));
     const guardado = (passiveBoostExpiresAt: number) => baseSave([], {
       nanites: 0,
       totalNanitesProduced: 0,
-      companions: [ficha('c1', 1, { power: 10, type: 'passive' })],
+      companions: [ficha('c1', 1, { power: poderC1, type: 'passive', potential: 3, baseId: 'base_com_t1_6' })],
       activeCompanions: ['c1'],
       maxCompanionSlots: 3,
       buffs: { clickBoostExpiresAt: 0, passiveBoostExpiresAt, clickX2ExpiresAt: 0, clickX3ExpiresAt: 0 }
@@ -140,8 +144,8 @@ async function main() {
       conBuffViejo === sinBuff * 2,
       `conBuff=${conBuffViejo} sinBuff=${sinBuff}`);
     check('y no se ha roto el ingreso normal',
-      sinBuff === 10,
-      `sinBuff=${sinBuff} (un compañero de power 10)`);
+      sinBuff === poderC1,
+      `sinBuff=${sinBuff} (un compañero de power ${poderC1})`);
   }
 
   // -----------------------------------------------------------------------

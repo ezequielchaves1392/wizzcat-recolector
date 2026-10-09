@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.17',
+    fecha: '9 de octubre de 2026',
+    titulo: 'Diez bases ocultas por tier, y a cazar',
+    lineas: [
+      'Cada arma y cada compañero tiene ahora una base oculta propia: dos del mismo tier y estrellas pueden pegar distinto, y la mejor sale menos.',
+      'Lo que ya tenías también sorteó su base al cargar: tus números se movieron un poco, para arriba o para abajo.',
+      'El techo de nivel ahora mira la base además del potencial: una base buena sube más niveles.',
+      'Forjar promedia las bases de los padres: dos bases buenas dan base buena.'
+    ]
+  },
+  {
     version: '1.15.16',
     fecha: '9 de octubre de 2026',
     titulo: 'El daño final suma arma y pasivos',

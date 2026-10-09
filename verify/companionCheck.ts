@@ -36,6 +36,7 @@ import {
   MULTIPLICADOR_POR_RAREZA
 } from '../src/data/crafting';
 import { rangoDePoder, rarezaDeTier } from '../src/data/tiers';
+import { basePorId } from '../src/data/bases';
 import { RARITY_RANK } from '../src/components/crateLoot';
 
 const RAREZAS = ['Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'];
@@ -117,12 +118,14 @@ async function main() {
   //  3. EL INGRESO Y EL STAT SON EL MISMO NÚMERO
   // -------------------------------------------------------------------------
   {
+    // F74 · Poder y base explícitos: sin base la migración sortea y recalcula.
+    const poderMc = (pot: number) => poderDeCompanero(5, pot, basePorId('base_com_t5_6'));
     const g = await boot(baseSave([
-      companion('mc', 5, { rarity: 'Divino' }),
-      ficha('mc', 5, { power: 100, rarity: 'Divino', potential: 5 })
+      companion('mc', 5, { rarity: 'Divino', potential: 5, baseId: 'base_com_t5_6' }),
+      ficha('mc', 5, { power: poderMc(5), rarity: 'Divino', potential: 5, baseId: 'base_com_t5_6' })
     ], {
       activeCompanions: ['mc'],
-      companions: [{ id: 'mc', name: 'Compañero T5', type: 'passive', power: 100, rarity: 'Divino', tier: 5, potential: 5 }]
+      companions: [{ id: 'mc', name: 'Compañero T5', type: 'passive', power: poderMc(5), rarity: 'Divino', tier: 5, potential: 5, baseId: 'base_com_t5_6' }]
     }));
 
     // **LO QUE COBRA Y LO QUE SE PINTA, DEL MISMO NÚMERO.** El stat se pide al motor
@@ -130,9 +133,9 @@ async function main() {
     const ingreso = s(g).passiveIncome;
     const stat: any = g.getStatPrincipal?.('mc');
     check('companero: el ingreso pasivo paga la rareza y el potencial',
-      ingreso === poderEfectivoDeCompanio({ power: 100, rarity: 'Divino', potential: 5 }),
+      ingreso === poderEfectivoDeCompanio({ power: poderMc(5), rarity: 'Divino', potential: 5 }),
       'ingreso=' + ingreso + ' esperado='
-        + poderEfectivoDeCompanio({ power: 100, rarity: 'Divino', potential: 5 }));
+        + poderEfectivoDeCompanio({ power: poderMc(5), rarity: 'Divino', potential: 5 }));
 
     check('companero: y el stat dice exactamente lo mismo que el ingreso',
       stat && stat.valor === ingreso,
@@ -239,26 +242,28 @@ async function main() {
     // **UNA PARTIDA VIEJA NO TIENE RAREZA EN LA FICHA, Y NO PUEDE PERDER INGRESO.**
     // El multiplicador por defecto es 1, o sea que un compañero guardado sin rareza
     // cobra exactamente lo que cobraba. Un guardado con una rareza inventada tampoco.
+    // F74 · Base y potencial explícitos: el poder sale de la fórmula con base.
+    const poderV = poderDeCompanero(4, 3, basePorId('base_com_t4_6'));
     const viejo = await boot(baseSave([
-      companion('mv', 4),
-      { id: 'mv', name: 'Viejo', type: 'passive', power: 40, tier: 4 }
+      companion('mv', 4, { potential: 3, baseId: 'base_com_t4_6' }),
+      { id: 'mv', name: 'Viejo', type: 'passive', power: poderV, tier: 4, potential: 3, baseId: 'base_com_t4_6' }
     ], {
       activeCompanions: ['mv'],
-      companions: [{ id: 'mv', name: 'Viejo', type: 'passive', power: 40, tier: 4 }]
+      companions: [{ id: 'mv', name: 'Viejo', type: 'passive', power: poderV, tier: 4, potential: 3, baseId: 'base_com_t4_6' }]
     }));
     check('companero: una ficha sin rareza cobra lo mismo que antes, ni un nano mas ni menos',
-      s(viejo).passiveIncome === 40,
+      s(viejo).passiveIncome === poderEfectivoDeCompanio({ power: poderV, potential: 3 }),
       'pasivo=' + s(viejo).passiveIncome);
 
     const raro = await boot(baseSave([
-      companion('mr', 4, { rarity: 'Inventada' }),
-      { id: 'mr', name: 'Raro', type: 'passive', power: 40, rarity: 'Inventada', tier: 4 }
+      companion('mr', 4, { rarity: 'Inventada', potential: 3, baseId: 'base_com_t4_6' }),
+      { id: 'mr', name: 'Raro', type: 'passive', power: poderV, rarity: 'Inventada', tier: 4, potential: 3, baseId: 'base_com_t4_6' }
     ], {
       activeCompanions: ['mr'],
-      companions: [{ id: 'mr', name: 'Raro', type: 'passive', power: 40, rarity: 'Inventada', tier: 4 }]
+      companions: [{ id: 'mr', name: 'Raro', type: 'passive', power: poderV, rarity: 'Inventada', tier: 4, potential: 3, baseId: 'base_com_t4_6' }]
     }));
     check('companero: y una rareza inventada tampoco lo cambia, porque vale 1',
-      s(raro).passiveIncome === 40,
+      s(raro).passiveIncome === poderV,
       'pasivo=' + s(raro).passiveIncome);
   }
 

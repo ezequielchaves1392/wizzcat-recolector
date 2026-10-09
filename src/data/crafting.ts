@@ -59,7 +59,7 @@ import {
   PROB_NANO_SUBE_RAREZA, PROB_SUBE_POTENCIAL, BONO_ETTER
 } from './constants';
 // F74 · LAS BASES OCULTAS: importamos el multiplicador y el buscador.
-import { multiplicadorDeBase, basePorId, BaseOculta } from './bases';
+import { multiplicadorDeBase, basePorId, basePorPosicion, posicionFusionada, posicionDeBase, baseAleatoriaSegura, BaseOculta } from './bases';
 
 // --------------------------------------------------------------------------
 // Atributos
@@ -177,6 +177,25 @@ const MAX_LEVEL_PER_POTENTIAL = 3;
 export function collectorMaxLevel(maxLevel?: number | null): number {
   if (typeof maxLevel === 'number' && maxLevel > 0) return maxLevel;
   return BASE_COLLECTOR_MAX_LEVEL;
+}
+
+/**
+ * EL TECHO DE NIVEL MIRA POTENCIAL Y BASE (F74, DECISIÓN 1).
+ *
+ * `20 + potencial × 2 + posición × 0,5`, hacia abajo. Baja el peso del potencial
+ * de ×3 a ×2 a propósito: la base es el eje nuevo y si el techo no la mirara,
+ * invertir en una base buena no rendiría nada. El ×0,5 es suave porque la base
+ * solo mueve ±10%: si contara igual que el potencial, una base buena en un ★1
+ * superaría a una floja en un ★5. Sin posición (item que no la trae) cuenta 6,
+ * la neutra de ×1,00 —igual que `posicionFusionada()`—.
+ *
+ * Vive aquí y se aplica donde nace el item (generación, forja, migración); el
+ * getter `collectorMaxLevel()`/`nivelMaximoDeCompanio()` solo lee lo guardado.
+ */
+export function techoDeNivel(potencial: number | undefined | null, posBase: number | undefined | null): number {
+  const p = potencialNormalizado(potencial ?? undefined);
+  const b = Math.min(10, Math.max(1, Math.floor(Number(posBase) || 6)));
+  return Math.floor(BASE_COLLECTOR_MAX_LEVEL + p * 2 + b * 0.5);
 }
 
 /**
@@ -543,17 +562,36 @@ export function potencialDe(item: CollectorItem): number {
  * **Y DEVUELVE EL MISMO ARRAY CUANDO NO HAY NADA QUE HACER**, para que el
  * llamante pueda usarlo como prueba de "esto no se ha tocado".
  */
-export function migraPotenciales(items: any[]): { items: any[]; changed: boolean } {
+export function migraPotenciales(items: any[], rng: () => number = Math.random): { items: any[]; changed: boolean } {
   let changed = false;
   const salida = items.map((w) => {
     if (w?.type !== 'collector') return w;
     const tiene = typeof w.damage === 'number' && Number.isFinite(w.damage) && w.damage > 0;
-    const { potential, damage } = tiene
-      ? potencialYDanoDe(w.tier ?? 1, w.damage)
-      : { potential: potencialNormalizado(w.potential), damage: 0 };
 
+    // F74 · LA BASE SE SORTEA Y EL DAÑO SE RECALCULA (decidido por el jugador).
+    // Un item sin base válida recibe una de su tabla con sus pesos y su daño
+    // pasa por ella: los números se mueven ±10% y la caza vale para lo que ya
+    // tienes. Con base válida no se toca nada: la migración es idempotente.
+    // El nivel no se toca aunque quede por encima del techo nuevo: se pierde
+    // la mejora futura, no la ya ganada.
+    const tier = w.tier ?? 1;
+    const basePrevia = typeof w.baseId === 'string' ? basePorId(w.baseId) : undefined;
+    const baseValida = basePrevia && basePrevia.tier === tier ? basePrevia : undefined;
+    // Para derivar el potencial se deshace la base que trae, si trae: si no, un
+    // daño con base ×1,10 derivaría un potencial más alto en cada carga y el item
+    // subiría solo. Con potencial válido no se deriva nada: se confía en él.
     const potencialYaVa = typeof w.potential === 'number' && w.potential >= 1 && w.potential <= 5;
-    if (potencialYaVa && w.potential === potential && w.damage === damage) return w;
+    const { potential } = potencialYaVa
+      ? { potential: w.potential }
+      : tiene
+        ? potencialYDanoDe(tier, w.damage / (baseValida?.pesoStat ?? 1))
+        : { potential: potencialNormalizado(w.potential) };
+    const base = baseValida ?? baseAleatoriaSegura(tier, 'recolector', rng);
+    const baseId = base?.id;
+    const damage = danioDeRango(tier, potential, base);
+    const maxLevel = techoDeNivel(potential, base?.posicion ?? 6);
+
+    if (potencialYaVa && w.potential === potential && w.damage === damage && w.baseId === baseId && w.maxLevel === maxLevel) return w;
 
     changed = true;
     // El `details` se rehace porque es lo que se pinta, y un item cuyo texto dice
@@ -562,6 +600,8 @@ export function migraPotenciales(items: any[]): { items: any[]; changed: boolean
       ...w,
       potential,
       damage,
+      baseId,
+      maxLevel,
       details: damage > 0 ? `Recolección por click: +${damage}` : w.details
     };
   });
@@ -631,9 +671,10 @@ export function migraNivelesDeCompaneros(
   const nuevosComp = (companeros ?? []).map((c) => {
     if (!c || typeof c !== 'object') return c;
     const nivel = nivelDe(c);
+    // F74 · El techo mira potencial y base. Si ya trae techo se respeta.
     const techo = typeof c.maxLevel === 'number' && c.maxLevel > 0
       ? c.maxLevel
-      : nivelMaximoDeCompanio(c.potential);
+      : techoDeNivel(c.potential, posicionDeBase(c.baseId));
     if (c.level === nivel && c.maxLevel === techo) return c;
     changed = true;
     return { ...c, level: nivel, maxLevel: techo };
@@ -648,9 +689,10 @@ export function migraNivelesDeCompaneros(
   const nuevasFichas = (fichas ?? []).map((f) => {
     if (f?.type !== 'companion') return f;
     const nivel = porId.has(f.id) ? porId.get(f.id)! : nivelDe(f);
+    // F74 · El techo mira potencial y base. Si ya trae techo se respeta.
     const techo = typeof f.maxLevel === 'number' && f.maxLevel > 0
       ? f.maxLevel
-      : nivelMaximoDeCompanio(f.potential);
+      : techoDeNivel(f.potential, posicionDeBase(f.baseId));
     if (f.level === nivel && f.maxLevel === techo) return f;
     changed = true;
     return { ...f, level: nivel, maxLevel: techo };
@@ -660,27 +702,80 @@ export function migraNivelesDeCompaneros(
 }
 
 export function migraPotencialesDeCompaneros(
-  companeros: any[], fichas: any[]
+  companeros: any[], fichas: any[], rng: () => number = Math.random
 ): { companeros: any[]; fichas: any[]; changed: boolean } {
   let changed = false;
   const reparados = new Map<string, number>();
+  const bases = new Map<string, string | undefined>();
+
+  // F74 · LA BASE SE SORTEA Y EL PODER SE RECALCULA (decidido por el jugador).
+  // Sin base válida: sorteo ponderado de su tabla y poder con base. Cambia el
+  // ingreso —a propósito, es la caza valiendo para lo que ya tienes—. Sin tier
+  // numérico (exclusivos de caja, de poder fijo) no hay nada que sortear: se
+  // dejan como están, con poder de carta y sin estrellas.
+  const basePara = (c: any): { baseId?: string; pos: number } => {
+    const tier = Number(c?.tier);
+    if (!Number.isFinite(tier) || tier < 1 || tier > 10) return { baseId: undefined, pos: 6 };
+    const previa = typeof c?.baseId === 'string' ? basePorId(c.baseId) : undefined;
+    if (previa && previa.tier === tier) return { baseId: previa.id, pos: previa.posicion };
+    const sorteada = baseAleatoriaSegura(tier, 'companero', rng);
+    return { baseId: sorteada?.id, pos: sorteada?.posicion ?? 6 };
+  };
 
   const nuevosComp = (companeros ?? []).map((c) => {
-    if (c?.type !== 'companion') return c;
+    if (!c || typeof c !== 'object') return c;
+    const tier = Number(c?.tier);
+    if (!Number.isFinite(tier) || tier < 1 || tier > 10) {
+      // Sin tier no hay base ni potencial de rango: se deja como está. Esto
+      // incluye a los exclusivos de caja (poder fijo, sin estrellas).
+      // (OJO: la versión anterior filtraba por `type === 'companion'`, que en
+      // este array no existe —los tipos son click/passive/multiplier—, así que
+      // el array no se migraba nunca y solo se tocaban las fichas. Con F74 el
+      // array sí se migra: sin base en el compañero no hay poder con base.)
+      return c;
+    }
+    // El multiplicador tiene poder FIJO (+50 %, +200 %): no sale del rango del
+    // tier y recalcularlo lo rompería. Se deja como está, sin base.
+    if (c.type === 'multiplier') return c;
     const tiene = typeof c.potential === 'number' && c.potential >= 1 && c.potential <= 5;
-    if (tiene) return c;
+    const potential = tiene ? c.potential : 3;
+    const { baseId, pos } = basePara(c);
+    const power = poderDeCompanero(tier, potential, baseId ? basePorId(baseId) ?? null : null);
+    const maxLevel = techoDeNivel(potential, pos);
+    if (tiene) reparados.set(c.id, potential); else { changed = true; reparados.set(c.id, 3); }
+    bases.set(c.id, baseId);
+    if (tiene && c.power === power && c.baseId === baseId && c.maxLevel === maxLevel) return c;
     changed = true;
-    reparados.set(c.id, 3);
-    return { ...c, potential: 3 };
+    return { ...c, potential, power, baseId, maxLevel };
   });
+
+  // Los ids de multiplicadores, cuyas fichas tampoco se tocan: poder fijo.
+  const multIds = new Set<string>();
+  for (const c of nuevosComp) {
+    if (c && typeof c === 'object' && c.type === 'multiplier' && typeof c.id === 'string') multIds.add(c.id);
+  }
 
   const nuevasFichas = (fichas ?? []).map((f) => {
     if (f?.type !== 'companion') return f;
+    if (typeof f?.id === 'string' && multIds.has(f.id)) return f;
     const tiene = typeof f.potential === 'number' && f.potential >= 1 && f.potential <= 5;
     const reparado = reparados.get(f.id);
-    if (tiene || reparado === undefined) return f;
+    const potential = tiene ? f.potential : reparado;
+    // Sin potencial ni compañero a la vista no hay de dónde sacarlo: se deja
+    // como está, igual que antes.
+    if (potential === undefined) return f;
+    // La ficha lleva la base de su compañero: son el mismo objeto. Sin
+    // compañero a la vista, sorteo propio con su tier, si lo tiene.
+    let baseId = bases.has(f.id) ? bases.get(f.id) : undefined;
+    const tierF = Number(f?.tier);
+    if (baseId === undefined && Number.isFinite(tierF) && tierF >= 1 && tierF <= 10) {
+      baseId = basePara(f).baseId;
+    }
+    const posF = baseId ? (basePorId(baseId)?.posicion ?? 6) : 6;
+    const maxLevel = techoDeNivel(potential, posF);
+    if (tiene && f.baseId === baseId && f.maxLevel === maxLevel) return f;
     changed = true;
-    return { ...f, potential: reparado };
+    return { ...f, potential, baseId, maxLevel };
   });
 
   if (!changed) return { companeros, fichas, changed: false };
@@ -991,20 +1086,26 @@ export function poderDeCompanero(
 export function crearCompanioDeTier(
   tier: number,
   potential: number,
-  rng: () => number = Math.random
-): { id: string; name: string; type: 'click'; power: number; rarity: string; tier: number; potential: number; level: number; maxLevel: number } {
+  rng: () => number = Math.random,
+  base?: BaseOculta | null
+): { id: string; name: string; type: 'click'; power: number; rarity: string; tier: number; potential: number; level: number; maxLevel: number; baseId?: string } {
   const p = potencialNormalizado(potential ?? undefined);
+  // F74 · Sin base se sortea de su tabla: todo compañero nace con base, la forja
+  // pasa la suya promediada y nadie nace neutro por defecto.
+  const baseFinal = base ?? baseAleatoriaSegura(tier, 'companero', rng);
+  const posFinal = baseFinal?.posicion ?? 6;
   return {
     id: `comp_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
     name: nombreDe('companion', tier, rng),
     type: 'click',
-    power: poderDeCompanero(tier, p),
+    power: poderDeCompanero(tier, p, baseFinal),
     // **LA RAREZA LA PONE EL TIER, Y LA PONE ESTA FUNCIÓN.** Estaba escrita a mano
     // (`TIER_SYSTEM.rarityByTier[tier] || 'Común'`) y la pantalla de forja necesita
     // la misma para anunciar el resultado antes de tirar (F76): una sola fuente.
     rarity: rarezaDeCompanionForjado(tier),
     tier,
     potential: p,
+    baseId: baseFinal?.id,
     // **NACE CON NIVEL 0 Y SU TECHO PUESTOS, Y POR ESO NO HAY MIGRACIÓN QUE
     // INVENTARLOS.** Un compañero sin nivel es un nivel 0, que es lo que haría
     // cualquier código que lo leyera; y el techo lo pone la misma función que lo
@@ -1025,7 +1126,8 @@ export function crearCompanioDeTier(
     // con "1 / 32", y la conclusión de que cada compañero tenía un tope arbitrario.
     // No lo tenía: **los de caja bien y los de forja con el potencial por techo**, que
     // es el peor sitio para un fallo porque las dos mitades del juego parecian lo mismo.
-    maxLevel: nivelMaximoDeCompanio(p)
+    // F74 · El techo mira potencial y base, igual que el recolector.
+    maxLevel: techoDeNivel(p, posFinal)
   };
 }
 
@@ -1053,7 +1155,9 @@ export function crearCompanioDeTier(
 /** El techo de niveles de un compañero, y el mismo reparto por estrella. */
 export function nivelMaximoDeCompanio(potential?: number | null, maxLevel?: number | null): number {
   if (typeof maxLevel === 'number' && maxLevel > 0) return maxLevel;
-  return BASE_COLLECTOR_MAX_LEVEL + potencialNormalizado(potential ?? undefined) * MAX_LEVEL_PER_POTENTIAL;
+  // Sin techo guardado ni base a la vista, la posición media: es el mismo techo
+  // que nace en la forja y la generación para una base 5.
+  return techoDeNivel(potential, 5);
 }
 
 /**
@@ -1603,9 +1707,19 @@ export function attemptForge(
   const newTier = tier + 1;
   const name = forgeCollectorName(potential, newTier, rng);
 
-  // El daño sale del potencial y de la base del tier nuevo. Una sola función, y
-  // la misma que usa la tienda, así que potencial y daño no pueden separarse.
-  const damage = danioDeRango(newTier, potential);
+  // F74 · LA BASE FORJADA ES LA MEDIA DE LAS POSICIONES. Dos bases 10 dan un 10
+  // y dos 5 dan un 5: promediar nunca sube, igual que el potencial. Si el tier
+  // nuevo no tiene tabla (T11+), no hay base: el item sale neutro, no roto.
+  const posNueva = posicionFusionada(
+    posicionDeBase(materials[0]?.baseId),
+    posicionDeBase(materials[1]?.baseId)
+  );
+  const baseNueva = basePorPosicion(newTier, posNueva, 'recolector') ?? null;
+
+  // El daño sale del potencial, de la base del tier nuevo y de la base forjada.
+  // Una sola función, y la misma que usa la tienda, así que potencial, base y
+  // daño no pueden separarse.
+  const damage = danioDeRango(newTier, potential, baseNueva);
 
   // La rareza va ANTES que los afijos, porque es lo que decide cuántos lleva: la
   // rareza da el mínimo y el tope es 6 para todos.
@@ -1632,12 +1746,13 @@ export function attemptForge(
     rarity,
     tier: newTier,
     level: 0,
-    // El techo sube con potencial: 20 + 3 por estrella (máx 35). Se calcula con la
-    // misma regla que lee todo el mundo, para que el techo que se crea y el que
-    // se comprueba no puedan separarse.
-    maxLevel: BASE_COLLECTOR_MAX_LEVEL + potential * MAX_LEVEL_PER_POTENTIAL,
+    // El techo mira potencial y base (F74): 20 + 2 por estrella y medio punto por
+    // posición de base. La misma regla que lee todo el mundo, para que el techo
+    // que se crea y el que se comprueba no puedan separarse.
+    maxLevel: techoDeNivel(potential, posNueva),
     potential,
     damage,
+    baseId: baseNueva?.id,
     affixes,
     forgedBy: authorName,
     forgedAt: Date.now(),
@@ -1668,7 +1783,7 @@ export function attemptForge(
  * encima de la media en esta fusión es la tirada, con o sin Éter.
  */
 export function attemptForgeCompanion(
-  materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number }>,
+  materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number; baseId?: string }>,
   tier: number,
   options: IntentosDeForja
 ): { success: boolean; companion?: any; error?: string; crystals?: number; chanceUsed?: number } {
@@ -1697,7 +1812,14 @@ export function attemptForgeCompanion(
     if (rng() < probSubida) potential += 1;
   }
 
-  return { success: true, companion: crearCompanioDeTier(newTier, potential, rng), chanceUsed: tira.chance };
+  // F74 · La base forjada es la media de las posiciones, igual que el recolector.
+  const posNueva = posicionFusionada(
+    posicionDeBase(materials[0]?.baseId),
+    posicionDeBase(materials[1]?.baseId)
+  );
+  const baseNueva = basePorPosicion(newTier, posNueva, 'companero') ?? null;
+
+  return { success: true, companion: crearCompanioDeTier(newTier, potential, rng, baseNueva), chanceUsed: tira.chance };
 }
 
 function collectorRarity(tier: number, potential: number): Rarity {

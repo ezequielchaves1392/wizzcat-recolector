@@ -47,6 +47,15 @@ export const connectFirestoreEmulator = (db: any, host: string, port: number) =>
 
 export const doc = (_db: any, ...path: string[]) => ({ id: path.join('/') });
 export const getDoc = async (ref: any) => {
+  // B39 · CUENTA LAS LECTURAS, Y POR QUÉ HACE FALTA.
+  //
+  // Las escrituras ya se contaban (`contarEscritura`) porque la cuota que se agotó
+  // fue esa, pero las lecturas también tienen tope diario y el pico las movió a la
+  // vez: cada perfil ajeno eran DOS lecturas del mismo documento (una al abrir y
+  // otra al contar la visita) y cada apertura del ranking hasta 40. Sin contador,
+  // un arreglo que ahorra lecturas pasaría en verde sin comprobar nada.
+  const db0 = globalThis.__MEM_DB__ as any;
+  if (db0) db0.lecturas = (db0.lecturas ?? 0) + 1;
   // FALLO DE LECTURA, Y POR QUÉ HACE FALTA UN CONMUTADOR PROPIO.
   //
   // `fallar` hace fallar las ESCRITURAS, que es lo que necesita la cola de
@@ -180,7 +189,21 @@ export const collection = (_db: any, path: string) => ({ path });
 export const query = (...args: any[]) => ({ args });
 export const orderBy = (campo: string) => ({ campo });
 export const limit = (n: number) => ({ limite: n });
-export const getDocs = async (_q: any) => ({ docs: [] as any[], empty: true });
+// B39 · También cuenta las consultas: es lo que permite comprobar que la caché del
+// ranking sirve la segunda apertura sin pedir la red. Y devuelve filas de verdad
+// cuando el banco las pone (`__rankingDocs`): sin eso la caché nunca se llenaría
+// en pruebas —el stub devolvía vacío siempre— y el test afirmaría sobre un camino
+// que no existe. Solo se activa si el banco lo pide; si no, igual que antes.
+export const getDocs = async (_q: any) => {
+  const db = globalThis.__MEM_DB__ as any;
+  if (db) db.consultas = (db.consultas ?? 0) + 1;
+  const filas = db?.__rankingDocs;
+  if (Array.isArray(filas)) {
+    const docs = filas.map((d: any) => ({ id: d.uid ?? d.id, data: () => d }));
+    return { docs, empty: docs.length === 0, forEach: (f: (x: any) => void) => docs.forEach(f) };
+  }
+  return { docs: [] as any[], empty: true, forEach: (_f: any) => {} };
+};
 
 /**
  * `updateDoc` con el sentinel de borrado.

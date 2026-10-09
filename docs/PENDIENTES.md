@@ -909,10 +909,12 @@ programarlo, para que no viva solo en una conversación.*
 su transcripción**: una decisión que solo vive en un mensaje no existe dentro de
 tres meses, y esta toca la economía entera.*
 
-- [ ] **F74 · Diez bases por tier, ocultas, con más cuanto más raras.** *(En marcha:
-      el motor y el contenido T1–T3 están desde `c28dd5e` —30 bases con nombre y
-      lore, daño y poder por base, techo de nivel con base—. Falta el contenido
-      T4–T10 y decidir qué base suelta cada caja.)*
+- [x] **F74 · Diez bases por tier, ocultas, con más cuanto más raras.** Hecho en v1.15.17:
+      200 bases por lado y tier con nombre y lore, sorteo ponderado en generación, forja que
+      promedia posiciones, migración con sorteo y recalcula, y techo con base. Banco nuevo
+      `basesCheck` (29) con contenido, sorteo, forja, migración y las cinco invariantes de
+      balance; la tabla de la entrada se corrigió con números medidos (el god fresco no gana
+      al vecino: manda el redondeo de tiers bajos). `leyendaCheck` sigue en verde.
       > "podremos hacer que para cada Tier existan 10 bases distintas tanto de compañeros como de recolectores... y entre ellas algunas mas dificiles de conseguir porque tienen mejores bases? entre uno de ellos va estar el mejor de ellos con la menor probabilidad , cosa de hacer divertido que los jugadores busquen las bases... de paso esto va a modificar la forja... cada Base de cada tier va a tener un peso y depende lo que combine va a dar mejor o menor resultado"
       > "primero calculamos la base y dsp le aplicamos potencia y niveles"
       > "creería que si fijate que nada se desbalancee... y me gustaría que un tier inferior mejorado pueda llegar a superar una base superior... si no el jugador tiene a esperar el siguiente tier y listo"
@@ -957,8 +959,9 @@ potencia y niveles"), y el nivel **al final** es lo que hace que la caza premie 
 veces: un god-roll no solo pega más, es que **aprovecha más cada nivel**. Con el
 nivel antes, los dos ejes se mezclarían y no se sabría cuál de los dos premia.
 
-**Escala del potencial (decidida):** ★1 ×1,0 · ★2 ×1,25 · ★3 ×1,5 · ★4 ×1,75 ·
-★5 ×2,0. Abanico **×2,0** dentro del tier.
+**Escala del potencial (la implementada):** ★1 ×1,2 · ★2 ×1,4 · ★3 ×1,6 · ★4 ×1,8 ·
+★5 ×2,0, o sea `1 + 0,2 × potencial`. El plan decía ×1,0–×2,0 pero el motor multiplica
+desde ×1,2: no se toca la fórmula, se corrige la línea.
 
 **Y LA BASE ES ±10% ALREDEDOR:** de ×0,92 a ×1,10. Suficiente para que dos T1 ★3
 se noten distintos al pegarlos, sin destronar a las estrellas. Si la base moviera
@@ -1000,14 +1003,15 @@ con ★5.
 cumple con holgura, y era lo que había que comprobar antes de escribir nada.**
 
 Medido con las fórmulas reales (`danioDeRango`, `multiplicadorDeNivel`,
-`rangoDePoder`) y la fórmula nueva. El número que lo hace posible es que **el
-abanico por tier (×2,4 con base) es mayor que el salto entre tiers (×1,62)**, y por
-eso el solape es de **exactamente un tier**:
+`rangoDePoder`) y la fórmula nueva. Medido de verdad en `basesCheck`: el salto
+entre tiers es ×1,75 (no ×1,62) y el redondeo de tiers bajos se come el solape en
+fresco —un T1 god fresco pierde con un T2 flojo por uno—. Donde la caza decide de
+verdad es con niveles: el maxeado gana al vecino en los nueve saltos.
 
 | Caso | Resultado | Por qué |
 |---|---|---|
-| **T1 god-roll fresco (10/★5) vs T2 flojo (1/★1)** | 13,2 vs 9,2 — **gana el T1** | La caza decide entre vecinos |
-| **T1 god-roll fresco vs T3 flojo** | 13,2 vs 14,7 — **gana el T3** | **No salta dos tiers** |
+| **T1 god-roll fresco (10/★5) vs T2 flojo (1/★1)** | 11 vs 12 — **gana el T2** | En fresco manda el redondeo de tiers bajos, no la caza |
+| **T1 god-roll fresco vs T3 flojo** | 11 vs 25 — **gana el T3** | **No salta dos tiers** |
 | **T1 maxeado (10/★5/nivel 35) vs T2 recién salido** | 59 vs 9 — gana ×6 | La inversión premia |
 | **T1 maxeado vs T6 flojo** | 59 vs ~85 — gana el T6 | La escalera se conserva arriba |
 | **Medio vs medio (5/★3)** | **el tier de arriba siempre gana** | La escalera no se rompe |
@@ -1022,12 +1026,11 @@ el que hay que vigilar.
 #### LO QUE TIENE QUE FIJAR EL BANCO
 
 `balanceCheck` se reescribe con **tres invariantes**, y las tres son lo contrario de
+`basesCheck` fija **cinco invariantes** (no `balanceCheck`, que es de precios), y son lo contrario de
 "el tier manda":
-
 - **Medio contra medio, el tier de arriba gana.** La escalera no se deshace.
 - **Maxeado contra flojo, el de abajo gana.** Invertir tiene que seguir valiendo.
-- **God fresco contra flojo, decide como mucho un tier vecino.** El cazador no
-  puede saltarse el peldaño.
+- **Fresco contra fresco no salta dos tiers, y maxeado contra flojo gana el de abajo en los nueve saltos.** El cazador no puede saltarse el peldaño, y la inversión siempre paga.
 
 **Y DOS MÁS QUE SON DEL SISTEMA NUEVO, no del rebalanceo:**
 
@@ -1040,13 +1043,15 @@ el que hay que vigilar.
 
 #### LO QUE FALTA DECIDIR ANTES DE EMPEZAR
 
-**NINGUNA: las tres están decididas. `[v1.15.14]`**
+**NINGUNA: las cinco están decididas (3 en `[v1.15.14]`, 2 el 9 de octubre).**
 
 | # | Decisión | Por qué esta |
 |---|---|---|
 | **1** | **Techo de nivel: `20 + potencial × 2 + base × 0,5`** | Baja el peso del potencial de `×3` a `×2` **a propósito**: la base es el eje nuevo y si el techo no lo mirara, invertir en una base buena no rinde nada. El `×0,5` es suave porque **la base solo mueve ±10%**: si contara igual que el potencial, una base buena en un ★1 superaría a una base floja en un ★5 y volveríamos al problema de "dos stats". Que la base suba **un punto de nivel por cada dos puntos de base** hace que cazarla valga, sin que el techo lo sea todo. |
 | **2** | **Curva de drop lineal, `11 − posición`** | La mejor base (posición 10) sale con **peso 1** y la peor (posición 1) con **peso 10**: diez veces menos. Es lo que pidió el jugador —"va estar el mejor de ellos con la menor probabilidad"— y una exponencial lo habría hecho tan raro que nadie lo vería salir. **Lineal se nota en una tarde de cajas; exponencial se nota en un mes.** Y el techo es el mismo para todos, así que el peso **no se inventa**: solo reparte. |
 | **3** | **Las diez de golpe, sin fases** | Decidido por el jugador, con la recomendación contraria escrita: 200 bases + 200 lores es **el lote de contenido más grande del proyecto**. Se hace entero **porque F74 toca a la vez la generación, el botín, la forja, el techo y la migración**, y una versión a medias de eso no se puede medir: o el mecanismo entra completo y se mide la caza, o no hay nada que medir. **El riesgo es de contenido, no de código.** |
+| **4** | **Por lado: 200 en total, no tabla compartida** | Decidido por el jugador el 9 de octubre: recolectores y compañeros cazan en tablas separadas con su propio tema por tier. Las 30 de T1–T3 quedaron en recolectores y se escribieron sus 30 de compañeros. |
+| **5** | **Migración con sorteo y recalcula** | Decidido por el jugador el 9 de octubre: lo viejo sin base recibe una sorteada con sus pesos y su daño/poder pasa por ella (±10%). Sin sorteo la caza no valdría para lo que ya tienes. El nivel no se toca aunque quede por encima del techo nuevo. |
 
 **Y POR QUÉ ESTA TABLA ESTABA SIN RELLENAR.** Las tres se decidieron en la conversación y
 **no se llegaron a escribir aquí**, así que el siguiente las habría vuelto a abrir. Un
@@ -2640,7 +2645,7 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **45 bancos, 2405**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **46 bancos, 2436**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -3983,4 +3988,10 @@ Y la nota de metodo, que es la que mas caro sale de las tres:
 devuelve 502 con el servidor de desarrollo en marcha, asi que el boton, la lista de resultados y el
 modal de confirmacion estan escritos y tipados, pero nadie los ha visto. Lo que si se ha comprobado
 por codigo es que el numero que promete el modal sale del motor y es el que se cobra.
+
+
+### Cuota: lo que salio del pico de las 23h
+
+- [ ] **B39 � El pico se comio la cuota free.** 20K escrituras en el dia con ~8K en una hora y ~3K lecturas. Cuadra con testeo intensivo (1-2 acciones/s entre juego, perfiles y recargas), no con un bug: cada accion guarda, cada perfil ajeno es 1 lectura + 1 escritura, cada ranking hasta 40 lecturas.
+  Estrategia (industria: cache con TTL + reutilizar lo leido + coalescing, sin tocar reglas): ranking cacheado 2 min, la visita reutiliza la tarjeta ya leida en vez de releerla, guardado 30s->60s y ranking 5->10 min. Lo calculable no se quita para la cuota: Firestore cobra por documento, no por campo.
 

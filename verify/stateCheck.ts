@@ -27,7 +27,8 @@ import { chanceDeSintonizacion } from '../src/data/items';
 import { costeDeCaja , techoDeExpansor } from '../src/data/store';
 import { formatNumber } from '../src/utils/format';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
-import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom, poderDeCompanero } from '../src/data/crafting';
+import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom, poderDeCompanero, techoDeNivel } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
 import { RARITY_ORDER } from '../src/types/domain';
 import { CRATE_LOOT, tablaDePesos, resolveLootAmount } from '../src/components/crateLoot';
@@ -128,7 +129,7 @@ async function main() {
       // y la migración de G4 lo puso en su sitio al recargar. Un fixture
       // incoherente no mide lo que dice medir —mide la contradicción del autor—,
       // así que aquí el número sale de `danioDeRango()`, como el de cualquier otro.
-      collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['a'], potential: 3 }),
+      collector('r1', 4, { level: 5, damage: danioDeRango(4, 3), affixes: ['a'], potential: 3, baseId: 'base_rec_t4_6' }),
       crate('c1', 6, 2),
       consumable('u1', 'afk', 2, { name: 'Tarjeta AFK' }),
       { id: 'm1', name: 'Compañero T2', type: 'companion', details: 'x', rarity: 'Épico', tier: 2, sellPrice: 500 }
@@ -687,11 +688,14 @@ async function main() {
       `crystals=${s(g).crystals} (un intento de T3 cuesta ${costeDeNivel(3, 0)})`);
   }
   {
-    // El techo de un recolector SIN `maxLevel` (o sea, de la tienda) son 20, y
-    // es un tope real: en el 20 no se mejora ni se cobran cristales.
+    // F74 · Sin `maxLevel` la migración lo calcula con potencial y base, no 20.
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: BASE_COLLECTOR_MAX_LEVEL })
+      collector('r1', 3, { damage: danioDeRango(3, 3, basePorId('base_rec_t3_6')), potential: 3, level: 20, baseId: 'base_rec_t3_6' })
     ], { nanites: 0, crystals: 999_999 }));
+    const it = find(g, 'r1');
+    check('mejora: sin maxLevel, la migración pone el techo de la fórmula',
+      it?.maxLevel === techoDeNivel(3, 6), `techo=${it?.maxLevel}`);
+    it.level = techoDeNivel(3, 6);
     g.equipCollector('r1');
     const r = g.upgradeEquippedCollector();
     check('mejora: en el nivel maximo se rechaza', !r.success && /máximo/i.test(r.msg ?? ''), r.msg ?? '');
@@ -733,8 +737,10 @@ async function main() {
   }
   {
     // Y el techo del item es el tope de verdad: en su propio maxLevel, ni uno mas.
+    // F74 · Con base explícita el techo es el de la fórmula y no se recalcula.
+    const techo29 = techoDeNivel(3, 6);
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: 60, level: 28, maxLevel: 28 })
+      collector('r1', 3, { damage: danioDeRango(3, 3, basePorId('base_rec_t3_6')), potential: 3, level: techo29, maxLevel: techo29, baseId: 'base_rec_t3_6' })
     ], { nanites: 0, crystals: 999_999 }));
     g.equipCollector('r1');
     const r = g.upgradeEquippedCollector();
@@ -744,7 +750,7 @@ async function main() {
       String(s(g).crystals));
     // El mensaje nombra el techo REAL, no el 20 de antes: si dice "+200%" cuando
     // el techo son 28, el jugador ve un número que no corresponde con su item.
-    check('mejora: el mensaje nombra el techo del item', /\+280%/.test(r.msg ?? ''), r.msg ?? '');
+    check('mejora: el mensaje nombra el techo del item', /\+290%/.test(r.msg ?? ''), r.msg ?? '');
   }
   {
     // Y sin `maxLevel` la regla sigue siendo 20, sin exceptions: los recolectores
@@ -1273,8 +1279,10 @@ async function main() {
       const conBp = { nodeLevels: { blueprint: 1 }, unlockedNodes: ['blueprint'] };
       const conPot = async (p1: number, p2: number) => {
         const g = await boot(baseSave([
-          collector('a', 4, { damage: danioDeRango(4, p1), potential: p1 }),
-          collector('b', 4, { damage: danioDeRango(4, p2), potential: p2 })
+          // F74 · Base explícita e igual: sin ella la migración sortea una por
+          // material y el daño forjado varía con el dado. Posición 6 (×1,00).
+          collector('a', 4, { damage: danioDeRango(4, p1), potential: p1, baseId: 'base_rec_t4_6' }),
+          collector('b', 4, { damage: danioDeRango(4, p2), potential: p2, baseId: 'base_rec_t4_6' })
         ], conBp));
         return conSec(0, 1, () => g.forgeCollector(['a', 'b']));
       };

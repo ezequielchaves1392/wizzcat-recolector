@@ -25,6 +25,8 @@
 // ==========================================================================
 
 import { check, resumen, boot, baseSave, crate, conRoll } from './kit';
+import { poderDeCompanero } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import {
   CRATE_LOOT, CRATE_ONLY_COMPANIONS, makeCrateOnlyCompanion, probabilidadDeSalto, tablaDePesos,
   pickLoot, RARITY_RANK, rarezaDeTabla
@@ -300,7 +302,8 @@ async function main() {
         vistos.size >= 2, `nombres distintos=${[...vistos].join(' | ')}`);
     }
 
-    // Y que el poder que sale sea el del rango del tier, no uno suelto.
+    // Y que el poder que sale sea el de la fórmula con su base, dentro de la
+    // banda de la base (F74: ±10% alrededor del rango, no dentro del rango).
     {
       const entrada = CRATE_LOOT[CAJA_EXCLUSIVA].find(e => e.id === 'up')!;
       for (let i = 0; i < 300; i++) {
@@ -308,10 +311,14 @@ async function main() {
         if (p.kind !== 'companion') continue;
         const rango = TIER_SYSTEM.ranges[p.tier];
         if (!rango) { check('salto: el tier del salto existe en TIER_SYSTEM', false, `tier=${p.tier}`); break; }
-        const ok = p.item.power >= rango[0] && p.item.power <= rango[1];
-        check('salto: el poder sale del rango de su tier',
+        const base = basePorId(p.item?.baseId);
+        const ok = !!base && base.tier === p.tier
+          && p.item.power === poderDeCompanero(p.tier, p.item.potential, base)
+          && p.item.power >= Math.floor(rango[0] * 0.92)
+          && p.item.power <= Math.ceil(rango[1] * 1.10);
+        check('salto: el poder sale de la fórmula con su base, en la banda del tier',
           ok,
-          `tier=${p.tier} rango=${JSON.stringify(rango)} power=${p.item.power}`);
+          `tier=${p.tier} rango=${JSON.stringify(rango)} power=${p.item.power} base=${p.item?.baseId}`);
         break;
       }
     }

@@ -93,13 +93,26 @@ function tickDe(lista: Intervalo[]): () => void {
 
 /** Una partida con un compañero activo de `power` y todo lo demás a cero. */
 function partidaConPasivo(power: number, tipo = 'passive') {
+  // F74 · Sin tier a propósito: es la forma de poder fijo (como los exclusivos),
+  // y la migración no lo recalcula. Estos bancos miden la cadencia de cobro con
+  // números redondos (+5/s suman 5): con tier, el poder saldría de la fórmula
+  // con base sorteada y los literales no valdrían nada.
+  const f: any = ficha('c1', 1, { power, type: tipo });
+  delete f.tier;
   return baseSave([], {
     nanites: 0,
     totalNanitesProduced: 0,
-    companions: [ficha('c1', 1, { power, type: tipo })],
+    companions: [f],
     activeCompanions: ['c1'],
     maxCompanionSlots: 3
   });
+}
+
+/** Un compañero de poder fijo para pruebas de cadencia (sin tier, ver arriba). */
+function fichaFija(id: string, power: number, type: string): any {
+  const f: any = ficha(id, 1, { power, type });
+  delete f.tier;
+  return f;
 }
 
 async function main() {
@@ -249,7 +262,7 @@ async function main() {
       const g = await boot(baseSave([], {
         nanites: 0,
         totalNanitesProduced: 0,
-        companions: [ficha('c1', 1, { power: 5, type: 'passive' })],
+        companions: [fichaFija('c1', 5, 'passive')],
         activeCompanions: ['c1'],
         maxCompanionSlots: 3
       }));
@@ -435,7 +448,7 @@ async function main() {
       const g = await boot(baseSave([consumable('afk', 'afk', 3, { name: 'Tarjeta AFK' })], {
         nanites: 0,
         totalNanitesProduced: 0,
-        companions: [ficha('c1', 1, { power: 5, type: 'passive' })],
+        companions: [fichaFija('c1', 5, 'passive')],
         activeCompanions: ['c1'],
         maxCompanionSlots: 3
       }));
@@ -484,7 +497,7 @@ async function main() {
     const g = await boot(baseSave([consumable('afk', 'afk', 3, { name: 'Tarjeta AFK' })], {
       nanites: 0,
       totalNanitesProduced: 0,
-      companions: [ficha('c1', 1, { power: 5, type: 'passive' })],
+      companions: [fichaFija('c1', 5, 'passive')],
       activeCompanions: ['c1'],
       maxCompanionSlots: 3,
       afkExpiresAt: Date.now() - 60 * 60_000

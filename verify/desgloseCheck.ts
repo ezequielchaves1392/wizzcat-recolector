@@ -74,7 +74,7 @@ async function main() {
   // -----------------------------------------------------------------------
   {
     const g = await boot(baseSave([
-      collector('r1', 3, { damage: danioDeRango(3, 3), level: 10, potential: 3 })
+      collector('r1', 3, { damage: danioDeRango(3, 3), level: 10, potential: 3, baseId: 'base_rec_t3_6' })
     ], { nanites: 0 }));
     g.equipCollector('r1');
     const d = g.getClickDamageBreakdown?.();

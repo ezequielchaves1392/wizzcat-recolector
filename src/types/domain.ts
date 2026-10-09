@@ -76,6 +76,8 @@ export interface CollectorItem {
   lineage?: Rarity[];
   equipped?: boolean;
   sellPrice?: number;
+  /** Base oculta F74 (`base_rec_t{tier}_{pos}`). Sin ella, el stat va sin base. */
+  baseId?: string;
 }
 
 export interface CompanionItem {
@@ -97,6 +99,8 @@ export interface CompanionItem {
    */
   potential?: number;
   sellPrice?: number;
+  /** Base oculta F74 (`base_com_t{tier}_{pos}`). Sin ella, el poder va sin base. */
+  baseId?: string;
 }
 
 export interface StackableItem {

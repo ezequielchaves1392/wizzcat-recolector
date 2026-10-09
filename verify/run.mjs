@@ -68,6 +68,7 @@ const BANCOS = [
   'tickCheck',
   'senalCheck',
   'balanceCheck',
+  'basesCheck',
   'desgloseCheck',
   'cajasCheck',
   'ranuraCheck',

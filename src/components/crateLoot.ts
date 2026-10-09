@@ -12,7 +12,8 @@
 //     distintas del mismo objeto.
 
 import { TIER_SYSTEM } from '../data/tiers';
-import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal } from '../data/crafting';
+import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal, techoDeNivel } from '../data/crafting';
+import { baseAleatoriaSegura } from '../data/bases';
 import { generateCollectorByTier } from '../data/generators';
 import { CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, textoDeExpansor, expansorDeCaja } from '../data/store';
 import type { CrateType } from '../data/store';
@@ -787,7 +788,9 @@ function subirNTier(crateType: CrateType, pasos: number): any {
   const tope = topeDeVenta(crateType);
   if (Math.random() < 0.5) {
     const potential = rollPotentialFrom();
-    const p = poderDeCompanero(tier, potential);
+    // F74 · El salto también trae base: sorteo de su tabla y poder con base.
+    const baseSalto = baseAleatoriaSegura(tier, 'companero');
+    const p = poderDeCompanero(tier, potential, baseSalto);
     const nombre = nombreDeArriba('companion', tier);
     const detalles = `Recolección por segundo: +${p}/s`;
     return {
@@ -799,7 +802,8 @@ function subirNTier(crateType: CrateType, pasos: number): any {
         id: `crate_up_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: nombre, type: 'companion', details: detalles,
         rarity: (TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], tier,
-        companionType: 'passive', power: p, potential,
+        companionType: 'passive', power: p, potential, baseId: baseSalto?.id,
+        maxLevel: techoDeNivel(potential, baseSalto?.posicion ?? 6),
         sellPrice: Math.floor(p * 62), sellPriceTope: tope
       },
       up: true
@@ -1063,7 +1067,9 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
     id: 'companion', weight: PESO_COMPANERO,
     build: () => {
       const potential = rollPotentialFrom();
-      const p = poderDeCompanero(tier, potential);
+      // F74 · También trae base, igual que el salto.
+      const baseCaja = baseAleatoriaSegura(tier, 'companero');
+      const p = poderDeCompanero(tier, potential, baseCaja);
       const nombre = nombreDeArriba('companion', tier);
       const detalles = `Recolección por segundo: +${p}/s`;
       return {
@@ -1074,6 +1080,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
           id: `crate_comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           name: nombre, type: 'companion', details: detalles,
           rarity: rareza, tier, companionType: 'passive', power: p, potential,
+          baseId: baseCaja?.id, maxLevel: techoDeNivel(potential, baseCaja?.posicion ?? 6),
           sellPrice: Math.floor(p * 62), sellPriceTope: tope
         }
       };

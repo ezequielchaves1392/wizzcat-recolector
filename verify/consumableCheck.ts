@@ -29,8 +29,10 @@ import {
 import { totalConcedidoDe } from '../src/data/buffs';
 import { unidadesDeBuff, matchesFilter } from '../src/components/warehouse';
 import {
-  successChance, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION, PIEDRA_PUNTOS
+  successChance, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION, PIEDRA_PUNTOS,
+  poderDeCompanero
 } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import {
   boot, reload, check, resumen, s, wh, ids, find, baseSave,
   collector, crate, consumable, RAREZA_NEUTRA
@@ -423,15 +425,17 @@ async function main() {
     // con el multiplicador de rareza un Épico de potencia 10 rinde 12: la prueba pedía 10
     // y recibía 12. La prueba es del buff, no de la rareza, así que el compañero va
     // neutro. Si algún día se deja aquí un Épico, esta vuelve a estar midiendo dos cosas.
+    // F74 · Poder y base explícitos: sin base la migración sortea y recalcula.
+    const poderM1 = poderDeCompanero(1, 3, basePorId('base_com_t1_6'));
     const g = await boot(baseSave([
       consumable('b2', 'passiveBoost', 1, { name: 'Buff Pasivo x2' }),
-      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: RAREZA_NEUTRA, tier: 1, sellPrice: 100 }
+      { id: 'm1', name: 'Compañero T1', type: 'companion', details: 'x', rarity: RAREZA_NEUTRA, tier: 1, sellPrice: 100, potential: 3, baseId: 'base_com_t1_6' }
     ], {
       activeCompanions: ['m1'],
-      companions: [{ id: 'm1', name: 'Compañero T1', type: 'passive', power: 10, rarity: RAREZA_NEUTRA, tier: 1 }]
+      companions: [{ id: 'm1', name: 'Compañero T1', type: 'passive', power: poderM1, rarity: RAREZA_NEUTRA, tier: 1, potential: 3, baseId: 'base_com_t1_6' }]
     }));
     const pasivoSinBuff = s(g).passiveIncome;
-    check('passiveBoost: hay ingreso pasivo de partida', pasivoSinBuff === 10, 'pasivo=' + pasivoSinBuff);
+    check('passiveBoost: hay ingreso pasivo de partida', pasivoSinBuff === poderM1, 'pasivo=' + pasivoSinBuff);
     g.useConsumable('b2');
     check('passiveBoost: duplica el ingreso pasivo', s(g).passiveIncome === pasivoSinBuff * 2,
       `${pasivoSinBuff} -> ${s(g).passiveIncome}`);

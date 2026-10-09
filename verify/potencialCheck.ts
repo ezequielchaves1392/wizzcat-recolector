@@ -32,7 +32,8 @@ import { CRATE_TIERS } from '../src/data/store';
 import { generateCompanionByTier } from '../src/data/generators';
 
 import { rangoDePoder } from '../src/data/tiers';
-import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivel, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
+import { danioDeRango, potencialNormalizado, potencialYDanoDe, AFIX_MIN_POR_RARIDAD, AFIX_MAX, poderDeCompanero, nivelMaximoDeCompanio, techoDeNivel, costeDeNivel, costeDeNivelDeCompanio, valorDeUnCristal, multiplicadorDeNivel } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import { chanceDeSintonizacion } from '../src/data/items';
 import { previewUpgradeChance } from '../src/gameLoop';
 import { tuningRoll } from '../src/components/tuningRoulette';
@@ -137,8 +138,12 @@ async function main() {
   // función que los construye es la misma para la tienda y para la caja, así que
   // comprobar `generateCompanionByTier()` es comprobar las dos.
   {
-    // La puerta de la regla: el generador siempre devuelve potencial 1..5, y el
-    // poder sale del rango con ese potencial, nunca de un dado suelto.
+    // La puerta de la regla: el generador siempre devuelve potencial 1..5, con
+    // base de su tabla, y el poder sale de la fórmula con esa base.
+    // F74 · El poder YA NO está acotado al rango del tier: la base lo mueve
+    // ±10% y el abanico con base (×2,4) es mayor que el salto entre tiers. Lo
+    // que se comprueba es que sale de la fórmula con su base y que no se sale
+    // de la banda de la base.
     let fallos = 0;
     let detalle = '';
     const vistos = new Set<number>();
@@ -146,12 +151,16 @@ async function main() {
       const c = generateCompanionByTier(5);
       vistos.add(c.potential);
       const [min, max] = rangoDePoder(5);
-      if (c.power !== poderDeCompanero(5, c.potential) || c.power < min || c.power > max) {
+      const base = basePorId(c.baseId);
+      const suelo = Math.floor(min * 0.92);
+      const techo = Math.ceil(max * 1.10);
+      if (!base || base.tier !== 5 || c.power !== poderDeCompanero(5, c.potential, base)
+        || c.power < suelo || c.power > techo) {
         fallos++;
         if (detalle.length < 80) detalle += `pot${c.potential}/p${c.power} `;
       }
     }
-    check('potencial: el generador da potencial 1..5 y el poder sale del rango',
+    check('potencial: el generador da potencial 1..5 y el poder sale de la fórmula con su base',
       fallos === 0, `${fallos} fallos · ${detalle}`);
     check('potencial: y sale más de un potencial en 300 tiradas',
       vistos.size >= 3, `vistos: ${[...vistos].sort().join(',')}`);
@@ -179,9 +188,10 @@ async function main() {
       tiersVistos.add(tierDelItem);
       if (typeof it?.potential === 'number') conPot++;
       const [min, max] = rangoDePoder(tierDelItem);
-      if (it && (it.power < min || it.power > max)) fueraDeRango++;
+      // F74 · La banda es la del rango con base (±10%): el poder sale con su base.
+      if (it && (it.power < Math.floor(min * 0.92) || it.power > Math.ceil(max * 1.10))) fueraDeRango++;
     }
-    check('potencial: los compañeros de caja traen potencial y están en su rango',
+    check('potencial: los compañeros de caja traen potencial y están en su rango con base',
       n > 0 && conPot === n && fueraDeRango === 0,
       `${conPot}/${n} con potencial · ${fueraDeRango} fuera de rango`);
     check('potencial: y el salto sale con su propio tier (1 o 2)',
@@ -301,15 +311,16 @@ async function main() {
       if (/sobrecargado/i.test(it?.rarity ?? '') || it?.overclock) sobrecargados++;
       // El salto sale con SU tier, no con el de la caja: un T4 de una caja T3
       // tiene el daño de un T4, y medirlo contra T3 daría un fallo falso justo en
-      // la única entrada que puede cambiar de tier.
+      // la única entrada que puede cambiar de tier. Y con SU BASE: el daño sale
+      // de la fórmula con la base que trae el item (F74).
       const tierDelItem = r.reward.tier ?? 3;
-      if (it?.damage !== danioDeRango(tierDelItem, it?.potential)) fueraDeDano++;
+      if (it?.damage !== danioDeRango(tierDelItem, it?.potential, basePorId(it?.baseId) ?? null)) fueraDeDano++;
     }
     check('potencial: el recolector de caja es normal y trae potencial',
       n > 0 && sinPot === 0, `${sinPot}/${n} sin potencial de ${n}`);
     check('potencial: y no sale ninguna rareza por encima de Divino',
       sobrecargados === 0, `${sobrecargados} sobrecargados de ${n}`);
-    check('potencial: su daño es danioDeRango(tier, potencial), sin sobrecarga encima',
+    check('potencial: su daño es danioDeRango(tier, potencial, base), sin sobrecarga encima',
       fueraDeDano === 0, `${fueraDeDano} de ${n} con daño que no cuadra`);
     check('potencial: la caja T3 sigue teniendo entrada de recolector',
       CRATE_LOOT[3].some((e: any) => e.id === 'collector'),
@@ -469,7 +480,8 @@ async function main() {
       .filter((w: any) =>
         typeof w.potential !== 'number'
         || w.potential < 1 || w.potential > 5
-        || w.damage !== danioDeRango(w.tier ?? 1, w.potential));
+        // F74 · Con la base que trae: el daño sale de la fórmula con base.
+        || w.damage !== danioDeRango(w.tier ?? 1, w.potential, basePorId(w.baseId) ?? null));
 
   // 1. Una partida nueva, tal cual. El Blaser de partida es el item que pediste.
   {
@@ -478,9 +490,9 @@ async function main() {
     check('G4: el recolector de partida nace con potencial',
       typeof colector?.potential === 'number' && colector.potential >= 1 && colector.potential <= 5,
       `potential=${colector?.potential}`);
-    check('G4: y su daño es el de esas estrellas, no un número suelto',
-      colector?.damage === danioDeRango(1, colector?.potential),
-      `daño=${colector?.damage} · el ★${colector?.potential} de T1 es ${danioDeRango(1, colector?.potential)}`);
+    check('G4: y su daño es el de esas estrellas con su base, no un número suelto',
+      colector?.damage === danioDeRango(1, colector?.potential, basePorId(colector?.baseId) ?? null),
+      `daño=${colector?.damage} · el ★${colector?.potential} de T1 es ${danioDeRango(1, colector?.potential, basePorId(colector?.baseId) ?? null)}`);
     check('G4: y lo que se pinta dice lo mismo que el daño',
       colector?.details === `Recolección por click: +${colector?.damage}`,
       `details="${colector?.details}" daño=${colector?.damage}`);
@@ -827,23 +839,30 @@ async function main() {
 
 // --- 4. El techo y el rechazo sin coste ---------------------------------------
 {
-  // El techo lo pone **la ficha**, y la ficha lo pone `nivelMaximoDeCompanio()`.
+  // El techo lo pone **la fórmula con base** (F74): 20 + 2 por estrella y medio
+  // punto por posición de base. Un techo a mano de otra fórmula lo recalcula la
+  // migración, así que aquí se monta con la regla de verdad.
   const g = await boot(baseSave([
-    companion('c1', 3, { potential: 1, level: 0, maxLevel: 3 })
+    companion('c1', 3, { potential: 1, level: 0, baseId: 'base_com_t3_1' })
   ], {
-    nanites: 0, warehouseCapacity: 40, crystals: valorDeUnCristal(3) * 20,
-    companions: [ficha('c1', 3, { potential: 1, level: 0, maxLevel: 3 })]
+    nanites: 0, warehouseCapacity: 40, crystals: 999999999,
+    companions: [ficha('c1', 3, { potential: 1, level: 0, baseId: 'base_com_t3_1' })]
   }));
 
-  let ok = 0;
-  for (let i = 0; i < 6; i++) {
-    const r: any = conRoll(0, () => g.upgradeCompanion('c1'));
-    if (r.success) ok++;
-    if (/nivel m/i.test(r.msg ?? '')) break;
-  }
-  const nivelFinal = (s(g).companions as any[])[0]?.level;
-  check('nivel companero: llega al techo de la ficha y ahí para',
-    ok === 3 && nivelFinal === 3, `subidas=${ok} nivel=${nivelFinal}`);
+  // F74 · Con potencial 1 y base 1, el techo es techoDeNivel(1, 1) = 22.
+  const techoReal = techoDeNivel(1, 1);
+  check('nivel companero: el techo mira potencial y base',
+    (s(g).companions as any[])[0]?.maxLevel === techoReal,
+    `techo=${(s(g).companions as any[])[0]?.maxLevel} esperado=${techoReal}`);
+
+  // Se deja a uno del techo por estado directo: subir 21 niveles a mano no
+  // comprueba nada que no compruebe una subida, y la probabilidad tiene suelo.
+  (s(g).companions as any[])[0].level = techoReal - 1;
+  (s(g).warehouse as any[]).find((w: any) => w.id === 'c1').level = techoReal - 1;
+  const r21: any = conRoll(0, () => g.upgradeCompanion('c1'));
+  check('nivel companero: a uno del techo sube una vez y ahi para',
+    r21.success === true && (s(g).companions as any[])[0]?.level === techoReal,
+    `nivel=${(s(g).companions as any[])[0]?.level} techo=${techoReal}`);
   const antesEnElTecho = s(g).crystals;
   const rTop: any = conRoll(0, () => g.upgradeCompanion('c1'));
   check('nivel companero: y en el techo responde "máximo", no cobra nada',
@@ -855,17 +874,18 @@ async function main() {
   // pagaría por una subida que no ocurrió.
   //
   // **EL RECHAZO ES "YA ESTÁ EN EL TECHO", NO "NO TENGO CRISTALES".** Con un
-  // rechazo por falta de unidades se comprobaría el orden del cobro dos veces —con
-  // el mismo resultado—, y además ese rechazo se puede tapar con "quedan cero": es
+  // rechazo por falta de unidades se comprobaría el orden del cobro dos veces -con
+  // el mismo resultado-, y además ese rechazo se puede tapar con "quedan cero": es
   // el que sale cuando el jugador no ha jugado nunca. El techo da el rechazo que se
   // repite cada vez que se vuelve a tocar el botón, y es el que un jugador con la
   // cartera llena se encuentra.
-  const tope = nivelMaximoDeCompanio(3, 3);
+  // F74 · El techo a mano se monta con la regla: potencial 3, base 6.
+  const tope = techoDeNivel(3, 6);
   const g2 = await boot(baseSave([
-    companion('c1', 3, { potential: 3, level: tope, maxLevel: tope })
+    companion('c1', 3, { potential: 3, level: tope, maxLevel: tope, baseId: 'base_com_t3_6' })
   ], {
     nanites: 0, warehouseCapacity: 40, crystals: costeDeNivelDeCompanio(3, 0),
-    companions: [ficha('c1', 3, { potential: 3, level: tope, maxLevel: tope })]
+    companions: [ficha('c1', 3, { potential: 3, level: tope, maxLevel: tope, baseId: 'base_com_t3_6' })]
   }));
   const antes = s(g2).crystals;
   const r2: any = g2.upgradeCompanion('c1');
@@ -886,15 +906,16 @@ async function main() {
   // techo con una función y el motor aceptaría otro. Los bancos construyen su
   // propio estado, así que esta es la única forma de verlo.
   const g = await boot(baseSave([
-    companion('c1', 3, { potential: 5 })
-  ], { nanites: 0, warehouseCapacity: 40, companions: [ficha('c1', 3, { potential: 5 })] }));
+    companion('c1', 3, { potential: 5, baseId: 'base_com_t3_6' })
+  ], { nanites: 0, warehouseCapacity: 40, companions: [ficha('c1', 3, { potential: 5, baseId: 'base_com_t3_6' })] }));
   const arr: any = (s(g).companions as any[])[0];
   const fich: any = wh(g).find((w: any) => w.id === 'c1');
   check('nivel companero: una partida vieja recibe nivel 0',
     arr?.level === 0, `nivel=${arr?.level}`);
+  // F74 · El techo sale de la fórmula con base: techoDeNivel(5, 6) = 33.
   check('nivel companero: y el techo que dice la función, en las dos mitades',
-    arr?.maxLevel === nivelMaximoDeCompanio(5) && fich?.maxLevel === arr?.maxLevel,
-    `array=${arr?.maxLevel} ficha=${fich?.maxLevel} esperado=${nivelMaximoDeCompanio(5)}`);
+    arr?.maxLevel === techoDeNivel(5, 6) && fich?.maxLevel === arr?.maxLevel,
+    `array=${arr?.maxLevel} ficha=${fich?.maxLevel} esperado=${techoDeNivel(5, 6)}`);
 }
 
 // --- 6. Y la regla se sostiene sola, sin subir más ------------------------------------
@@ -908,17 +929,18 @@ async function main() {
   // un T3 con potencial 5" y todos los bancos que comparan contra
   // `poderDeCompanero()` empezarían a fallar sin que nadie supiera por qué.
   const gGuardado = await boot(baseSave([
-    companion('c1', 3, { potential: 5 })
+    companion('c1', 3, { potential: 5, baseId: 'base_com_t3_6' })
   ], {
     nanites: 0, warehouseCapacity: 40, activeCompanions: ['c1'],
     crystals: valorDeUnCristal(3) * 4,
-    companions: [ficha('c1', 3, { potential: 5, power: poderDeCompanero(3, 5) })]
+    companions: [ficha('c1', 3, { potential: 5, power: poderDeCompanero(3, 5, basePorId('base_com_t3_6')), baseId: 'base_com_t3_6' })]
   }));
   conRoll(0, () => gGuardado.upgradeCompanion('c1'));
   const guardado: any = (s(gGuardado).companions as any[])[0];
+  // F74 · El poder lleva su base (×1,00 aquí): con base explícita no hay sorteo.
   check('nivel companero: el poder guardado es el de base, sin nivel dentro',
-    guardado?.level === 1 && guardado?.power === poderDeCompanero(3, 5),
-    `nivel=${guardado?.level} power=${guardado?.power} esperado=${poderDeCompanero(3, 5)}`);
+    guardado?.level === 1 && guardado?.power === poderDeCompanero(3, 5, basePorId('base_com_t3_6')),
+    `nivel=${guardado?.level} power=${guardado?.power} esperado=${poderDeCompanero(3, 5, basePorId('base_com_t3_6'))}`);
   check('nivel companero: y el multiplicador por nivel es el mismo +10 %',
     multiplicadorDeNivel(0) === 1 && multiplicadorDeNivel(5) === 1.5,
     `nivel0=${multiplicadorDeNivel(0)} nivel5=${multiplicadorDeNivel(5)}`);
@@ -1086,9 +1108,14 @@ async function main() {
         // rechazo seguiría siendo `false` y el banco daría verde. Con el saldo
         // justo para subir este nivel, la única razón posible del rechazo es el
         // tope.
+        // F74 · El techo sale de la fórmula con base: nivel = techo = techoDeNivel.
         nombre: 'en el techo de niveles',
-        save: baseSave([collector('r1', TIER_CARTEL, { damage: 60, level: 20, maxLevel: 20 })],
-          { nanites: 0, crystals: costeDeNivel(TIER_CARTEL, 20) })
+        save: baseSave([collector('r1', TIER_CARTEL, {
+          damage: danioDeRango(TIER_CARTEL, 3, basePorId('base_rec_t3_6')),
+          potential: 3, level: techoDeNivel(3, 6), maxLevel: techoDeNivel(3, 6),
+          baseId: 'base_rec_t3_6'
+        })],
+          { nanites: 0, crystals: costeDeNivel(TIER_CARTEL, techoDeNivel(3, 6)) })
       },
       {
         // Almacén VACÍO a propósito: este caso se provoca por no tener recolector

@@ -27,6 +27,8 @@ import {
 import { materialesDeForja } from '../src/ui/forgePage';
 import { bandaDeProbabilidad, CORTE_PROBABILIDAD_ALTA, CORTE_PROBABILIDAD_MEDIA } from '../src/data/items';
 import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
+import { poderDeCompanero, danioDeRango } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import {
   boot, reload, check, resumen, s, wh, ids, baseSave,
   collector, companion, crate, consumable, ficha
@@ -214,12 +216,19 @@ async function main() {
       // el nivel, así que el orden por base los deja en el orden de entrada y el final los
       // ordena de verdad. El nivel se fija DESPUÉS de cargar, porque la carga recalcula el
       // daño del recolector a partir del tier y el potencial.
-      collector('n0'), collector('n5'), collector('n20'),
+      // F74 · La base va explícita e igual en los tres: sin ella la migración sortea
+      // una distinta por item y la premisa (mismo daño) se rompe por el dado.
+      collector('n0', 3, { potential: 3, baseId: 'base_rec_t3_6' }),
+      collector('n5', 3, { potential: 3, baseId: 'base_rec_t3_6' }),
+      collector('n20', 3, { potential: 3, baseId: 'base_rec_t3_6' }),
       // Dos del mismo tier con distinto potencial: el daño de base ya sale distinto, así
       // que este caso lo resolvía el orden viejo también. Está para que se vea que sigue
       // funcionando.
-      collector('p1'), collector('p5'),
-      companion('c0'), companion('c20'), companion('mult')
+      collector('p1', 3, { potential: 1, baseId: 'base_rec_t3_6' }),
+      collector('p5', 3, { potential: 5, baseId: 'base_rec_t3_6' }),
+      companion('c0', 4, { potential: 3, baseId: 'base_com_t4_6' }),
+      companion('c20', 4, { potential: 3, baseId: 'base_com_t4_6' }),
+      companion('mult')
     ], { warehouseCapacity: 30 }));
 
     const wh = s(g).warehouse as any[];
@@ -229,9 +238,12 @@ async function main() {
 
     // Y las fichas, que es de donde el motor saca el tipo y el poder. **EL MISM0 PODER
     // CON NIVELES DISTINTOS**: es el caso exacto que el orden por base no veía.
+    // F74 · Base y potencial explícitos e iguales: sin ellos la migración sortea
+    // una base por item y el poder recalculado ya no es el mismo.
+    const poderC = poderDeCompanero(4, 3, basePorId('base_com_t4_6'));
     s(g).companions = [
-      ficha('c0', 4, { type: 'passive', power: 10 }),
-      ficha('c20', 4, { type: 'passive', power: 10 }),
+      ficha('c0', 4, { type: 'passive', power: poderC, potential: 3, baseId: 'base_com_t4_6' }),
+      ficha('c20', 4, { type: 'passive', power: poderC, potential: 3, baseId: 'base_com_t4_6' }),
       ficha('mult', 4, { type: 'multiplier', power: 2 })
     ];
     // El poder sale de la ficha, y la ficha tiene que ir en el mismo sitio que en el
@@ -261,9 +273,13 @@ async function main() {
       (stat('n5')?.valor ?? 0) > (stat('n0')?.valor ?? 0),
       `n0=${stat('n0')?.valor} n5=${stat('n5')?.valor} n20=${stat('n20')?.valor}`);
 
-    // **EL ORDEN ES EL DEL VALOR FINAL, NO EL DE LA BASE.**
+    // **EL ORDEN ES EL DEL VALOR FINAL, NO EL DE LA BASE.** Relativo, no absoluto:
+    // p5 lleva ★5 y queda donde le toca por su número; lo que importa es que el
+    // nivel ordene a los tres iguales (n20 > n5 > n0).
     check('forja: con la misma base, el de mas nivel va primero',
-      ordenRec.slice(0, 3).join(',') === 'n20,n5,n0', ordenRec.join(','));
+      ordenRec.indexOf('n20') < ordenRec.indexOf('n5')
+        && ordenRec.indexOf('n5') < ordenRec.indexOf('n0'),
+      ordenRec.join(','));
 
     // **Y EL ORDEN ES EL DEL NÚMERO QUE SE VE**, que es lo que hace que la lista cuadre
     // con lo que hay delante de los ojos. La misma comprobación que en el almacén.

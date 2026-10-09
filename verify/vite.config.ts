@@ -76,6 +76,7 @@ export default defineConfig({
         tickCheck: resolve(here, 'tickCheck.ts'),
         senalCheck: resolve(here, 'senalCheck.ts'),
         balanceCheck: resolve(here, 'balanceCheck.ts'),
+        basesCheck: resolve(here, 'basesCheck.ts'),
         desgloseCheck: resolve(here, 'desgloseCheck.ts'),
         cajasCheck: resolve(here, 'cajasCheck.ts'),
         ranuraCheck: resolve(here, 'ranuraCheck.ts'),

@@ -327,8 +327,53 @@ export const FILAS_DE_EJEMPLO: LeaderboardEntry[] = [
   { uid: 'mock_4', username: 'ByteSmith', score: 9800, nanites: 9800, totalClicks: 640, achievements: 7, secretAchievements: 1, forgedCount: 3, cores: 2, updatedAt: Date.now(), title: 'title_ghost', frame: 'frame_matrix', banner: 'banner_datastorm' }
 ];
 
+/**
+ * B39 · CUÁNTO VIVE UNA TABLA EN MEMORIA.
+ *
+ * Dos minutos. Menos sería no cachear nada —entrar y volver ya tarda eso— y más
+ * empezaría a notarse en la tabla que cada uno mira para compararse, que es la
+ * que tiene que moverse. Es un número de presentación, no de economía: si un día
+ * hace falta otra frescura, es esta línea y ninguna regla del juego.
+ */
+export const TTL_RANKING_MS = 2 * 60_000;
+
+/** Lo último que trajo la red, y cuándo. Vacío significa "no hay nada". */
+const cacheRanking: { filas: LeaderboardEntry[]; cuando: number; limite: number } = {
+  filas: [],
+  cuando: 0,
+  limite: 0
+};
+
+/**
+ * Vacía la caché del ranking. Solo la usan los bancos: en el juego la caché
+ * caduca sola por TTL, y vaciarla a mano sería pedir la red pudiendo servir
+ * lo guardado, que es justo lo que se está evitando.
+ */
+export function limpiarCacheRanking(): void {
+  cacheRanking.filas = [];
+  cacheRanking.cuando = 0;
+  cacheRanking.limite = 0;
+}
+
 export async function getTopRankings(limitRows = 40): Promise<LeaderboardEntry[]> {
   const fallbackData = FILAS_DE_EJEMPLO;
+  // B39 · CACHÉ CON TTL, Y POR QUÉ AQUÍ Y NO EN LA VISTA.
+  //
+  // Cada apertura del ranking son hasta 40 lecturas cobradas, y entrar, salir y
+  // volver —o pasear por perfiles volviendo a la tabla— las repite idénticas.
+  // La vista ya ordena en cliente desde UNA carga, así que la red solo hace
+  // falta cuando lo guardado tiene más de dos minutos: una tabla con dos minutos
+  // de retraso no miente, y cuarenta lecturas por revisita sí cuestan.
+  //
+  // Los fallos NO se cachean: si la red falla se devuelve el respaldo y la
+  // próxima apertura lo reintenta, que es lo que hace que un corte se cure solo.
+  if (
+    cacheRanking.filas.length > 0 &&
+    cacheRanking.limite === limitRows &&
+    Date.now() - cacheRanking.cuando < TTL_RANKING_MS
+  ) {
+    return cacheRanking.filas;
+  }
   try {
     const fetchPromise = async () => {
       const q = query(collection(db, 'rankings'), orderBy('score', 'desc'), limit(limitRows));
@@ -352,7 +397,15 @@ export async function getTopRankings(limitRows = 40): Promise<LeaderboardEntry[]
       setTimeout(() => reject(new Error('Firestore timeout')), 3500)
     );
 
-    return await Promise.race([fetchPromise(), timeoutPromise]);
+    const filas = await Promise.race([fetchPromise(), timeoutPromise]);
+    // Solo lo que trajo la red: el respaldo (lista vacía) no se guarda, para
+    // que un corte no congele la tabla en los ejemplos hasta que caduque.
+    if (filas !== fallbackData) {
+      cacheRanking.filas = filas;
+      cacheRanking.cuando = Date.now();
+      cacheRanking.limite = limitRows;
+    }
+    return filas;
   } catch (e) {
     console.warn('Rankings con datos de respaldo (Firestore no disponible):', e);
     return fallbackData;

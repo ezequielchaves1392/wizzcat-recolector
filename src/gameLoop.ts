@@ -19,7 +19,8 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, danoFinalDeRecolector } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
+import { basePorPosicion } from './data/bases';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
 import { MATERIALES_POR_FUSION } from './data/crafting';
@@ -498,6 +499,10 @@ export async function createGameLoop(
 
   // El compañero inicial es un T1 real: mismo poder que compra el jugador, para
   // que la decisión "comprar otro T1 o guardar" tenga sentido desde el segundo 1.
+  // F74 · El inicial trae base NEUTRA fija (posición 6, ×1,00), no sorteada: todos
+  // los jugadores empiezan iguales y la partida nueva es determinista —los bancos
+  // de partida nueva clavan sus números—. La caza empieza en las cajas.
+  const baseInicialComp = basePorPosicion(1, 6, 'companero') ?? null;
   const baseCompanion = {
     id: 'companion_base_001',
     name: 'Dron Explorador',
@@ -507,10 +512,12 @@ export async function createGameLoop(
     // rango del T1 y por eso el "compañero inicial es un T1 real" del comentario
     // no era cierto. Ahora sale de `poderDeCompanero(1, 3)` y por construcción es
     // el T1 de la mitad, que es lo que dice el comentario.
-    power: poderDeCompanero(1, POTENCIAL_BASE),
+    power: poderDeCompanero(1, POTENCIAL_BASE, baseInicialComp),
     rarity: 'Común',
     tier: 1,
-    potential: POTENCIAL_BASE
+    potential: POTENCIAL_BASE,
+    baseId: baseInicialComp?.id,
+    maxLevel: techoDeNivel(POTENCIAL_BASE, baseInicialComp?.posicion ?? 6)
   };
 
   /**
@@ -536,25 +543,34 @@ export async function createGameLoop(
     power: baseCompanion.power,
     rarity: baseCompanion.rarity,
     tier: baseCompanion.tier,
-    potential: baseCompanion.potential
+    potential: baseCompanion.potential,
+    baseId: baseCompanion.baseId,
+    maxLevel: baseCompanion.maxLevel
   });
 
-  const nuevoBaseRecolector = () => ({
-    id: 'collector_blaster_001',
-    name: 'Blaster Láser',
-    type: 'collector',
-    // El daño sale de `danioDeRango` y el `details` sale de ESE número, no al
-    // revés. Escritos a mano eran `damage: 5` y `details: '+5'`, que casaban
-    // entre sí pero no con el potencial 3 que el item no tenía: al añadirle las
-    // estrellas, un ★3 con daño 5 se vio enseguida que era mentira.
-    damage: danioDeRango(1, POTENCIAL_BASE),
-    details: `Recolección por click: +${danioDeRango(1, POTENCIAL_BASE)}`,
-    rarity: 'Común',
-    tier: 1,
-    level: 0,
-    potential: POTENCIAL_BASE,
-    sellPrice: 250
-  });
+  const nuevoBaseRecolector = () => {
+    // F74 · Base neutra fija, como el compañero: partida nueva determinista.
+    const baseRec = basePorPosicion(1, 6, 'recolector');
+    const danoRec = danioDeRango(1, POTENCIAL_BASE, baseRec);
+    return {
+      id: 'collector_blaster_001',
+      name: 'Blaster Láser',
+      type: 'collector',
+      // El daño sale de `danioDeRango` y el `details` sale de ESE número, no al
+      // revés. Escritos a mano eran `damage: 5` y `details: '+5'`, que casaban
+      // entre sí pero no con el potencial 3 que el item no tenía: al añadirle las
+      // estrellas, un ★3 con daño 5 se vio enseguida que era mentira.
+      damage: danoRec,
+      details: `Recolección por click: +${danoRec}`,
+      rarity: 'Común',
+      tier: 1,
+      level: 0,
+      potential: POTENCIAL_BASE,
+      baseId: baseRec?.id,
+      maxLevel: techoDeNivel(POTENCIAL_BASE, baseRec?.posicion ?? 6),
+      sellPrice: 250
+    };
+  };
 
   // Bonus especial para usuarios de prueba
   // El nombre llega resuelto desde `main.ts`, que ya lo ha buscado en la
@@ -1434,10 +1450,10 @@ const AFK_THRESHOLD_MS = 60000;
 /**
  * Cada cuánto se escribe el documento de la clasificación.
  *
- * **CINCO MINUTOS, Y AQUÍ ESTÁ EL AHORRO DE VERDAD.** Antes de este cambio el guardado
+ * **DIEZ MINUTOS, Y AQUÍ ESTÁ EL AHORRO DE VERDAD.** Antes de este cambio el guardado
  * escribía DOS documentos cada quince segundos, y el segundo era el ranking: la tabla
  * de posiciones no es una cosa que necesite saber que subes un entero por segundo. Con
- * el juego guardado cada quince, el ranking se escribía cuatro veces más de lo que
+ * el juego guardado cada sesenta segundos, el ranking se escribía cuatro veces más de lo que
  * ninguna clasificación ha necesitado nunca, y era **la mitad de todas las escrituras
  * del juego**.
  *
@@ -1446,7 +1462,7 @@ const AFK_THRESHOLD_MS = 60000;
  * cobra igual. Un jugador con el juego abierto sin hacer nada deja de escribir en el
  * ranking por completo, que es el caso que más cuota quemaba.
  */
-const RITMO_RANKING_MS = 5 * 60_000;
+const RITMO_RANKING_MS = 10 * 60_000;
 
   const rankingRef = doc(db, 'rankings', user.uid);
 
@@ -3363,11 +3379,11 @@ function sePuedeGuardar(): boolean {
    * MISMO.
    *
    * **EL PROBLEMA QUE ESTE NÚMERO RESUELVE.** El temporizador de guardado dispara
-   * cada 30 segundos **aunque no haya pasado nada**, porque `saveToFirebase()` no
+   * cada 60 segundos **aunque no haya pasado nada**, porque `saveToFirebase()` no
    * pregunta. Y `updatedAt: new Date()` cambia en cada llamada, así que el documento
    * **nunca es igual al anterior** y no hay forma de saltarse la escritura por
    * comparación. El caso real: un jugador que abre la pestaña, se sienta a mirar el
-   * almacén y no toca nada durante una hora son **120 escrituras de la nada** — y la
+   * almacén y no toca nada durante una hora son **60 escrituras de la nada** — y la
    * cuota de Firestore es de 20.000 al día **para el proyecto entero**, no por
    * jugador.
    *
@@ -4045,7 +4061,7 @@ function sePuedeGuardar(): boolean {
  * Cada cuánto se guarda la partida en la nube, que es lo único que no depende de una
  * acción del jugador.
  *
- * **TREINTA SEGUNDOS, Y LA RAZÓN ES LA CUOTA.** Firestore da 20.000 escrituras al día
+ * **SESENTA SEGUNDOS, Y LA RAZÓN ES LA CUOTA.** Firestore da 20.000 escrituras al día
  * en el plan gratuito y **son de todo el proyecto**, no de cada jugador: con la tabla
  * de hace un rato, una pestaña abierta cuatro horas se gastaba la cuota del día entero,
  * y con cuatro personas probando a la vez se agotaba en minutos. Y ese es un
@@ -4054,11 +4070,11 @@ function sePuedeGuardar(): boolean {
  * único que este temporizador hace es la red de seguridad de lo que se produce solo.
  *
  * Y para ese caso está la cola local: `anotarPendiente()` escribe en `localStorage` de
- * forma síncrona en CADA guardado, así que perder hasta treinta segundos de ingreso
- * pasivo no cuesta nada porque el saldo se recupera al recargar. Con quince no se
+ * forma síncrona en CADA guardado, así que perder hasta sesenta segundos de ingreso
+ * pasivo no cuesta nada porque el saldo se recupera al recargar. Con treinta no se
  * ganaba nada que alguien notara.
  */
-const RITMO_GUARDADO_MS = 30_000;
+const RITMO_GUARDADO_MS = 60_000;
 
 
 
