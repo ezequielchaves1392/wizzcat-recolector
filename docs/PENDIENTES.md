@@ -1372,6 +1372,13 @@ feature que falta):**
       **saldo** (`state.cores`) cuando es mayor que cero, y solo si es cero enseña el
       **pendiente**. Con 2 en cartera y 1,166 K por ganar, el pendiente queda oculto en
       el menú. Falta reproducir y decidir si se enseñan los dos o el pendiente manda.
+- [ ] **B38 · El daño de la fila del ranking está mal.** *(Para después, reportado el
+      9 de octubre con captura.)*
+      > "ahi aparece el daño esta mal jaja"
+      *La evidencia: la fila propia ("TÚ", Blanqui) dice "Daño +884" y no cuadra.*
+      **Candidatos sin reproducir:** foto vieja (la fila se publica cada minutos y el
+      arma sube entre publicaciones), o descuadre entre lo publicado (`danoFinal`) y
+      la ficha viva. Falta reproducir comparando la fila con la ficha en el momento.
 
 - [x] **B33 · El cerrojo se apaga cuando no hay nadie mirando.** `[v1.15.5]`
       > "hace lo que creas mas conveniente y que mejore esta situacion"
