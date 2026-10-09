@@ -833,7 +833,7 @@ programarlo, para que no viva solo en una conversación.*
 
 *Lo pedido, con tus palabras. Sin tocar todavía.*
 
-- [ ] **F68 · La tarjeta ajena enseña el menú principal con sus buffs.**
+- [x] **F68 · La tarjeta ajena enseña el menú principal con sus buffs.**
       > "En el perfil del jugador en rankings me tiene que aparecer una preview del menú principal del jugador con lso buffs aplicados."
       La tarjeta ya trae el recolector equipado, los compañeros activos, los
       nodos y los logros, pero **no trae buffs ni los dos números de la base**
@@ -841,6 +841,7 @@ programarlo, para que no viva solo en una conversación.*
       activos (`perfiles/{uid}`, con coacción y reglas si hace falta) y pintar
       el bloque "así juega ahora" en la tarjeta ajena, diciendo que es al
       guardar (los buffs caducan y la tarjeta no).
+      **Visto bueno el 9 de octubre: se queda como está, sin snapshot de buffs.**
 - [x] **F69 · Diez piedras por fusión, cada una más suave.** Hecho y **superado** en
       v1.15.14.
       > "Ahora se pueden agregar hasta 10 piedras de calibración reducir la probabilidad base que aumenta cada una..."
@@ -1638,7 +1639,7 @@ feature que falta):**
       `showConfirmModal`. A 390 px, "Entran / 7 recolectores del tier 1, de dos en dos
       y por potencial" no cabe en una línea y **un modal que se parte en tres es peor
       que el párrafo**.
-- [ ] **F80 · La tarjeta ajena enseña el perfil entero, y sustituye a los bloques
+- [x] **F80 · La tarjeta ajena enseña el perfil entero, y sustituye a los bloques
       que ya tiene.**
       > "quiero que eso se vea en el perfil del jugador cuando otro lo abre desde el ranking asi tal cual con los mismos datos, deberias solo reemplazar lo que esta por esas vistas"
       *Con tus tres capturas: el bloque del RECOLECTOR con su desglose entero, el de
@@ -1702,6 +1703,7 @@ feature que falta):**
       **Y EL ORDEN.** Va **después de F74**, porque con las bases las tres capturas
       enseñan un stat más cada una, y si esto se programa antes se programa dos
       veces.
+      **Visto bueno el 9 de octubre: el jugador lo ve bien como está, sin cambios.**
 - [ ] **F81 · El resumen de la forja en serie enseña el item entero.**
       > "aca tambien mostrar bien los iconos , el potencial y el tier que sale el arma y si tiene afijos poner el tag"
       Hoy cada fila de la serie es **una sola línea**: el número, una casilla con un
@@ -1870,16 +1872,13 @@ decisión que solo vive en un mensaje no existe dentro de tres meses.**
 
 ## Lo único que espera tu respuesta
 
-**Son cinco cosas, y las cinco son tuyas, no más. Nada de la lista de abajo se puede
+**Son dos cosas, y las dos son tuyas. Nada de la lista de abajo se puede
 programar bien hasta que estén.**
 
 | # | Qué | Por qué bloquea |
 |---|---|---|
 | **1** | **La curva de probabilidad de forja por debajo del T20.** Propuesta: **60% / 68% / 75%** (tramos 1-9 / 10-19 / 20+). Hoy está al revés: 78% en T1 bajando a 33% en T10. | Es un **cambio de signo** en la curva, y es lo que da forma al tramo alto de la forja. Sin tu "sí" el forjado sigue siendo más difícil cuanto más alto, que es lo contrario de lo que pediste. |
-| **2** | **B8 · Ver el perfil de otro jugador.** Hecho: tarjeta pública `perfiles/{uid}`, se abre tocando un nombre en el ranking, y con contador de visitas que no cuenta al dueño | **Es privacidad, y no lo debe decidir un agente.** Recomiendo la tarjeta pública: lo no recomendable es abrir el documento privado, porque un incremental te enseña el gasto y el inventario de tu competencia. Bloquea F20 y F22. |
-| **3** | **P4 · Jugar otra partida y decir hasta dónde llegas.** | `balanceCheck` comprueba que los números encajen entre sí, no que la partida dure lo que tiene que durar. Eso solo se mide jugando. |
-| **4** | **F19 · Dos cosas de los logros como items.** Qué pasa con el item si ya tienes el logro (¿se vende, se guarda, no se usa dos veces?), y si los logros **seguros** son tradeares o solo los de caja. | Cambia el modelo de logros entero. Es la última cosa del lote a propósito. |
-| **5** | **P5 · Las cajas ya no dan nanitas.** El premio pasó de ×14-22 del par a **25-40%**, porque era una máquina de imprimir. | Cerrar el bucle compra-venta era lo que pediste, y la única palanca que quedaba era la **fórmula** de las nanitas. Con menos nanitas de las cajas, la **forja pasa a ser el ingreso principal** y la partida puede hacerse más lenta. El sitio del ajuste es un número, y cualquier valor sigue teniendo la prueba de que no supera el par. |
+| **2** | **F19 · Lo que falta: si los logros seguros se tradean.** Decidido el 9 de octubre: el item se da y vale nanitas en cantidad buena, balanceada por logro. | Sin eso no se cierra el modelo de logros como items. |
 
 **Y una limpieza que ya está hecha:** `.github/workflows/publicar.yml` **está borrado**.
 Fallaba en todos los pushes porque Pages no está activado en el repo, y no se quiere
@@ -1916,7 +1915,7 @@ fracaso. Está razonado en el archivo y en F36.
 | **6** | **F30, F28, F25** · Sueltos y pequeños | No dependen de nada. F30 es un R3 (se ve 99 y hay 150), F28 es delta time, F25 es una línea en un array. |
 | **7** | **F37** · Síntesis de items / elegir afijo | **Después de F33 a propósito**: F33 vende la forja como "el item que tú quieres" y una síntesis con afijo sorteado es "el item que te salió", que es la promesa de la caja. No pueden ser el mismo botón. |
 | **8** | **F19 + F21** · Logros como items, y el nombre de los secretos | Últimos. Cambian el modelo entero, y F21 sale de F19. |
-| **9** | **F20, F22** · Avatar propio y comparar partidas | Dependen de tu respuesta nº2 (B8), porque un avatar es justo el dato que hay que poder leer de otro jugador. |
+| **9** | **F20, F22** · Avatar propio y comparar partidas | Desbloqueados el 9 de octubre (B8 confirmado): el avatar ya se puede leer de otro jugador. |
 
 **F9, F10 y F13 no están en el plan porque ya están resueltos** — mira abajo.
 
@@ -2324,6 +2323,8 @@ hizo (un logro pesa 50.000 puntos, y uno secreto 250.000).
 Dos decisiones antes de escribir: **qué pasa con el item si ya tienes el logro**, y si los
 logros **seguros** son tradeares o solo los de caja.
 
+**Decidido el 9 de octubre: el item se da y vale nanitas en cantidad buena, balanceada por logro.** Lo que sigue abierto es solo si los seguros se tradean.
+
 ### F20 · Elegir imagen de perfil
 
 > Permitamos elegir una imagen entre varias 5 a los jugadores en su perfil. Son como iconos, se pueden desbloquear o comprar en un pack aleatorio, y **algunos salen en logros**.
@@ -2387,7 +2388,9 @@ recomiendo**. Con la primera no hay problema de seguridad: es un documento que e
 escribe con lo que decide enseñar. De paso le daría en qué apoyarse a **F20**, porque la
 imagen de perfil es justo el dato que hay que poder leer de otro.
 
-**Son tres los bugs abiertos del juego: B8, B11 y B21.** Todos los demás están cerrados y con banco.
+**Confirmado por el jugador el 9 de octubre: la tarjeta pública está bien así.** Desbloquea F20 y F22.
+
+**Son dos los bugs abiertos del juego: B11 y B21.** Todos los demás están cerrados y con banco.
 
 ### B11 · En el celular no se puede cerrar sesión ni cambiar de theme
 
@@ -2597,11 +2600,13 @@ tope es este número y no el de la reventa: se cambia un `1000` y está. El banc
 `loteCheck` mide que el par no se supera en ninguno de los diez tiers, así que cualquier
 valor que pongas aquí sigue teniendo una prueba detrás.
 
-### P4 · Verificar en partida real
+**Confirmado por el jugador el 9 de octubre: el ritmo está bien.**
 
-**Pendiente de tu lado** (es el nº3 de lo que espera tu respuesta). El banco comprueba que
-los números encajen entre sí, no que la partida dure lo que tiene que durar. Para eso hace
-falta jugarla: otra partida nueva y decir hasta dónde llegas y en cuánto tiempo.
+### P4 · Verificar en partida real — DESCARTADO
+
+**Sacado de la lista a petición del jugador (9 de octubre):** no se va a jugar
+otra partida para medir el ritmo. Se queda escrito que la duración real nunca se
+midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ---
 
