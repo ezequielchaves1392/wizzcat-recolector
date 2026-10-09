@@ -267,7 +267,11 @@ async function main() {
   //     resta no es un número que exista en ningún sitio.
   // -----------------------------------------------------------------------
   {
-    const g = await boot(baseSave([collector('r1', 3, { damage: 60, level: 4 })], { nanites: 1000 }));
+    // **CON `first_click` YA DESBLOQUEADO, COMO EL BLOQUE DE ABAJO.** El primer
+    // click lo desbloquea (+2 %) y la relectura ya lo lleva: sin
+    // pre-desbloquearlo la comparación mediría el logro, no la estabilidad, y
+    // con afijos que suben el daño el +2 % pasa el ±1 que admite el redondeo.
+    const g = await boot(baseSave([collector('r1', 3, { damage: 60, level: 4, rarity: 'Común' })], { nanites: 1000, unlockedAchievements: ['first_click'] }));
     g.equipCollector('r1');
 
     const antes = nanites(g);
@@ -315,7 +319,12 @@ async function main() {
   {
     // Sin afijo de crítico, doscientos clicks y ni un crítico: la probabilidad
     // es cero y el dado no existe. Es determinista sin clavar nada.
-    const g = await boot(baseSave([collector('r1', 3, { damage: 60 })], { nanites: 1000 }));
+    // **COMÚN A PROPÓSITO (F97).** Desde F97 todo item con rareza trae sus
+    // afijos al cargar: con la rareza de antes (Épico) la migración sorteaba 2
+    // y si caía uno de crítico el test medía la suerte del sorteo, no la regla
+    // —caía 1 de cada ~4 corridas—. El neutro es Común (0 por tabla), que es la
+    // doctrina de RAREZA_NEUTRA de `kit.ts`.
+    const g = await boot(baseSave([collector('r1', 3, { damage: 60, rarity: 'Común' })], { nanites: 1000 }));
     g.equipCollector('r1');
     let criticos = 0;
     for (let i = 0; i < 200; i++) {

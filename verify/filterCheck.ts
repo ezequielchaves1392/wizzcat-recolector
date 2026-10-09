@@ -129,7 +129,13 @@ async function main() {
   {
     const g = await boot(baseSave([
       // Dos recolectores con el MISMO daño y distinto tier: es el caso del desempate.
-      collector('r1', 3), collector('r2', 7), collector('r3', 5), collector('r4', 1),
+      // **COMUNES A PROPÓSITO (F97).** Desde F97 todo item con rareza trae sus
+      // afijos al cargar y el stat sumaría un componente sorteado: el orden
+      // dejaría de ser el del daño y la prueba sería flaky entre corridas. El
+      // neutro es Común (0 por tabla), que es lo que la doctrina de RAREZA_NEUTRA
+      // de `kit.ts` pide para no medir el multiplicador en vez de lo medido.
+      collector('r1', 3, { rarity: 'Común' }), collector('r2', 7, { rarity: 'Común' }),
+      collector('r3', 5, { rarity: 'Común' }), collector('r4', 1, { rarity: 'Común' }),
       companion('m1'), companion('m2'), companion('m3'),
       crate('c1')
     ]));
