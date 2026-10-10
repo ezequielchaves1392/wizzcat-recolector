@@ -200,6 +200,9 @@ export function pintarUsoRed(): void {
       const hoja = sec.closest('[data-ajustes]');
       // Cerrada no se pinta: escribir en un nodo oculto es trabajo gratis.
       if (hoja && hoja.classList.contains('hidden')) continue;
+      // Y en la pestaña de al lado tampoco: está montada pero no se ve.
+      const panel = sec.closest('[data-panel-ajustes]');
+      if (panel && panel.classList.contains('hidden')) continue;
       const estado = sec.querySelector('[data-ops-estado]');
       if (estado) {
         estado.textContent = `· ${palabraDeColor(color)}`;

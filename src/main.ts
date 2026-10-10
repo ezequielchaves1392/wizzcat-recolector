@@ -41,7 +41,7 @@ import {
   setAudioSuspended, installAudioUnlock, onAudioStateChange
 } from './utils/audio';
 import { renderLayoutHTML } from './ui/layout';
-import { updateResourceBar } from './ui/appHeader';
+import { updateResourceBar, mostrarPestanaAjustes } from './ui/appHeader';
 import { montarOpsOverlay, montarRefrescoUsoRed, pintarUsoRed } from './ui/opsOverlay';
 import { resumenOps } from './services/contadorOps';
 import { miniIdentity } from './ui/identity';
@@ -1026,6 +1026,18 @@ function instalaDelegacionDeAjustes() {
       // La hoja se reconstruye en cada vista: al abrirla se pinta el uso de
       // red en el acto, sin esperar al siguiente tic del intervalo.
       pintarUsoRed();
+      return;
+    }
+
+    // **LAS PESTAÑAS DE LA HOJA, POR DELEGACIÓN COMO TODO LO DEMÁS.**
+    // El nodo se busca aquí y no se guarda, por el mismo motivo que los de
+    // arriba: la hoja se reconstruye en cada vista. `mostrarPestanaAjustes`
+    // guarda la elegida en el módulo y conmuta los paneles sin re-render.
+    const tabAjustes = target.closest('[data-ajustes-tab]');
+    if (tabAjustes) {
+      e.preventDefault();
+      sfx.nav();
+      mostrarPestanaAjustes(tabAjustes.getAttribute('data-ajustes-tab') === 'red' ? 'red' : 'general');
       return;
     }
 

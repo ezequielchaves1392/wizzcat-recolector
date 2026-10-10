@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.44',
+    fecha: '10 de octubre de 2026',
+    titulo: 'El uso de red tiene su pestaña',
+    lineas: [
+      'La sección de uso de red de Ajustes tiene ahora su propia pestaña y la hoja abre más corta.',
+      'Cambiar de pestaña no cierra la hoja: la que dejaste abierta sigue ahí al volver.',
+      'Todo lo demás queda igual: lo de red sigue borrándose al recargar.'
+    ]
+  },
+  {
     version: '1.15.43',
     fecha: '10 de octubre de 2026',
     titulo: 'Uso de red visible en Ajustes',

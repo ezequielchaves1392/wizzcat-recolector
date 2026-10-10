@@ -295,8 +295,55 @@ export function headerSettingsButton(): string {
  * Una animación con `both` sobre un elemento que se centra con un translate anula el
  * centrado. `fadeIn` solo mueve la opacidad y no compite con nada.
  */
+/**
+ * LA PESTAÑA ABIERTA DE LA HOJA, Y POR QUÉ VIVE EN EL MÓDULO.
+ *
+ * La hoja se reconstruye en cada vista, así que un estado dentro de la
+ * función que la pinta se reiniciaría al navegar (R6). Aquí sobrevive: abrir
+ * Ajustes desde otra pantalla vuelve a la pestaña que dejaste.
+ */
+export type PestanaAjustes = 'general' | 'red';
+let pestanaAjustes: PestanaAjustes = 'general';
+
+/** La pestaña que la hoja enseñará al pintarse. */
+export function pestanaAjustesActual(): PestanaAjustes {
+  return pestanaAjustes;
+}
+
+/**
+ * Cambia de pestaña y lo pinta en el DOM vivo, sin re-render: re-renderizar
+ * la hoja la cerraría, porque el `hidden` del nodo se perdería. Lo llaman el
+ * juego y el preview, que es lo único que evita dos implementaciones (R2).
+ */
+export function mostrarPestanaAjustes(id: PestanaAjustes): void {
+  pestanaAjustes = id;
+  try {
+    const hoja = document.querySelector('[data-ajustes]:not(.hidden)');
+    if (!hoja) return;
+    hoja.querySelectorAll('[data-ajustes-tab]').forEach((b) => {
+      const activa = b.getAttribute('data-ajustes-tab') === id;
+      b.setAttribute('aria-selected', activa ? 'true' : 'false');
+      b.className = `h-11 rounded-lg text-[11px] font-mono cursor-pointer transition ${activa ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}`;
+    });
+    hoja.querySelectorAll('[data-panel-ajustes]').forEach((p) => {
+      const visible = p.getAttribute('data-panel-ajustes') === id;
+      p.classList.toggle('hidden', !visible);
+      p.classList.toggle('flex', visible);
+      p.classList.toggle('flex-col', visible);
+      p.classList.toggle('gap-4', visible);
+    });
+  } catch {
+    // Pintar no puede tumbar la navegación: se traga y sigue.
+  }
+}
+
 export function settingsSheetHTML(): string {
   const tema = getSavedTheme();
+  const tab = pestanaAjustes;
+  const botonTab = (id: PestanaAjustes, etiqueta: string) => `
+          <button role="tab" data-ajustes-tab="${id}" aria-selected="${tab === id}"
+                   class="h-11 rounded-lg text-[11px] font-mono cursor-pointer transition
+                          ${tab === id ? 'accent-bg text-slate-950 font-bold' : 'btn-ghost text-[var(--text-muted)]'}">${etiqueta}</button>`;
   return `
     <div data-ajustes class="fixed inset-0 z-[80] hidden">
       <div class="absolute inset-0 bg-black/65 backdrop-blur-sm" data-cerrar-ajustes></div>
@@ -329,6 +376,20 @@ export function settingsSheetHTML(): string {
           data-audio en vez de dos manejadores: uno solo por delegación cubre los dos. Los
           ids se quedan porque paintAudioButtons() los busca por id para repintarlos.
         -->
+        <!--
+          LAS PESTAÑAS, Y POR QUÉ EL USO DE RED VA APARTE.
+
+          La hoja crecía con cada ajuste y el uso de red —que es lo más largo—
+          empujaba el cerrar sesión fuera de la primera pantalla. Cada panel va
+          en su propio div: conmutar es quitar y poner hidden, sin re-render,
+          porque re-renderizar la hoja la cerraría.
+        -->
+        <div role="tablist" aria-label="Secciones de ajustes" class="grid grid-cols-2 gap-2">
+          ${botonTab('general', 'General')}
+          ${botonTab('red', 'Uso de red')}
+        </div>
+
+        <div data-panel-ajustes="general" role="tabpanel" class="${tab === 'general' ? 'flex flex-col gap-4' : 'hidden'}">
         <div class="grid grid-cols-2 gap-2">
           <button id="music-btn" data-audio="music"
             aria-pressed="${isMusicEnabled()}"
@@ -414,7 +475,10 @@ export function settingsSheetHTML(): string {
           </div>
         </div>
 
+        </div>
+        <div data-panel-ajustes="red" role="tabpanel" class="${tab === 'red' ? 'flex flex-col gap-4' : 'hidden'}">
         ${seccionUsoRedHTML()}
+        </div>
 
         <button data-logout
           class="h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer

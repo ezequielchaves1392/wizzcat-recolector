@@ -22,6 +22,7 @@ import { CRATE_TYPES, RANURAS_BARRA, consumibleAsignable } from './data/store';
 import { CRISTAL_NOMBRE, CRISTAL_RAREZA } from './data/items';
 import './style.modules.css';
 import { renderLayoutHTML } from './ui/layout';
+import { mostrarPestanaAjustes } from './ui/appHeader';
 import { wirePreviewAudio } from './previewAudio';
 import { renderPanel } from './ui/playerPanel';
 import { renderBuffHudForPreview } from './ui/buffHud';
@@ -861,6 +862,11 @@ wirePreviewAudio(app);
 // Es la misma clase de fallo que el de los interruptores de arriba, y por el mismo
 // motivo: cableado donde se daba por supuesto en vez de donde se monta.
 document.addEventListener('click', (ev) => {
+  const tabAjustes = (ev.target as HTMLElement | null)?.closest('[data-ajustes-tab]');
+  if (tabAjustes) {
+    mostrarPestanaAjustes(tabAjustes.getAttribute('data-ajustes-tab') === 'red' ? 'red' : 'general');
+    return;
+  }
   const destino = (ev.target as HTMLElement | null)?.closest('[data-pestana]');
   if (!destino) return;
   cambiaDePestana(destino.getAttribute('data-pestana') as string);

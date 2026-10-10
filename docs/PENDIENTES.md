@@ -2948,6 +2948,11 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
       el refresco no escribe con la hoja cerrada (R7). El `(F96)` se va también
       del `title` de la píldora. `opsCheck` (+2: los diez motivos tienen etiqueta
       y ninguna trae códigos ni jerga).
+      **Pestaña propia (v1.15.44, mismo día):** la sección vivía al fondo de la
+      hoja y empujaba el cerrar sesión fuera de la primera pantalla. Ahora la
+      hoja tiene dos pestañas (General y Uso de red): conmutar es quitar y poner
+      `hidden`, sin re-render que la cerraría, y la elegida sobrevive en el
+      módulo porque la hoja se reconstruye en cada vista (R6). Sin banco: es DOM.
 
 ---
 
