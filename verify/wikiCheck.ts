@@ -55,19 +55,24 @@ import {
 } from '../src/data/bases';
 import {
   AFFIXES, POTENTIAL_WEIGHTS, baseSuccessChance, techoDeNivel,
-  AFIX_MIN_POR_RARIDAD, AFIX_MAX
+  AFIX_MIN_POR_RARIDAD, AFIX_MAX, danioDeRango, poderDeCompanero,
+  multiplicadorDeNivel, multiplicadorDeCalidadDeCompanero
 } from '../src/data/crafting';
 import { ACHIEVEMENTS } from '../src/achievements';
 import {
   LOGROS_DIFICILES, ACHIEVEMENT_REWARDS, SECRET_ACHIEVEMENTS
 } from '../src/data/achievements';
-import { TREE_NODES, nodeCost } from '../src/data/tree';
-import { pendingCores } from '../src/data/prestige';
+import { TREE_NODES, nodeCost, coresGastadosEnArbol } from '../src/data/tree';
+import { pendingCores, nanitesForCores, aggregateBonuses } from '../src/data/prestige';
 import {
   ANCLA, anclaAfijo, anclaBase, anclaCaja, anclaConsumible, anclaExclusivo,
   anclaExpansor, anclaGrupoBases, anclaLogro, anclaNodo, anclaTier,
   anclaVersion, buscarEnWiki, construirIndiceWiki, normalizaWiki
 } from '../src/data/wikiIndex';
+import {
+  compraSimulada, quitaNivelSimulada, resumenDeBuild,
+  produccionParaBuild, cabeEnRun, fichaSimulada
+} from '../src/ui/wikiTools';
 
 async function main() {
   // ------------------------------------------------------------------
@@ -212,6 +217,80 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
+  // 7b · Las herramientas (F98): el simulador cobra con las reglas
+  // ------------------------------------------------------------------
+  {
+    const raiz = TREE_NODES.find(n => (n.requires ?? []).length === 0);
+    const conReq = TREE_NODES.find(n => (n.requires ?? []).length > 0);
+    check('herr: hay nodos con y sin requisitos para simular', !!raiz && !!conReq,
+      raiz && conReq ? 'los dos casos' : 'falta un caso');
+    if (raiz && conReq) {
+      const r1 = compraSimulada({}, raiz.id, null);
+      check('herr: el simulador suma un nivel en un nodo raíz',
+        r1.ok && r1.niveles[raiz.id] === 1 && r1.coste === nodeCost(raiz as any, 0),
+        `coste=${r1.coste}`);
+      const r2 = compraSimulada({}, conReq.id, null);
+      check('herr: sin requisitos no se suma ni sin presupuesto',
+        !r2.ok && (r2.motivo ?? '').startsWith('Requiere') && r2.niveles[conReq.id] === undefined,
+        r2.motivo ?? 'sin motivo');
+      const r3 = compraSimulada({}, raiz.id, 0);
+      check('herr: con presupuesto cero no se suma ni el primer nivel',
+        !r3.ok && r3.niveles[raiz.id] === undefined, r3.motivo ?? 'sin motivo');
+      const q = quitaNivelSimulada({}, raiz.id);
+      check('herr: quitar de cero no inventa niveles', q[raiz.id] === undefined, 'ok');
+      const res = resumenDeBuild(r1.niveles);
+      check('herr: el resumen cobra lo gastado con la regla',
+        res.gastados === coresGastadosEnArbol(r1.niveles) &&
+        res.gastados === nodeCost(raiz as any, 0),
+        `${res.gastados}`);
+      check('herr: el resumen otorga lo agregado por el árbol',
+        JSON.stringify(res.bonos) === JSON.stringify(aggregateBonuses(r1.niveles)),
+        'bonos');
+      const C = 100;
+      const P = produccionParaBuild(C, 0);
+      check('herr: lo pedido para la build la justifica y es lo mínimo',
+        pendingCores(P, 0) >= C && (P <= 1_000_000 || pendingCores(P - 1, 0) < C),
+        `${P}`);
+      const cabe = cabeEnRun(P, C, 0);
+      check('herr: con esa producción la build cabe',
+        cabe.cabe && cabe.darian >= C, `${cabe.darian}`);
+      const noCabe = cabeEnRun(1_000_000, C + 1000, 0);
+      check('herr: con poco no cabe y lo dice', !noCabe.cabe, `${noCabe.darian}`);
+    }
+
+    const baseRec = { lado: 'rec' as const, tier: 1, baseId: null as string | null, potencial: 3, nivel: 0, rareza: 'Común', tipo: 'click' as const, afijos: [] as string[] };
+    const fRec = fichaSimulada(baseRec);
+    check('herr: la base neutra da el daño de la regla',
+      fRec.total === danioDeRango(1, 3, null), `${fRec.total}`);
+    const fNiv = fichaSimulada({ ...baseRec, nivel: 99 });
+    check('herr: el nivel simulado topa en el techo real',
+      fNiv.nivel === techoDeNivel(3, 6), `${fNiv.nivel}`);
+    const fAf = fichaSimulada({
+      ...baseRec,
+      afijos: ['aff_inventado', 'aff_sharp', 'aff_rapid', 'aff_yield', 'aff_flow', 'aff_bulwark', 'aff_core', 'aff_crit']
+    });
+    check('herr: los afijos topan en seis y el inventado no cuenta',
+      fAf.afijos.length === AFIX_MAX && !fAf.afijos.includes('aff_inventado'),
+      fAf.afijos.join(','));
+    const baseCom = { lado: 'com' as const, tier: 5, baseId: null as string | null, potencial: 3, nivel: 0, rareza: 'Épico', tipo: 'click' as const, afijos: [] as string[] };
+    const fCom = fichaSimulada(baseCom);
+    check('herr: el compañero simulado rinde el poder de la regla',
+      fCom.total === Math.round(poderDeCompanero(5, 3, null)
+        * multiplicadorDeNivel(0)
+        * multiplicadorDeCalidadDeCompanero('Épico', 3)),
+      `${fCom.total}`);
+    const fMulSin = fichaSimulada({ ...baseCom, tipo: 'multiplier', afijos: [] });
+    const fMulCon = fichaSimulada({ ...baseCom, tipo: 'multiplier', afijos: ['aff_sharp', 'aff_yield'] });
+    check('herr: en multiplier los afijos no mueven el aura',
+      fMulSin.total === fMulCon.total, `${fMulSin.total}/${fMulCon.total}`);
+    const ajena = (BASES_RECOLECTOR as Record<number, Array<{ id: string }>>)[1]?.[5]?.id ?? null;
+    const fAjena = fichaSimulada({ ...baseCom, lado: 'rec', tier: 5, baseId: ajena });
+    const fNeutra = fichaSimulada({ ...baseCom, lado: 'rec', tier: 5, baseId: null });
+    check('herr: una base de otro tier cuenta como neutra',
+      fAjena.total === fNeutra.total, `${fAjena.total}/${fNeutra.total}`);
+  }
+
+  // ------------------------------------------------------------------
   // 8 · Las reglas que la Wiki enseña con número
   // ------------------------------------------------------------------
   {
@@ -288,8 +367,8 @@ async function main() {
   {
     const indice = construirIndiceWiki();
     const porSeccion = (s: string) => indice.filter(e => e.seccion === s);
-    check('wiki: el índice cubre las siete secciones',
-      ['mecanicas', 'cajas', 'bases', 'items', 'logros', 'pasivas', 'versiones']
+    check('wiki: el índice cubre las ocho secciones',
+      ['mecanicas', 'cajas', 'bases', 'items', 'logros', 'pasivas', 'herramientas', 'versiones']
         .every(s => porSeccion(s).length > 0),
       [...new Set(indice.map(e => e.seccion))].join(','));
     check('wiki: cinco bloques de mecánicas', porSeccion('mecanicas').length === 5,
@@ -307,6 +386,9 @@ async function main() {
       `${porSeccion('logros').length} frente a ${ACHIEVEMENTS.length}`);
     check('wiki: un nodo por entrada (más la intro)', porSeccion('pasivas').length === TREE_NODES.length + 1,
       `${porSeccion('pasivas').length} frente a ${TREE_NODES.length}`);
+    check('wiki: dos herramientas (simuladores de árbol y de base)',
+      porSeccion('herramientas').length === 2,
+      porSeccion('herramientas').map(e => e.ancla).join(','));
     const deItems = porSeccion('items');
     check('wiki: un afijo por entrada', deItems.filter(e => e.ancla.startsWith('afijo-')).length === AFFIXES.length,
       `${AFFIXES.length} afijos`);
@@ -333,8 +415,7 @@ async function main() {
     check('wiki: anclas sin espacios ni raros', anclas.every(a => /^[A-Za-z0-9_.-]+$/.test(a)),
       anclas.filter(a => !/^[A-Za-z0-9_.-]+$/.test(a)).join(',') || 'todas valen');
     const deAyudantes = new Set<string>([
-      ...Object.values(ANCLA),
-      ...(CRATE_TIERS as readonly number[]).map(anclaCaja),
+      ...Object.values(ANCLA),      ...(CRATE_TIERS as readonly number[]).map(anclaCaja),
       ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(t => [anclaGrupoBases('rec', t), anclaGrupoBases('com', t)]),
       ...TODAS_LAS_BASES.map(b => anclaBase((b as any).id)),
       ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(anclaTier),
@@ -356,6 +437,10 @@ async function main() {
     check('wiki: "forja" lleva al bloque de la forja',
       buscarEnWiki('forja').some(e => e.ancla === ANCLA.mecanicaForja),
       `${buscarEnWiki('forja').length} resultados`);
+    check('wiki: "simulador" lleva a las dos herramientas',
+      buscarEnWiki('simulador').some(e => e.ancla === ANCLA.herramientasArbol) &&
+      buscarEnWiki('simulador').some(e => e.ancla === ANCLA.herramientasBase),
+      buscarEnWiki('simulador').map(e => e.ancla).join(','));
     check('wiki: sin tildes ("calibracion" encuentra la Piedra)',
       buscarEnWiki('calibracion').some(e => e.titulo.includes('Calibración')),
       buscarEnWiki('calibracion').map(e => e.titulo).join(' | ') || 'nada');
@@ -368,6 +453,7 @@ async function main() {
       normalizaWiki('Calibración FORJA') === 'calibracion forja',
       normalizaWiki('Calibración FORJA'));
     check('wiki: el set trae el icono del buscador', 'search' in ICONS, 'search');
+    check('wiki: el set trae el icono de Herramientas', 'wrench' in ICONS, 'wrench');
   }
 
   resumen('wiki: la base de conocimiento enseña las reglas que el juego aplica');

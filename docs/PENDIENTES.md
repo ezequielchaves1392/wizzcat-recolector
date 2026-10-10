@@ -1944,6 +1944,47 @@ secciones; el probador queda anotado y no se toca.*
       `wikiIndex` dejaba el nombre sin declarar en el bundle, así que va con
       alias (`CONSUMIBLES`).
 
+### Lote L · HERRAMIENTAS DE LA WIKI (encargo del 10 de octubre)
+
+*Lo pedido, con tus palabras. Se escribe aquí antes de programarlo, para que no
+viva solo en una conversación.*
+- [x] **F98 · Sección Herramientas en la Wiki: simulador de árbol y simulador de base.** Hecho en v1.15.33.
+      > "en la wiki quiero agregar una seccion de herramientas, donde voy a tener un simulador de Skill tree, donde puedo gastar puntos y ver el resumen de lo que otorga y lo que me va a costar en nucleos, determinando aprox los reset necesarios etc... tambien poder seleccionar una base y ver como quedaría con en distintos potenciales, niveles y afijos"
+      > "en la wiki quiero agregar una seccion de herramientas, donde voy a tener un simulador de Skill tree, donde puedo gastar puntos y ver el resumen de lo que otorga y lo que me va a costar en nucleos, determinando aprox los reset necesarios etc... tambien poder seleccionar una base y ver como quedaría con en distintos potenciales, niveles y afijos"
+      > "me referia a que se le de una idea de cuantos resets iba a necesitar aproximadamente para lograr la build que arme... empieza de 0 y la puede reiniciar infinitas veces... puede ver el daño final sin la forja, puede elegir todo lo que quiera directamente"
+      > "acordate de usar iconos, colores, previews del juego original, etc..."
+      Dos sub-herramientas, las dos solo lectura sobre `src/data/`, sin game loop
+      ni Firebase (la Wiki ya vive así):
+      (a) **Simulador de árbol:** empieza de 0, +/− por nodo respetando
+      `canBuyNode()` (requisitos + puntos por rama), reinicio infinito del
+      simulador, y resumen con `coresGastadosEnArbol()` + `aggregateBonuses()`.
+      Lo de "cuántos resets" no existe como número único (cada Ascensión tiene
+      que producir más que la anterior: `nextCores` resta el histórico), así que
+      se enseña la cota honesta: la build cuesta C núcleos ≈ producir
+      `nanitesForCores(C)` en una sola run, más un "produzco ~X" que dice
+      cabe/no cabe (`pendingCores(X)`), sin prometer nº de runs.
+      (b) **Simulador de base:** tier, lado, base, potencial, nivel (capado al
+      `techoDeNivel()` real) y afijos a elección libre; enseña el daño/poder
+      final con `danioDeRango()`/`poderDeCompanero()` × `multiplicadorDeNivel()`
+      × afijos, rotulado como ilustrativo (la forja sortea).
+      Visual: iconos del set (`icSafe`), colores de rama y rareza, y las mismas
+      piezas (chips de bonus, `.wiki-box`, `estrellasDe()`, `formatNumber()`).
+      Banco: `wikiCheck` ata que todo número salga de la regla (R32).
+      **Hecho:** octava pestaña con las dos sub-herramientas en `wikiTools.ts`
+      (nuevo, solo lectura sobre `data/`), cableada en `wikiPage.ts` por zonas
+      (cada toque repinta su zona, sin volver arriba ni robar foco: A5/B15), con
+      `bonusLabel()` mudado a `bonusLabels.ts` para no duplicar textos entre
+      Prestigio y Wiki. `wikiCheck` 129 → 148 (+19: contratos del simulador,
+      índice de ocho secciones y buscador de "simulador"). `build` + `verify`
+      en verde: 49 bancos, 2739 pruebas.
+- [x] **F99 · Pasivas de la Wiki por ramas, como las pestañas del juego.** Hecho en v1.15.34.
+      > "me gustaría que esten divididos como en el juego las pestañas: y explicar en que se enfoca cada rama ej: Asalto: rama especializada en mejora de recolectores y click bla bla bla... y poner todos los skills de esa rama, es reacomodar esa seccion"
+      Cuatro bloques (Asalto, Manada, Fortuna, Forja) en el orden del catálogo, cada uno
+      con su enfoque en prosa y todos sus nodos por tier (descripción, lore, Máx, coste
+      base de `nodeCost()` y requisitos). Los umbrales de fila salen de
+      `UMBRAL_PUNTOS_RAMA`, sin cifras a mano (R32). De paso, la etiqueta de
+      `herramientas` que le faltaba a `ETIQUETA_SECCION` y rompía el `build` del lote F98.
+
 ### Lote K · ENCARGO DEL 9 DE OCTUBRE (ideas nocturnas del jugador)
 
 *Lo pedido, con tus palabras. Sin tocar todavía: se escribe aquí antes de

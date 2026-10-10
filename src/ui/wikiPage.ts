@@ -57,7 +57,13 @@ import {
 import { ACHIEVEMENTS } from '../achievements';
 import { LOGROS_DIFICILES } from '../data/achievements';
 import { TREE_NODES, TREE_CATEGORY_META, nodeCost } from '../data/tree';
+import { UMBRAL_PUNTOS_RAMA } from '../data/prestige';
 import { pendingCores, PRESTIGE_MIN_NANITES } from '../data/prestige';
+import {
+  simHerr, baseNeutra, compraSimulada, quitaNivelSimulada,
+  arbolSimHTML, resumenBuildHTML, baseSimHTML
+} from './wikiTools';
+import { AFIX_MAX } from '../data/crafting';
 import { chanceDeSintonizacion, CRISTAL_NOMBRE } from '../data/items';
 import { NOTAS } from '../data/patchNotes';
 import {
@@ -65,7 +71,7 @@ import {
   TOPE_MS_CLICK_X2, TOPE_MS_CLICK_X3
 } from '../data/buffs';
 
-/** Las siete secciones, en el orden en que un jugador las pregunta. */
+/** Las ocho secciones, en el orden en que un jugador las pregunta. */
 const SECCIONES: Array<{ id: SeccionWiki; label: string; icon: string }> = [
   { id: 'mecanicas', label: 'Mecánicas', icon: 'info' },
   { id: 'cajas', label: 'Cajas', icon: 'crate' },
@@ -73,6 +79,7 @@ const SECCIONES: Array<{ id: SeccionWiki; label: string; icon: string }> = [
   { id: 'items', label: 'Items', icon: 'collector' },
   { id: 'logros', label: 'Logros', icon: 'achievement' },
   { id: 'pasivas', label: 'Pasivas', icon: 'tree' },
+  { id: 'herramientas', label: 'Herramientas', icon: 'wrench' },
   { id: 'versiones', label: 'Versiones', icon: 'clock' }
 ];
 
@@ -82,7 +89,7 @@ const ui: { seccion: SeccionWiki; q: string } = { seccion: 'mecanicas', q: '' };
 /** La etiqueta legible de cada sección, para la lista de resultados. */
 const ETIQUETA_SECCION: Record<SeccionWiki, string> = {
   mecanicas: 'Mecánicas', cajas: 'Cajas', bases: 'Bases', items: 'Items',
-  logros: 'Logros', pasivas: 'Pasivas', versiones: 'Versiones'
+  logros: 'Logros', pasivas: 'Pasivas', herramientas: 'Herramientas', versiones: 'Versiones'
 };
 
 /**
@@ -526,29 +533,52 @@ function seccionLogros(): string {
 // --------------------------------------------------------------------------
 
 function seccionPasivas(): string {
-  const porTier: Record<number, typeof TREE_NODES> = {};
-  for (const n of TREE_NODES) (porTier[n.tier] ||= []).push(n);
-  const columnas = Object.keys(porTier).map(Number).sort((a, b) => a - b).map(tier => `
-    <h3 class="label-caps mt-4 mb-2">Tier ${tier}</h3>
-    ${(porTier[tier] ?? []).map(n => {
-      const cat = (TREE_CATEGORY_META as Record<string, { label: string; color: string }>)[n.category];
-      const catColor = cat?.color ?? 'accent-text';
-      const reqs = (n.requires ?? []).map(id => (TREE_NODES as any[]).find(x => x.id === id)?.name ?? id);
-      return `
+  // Como en el juego: una rama por pestaña, y cada rama con sus nodos.
+  // El orden es el del catálogo, que es el que decide la identidad de cada
+  // una en la pantalla de Ascensión. Los números salen de la tabla (R32):
+  // aquí solo se agrupa, no se recalcula nada.
+  const RAMAS = Object.keys(TREE_CATEGORY_META) as Array<keyof typeof TREE_CATEGORY_META>;
+  // En qué se enfoca cada rama: prosa, sin cifras a mano. Las cifras las
+  // pone cada nodo con su descripción y su coste base.
+  const ENFOQUE_RAMA: Record<string, string> = {
+    asalto: 'Rama del click: sube el daño por pulsación, los clics automáticos que pegan solos y los críticos —la probabilidad y el crítico asegurado de Sobrecarga—. Es la rama de quien juega pulsando y de quien deja que la base pegue sola.',
+    manada: 'Rama del escuadrón y del ingreso pasivo: sube el pasivo global, el poder de los compañeros por tipo (pasivos, clicks y multiplier), abarata su mejora y da ranuras para llevar más activos. Sus keystones premian llevar el escuadrón lleno.',
+    fortuna: 'Rama de la economía y las cajas: precio de venta, coste de la tienda, ranuras de almacén, suerte y botín de cajas (salto, eco y premio gordo), núcleos por reinicio y tiempo de tarjeta AFK. También abre la compra de cajas altas con las licencias.',
+    forja: 'Rama de la fusión: probabilidad de acierto en todos los tramos, más cristales de consuelo cuando la tirada falla y la firma de Obras Maestras al fundir dos potenciales máximos. No toca el click ni el pasivo: solo que la forja salga mejor.'
+  };
+
+  const fichaNodo = (n: typeof TREE_NODES[number]): string => {
+    const reqs = (n.requires ?? []).map(id => (TREE_NODES as any[]).find(x => x.id === id)?.name ?? id);
+    return `
         <div class="py-2 border-b border-[var(--border-color)] last:border-0" id="${anclaNodo(n.id)}">
           <div class="flex items-center justify-between gap-2">
             <span class="text-[11px] font-mono font-bold text-[var(--text-main)] flex items-center gap-1.5 min-w-0">
-              <span class="${catColor} flex-shrink-0 [&>span>svg]:w-4 [&>span>svg]:h-4">${icSafe(n.icon)}</span>
+              <span class="accent-text flex-shrink-0 [&>span>svg]:w-4 [&>span>svg]:h-4">${icSafe(n.icon)}</span>
               <span class="truncate">${n.name}</span>
             </span>
-            <span class="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">${cat?.label ?? n.category} · Máx ${n.maxLevel} · ${formatNumber(nodeCost(n as any, 0))} ◆ base</span>
+            <span class="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">Tier ${n.tier} · Máx ${n.maxLevel} · ${formatNumber(nodeCost(n as any, 0))} ◆ base</span>
           </div>
           <p class="text-[11px] font-mono text-[var(--text-muted)] mt-0.5">${n.description}</p>
           <p class="text-[11px] font-mono text-[var(--text-muted)] mt-0.5 italic">“${n.lore}”</p>
           ${reqs.length > 0 ? `<p class="text-[10px] font-mono text-[var(--text-muted)] mt-0.5 opacity-75">Requiere: ${reqs.join(', ')}</p>` : ''}
         </div>`;
-    }).join('')}
-  `).join('');
+  };
+
+  const bloquesRama = RAMAS.map(rama => {
+    const meta = TREE_CATEGORY_META[rama as string];
+    const nodos = TREE_NODES.filter(n => n.category === rama);
+    const porTier: Record<number, typeof nodos> = {};
+    for (const n of nodos) (porTier[n.tier] ||= []).push(n);
+    const tiers = Object.keys(porTier).map(Number).sort((a, b) => a - b);
+    return bloqueWiki(meta?.label ?? rama, meta?.icon ?? 'tree', `
+      <p class="wiki-p">${ENFOQUE_RAMA[rama as string] ?? ''}</p>
+      <p class="wiki-p">${nodos.length} nodos en esta rama. Cada fila se abre por puntos en la rama —niveles comprados en ella—: ${tiers.map(t => `T${t} pide ${UMBRAL_PUNTOS_RAMA[t] ?? 0}`).join(' · ')}.</p>
+      ${tiers.map(tier => `
+        <h4 class="wiki-sub">Tier ${tier}</h4>
+        <div class="wiki-box">${(porTier[tier] ?? []).map(fichaNodo).join('')}</div>
+      `).join('')}
+    `);
+  }).join('');
 
   return `
     ${bloqueWiki('El árbol', 'tree', `
@@ -556,8 +586,9 @@ function seccionPasivas(): string {
       Cada rama se abre por puntos: compra niveles en ella para bajar de fila.
       Los efectos se suman a todo lo demás —click, pasivo,
       tienda, forja, cajas y almacén—.</p>
-      ${columnas}
+      <p class="wiki-p">Las ramas son las mismas pestañas del juego: ${RAMAS.map(r => TREE_CATEGORY_META[r as string]?.label ?? r).join(' · ')}.</p>
     `, ANCLA.pasivasArbol)}
+    ${bloquesRama}
   `;
 }
 
@@ -582,9 +613,84 @@ function cuerpoDeSeccion(): string {
     case 'items': return seccionItems();
     case 'logros': return seccionLogros();
     case 'pasivas': return seccionPasivas();
+    case 'herramientas': return seccionHerramientas();
     case 'versiones': return seccionVersiones();
     case 'mecanicas':
     default: return seccionMecanicas();
+  }
+}
+
+// --------------------------------------------------------------------------
+//  Herramientas (F98): los simuladores viven en `wikiTools.ts` y aquí solo
+//  se montan en sus zonas. Cada toque repinta SU zona y ninguna más: volver
+//  arriba en cada + sería decidir y perder el sitio (precedente A5).
+// --------------------------------------------------------------------------
+
+function seccionHerramientas(): string {
+  return `
+    ${bloqueWiki('Simulador de árbol', 'tree', `
+      <p class="wiki-p">Arma una build con núcleos de mentira: toca + en los nodos
+      y mira abajo lo que otorga y lo que cuesta. Empieza de cero y se reinicia
+      cuantas veces quieras. No toca tu partida ni tus núcleos de verdad.</p>
+      <div data-herr-zona="arbol">${arbolSimHTML()}${resumenBuildHTML()}</div>
+    `, ANCLA.herramientasArbol)}
+    ${bloqueWiki('Simulador de base', 'star', `
+      <p class="wiki-p">Elige lado, tier, base, potencial, nivel, rareza y afijos, y
+      mira el daño final. Es una combinación ilustrativa, sin forja: aquí eliges
+      todo y el juego lo sortea.</p>
+      <div data-herr-zona="base">${baseSimHTML()}</div>
+    `, ANCLA.herramientasBase)}
+  `;
+}
+
+/**
+ * Repinta una zona de herramientas sin mover el scroll ni el foco de la
+ * sección. La zona que no se toca ni se mira: por eso el + de un nodo no
+ * devuelve arriba ni cierra nada.
+ */
+function repintaHerr(zona: 'arbol' | 'base'): void {
+  if (!vista.mount) return;
+  const el = vista.mount.querySelector(`[data-herr-zona="${zona}"]`);
+  if (!el) return;
+  el.innerHTML = zona === 'arbol' ? `${arbolSimHTML()}${resumenBuildHTML()}` : baseSimHTML();
+}
+
+/** Un <select> de la herramienta cambia un campo de la selección de base. */
+function cambiaSelBase(clave: string | null, valor: string): void {
+  if (!clave) return;
+  const sel = simHerr.base;
+  if (clave === 'lado') {
+    sel.lado = valor === 'com' ? 'com' : 'rec';
+    sel.baseId = baseNeutra(sel.tier, sel.lado);
+  } else if (clave === 'tier') {
+    const t = Math.min(10, Math.max(1, Math.floor(Number(valor) || 1)));
+    sel.tier = t;
+    sel.baseId = baseNeutra(t, sel.lado);
+  } else if (clave === 'base') {
+    sel.baseId = valor || null;
+  } else if (clave === 'potencial') {
+    sel.potencial = Math.min(5, Math.max(1, Math.round(Number(valor) || 3)));
+  } else if (clave === 'rareza') {
+    if (['Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'].includes(valor)) sel.rareza = valor;
+  } else if (clave === 'tipo') {
+    sel.tipo = valor === 'passive' ? 'passive' : valor === 'multiplier' ? 'multiplier' : 'click';
+  } else {
+    return;
+  }
+  repintaHerr('base');
+}
+
+/** Un número de la herramienta: presupuesto, producción o nivel. */
+function cambiaNumHerr(clave: string | null, valor: string): void {
+  if (!clave) return;
+  const n = Math.max(0, Math.floor(Number(valor) || 0));
+  const vacio = valor.trim() === '';
+  if (clave === 'presupuesto' || clave === 'produccion') {
+    simHerr[clave] = vacio ? null : n;
+    repintaHerr('arbol');
+  } else if (clave === 'nivel') {
+    simHerr.base.nivel = vacio ? 0 : n;
+    repintaHerr('base');
   }
 }
 
@@ -786,8 +892,10 @@ export function renderWikiStandalone(container: HTMLElement) {
   vista.mount = container.querySelector('[data-wiki-mount]') as HTMLElement;
   vista.campo = container.querySelector('[data-wiki-q]') as HTMLInputElement;
 
-  // Un solo delegado en el contenedor: pestañas, enlaces y resultados se
-  // recrean en cada pintado. El campo de búsqueda sobrevive (ver `vista`).
+  // Un solo delegado en el contenedor: pestañas, enlaces, resultados y
+  // herramientas se recrean en cada pintado. El campo de búsqueda sobrevive
+  // (ver `vista`). Las herramientas repintan su zona y no la página: volver
+  // arriba en cada toque sería perder el sitio.
   container.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('[data-wiki-limpiar]')) {
       e.preventDefault();
@@ -797,6 +905,35 @@ export function renderWikiStandalone(container: HTMLElement) {
         vista.campo.focus();
       }
       pintaWiki();
+      return;
+    }
+    const herr = (e.target as HTMLElement).closest('[data-herr]') as HTMLElement | null;
+    if (herr) {
+      e.preventDefault();
+      const acc = herr.getAttribute('data-herr');
+      if (acc === 'rama') {
+        simHerr.rama = herr.getAttribute('data-rama') || simHerr.rama;
+        repintaHerr('arbol');
+      } else if (acc === 'nodo-mas') {
+        const id = herr.getAttribute('data-nodo') ?? '';
+        const r = compraSimulada(simHerr.niveles, id, simHerr.presupuesto);
+        if (r.ok) simHerr.niveles = r.niveles;
+        repintaHerr('arbol');
+      } else if (acc === 'nodo-menos') {
+        const id = herr.getAttribute('data-nodo') ?? '';
+        simHerr.niveles = quitaNivelSimulada(simHerr.niveles, id);
+        repintaHerr('arbol');
+      } else if (acc === 'arbol-reset') {
+        simHerr.niveles = {};
+        repintaHerr('arbol');
+      } else if (acc === 'afijo') {
+        const id = herr.getAttribute('data-afijo') ?? '';
+        const puestos = simHerr.base.afijos;
+        simHerr.base.afijos = puestos.includes(id)
+          ? puestos.filter(x => x !== id)
+          : [...puestos, id].slice(0, AFIX_MAX);
+        repintaHerr('base');
+      }
       return;
     }
     const salto = (e.target as HTMLElement).closest('[data-wiki-ir]') as HTMLElement | null;
@@ -819,6 +956,22 @@ export function renderWikiStandalone(container: HTMLElement) {
     if (!campo) return;
     ui.q = campo.value;
     pintaWiki();
+  });
+
+  // Los <select> van en `change`, nunca en `click`: un click en un select es
+  // "han tocado el control", no "han elegido algo" (precedente A5: redibujar
+  // ahí cerraba el desplegable antes de abrirse). Los números también van en
+  // `change` y no en `input`: repintar en cada tecla destruiría el campo bajo
+  // los dedos y robaría el foco (precedente B15).
+  container.addEventListener('change', (e) => {
+    const sel = (e.target as HTMLElement).closest('[data-herr-sel]') as HTMLSelectElement | null;
+    if (sel) {
+      e.preventDefault();
+      cambiaSelBase(sel.getAttribute('data-herr-sel'), sel.value);
+      return;
+    }
+    const num = (e.target as HTMLElement).closest('[data-herr-num]') as HTMLInputElement | null;
+    if (num) cambiaNumHerr(num.getAttribute('data-herr-num'), num.value);
   });
 
   // Enter salta al primer resultado: es el "moverse automáticamente".

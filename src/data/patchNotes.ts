@@ -57,6 +57,26 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.34',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Pasivas de la Wiki por ramas',
+    lineas: [
+      'La sección de Pasivas de la Wiki se ordena por ramas, como las pestañas del juego, con lo que enfoca cada una.',
+      'Cada rama lista todos sus nodos por fila, con su coste en núcleos y sus requisitos.',
+      'Las filas se abren por puntos en su rama, igual que en la pantalla de Ascensión.'
+    ]
+  },
+  {
+    version: '1.15.33',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Herramientas en la Wiki: dos simuladores',
+    lineas: [
+      'La Wiki tiene una sección nueva de Herramientas, con dos simuladores para probar sin gastar nada.',
+      'El simulador de árbol deja armar una build con núcleos de mentira y ver lo que otorga, lo que cuesta y lo que habría que producir para pagarla.',
+      'El simulador de base enseña cómo quedaría cualquier base con el potencial, el nivel y los afijos que elijas.'
+    ]
+  },
+  {
     version: '1.15.32',
     fecha: '10 de octubre de 2026',
     titulo: 'Cinco logros nuevos del árbol',

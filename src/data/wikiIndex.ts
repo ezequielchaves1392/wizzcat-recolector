@@ -29,10 +29,10 @@ import { LOGROS_DIFICILES } from './achievements';
 import { TREE_NODES } from './tree';
 import { NOTAS } from './patchNotes';
 
-/** Las siete secciones, en el mismo orden en que la Wiki las enseña. */
+/** Las ocho secciones, en el mismo orden en que la Wiki las enseña. */
 export type SeccionWiki =
   | 'mecanicas' | 'cajas' | 'bases' | 'items'
-  | 'logros' | 'pasivas' | 'versiones';
+  | 'logros' | 'pasivas' | 'herramientas' | 'versiones';
 
 /** Una entrada buscable: a qué sección lleva y a qué ancla dentro de ella. */
 export interface EntradaWiki {
@@ -87,6 +87,8 @@ export const ANCLA = {
   itemsAfijos: 'items-afijos',
   logrosQueDan: 'logros-que-dan',
   pasivasArbol: 'pasivas-arbol',
+  herramientasArbol: 'herramientas-arbol',
+  herramientasBase: 'herramientas-base',
   versionesHistorial: 'versiones-historial'
 } as const;
 
@@ -266,6 +268,19 @@ function pasivas(): EntradaWiki[] {
   return [intro, ...nodos];
 }
 
+function herramientas(): EntradaWiki[] {
+  return [
+    {
+      seccion: 'herramientas', ancla: ANCLA.herramientasArbol, titulo: 'Simulador de árbol',
+      texto: 'simulador arbol pasiva pasivas nodo nodos build núcleos gastar resumen reinicio ascension'
+    },
+    {
+      seccion: 'herramientas', ancla: ANCLA.herramientasBase, titulo: 'Simulador de base',
+      texto: 'simulador base dano poder potencial nivel afijo afijos tier caza comparar'
+    }
+  ];
+}
+
 function versiones(): EntradaWiki[] {
   const intro: EntradaWiki = {
     seccion: 'versiones', ancla: ANCLA.versionesHistorial, titulo: 'Historial del juego',
@@ -282,7 +297,7 @@ function versiones(): EntradaWiki[] {
 
 /** El índice entero, en el orden en que la Wiki lo enseña. */
 export function construirIndiceWiki(): EntradaWiki[] {
-  return [...mecanicas(), ...cajas(), ...bases(), ...items(), ...logros(), ...pasivas(), ...versiones()];
+  return [...mecanicas(), ...cajas(), ...bases(), ...items(), ...logros(), ...pasivas(), ...herramientas(), ...versiones()];
 }
 
 export const INDICE_WIKI: EntradaWiki[] = construirIndiceWiki();
