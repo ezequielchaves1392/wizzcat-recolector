@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.37',
+    fecha: '10 de octubre de 2026',
+    titulo: 'La barra de Ascensión dice lo que falta',
+    lineas: [
+      'La barra de la Ascensión ya no se queda al máximo: siempre dice cuánto falta para el siguiente núcleo.',
+      'Con núcleos por ganar, también dice cuántos ganarías produciendo un poco más.',
+      'Así siempre sabes si te conviene seguir produciendo o reciclar ya.'
+    ]
+  },
+  {
     version: '1.15.36',
     fecha: '10 de octubre de 2026',
     titulo: 'Segundo servidor para jugadores nuevos',

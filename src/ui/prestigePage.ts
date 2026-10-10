@@ -169,24 +169,31 @@ export function renderPrestigePage(
           <span class="text-[11px] font-mono text-[var(--text-muted)]">Producido total</span>
           <span class="font-['Orbitron'] font-bold text-sm accent-text tabular">${formatNumber(state.totalNanitesProduced)}</span>
         </div>
-      ` : `
+      ` : ''}
+      ${(() => {
+        // B42: lo que falta y la barra se enseñan SIEMPRE, también pudiendo
+        // reciclar. Antes este bloque solo salía sin núcleos por ganar, y con
+        // +N la pantalla no decía cuánto falta para +N+1: el progreso quedaba
+        // clavado al máximo. La cuenta es la que cobra el botón (R3).
+        const base = {
+          totalNanitesProduced: state.totalNanitesProduced,
+          totalCores: state.totalCores,
+          coreGain: bonus.coreGain
+        };
+        const falta = nanitesToNextCore(base);
+        const porc = Math.round(coreProgress(base) * 100);
+        return `
         <div class="mb-2.5">
           <div class="flex items-center justify-between gap-2 mb-1">
             <span class="text-[10px] font-mono text-[var(--text-muted)]">
-              Produce ${formatNumber(nanitesToNextCore({
-                totalNanitesProduced: state.totalNanitesProduced,
-                totalCores: state.totalCores,
-                coreGain: bonus.coreGain
-              }))} más para el ${state.totalCores > 0 ? 'siguiente' : 'primer'} núcleo
+              ${pending > 0
+                ? `Produce ${formatNumber(falta)} más para ganar ${formatNumber(pending + 1)} núcleos`
+                : `Produce ${formatNumber(falta)} más para el ${state.totalCores > 0 ? 'siguiente' : 'primer'} núcleo`}
             </span>
           </div>
-          <div class="meter is-tall"><span style="width:${Math.round(coreProgress({
-            totalNanitesProduced: state.totalNanitesProduced,
-            totalCores: state.totalCores,
-            coreGain: bonus.coreGain
-          }) * 100)}%"></span></div>
-        </div>
-      `}
+          <div class="meter is-tall"><span style="width:${porc}%"></span></div>
+        </div>`;
+      })()}
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-[10px]">
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">

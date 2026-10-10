@@ -2019,14 +2019,54 @@ const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoD
     const prog2 = coreProgress(st(2_000_000));
     check('B12: la barra sube al producir (antes bajaba de 1 a 0,67)',
       prog2 > prog1, `1M=${prog1} 2M=${prog2}`);
-    check('B12: y llega a 1 cuando ya se puede reciclar',
-      coreProgress(st(1_000_000 + falta)) === 1,
-      String(coreProgress(st(1_000_000 + falta))));
+    // B42 reemplaza la aserción que había aquí ("llega a 1 cuando ya se puede
+    // reciclar"): ese 1 clavado ERA el bug. El bloque B42 de abajo fija el
+    // contrato nuevo —progreso dentro del peldaño, siempre por debajo del
+    // tope pudiendo reciclar—.
     // La primera vuelta no cambia: sin histórico el umbral sigue siendo 1 M.
     check('B12: en la primera vuelta el umbral sigue siendo el minimo de 1 M',
       nanitesForCores(1, 0) === 1_000_000 && nanitesToNextCore({
         totalNanitesProduced: 400_000, totalCores: 0, coreGain: 0
       }) === 600_000, `forCores(1)=${nanitesForCores(1, 0)}`);
+  }
+  {
+    // B42 · CON NÚCLEOS POR GANAR LA BARRA SE CLAVABA AL 100 %.
+    //
+    // `coreProgress` devolvía 1 en cuanto `nextCores > 0`, y `nanitesToNextCore`
+    // devolvía 0 en el mismo caso: con +N por ganar no había forma de saber
+    // cuánto falta para +N+1. El progreso se mide dentro del peldaño actual
+    // —de `nanitesForCores(T)` a `nanitesForCores(T+1)`, con T lo justificado
+    // por lo producido— y lo que falta sale de esa misma cuenta, que es la
+    // que cobra el botón.
+    const g = await boot(baseSave([collector('r1')], {
+      totalNanitesProduced: 1_000_000,
+      cores: 0, totalCores: 0, resets: 0
+    }));
+    g.prestige();
+    const hist = s(g).totalCores;
+    const st = (p: number) => ({
+      totalNanitesProduced: p, totalCores: hist, coreGain: s(g).bonus.coreGain
+    });
+    const falta = nanitesToNextCore(st(1_000_000));
+    const pRec = 1_000_000 + falta;
+    check('B42: pudiendo reciclar, lo que falta es para el siguiente (> 0)',
+      nanitesToNextCore(st(pRec)) > 0, `falta=${nanitesToNextCore(st(pRec))}`);
+    const falta2 = nanitesToNextCore(st(pRec));
+    check('B42: y produciendo justo eso aparece un núcleo más',
+      nextCores(st(pRec + falta2)) >= 2,
+      `pending=${nextCores(st(pRec + falta2))}`);
+    check('B42: y con uno menos sigue en los mismos (la cifra es exacta)',
+      nextCores(st(pRec + falta2 - 1)) === 1,
+      `pending=${nextCores(st(pRec + falta2 - 1))}`);
+    check('B42: la barra ya no se clava al 100 % pudiendo reciclar',
+      coreProgress(st(pRec)) < 1 && coreProgress(st(pRec)) >= 0,
+      `prog=${coreProgress(st(pRec))}`);
+    check('B42: la barra sube dentro del peldaño al producir',
+      coreProgress(st(pRec + 1)) > coreProgress(st(pRec)),
+      `${coreProgress(st(pRec))} -> ${coreProgress(st(pRec + 1))}`);
+    check('B42: en la primera vuelta la barra sigue midiendo esfuerzo (0,4 con 400 K)',
+      coreProgress({ totalNanitesProduced: 400_000, totalCores: 0, coreGain: 0 }) === 0.4,
+      String(coreProgress({ totalNanitesProduced: 400_000, totalCores: 0, coreGain: 0 })));
   }
 
   // ==========================================================================

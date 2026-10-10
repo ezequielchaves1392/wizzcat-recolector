@@ -103,35 +103,51 @@ export function nanitesForCores(nucleos: number, coreGainBonus = 0): number {
   return p;
 }
 
-/** Cuánto falta producir para el siguiente núcleo (0 si ya se puede reciclar). */
+/**
+ * Cuánto falta producir para justificar UN núcleo más de los ya justificados.
+ *
+ * B42: antes devolvía 0 en cuanto se podía reciclar, y la pantalla se quedaba
+ * sin nada que pedir —con +N por ganar no había forma de saber cuánto falta
+ * para +N+1—. Ahora siempre responde lo que falta para el siguiente peldaño:
+ * `nanitesForCores(T+1) - producido`, con T lo justificado por lo producido.
+ * Es la misma cuenta que cobra el botón (`pendingCores`), así que lo que se
+ * enseña es lo que se cobra (R3). Por construcción siempre es > 0: si lo
+ * producido alcanzara el umbral, T ya sería uno más.
+ */
 export function nanitesToNextCore(state: {
   totalNanitesProduced: number;
   totalCores: number;
   coreGain: number;
 }): number {
-  if (nextCores(state) > 0) return 0;
-  const umbral = nanitesForCores(state.totalCores + 1, state.coreGain);
+  const justificados = pendingCores(state.totalNanitesProduced, state.coreGain);
+  const umbral = nanitesForCores(justificados + 1, state.coreGain);
   return Math.max(0, umbral - state.totalNanitesProduced);
 }
 
 /**
- * Progreso 0..1 hacia el siguiente núcleo, para la barra de la UI.
+ * Progreso 0..1 dentro del peldaño actual, para la barra de la UI.
  *
- * Se mide en esfuerzo (producido / umbral del siguiente), no en
+ * B42: antes devolvía 1 en cuanto `nextCores > 0`, y la barra se clavaba al
+ * 100 % justo cuando más interesa —con núcleos por ganar—. Ahora mide de
+ * `nanitesForCores(T)` a `nanitesForCores(T+1)`, con T lo justificado: la
+ * barra sube al producir en cada peldaño y nunca se queda quieta en el tope.
+ *
+ * Se mide en esfuerzo (producido entre umbrales), no en
  * `totalCores / total`: esa fracción BAJA al producir —con 8 de histórico da 1
  * con 1 M y 0,67 con 2 M—, así que la barra retrocedía cuanto más jugabas.
- * La producción se reinicia a 0 en cada Ascenso, así que medir desde 0 es lo
- * que el jugador siente: lo producido entre lo necesario.
+ * La producción se reinicia a 0 en cada Ascenso, así que medir dentro del
+ * peldaño es lo que el jugador siente: lo producido entre lo necesario.
  */
 export function coreProgress(state: {
   totalNanitesProduced: number;
   totalCores: number;
   coreGain: number;
 }): number {
-  if (nextCores(state) > 0) return 1;
-  const umbral = nanitesForCores(state.totalCores + 1, state.coreGain);
-  if (umbral <= 0) return 0;
-  return Math.min(1, Math.max(0, state.totalNanitesProduced / umbral));
+  const justificados = pendingCores(state.totalNanitesProduced, state.coreGain);
+  const suelo = nanitesForCores(justificados, state.coreGain);
+  const techo = nanitesForCores(justificados + 1, state.coreGain);
+  if (techo <= suelo) return 0;
+  return Math.min(1, Math.max(0, (state.totalNanitesProduced - suelo) / (techo - suelo)));
 }
 
 /**

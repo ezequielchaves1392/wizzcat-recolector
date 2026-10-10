@@ -2021,11 +2021,18 @@ más alto": los estás haciendo tú.*
       no limpieza.
       Hecho en v1.15.22 con el Lote 0 de F97: fuera del catálogo, fuera del
       mock y fuera de los saves viejos; no queda ningún `aff_luck` en código.
-- [ ] **B42 · La barra de próximo prestigio queda al máximo.**
+- [x] **B42 · La barra de próximo prestigio queda al máximo.** Hecho en v1.15.37.
       > "La barra de progreso para proximo prestigio debe mostrar cuanto necesito para el que sigue ... actualmente queda al maximo"
-      Un progreso clavado al 100 % es un número que miente (criterio 1): tiene
-      que mostrar lo que falta para el siguiente, y salir del mismo
-      `pendingCores()` que cobra el botón.
+      **Causa raíz: el progreso se medía contra el botón en vez de contra el siguiente núcleo.**
+      `coreProgress` devolvía 1 en cuanto `nextCores > 0` y `nanitesToNextCore`
+      devolvía 0 en el mismo caso, así que con +N por ganar no había respuesta
+      para +N+1: la barra se clavaba al tope. Ahora los dos miden dentro del
+      peldaño actual —de `nanitesForCores(T)` a `nanitesForCores(T+1)`, con T lo
+      justificado por lo producido—, que es la misma cuenta que cobra el botón,
+      y la página enseña barra y texto siempre: sin núcleos por ganar dice lo
+      que falta para el primero/siguiente, y con +N dice lo que falta para
+      ganar N+1. `stateCheck` (+5, y la aserción vieja que fijaba el 1 clavado
+      se va con el bug).
 
 **Features (después de los bugs que elijas):**
 
