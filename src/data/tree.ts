@@ -242,11 +242,11 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { craftLuck: 0.025 }, x: 3, y: 3
   },
   {
-    id: 'core_yield', name: 'Rendimiento del Núcleo', description: '+20% de núcleos por reinicio.',
+    id: 'core_yield', name: 'Rendimiento del Núcleo', description: '+10% de núcleos por reinicio, sobre lo producido después de comprarlo.',
     lore: 'Reciclar no es tirar: es traducir. Con el mismo monton sale mas si sabes lo que haces.',
     icon: 'sparkle', category: 'fortuna', tier: 3, requires: ['bulk_buy'],
-    baseCost: 40, costGrowth: 1.8, maxLevel: 5,
-    bonus: { coreGain: 0.20 }, x: 3, y: 4
+    baseCost: 40, costGrowth: 1.8, maxLevel: 3,
+    bonus: { coreGain: 0.10 }, x: 3, y: 4
   },
 
   // ---------------------------------------------------------------- TIER 4

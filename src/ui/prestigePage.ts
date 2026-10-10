@@ -82,7 +82,8 @@ export function renderPrestigePage(
   const pending = nextCores({
     totalNanitesProduced: state.totalNanitesProduced,
     totalCores: state.totalCores,
-    coreGain: bonus.coreGain
+    coreGain: bonus.coreGain,
+    baseAlComprar: state.baseAlComprar
   });
   const completion = treeCompletion(state.nodeLevels || {});
   const canRecycle = pending > 0;
@@ -141,8 +142,9 @@ export function renderPrestigePage(
       el almacén.
 
       Y lo que se queda, "Al reiniciar", **no es el saldo**: es lo que vas a conseguir,
-      que es otra pregunta. Y las otras dos —reinicios y porcentaje del árbol— no son
-      recursos.
+      que es otra pregunta. Por eso la tira NO repite la cartera (B14): la cabecera ya
+      la enseña en su franja y dos cifras del mismo saldo se desincronizan. El
+      histórico sí sale, abajo en su sector, porque no está en ningún otro sitio.
     -->
     ${statStrip([
       { label: 'Al reiniciar', value: `+${formatNumber(pending)}`, tone: 'text-emerald-400' },
@@ -178,7 +180,8 @@ export function renderPrestigePage(
         const base = {
           totalNanitesProduced: state.totalNanitesProduced,
           totalCores: state.totalCores,
-          coreGain: bonus.coreGain
+          coreGain: bonus.coreGain,
+          baseAlComprar: state.baseAlComprar
         };
         const falta = nanitesToNextCore(base);
         const porc = Math.round(coreProgress(base) * 100);
@@ -212,6 +215,18 @@ export function renderPrestigePage(
             <li>Los recolectores que ya forjaste</li>
           </ul>
         </div>
+      </div>
+
+      <!--
+        HISTÓRICO DE NÚCLEOS (F70). Arriba va lo actual —la cartera, que es lo
+        que se gasta— y aquí lo ganado en total: son dos preguntas distintas y
+        la segunda es la que sube con cada Ascensión.
+      -->
+      <div class="rounded-xl border border-[var(--border-color)] p-2.5 mb-3">
+        <div class="label-caps mb-1">Histórico</div>
+        <p class="text-[10px] font-mono text-[var(--text-muted)] leading-snug">
+          ${formatNumber(state.totalCores)} núcleos ganados en ${state.resets} reinicio${state.resets === 1 ? '' : 's'}.
+        </p>
       </div>
 
       <button id="recycle-btn" ${canRecycle ? '' : 'disabled'}
@@ -448,7 +463,8 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
     const gained = nextCores({
       totalNanitesProduced: state.totalNanitesProduced,
       totalCores: state.totalCores,
-      coreGain: state.bonus.coreGain
+      coreGain: state.bonus.coreGain,
+      baseAlComprar: state.baseAlComprar
     });
     if (gained <= 0) return;
     showConfirmModal(

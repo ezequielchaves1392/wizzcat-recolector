@@ -27,7 +27,7 @@ import { chanceDeSintonizacion } from '../src/data/items';
 import { costeDeCaja , techoDeExpansor } from '../src/data/store';
 import { formatNumber } from '../src/utils/format';
 import { nextCores, pendingCores, coreProgress, nanitesForCores, nanitesToNextCore } from '../src/data/prestige';
-import { coresGastadosEnArbol } from '../src/data/tree';
+import { coresGastadosEnArbol, TREE_BY_ID } from '../src/data/tree';
 import { BASE_COLLECTOR_MAX_LEVEL, collectorMaxLevel, danioDeRango, potencialDe, baseDeTier, AFIX_MIN_POR_RARIDAD, AFFIXES, rollPotentialFrom, poderDeCompanero, techoDeNivel } from '../src/data/crafting';
 import { basePorId } from '../src/data/bases';
 import { rangoDePoder, rarezaDeTier, TIER_SYSTEM } from '../src/data/tiers';
@@ -2017,8 +2017,12 @@ const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoD
       `pending=${g2.getPrestigeInfo().pending} totalCores=${g2.getPrestigeInfo().totalCores}`);
     const prog1 = coreProgress(st(1_000_000));
     const prog2 = coreProgress(st(2_000_000));
-    check('B12: la barra sube al producir (antes bajaba de 1 a 0,67)',
-      prog2 > prog1, `1M=${prog1} 2M=${prog2}`);
+    // F70: el progreso se mide dentro del peldaño actual y cada peldaño tiene
+    // su propia escala —comparar 1 M contra 2 M no dice nada—. Lo que vale en
+    // cada punto es estar entre 0 y 1.
+    check('B12: la barra mide esfuerzo en la segunda vuelta (entre 0 y 1)',
+      prog1 >= 0 && prog1 < 1 && prog2 >= 0 && prog2 < 1,
+      `1M=${prog1} 2M=${prog2}`);
     // B42 reemplaza la aserción que había aquí ("llega a 1 cuando ya se puede
     // reciclar"): ese 1 clavado ERA el bug. El bloque B42 de abajo fija el
     // contrato nuevo —progreso dentro del peldaño, siempre por debajo del
@@ -2067,6 +2071,86 @@ const gB = await boot(baseSave([], { nanites: 500_000, warehouseCapacity: techoD
     check('B42: en la primera vuelta la barra sigue midiendo esfuerzo (0,4 con 400 K)',
       coreProgress({ totalNanitesProduced: 400_000, totalCores: 0, coreGain: 0 }) === 0.4,
       String(coreProgress({ totalNanitesProduced: 400_000, totalCores: 0, coreGain: 0 })));
+  }
+  {
+    // F70 · EL BONUS DE NÚCLEOS SOLO PREMIA LO POSTERIOR A LA COMPRA.
+    //
+    // Antes la tasa multiplicaba todo lo justificado, incluida la parte que el
+    // histórico ya había pagado: comprar a mitad de vuelta regalaba núcleos
+    // sin producir. Ahora se anota la foto (lo justificado al comprar) y el
+    // extra sale solo de lo posterior. La tasa baja de 20 % a 10 % con tope
+    // en 3 niveles: el 100 % sobre todo era muchísimo.
+    check('F70: el catálogo da 10 % por nivel con tope en 3',
+      (TREE_BY_ID as any).core_yield?.bonus?.coreGain === 0.10 &&
+      (TREE_BY_ID as any).core_yield?.maxLevel === 3,
+      JSON.stringify((TREE_BY_ID as any).core_yield?.bonus));
+    const g = await boot(baseSave([collector('r1')], {
+      totalNanitesProduced: 1_000_000,
+      cores: 0, totalCores: 0, resets: 0
+    }));
+    g.prestige();
+    s(g).totalNanitesProduced = 5_000_000;
+    s(g).cores = 10000;
+    const antes = g.getPrestigeInfo().pending;
+    const r1 = g.buyNode('scrapyard');
+    const r2 = g.buyNode('scrapyard');
+    const r3 = g.buyNode('scrapyard');
+    const r4 = g.buyNode('refinery');
+    const r5 = g.buyNode('refinery');
+    const r6 = g.buyNode('bulk_buy');
+    const r7 = g.buyNode('core_yield');
+    check('F70: la cadena de requisitos se compra (6 puntos en Fortuna)',
+      [r1, r2, r3, r4, r5, r6, r7].every(r => r.success),
+      [r1, r2, r3, r4, r5, r6, r7].map(r => r.success).join(','));
+    check('F70: la foto queda en lo justificado al comprar (base 21)',
+      (s(g) as any).baseAlComprar === 21, `foto=${(s(g) as any).baseAlComprar}`);
+    check('F70: comprar NO mueve el pendiente (el exploit está muerto)',
+      g.getPrestigeInfo().pending === antes, `antes=${antes} ahora=${g.getPrestigeInfo().pending}`);
+    s(g).totalNanitesProduced = 10_000_000;
+    // base(10 M) = 31, marginal 23, bonificable 31 − 21 = 10, extra 1.
+    check('F70: lo producido después SÍ cobra el bonus (23 + 1)',
+      g.getPrestigeInfo().pending === 24, `pending=${g.getPrestigeInfo().pending}`);
+    const r = g.prestige();
+    check('F70: el reciclaje suma la ganancia con bonus al histórico',
+      r.success && s(g).totalCores === 8 + 24 && s(g).cores === 10000 - 68 + 24,
+      `total=${s(g).totalCores} cartera=${s(g).cores}`);
+    check('F70: la foto se reinicia al histórico nuevo',
+      (s(g) as any).baseAlComprar === 32, `foto=${(s(g) as any).baseAlComprar}`);
+    const g2 = await reload();
+    check('F70: foto, histórico y cartera sobreviven a la recarga',
+      (s(g2) as any).baseAlComprar === 32 && s(g2).totalCores === 32 && s(g2).cores === 10000 - 68 + 24,
+      `foto=${(s(g2) as any).baseAlComprar} total=${s(g2).totalCores}`);
+    // Inversión exacta con bonus: bracketing en el peldaño con tasa.
+    const st2 = (p: number) => ({
+      totalNanitesProduced: p, totalCores: 8, coreGain: 0.10, baseAlComprar: 21
+    });
+    const cur = nextCores(st2(5_000_000));
+    const f = nanitesToNextCore(st2(5_000_000));
+    check('F70: con bonus, lo que falta es > 0 y producirlo suma uno',
+      f > 0 && nextCores(st2(5_000_000 + f)) >= cur + 1,
+      `falta=${f} cur=${cur} luego=${nextCores(st2(5_000_000 + f))}`);
+    check('F70: y con uno menos no se llega (bracketing exacto)',
+      nextCores(st2(5_000_000 + f - 1)) === cur,
+      `da=${nextCores(st2(5_000_000 + f - 1))} cur=${cur}`);
+    const pr = coreProgress(st2(5_000_000));
+    check('F70: con bonus la barra queda dentro del peldaño',
+      pr >= 0 && pr < 1, `prog=${pr}`);
+  }
+  {
+    // F70 · MIGRACIÓN: sin foto no hay regalo retroactivo.
+    const g = await boot(baseSave([collector('r1')], {
+      totalNanitesProduced: 5_000_000,
+      cores: 0, totalCores: 8, resets: 1,
+      nodeLevels: { core_yield: 1 }, unlockedNodes: ['core_yield']
+    }));
+    // base(5 M) = 21: la foto arranca en max(8, 21) y el bonus en cero.
+    check('F70: la foto de una partida vieja arranca sin regalo',
+      (s(g) as any).baseAlComprar === 21, `foto=${(s(g) as any).baseAlComprar}`);
+    check('F70: y el pendiente es solo el marginal, sin extra',
+      g.getPrestigeInfo().pending === 13, `pending=${g.getPrestigeInfo().pending}`);
+    const g2 = await reload();
+    check('F70: la foto sobrevive a la recarga',
+      (s(g2) as any).baseAlComprar === 21, `foto=${(s(g2) as any).baseAlComprar}`);
   }
 
   // ==========================================================================

@@ -857,16 +857,18 @@ programarlo, para que no viva solo en una conversación.*
       quedaba casi segura y la piedra dejó de ser una decisión. Ahora el botón de
       las necesarias enseña la probabilidad real cuando el 95 % ya no se alcanza.
       El plan de bajar a 7 queda escrito en el commit que lo superó.
-- [ ] **F70 · Cada Ascensión pide más, y los núcleos no compran núcleos.**
+- [x] **F70 · Cada Ascensión pide más, y los núcleos no compran núcleos.** Hecho en v1.15.39.
       > "Ver que cada reinicio o ascensión en base a los nucleos obtenidos me vaya pidiendo mas nanitas para el próximo reset, balancerlo lo mejor posible para evitar exploits."
-      Dos mitades: (a) el escalado por `totalCores` **ya existe** (cada reset
-      pide `nanitesForCores(totalCores+1)`, estrictamente más que el anterior)
-      y hay que fijarlo con banco; (b) **el exploit sí existe**: `core_yield`
-      (+20 %/nivel) se aplica a TODA la producción histórica, así que comprar
-      el nodo paga núcleos gratis sin producir. Al subir `coreGain`, lo
-      retroactivo se anula en una base aparte (la cartera no se toca y el
-      pendiente no se mueve: el bonus rige desde ahora). Sin campo nuevo no se
-      puede: `?? 0` y las partidas viejas conservan lo ya cobrado.
+      **El escalado ya existía y ahora está fijado con banco; el exploit se cerró
+      con foto y la tasa bajó de 20 % a 10 % con tope en 3.** La ganancia son dos
+      sumandos: lo nuevo de la vuelta más el bonus solo sobre lo justificado con
+      producción posterior a la compra (`baseAlComprar`, campo nuevo con default
+      que no regala nada). Comprar no mueve el pendiente; reciclar suma todo al
+      histórico. La barra y lo que falta se invierten por búsqueda exacta (ya no
+      hay fórmula cerrada con bonus por tramos). Display fundido con B37: arriba
+      la cartera, el botón dice lo que da la vuelta, y el histórico tiene su
+      sector en Ascensión. `stateCheck` (+14 con el contrato nuevo; la aserción
+      que comparaba dos peldaños se va porque cada uno tiene su escala).
 - [ ] **F71 · Tarjetas x1.5 (tienda) y x2 (cajas) para compañeros.** Decidido el
       7 de octubre: **x1.5 comprable, x2 solo de cajas, 30 segundos cada una.**
       > "Que existan cards igual al x2 y x3 de clicks pero que apliquen a los compañeros, ver algo balanceado. no se si un x2 x3 seria demasiado."
@@ -1370,16 +1372,17 @@ feature que falta):**
       hay un plan de pago, esto deja de ser un problema**; si no lo hay, el camino es
       agrupan latido y presencia en el mismo documento, que es el mismo truco que B30 y que
       **no se ha hecho porque toca el diseño del cerrojo**.
-- [ ] **B37 · En el menú no salen bien los núcleos al reiniciar.** *(Para después,
-      reportado el 9 de octubre con dos capturas.)*
+- [x] **B37 · En el menú no salen bien los núcleos al reiniciar.** Hecho en v1.15.39,
+      fundido con F70 (mismo botón, mismas líneas).
       > "en el menu principal no me salen correctamente los nucleos al reiniciar"
       *La evidencia: la pantalla de Ascensión dice "AL REINICIAR +1,166 K" y el botón
       "RECICLAR Y GANAR 1,166 K NÚCLEOS" (producido 10,769 B, 5 reinicios), pero el
       menú dice "Ascensión: 2 núcleos disponibles".*
-      **El mecanismo, sin reproducir todavía:** la píldora (`#prestige-hint`) enseña el
-      **saldo** (`state.cores`) cuando es mayor que cero, y solo si es cero enseña el
-      **pendiente**. Con 2 en cartera y 1,166 K por ganar, el pendiente queda oculto en
-      el menú. Falta reproducir y decidir si se enseñan los dos o el pendiente manda.
+      **Causa raíz confirmada: la píldora enseñaba la cartera.** (`#prestige-hint`)
+      mostraba el **saldo** cuando era mayor que cero y el **pendiente** quedaba
+      oculto. Ahora el botón dice siempre lo que la vuelta va a dar (el
+      pendiente), y sin nada por ganar dice lo que falta para el siguiente. La
+      cartera se ve donde se gasta y arriba va lo actual.
 - [ ] **B38 · El daño de la fila del ranking está mal.** *(Para después, reportado el
       9 de octubre con captura.)*
       > "ahi aparece el daño esta mal jaja"
@@ -1913,11 +1916,11 @@ secciones; el probador queda anotado y no se toca.*
       una de cada ~55 corridas sale la base 10 y da 7 en vez de 6. Reproducido en
       una corrida completa (140/141) y ausente en 8 sueltas. No se toca: el arreglo
       es fijar el dado en el test, no relajar la migración.
-- [ ] **F87 · Probador de builds.** Anotado y sin empezar, como pediste ("eso luego"):
-      elegir recolector/compañero con nivel, estrellas, afijos y base, más nodos del árbol
-      y logros, y que el daño y el pasivo los calcule el motor de verdad
-      (`getClickDamage` y el reparto del pasivo), no una copia. Si calcula por su cuenta,
-      es la segunda fuente que se queda vieja.
+- [x] **F87 · Probador de builds.** Cumplido vía F98 (hecho en v1.15.33): los
+      simuladores de la Wiki arman la build con las reglas reales, así que se
+      saca de la lista como pediste. Pedía elegir recolector/compañero con
+      nivel, estrellas, afijos y base, más nodos del árbol, con el daño y el
+      pasivo calculados por las reglas de verdad y no por una copia.
 - [x] **F95 · Buscador en la Wiki y enlaces entre conceptos.** Hecha en v1.15.21, con el
       documento entero enriquecido de paso (era lo pedido: no solo un sector).
       > "Meter un buscador en la wiki, y moverse automáticamente a conceptos por hipervinculos"
@@ -2002,6 +2005,26 @@ viva solo en una conversación.*
       El proyecto nuevo necesita Auth por correo, Firestore creado, reglas
       publicadas y su `admins/{uid}`; los datos no migran. Sin banco: es cableado
       de config y `verify/` sustituye Firebase por stubs.
+- [x] **F101 · Salida al otro servidor desde el cartel de mantenimiento.** Hecho en v1.15.38.
+      > "si entro a S1 y me sale ese cartel me permite volver al inicio a elegir jugar en S2"
+      > "si entro a S1 y me sale ese cartel me permite volver al inicio a elegir jugar en S2"
+      El cartel de carga (`renderErrorDeCarga`) y la pantalla de cuota en juego
+      (`renderCuotaAgotada`) ofrecen "Jugar en el Servidor 2/1" cuando
+      `VITE_URL_OTRO_SERVIDOR` trae la URL del otro despliegue; sin la variable no
+      sale nada (mismo opt-in explícito que F100). Es un enlace normal, sin JS: no
+      puede fallar ni acumular listeners. Y dice que en el otro se empieza de cero,
+      porque las cuentas no viajan (F100). Sin banco: es pintado, y `verify/` no
+      cubre render por diseño.
+      Ops pendiente (fuera del código): segundo proyecto Vercel desde el mismo repo
+      —S1 con `VITE_URL_OTRO_SERVIDOR` a la URL de S2 y al revés—, proyecto Firebase
+      S2 con Auth, Firestore creado, `rules:server2` y su `admins/{uid}`.
+      Comprobado: `npm run build` (tsc limpio) y `npm run verify` en verde sobre
+      el árbol combinado con F70/B37. Lógica afirmada con banco temporal (borrado):
+      con URL el cartel y la pantalla ofrecen el destino correcto (S1→2, S2→1) con
+      la URL y el aviso de cero; sin URL no sale nada y lo viejo queda intacto.
+      De paso: dos rojos transitorios de `stateCheck` en una pasada eran otro
+      agente guardando `prestige.ts`/`gameLoop.ts` a mitad del build, no el cambio
+      —en solitario 332/332 y en las repeticiones, cero.
 
 ### Lote K · ENCARGO DEL 9 DE OCTUBRE (ideas nocturnas del jugador)
 

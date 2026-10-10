@@ -63,6 +63,24 @@ const firebaseConfig = import.meta.env.VITE_FIREBASE_SERVIDOR === '2'
   ? CONFIG_SERVIDOR_2
   : CONFIG_SERVIDOR_1;
 
+/**
+ * F101 · QUIÉN SOY Y DÓNDE ESTÁ EL OTRO, Y POR QUÉ DOS CONSTANTES Y NO UNA FUNCIÓN.
+ *
+ * `SERVIDOR_ACTUAL` sale de la misma variable que elige la config, así que no hay
+ * dos sitios que puedan decir servidores distintos. `URL_OTRO_SERVIDOR` es la URL
+ * del otro despliegue (el otro Vercel, no Firebase): cada despliegue la pone
+ * apuntando al otro, y sin ella no hay botón.
+ *
+ * POR QUÉ OPT-IN COMO `VITE_EMULADOR`. Un build sin la variable es el juego de
+ * siempre, sin rastro del otro servidor: el cartel no promete una salida que no
+ * existe. Y la URL no es un secreto (es la dirección pública del otro despliegue),
+ * así que puede viajar en el bundle sin drama.
+ */
+export const SERVIDOR_ACTUAL: '1' | '2' = import.meta.env.VITE_FIREBASE_SERVIDOR === '2' ? '2' : '1';
+
+/** URL del otro despliegue, o '' si este build no conoce ninguno (F101). */
+export const URL_OTRO_SERVIDOR: string = import.meta.env.VITE_URL_OTRO_SERVIDOR ?? '';
+
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);

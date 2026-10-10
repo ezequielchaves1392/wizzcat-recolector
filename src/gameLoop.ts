@@ -17,7 +17,7 @@ import { SECRET_ACHIEVEMENTS } from './data/achievements';
 // valoración. Se re-exportan aquí para no romper los imports existentes.
 export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
-import { aggregateBonuses, canBuyNode, pendingCores, nextCores } from './data/prestige';
+import { aggregateBonuses, canBuyNode, pendingCores, nextCores, fotoInicial } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraAfijosDeCompaneros, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, efectoDeAfijosDeCompanero, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
@@ -647,6 +647,11 @@ export async function createGameLoop(
     // --- Prestige ---
     cores: 0, // Núcleos disponibles
     totalCores: 0, // Núcleos ganados historicamente
+    // F70 · La foto del bonus de núcleos: lo justificado cuando se compró
+    // Rendimiento del Núcleo. El bonus solo premia producción posterior, así
+    // que comprar no mueve el pendiente. Nace en 0 y la carga la deja donde
+    // no regala nada si el save no la trae.
+    baseAlComprar: 0,
     resets: 0, // Veces que se ha reciclado el progreso
     unlockedNodes: [] as string[], // Nodos comprados
     nodeLevels: {} as Record<string, number>, // Nivel por nodo
@@ -2151,6 +2156,17 @@ function sePuedeGuardar(): boolean {
       state.cores = data.cores ?? 0;
       state.totalCores = data.totalCores ?? 0;
       state.resets = data.resets ?? 0;
+      // F70 · La foto del bonus: si el save no la trae (partida anterior) o
+      // trae basura, `fotoInicial()` la deja donde no regala nada —la misma
+      // regla que `fotoEfectiva()`, en un solo sitio—. Va DESPUÉS de lo
+      // producido y del histórico, que es de lo que se calcula.
+      {
+        const foto = (data as any).baseAlComprar;
+        const n = (foto === undefined || foto === null) ? NaN : Math.floor(Number(foto));
+        state.baseAlComprar = (Number.isFinite(n) && n >= 0)
+          ? n
+          : fotoInicial(state.totalCores, state.totalNanitesProduced ?? 0);
+      }
       state.unlockedNodes = data.unlockedNodes ?? [];
       state.nodeLevels = data.nodeLevels ?? {};
       // F97 · DEVOLUCIÓN ÚNICA DEL ÁRBOL, Y POR QUÉ VA CON VERSIÓN.
@@ -2399,6 +2415,7 @@ function sePuedeGuardar(): boolean {
         unlockedAchievements: state.unlockedAchievements,
         cores: state.cores,
         totalCores: state.totalCores,
+        baseAlComprar: state.baseAlComprar,
         resets: state.resets,
         unlockedNodes: state.unlockedNodes,
         nodeLevels: state.nodeLevels,
@@ -3671,6 +3688,7 @@ function sePuedeGuardar(): boolean {
         unlockedAchievements: state.unlockedAchievements,
         cores: state.cores,
         totalCores: state.totalCores,
+        baseAlComprar: state.baseAlComprar,
         resets: state.resets,
         unlockedNodes: state.unlockedNodes,
         nodeLevels: state.nodeLevels,
@@ -6618,7 +6636,8 @@ const RITMO_GUARDADO_MS = 60_000;
       pending: nextCores({
         totalNanitesProduced: state.totalNanitesProduced,
         totalCores: state.totalCores,
-        coreGain: state.bonus.coreGain
+        coreGain: state.bonus.coreGain,
+        baseAlComprar: state.baseAlComprar
       }),
       resets: state.resets,
       totalProduced: state.totalNanitesProduced,
@@ -6646,7 +6665,8 @@ const RITMO_GUARDADO_MS = 60_000;
       const gained = nextCores({
         totalNanitesProduced: state.totalNanitesProduced,
         totalCores: state.totalCores,
-        coreGain: state.bonus.coreGain
+        coreGain: state.bonus.coreGain,
+        baseAlComprar: state.baseAlComprar
       });
       if (gained <= 0) {
         return { success: false, gained: 0, msg: 'Necesitas producir más para reciclar.' };
@@ -6794,6 +6814,10 @@ const RITMO_GUARDADO_MS = 60_000;
         // Lo permanente
         cores: keptCores,
         totalCores: keptTotalCores,
+        // F70 · La foto se reinicia al histórico nuevo: la vuelta que empieza
+        // no tiene producción posterior a ninguna compra, así que el bonus
+        // arranca en cero y solo premia lo que se produzca de aquí en más.
+        baseAlComprar: keptTotalCores,
         resets: keptResets,
         nodeLevels: keptNodes,
         unlockedNodes: Object.keys(keptNodes),
@@ -6826,6 +6850,14 @@ const RITMO_GUARDADO_MS = 60_000;
       const cost = nodeCost(node, level);
       state.cores -= cost;
       state.nodeLevels[nodeId] = level + 1;
+      // F70 · La foto del bonus: al comprar Rendimiento del Núcleo se anota lo
+      // justificado AHORA, y el bonus solo premia lo posterior. Sin esta línea
+      // comprar a mitad de vuelta pagaba núcleos por producción anterior: el
+      // exploit. Con ella, comprar no mueve el pendiente (el banco lo ata).
+      if (nodeId === 'core_yield') {
+        state.baseAlComprar = Math.max(
+          state.totalCores, pendingCores(state.totalNanitesProduced ?? 0, 0));
+      }
       recomputeBonuses();
       recalculatePassiveIncome();
       onUpdate(state, isAfk);

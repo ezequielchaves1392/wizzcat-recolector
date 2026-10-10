@@ -21,6 +21,7 @@
 
 import { ic } from '../ui/icons';
 import { esc } from '../utils/esc';
+import { SERVIDOR_ACTUAL, URL_OTRO_SERVIDOR } from '../firebase';
 
 export function renderBloqueado(
   container: HTMLElement,
@@ -221,6 +222,35 @@ function esSinRespuesta(error: unknown): boolean {
   return String((error as any)?.name ?? '') === 'TiempoAgotadoError';
 }
 
+/**
+ * F101 · EL ENLACE AL OTRO SERVIDOR, Y POR QUÉ ES UN ENLACE Y NO UN BOTÓN.
+ *
+ * Un botón con `addEventListener` es código que puede fallar justo en la pantalla
+ * que sale cuando algo ya falló, y un listener sobre `#app` es el bug de R5 que ya
+ * se pagó. Un `<a>` navega solo, sin JS: no hay nada que atar ni que acumular.
+ *
+ * POR QUÉ DICE QUE SE EMPIEZA DE CERO. Las cuentas no viajan entre servidores
+ * (F100): sin esa línea, el jugador esperaría su partida al otro lado y encontraría
+ * un registro vacío, que es la misma mentira que este cartel vino a quitar.
+ *
+ * Y POR QUÉ A VECES NO SALE NADA. Sin `VITE_URL_OTRO_SERVIDOR` no hay a dónde ir:
+ * un botón que promete otro servidor sin URL es peor que no tener botón.
+ */
+function enlaceOtroServidorHTML(): string {
+  if (!URL_OTRO_SERVIDOR) return '';
+  const destino = SERVIDOR_ACTUAL === '1' ? '2' : '1';
+  return `
+    <a href="${esc(URL_OTRO_SERVIDOR)}" data-otro-servidor
+       class="w-full min-h-[44px] py-2.5 btn-ghost font-['Orbitron'] font-bold text-xs rounded-xl
+              hover:opacity-90 transition cursor-pointer flex items-center justify-center gap-2">
+      <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('globe')}</span>
+      JUGAR EN EL SERVIDOR ${destino}
+    </a>
+    <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+      En el otro servidor empiezas de cero: tu cuenta y tu partida de aquí no viajan.
+    </p>`;
+}
+
 export function renderErrorDeCarga(
   container: HTMLElement,
   error: unknown,
@@ -272,6 +302,7 @@ export function renderErrorDeCarga(
           <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('scroll')}</span>
           ABRIR LA WIKI
         </button>` : ''}
+        ${enlaceOtroServidorHTML()}
         <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
           ${esc(pie)}
         </div>
@@ -371,6 +402,7 @@ export function renderCuotaAgotada(container: HTMLElement): void {
             <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('scroll')}</span>
             ABRIR LA WIKI
           </button>
+          ${enlaceOtroServidorHTML()}
 
           <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
             La Wiki es solo lectura y no toca tu partida. El juego volverá cuando

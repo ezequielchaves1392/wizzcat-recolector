@@ -333,7 +333,7 @@ export function resumenBuildHTML(): string {
         : `<div class="flex items-center justify-between gap-2 py-1">
             <span class="text-[11px] font-mono text-[var(--text-muted)]">Con ${formatNumber(produccion ?? 0)} por run</span>
             <span class="text-[11px] font-mono font-bold tabular ${prueba.cabe ? 'text-emerald-400' : 'text-amber-400'}">
-              ${prueba.cabe ? `Cabe: daría ${formatNumber(prueba.darian)} ◆` : `No cabe: daría ${formatNumber(prueba.darian)} ◆ de ${formatNumber(r.gastados)} ◆`}
+              Justifica ${formatNumber(prueba.darian)} ◆ en total · pide ${formatNumber(r.gastados)} ◆
             </span>
           </div>`}
     </div>` : ''}

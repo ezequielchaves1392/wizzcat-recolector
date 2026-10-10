@@ -6,7 +6,13 @@
 // ~2 horas y se queda sin nada que comprar. El reinicio convierte "tiempo
 // jugado" en una moneda permanente.
 //
-// Fórmula:  núcleos = floor(8 · (totalProducido / 1e6)^0.6 · (1 + coreGain))
+// Fórmula en dos niveles (F70):
+//   base     = floor(8 · (totalProducido / 1e6)^0.6): lo justificado, sin bonus.
+//   ganancia = max(0, base − histórico) + floor(max(0, base − max(histórico, foto)) × tasa).
+// El primer sumando es lo nuevo de verdad; el segundo es el nodo Rendimiento
+// del Núcleo, que solo premia lo justificado DESPUÉS de comprarlo (la foto).
+// Comprar no mueve la ganancia y reciclar la suma entera al histórico, que es
+// de donde sale la escalada: cada vuelta tiene que superar a la anterior.
 //
 // El exponente 0.6 está calibrado contra el árbol, no elegido al azar:
 //   1 M  →    8 núcleos  (lo justo: blueprints + 3 nodos)
@@ -68,14 +74,79 @@ export function pendingCores(totalProduced: number, coreGainBonus = 0): number {
   return Math.floor(raw * (1 + coreGainBonus));
 }
 
-/** Núcleo gained en el siguiente reinicio, descontando lo ya ganado. */
+/**
+ * Lo justificado por la producción, SIN bonus: la base sobre la que todo lo
+ * demás se calcula. `pendingCores(p, 0)` con nombre de lo que es, para que
+ * `nextCores` no tenga que repetir el `, 0` que lo hace puro.
+ */
+function baseJustificada(totalProduced: number): number {
+  return pendingCores(totalProduced, 0);
+}
+
+/**
+ * La foto con la que arranca quien no tiene foto guardada: lo justificado
+ * ahora o el histórico, lo que sea mayor. Una sola fuente (R2): la usan la
+ * carga de partidas viejas y `fotoEfectiva()`, y las dos niegan lo mismo —
+ * el regalo retroactivo—.
+ */
+export function fotoInicial(totalCores: number, totalProduced: number): number {
+  return Math.max(
+    Math.max(0, Math.floor(Number(totalCores) || 0)),
+    baseJustificada(Math.max(0, Number(totalProduced) || 0))
+  );
+}
+
+/**
+ * La foto efectiva del bonus: lo justificado cuando se compró el nodo.
+ *
+ * Si el save no la trae (partida anterior a F70) o trae basura, vale lo
+ * justificado ahora mismo o el histórico, lo que sea mayor: con eso el bonus
+ * arranca en cero y solo premia producción nueva. La alternativa —foto en el
+ * histórico— regalaría de golpe el bonus sobre el marginal ya producido, que
+ * es justo el exploit que esto viene a cerrar.
+ */
+function fotoEfectiva(state: {
+  totalNanitesProduced: number;
+  totalCores: number;
+  baseAlComprar?: number;
+}): number {
+  const f = state.baseAlComprar === undefined || state.baseAlComprar === null
+    ? NaN
+    : Math.floor(Number(state.baseAlComprar));
+  if (Number.isFinite(f) && f >= 0) return f;
+  return fotoInicial(state.totalCores, state.totalNanitesProduced);
+}
+
+/**
+ * Núcleos que daría reciclar AHORA.
+ *
+ * F70: el bonus (`coreGain`, nodo Rendimiento del Núcleo) ya NO multiplica
+ * todo lo justificado. Son dos sumandos:
+ *
+ *   marginal    = max(0, base − histórico): lo nuevo de verdad en esta subida.
+ *   extra       = floor(max(0, base − max(histórico, foto)) × tasa): el bonus,
+ *                 solo sobre lo justificado con producción POSTERIOR a la
+ *                 compra del nodo.
+ *
+ * Comprar el nodo no mueve el pendiente ni un núcleo: en ese instante la base
+ * es la foto y el segundo sumando es cero. Y reciclar suma los dos al
+ * histórico, que es de donde sale la escalada: cada vuelta tiene que superar
+ * a la anterior porque el histórico solo sube.
+ *
+ * Sin bonus (tasa 0) es `max(0, base − histórico)`, la cuenta de siempre: la
+ * foto no existe para quien no compró el nodo.
+ */
 export function nextCores(state: {
   totalNanitesProduced: number;
   totalCores: number;
   coreGain: number;
+  baseAlComprar?: number;
 }): number {
-  const total = pendingCores(state.totalNanitesProduced, state.coreGain);
-  return Math.max(0, total - state.totalCores);
+  const base = baseJustificada(state.totalNanitesProduced);
+  const foto = fotoEfectiva(state);
+  const marginal = Math.max(0, base - state.totalCores);
+  const bonificable = Math.max(0, base - Math.max(state.totalCores, foto));
+  return marginal + Math.floor(bonificable * state.coreGain);
 }
 
 /**
@@ -104,50 +175,101 @@ export function nanitesForCores(nucleos: number, coreGainBonus = 0): number {
 }
 
 /**
- * Cuánto falta producir para justificar UN núcleo más de los ya justificados.
+ * La ganancia con una producción dada, con el resto fijo: la función que la
+ * inversión recorre. Es monótona no decreciente en `p` —más producción nunca
+ * da menos núcleos—, que es lo que hace que la bisección termine.
+ */
+function gananciaEn(
+  p: number,
+  totalCores: number,
+  coreGain: number,
+  baseAlComprar: number | undefined
+): number {
+  return nextCores({
+    totalNanitesProduced: Math.max(0, Math.floor(Number(p) || 0)),
+    totalCores,
+    coreGain,
+    baseAlComprar
+  });
+}
+
+/**
+ * El mínimo producido entero con ganancia >= objetivo.
  *
- * B42: antes devolvía 0 en cuanto se podía reciclar, y la pantalla se quedaba
- * sin nada que pedir —con +N por ganar no había forma de saber cuánto falta
- * para +N+1—. Ahora siempre responde lo que falta para el siguiente peldaño:
- * `nanitesForCores(T+1) - producido`, con T lo justificado por lo producido.
- * Es la misma cuenta que cobra el botón (`pendingCores`), así que lo que se
- * enseña es lo que se cobra (R3). Por construcción siempre es > 0: si lo
- * producido alcanzara el umbral, T ya sería uno más.
+ * Bisección con sonda exponencial: la ganancia no topa (la base crece sin
+ * techo con la producción), así que el `hi` se alcanza doblando como mucho
+ * unas sesenta veces, y el tramo se parte a la mitad otras tantas. Cada paso
+ * es un `pendingCores` —un `pow` y un `floor`—, barato hasta en el tick de
+ * la vista.
+ */
+function producidoParaGanancia(
+  objetivo: number,
+  totalCores: number,
+  coreGain: number,
+  baseAlComprar: number | undefined
+): number {
+  const obj = Math.max(0, Math.floor(Number(objetivo) || 0));
+  if (gananciaEn(0, totalCores, coreGain, baseAlComprar) >= obj) return 0;
+  let hi = 1;
+  while (gananciaEn(hi, totalCores, coreGain, baseAlComprar) < obj) hi *= 2;
+  let lo = 0;
+  while (lo + 1 < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (gananciaEn(mid, totalCores, coreGain, baseAlComprar) >= obj) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+/**
+ * Cuánto falta producir para ganar UN núcleo más de los que ya se ganarían.
+ *
+ * F70 + B42: con bonus por tramos ya no hay fórmula cerrada que invertir
+ * (`nanitesForCores` invertía el `pendingCores` multiplicativo), así que se
+ * busca: el mínimo `p` que sube la ganancia en uno, menos lo producido. Por
+ * construcción siempre es > 0 y producir justo eso suma uno —el banco lo ata
+ * por bracketing, como B12 ataba la resta—.
  */
 export function nanitesToNextCore(state: {
   totalNanitesProduced: number;
   totalCores: number;
   coreGain: number;
+  baseAlComprar?: number;
 }): number {
-  const justificados = pendingCores(state.totalNanitesProduced, state.coreGain);
-  const umbral = nanitesForCores(justificados + 1, state.coreGain);
-  return Math.max(0, umbral - state.totalNanitesProduced);
+  const actual = gananciaEn(
+    state.totalNanitesProduced, state.totalCores, state.coreGain, state.baseAlComprar);
+  const hi = producidoParaGanancia(
+    actual + 1, state.totalCores, state.coreGain, state.baseAlComprar);
+  return Math.max(0, hi - Math.max(0, Math.floor(Number(state.totalNanitesProduced) || 0)));
 }
 
 /**
  * Progreso 0..1 dentro del peldaño actual, para la barra de la UI.
  *
- * B42: antes devolvía 1 en cuanto `nextCores > 0`, y la barra se clavaba al
- * 100 % justo cuando más interesa —con núcleos por ganar—. Ahora mide de
- * `nanitesForCores(T)` a `nanitesForCores(T+1)`, con T lo justificado: la
- * barra sube al producir en cada peldaño y nunca se queda quieta en el tope.
+ * F70: el peldaño ya no es "de `nanitesForCores(T)` a `nanitesForCores(T+1)`"
+ * en total justificado, sino de ganancia: del primer producido que da lo
+ * actual al primero que da uno más. Cada peldaño tiene su propia escala, así
+ * que comparar dos peldaños no dice nada; lo que vale en cada uno es subir
+ * al producir y no clavarse al tope (B42).
  *
  * Se mide en esfuerzo (producido entre umbrales), no en
  * `totalCores / total`: esa fracción BAJA al producir —con 8 de histórico da 1
  * con 1 M y 0,67 con 2 M—, así que la barra retrocedía cuanto más jugabas.
- * La producción se reinicia a 0 en cada Ascenso, así que medir dentro del
- * peldaño es lo que el jugador siente: lo producido entre lo necesario.
  */
 export function coreProgress(state: {
   totalNanitesProduced: number;
   totalCores: number;
   coreGain: number;
+  baseAlComprar?: number;
 }): number {
-  const justificados = pendingCores(state.totalNanitesProduced, state.coreGain);
-  const suelo = nanitesForCores(justificados, state.coreGain);
-  const techo = nanitesForCores(justificados + 1, state.coreGain);
-  if (techo <= suelo) return 0;
-  return Math.min(1, Math.max(0, (state.totalNanitesProduced - suelo) / (techo - suelo)));
+  const p = Math.max(0, Math.floor(Number(state.totalNanitesProduced) || 0));
+  const actual = gananciaEn(p, state.totalCores, state.coreGain, state.baseAlComprar);
+  const lo = actual <= 0
+    ? 0
+    : producidoParaGanancia(actual, state.totalCores, state.coreGain, state.baseAlComprar);
+  const hi = producidoParaGanancia(actual + 1, state.totalCores, state.coreGain, state.baseAlComprar);
+  if (hi <= lo) return 0;
+  return Math.min(1, Math.max(0, (p - lo) / (hi - lo)));
 }
 
 /**

@@ -18,6 +18,7 @@ import {
 } from './services/sessionService';
 import { consultarBloqueo } from './services/bloqueoService';
 import { createGameLoop } from './gameLoop';
+import { nanitesToNextCore } from './data/prestige';
 import type { BuffKey } from './data/buffs';
 import { showToast, syncToastOffset } from './utils/toast';
 import { renderWarehouseTab, pintarBarraDeConsumibles } from './components/warehouse';
@@ -1410,15 +1411,28 @@ function updateUI(state: any, isAfk: boolean = false) {
     clickDamageDisplay.textContent = `+${formatNumber(clickDamage)} Nanitas por click`;
   }
 
-  // Atajo a la ascensión: dice cuántos núcleos llevas sin abrir la página
+  // Atajo a la ascensión: dice lo que ESTA vuelta va a dar, siempre.
+  //
+  // B37: antes se enseñaba la cartera cuando era mayor que cero, y el
+  // pendiente quedaba oculto justo cuando importaba —con 2 en cartera y
+  // 1.166 K por ganar, el menú decía "2 núcleos disponibles"—. La cartera se
+  // ve donde se gasta (aquí arriba va lo actual, en otra píldora); este botón
+  // responde una sola pregunta: qué gano si reciclo ahora. Sin nada por
+  // ganar, dice lo que falta para el siguiente (F70).
   const prestigeHint = document.querySelector('#prestige-hint');
   if (prestigeHint) {
     const pending = activeGameInstance?.getPrestigeInfo?.()?.pending ?? 0;
-    prestigeHint.textContent = state.cores > 0
-      ? `${formatNumber(state.cores)} núcleos disponibles`
-      : pending > 0
-        ? `Reciclar: +${formatNumber(pending)} núcleos`
-        : '0 núcleos';
+    if (pending > 0) {
+      prestigeHint.textContent = `Reciclar: +${formatNumber(pending)} núcleos`;
+    } else {
+      const falta = activeGameInstance ? nanitesToNextCore({
+        totalNanitesProduced: state.totalNanitesProduced ?? 0,
+        totalCores: state.totalCores ?? 0,
+        coreGain: state.bonus?.coreGain ?? 0,
+        baseAlComprar: (state as any).baseAlComprar
+      }) : 0;
+      prestigeHint.textContent = `Faltan ${formatNumber(falta)} para +1`;
+    }
   }
 
   // **LA BARRA DE CONSUMIBLES SE REPINTA AQUÍ, Y NO AL MONTAR LA PÁGINA.**

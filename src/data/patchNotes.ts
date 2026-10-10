@@ -57,6 +57,26 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.39',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Núcleos: lo que ganas y lo que te falta',
+    lineas: [
+      'El botón de Ascensión dice siempre los núcleos que te va a dar esta vuelta.',
+      'Arriba ves los que tienes y dentro de la página, tu histórico.',
+      'El nodo de núcleos premia solo lo que produces después de comprarlo.'
+    ]
+  },
+  {
+    version: '1.15.38',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Salida al otro servidor desde el cartel',
+    lineas: [
+      'Si tu servidor está en mantenimiento, el cartel te ofrece seguir jugando en el otro servidor.',
+      'En el otro servidor empiezas de cero: tu partida sigue intacta donde estaba.',
+      'Volver al primer servidor es abrirlo de nuevo: cada uno guarda lo suyo.'
+    ]
+  },
+  {
     version: '1.15.37',
     fecha: '10 de octubre de 2026',
     titulo: 'La barra de Ascensión dice lo que falta',
