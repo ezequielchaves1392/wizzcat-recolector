@@ -1985,6 +1985,24 @@ viva solo en una conversación.*
       `UMBRAL_PUNTOS_RAMA`, sin cifras a mano (R32). De paso, la etiqueta de
       `herramientas` que le faltaba a `ETIQUETA_SECCION` y rompía el `build` del lote F98.
 
+### Lote M · SEGUNDO SERVIDOR (encargo del 10 de octubre)
+
+*Lo pedido, con tus palabras. Se escribe aquí antes de programarlo, para que no
+viva solo en una conversación.*
+- [x] **F100 · Dos servidores distintos con la misma app.** Hecho en v1.15.36.
+      > "quiero que tengas dos credenciales distintas para dos proyectos distintos pero que usen la misma app"
+      > "son dos server del juego distintos, los jugadores son nuevos"
+      La app apunta a un solo backend por build: `chronos-tap` (servidor 1, el de
+      siempre) salvo `VITE_FIREBASE_SERVIDOR=2`, que apunta a `pet-project-aef10`
+      (servidor 2, jugadores nuevos). Sin selector en el juego a propósito: `auth`
+      y `db` son singletons y un cambio en caliente obligaría a dos sesiones vivas
+      a la vez. El 2 es opt-in explícito (mismo criterio que `VITE_EMULADOR`): un
+      build sin la variable es el 1, sin que nadie se acuerde. Reglas del 2 con
+      `npm run rules:server2` (las de `rules` siguen yendo al 1 por `.firebaserc`).
+      El proyecto nuevo necesita Auth por correo, Firestore creado, reglas
+      publicadas y su `admins/{uid}`; los datos no migran. Sin banco: es cableado
+      de config y `verify/` sustituye Firebase por stubs.
+
 ### Lote K · ENCARGO DEL 9 DE OCTUBRE (ideas nocturnas del jugador)
 
 *Lo pedido, con tus palabras. Sin tocar todavía: se escribe aquí antes de

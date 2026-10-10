@@ -86,8 +86,11 @@ montarlo de nuevo; no se puede leer del `git show`.
 
 ## 1.5 Firebase
 
-`src/firebase.ts` son 20 líneas: `initializeApp` con la config **en el código**
-(proyecto `chronos-tap`), y exportar `auth` y `db`. No hay variables de entorno.
+`src/firebase.ts` es `initializeApp` con la config **en el código** y exportar
+`auth` y `db`. Hay dos proyectos (`chronos-tap`, el servidor 1, y
+`pet-project-aef10`, el servidor 2) y se elige uno por build con
+`VITE_FIREBASE_SERVIDOR=2`; sin la variable es el 1. La tercera variable,
+`VITE_EMULADOR`, es la del emulador local.
 La config de un cliente web de Firebase es pública por definición; lo que protege
 el juego son las reglas.
 

@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.36',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Segundo servidor para jugadores nuevos',
+    lineas: [
+      'Hay un segundo servidor del juego, para jugadores que empiezan desde cero.',
+      'Cada servidor tiene sus partidas y su ranking: lo de uno no aparece en el otro.',
+      'Tu partida no se mueve: sigues jugando donde estabas.'
+    ]
+  },
+  {
     version: '1.15.35',
     fecha: '10 de octubre de 2026',
     titulo: 'La Wiki con los colores del juego',

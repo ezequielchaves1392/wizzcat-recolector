@@ -1,7 +1,7 @@
 {
   "name": "cyber-forge",
   "private": true,
-  "version": "1.15.35",
+  "version": "1.15.36",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
     "scan": "node verify/scanTexto.mjs && node verify/scanPlantillas.mjs && node verify/scanCss.mjs",
     "scan:probar": "node verify/probarScan.mjs && node verify/probarAlcance.mjs && node verify/probarPlantillas.mjs && node verify/probarScanCss.mjs",
     "rules": "firebase deploy --only firestore:rules",
+    "rules:server2": "firebase deploy --only firestore:rules --project pet-project-aef10",
     "rules:mirar": "firebase deploy --only firestore:rules --dry-run"
   },
   "dependencies": {

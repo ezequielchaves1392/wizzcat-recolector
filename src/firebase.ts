@@ -2,7 +2,42 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 
-const firebaseConfig = {
+// ==========================================================================
+//  DOS SERVIDORES, UNA SOLA APP
+//
+//  El juego corre en dos proyectos de Firebase distintos, con jugadores
+//  distintos en cada uno: `chronos-tap` (servidor 1, el de siempre) y
+//  `pet-project-aef10` (servidor 2, jugadores nuevos). Cada build apunta a uno
+//  solo, y se elige con `VITE_FIREBASE_SERVIDOR=2`; sin la variable (o con
+//  cualquier otro valor) es el 1.
+//
+//  POR QUÉ EN BUILD Y NO CON UN SELECTOR EN EL JUEGO. `auth` y `db` son los
+//  singletons que importa todo el proyecto: un cambio de servidor en caliente
+//  obligaría a dos sesiones vivas a la vez (dos auth, dos escrituras, dos
+//  rankings) y a decidir en cada servicio cuál manda. Un build por servidor no
+//  tiene ese problema: cada build tiene un solo backend, como hasta ahora.
+//
+//  POR QUÉ OPT-IN EXPLÍCITO Y NO AL REVÉS. Un build de producción tiene que
+//  apuntar al servidor correcto sin que nadie se acuerde: el valor por defecto
+//  es el 1, y el 2 solo existe si se pide a mano (mismo criterio que
+//  `VITE_EMULADOR` en B31).
+//
+//  LO QUE UN PROYECTO NUEVO NECESITA ANTES DEL PRIMER JUGADOR (no viene solo):
+//    1. Auth con el proveedor de correo y contraseña activado.
+//    2. Una base de datos Firestore creada.
+//    3. Las reglas publicadas en ESE proyecto:
+//       `firebase deploy --only firestore:rules --project pet-project-aef10`
+//       (o `npm run rules:server2`). Sin esto, el juego arranca y no guarda nada.
+//    4. El documento `admins/{uid}` del admin, o la terminal no concede nada.
+//  Los datos no migran: cada servidor empieza con sus jugadores desde cero,
+//  que es lo pedido.
+//
+//  ANALYTICS, Y POR QUÉ NO ESTÁ. La plantilla de Firebase trae `getAnalytics`
+//  y el `measurementId` viaja en las dos configs, pero el juego no lo usa: sin
+//  una pantalla o decisión que lo lea, es peso muerto con acceso a la red.
+// ==========================================================================
+
+const CONFIG_SERVIDOR_1 = {
        apiKey: "AIzaSyDe2OtAdDFWOml4v6EuISnPhYI-0xx8kOU",
        authDomain: "chronos-tap.firebaseapp.com",
        databaseURL: "https://chronos-tap-default-rtdb.firebaseio.com",
@@ -12,6 +47,21 @@ const firebaseConfig = {
        appId: "1:755222927108:web:82744c3626e7a125c92251",
        measurementId: "G-WGZLCFN2GH"
      };
+
+const CONFIG_SERVIDOR_2 = {
+       apiKey: "AIzaSyBR0R04751C2ytAjkIYTcFJ2NMDOUS0wCw",
+       authDomain: "pet-project-aef10.firebaseapp.com",
+       databaseURL: "https://pet-project-aef10-default-rtdb.firebaseio.com",
+       projectId: "pet-project-aef10",
+       storageBucket: "pet-project-aef10.firebasestorage.app",
+       messagingSenderId: "1095832691858",
+       appId: "1:1095832691858:web:715bcdfa2da1fbd51bb24b",
+       measurementId: "G-BDWWK5K0R4"
+     };
+
+const firebaseConfig = import.meta.env.VITE_FIREBASE_SERVIDOR === '2'
+  ? CONFIG_SERVIDOR_2
+  : CONFIG_SERVIDOR_1;
 
 
 const app = initializeApp(firebaseConfig);
