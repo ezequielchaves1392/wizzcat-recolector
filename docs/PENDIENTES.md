@@ -2802,7 +2802,7 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **49 bancos, 2701**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **49 bancos, 2709**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -4197,7 +4197,8 @@ de núcleos va en el parche grande y es una sola vez.*
    puntos y devolución). **Lote 2b hecho en v1.15.26** (cuatro keystones).
    **Lote 2c hecho en v1.15.27** (licencias y Eco). **Lote 2d (1ª parte) hecho en
    v1.15.28** (afijos de compañero). **Lote 2d (2ª parte) hecho en v1.15.29**
-   (buffers de compañero). Queda Lote 3.
+   (buffers de compañero). **Lote 3 hecho en v1.15.31** (15 nodos por rama,
+   60 en total). F97 cerrada.
 
 ### Encontrado haciendo B43 (9 de octubre, para quien lleve F97)
 

@@ -31,7 +31,7 @@ import { COMPANION_SLOT_BUY, RANURA_POR_CARTA } from '../src/data/store';
 // tocarse.
 import { valorDeUnCristal } from '../src/data/crafting';
 import {
-  boot, reload, recargar, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, consumable, distintos
+  boot, reload, recargar, check, resumen, s, wh, ids, nanites, deType, find, ranuras, baseSave, crate, consumable, distintos, collector, conRoll
 } from './kit';
 
 async function main() {
@@ -1113,6 +1113,69 @@ async function main() {
       && c.items.some(id => ['calibrationStone', 'stabilityNano', 'refiningEther'].includes(id)));
     check('tienda: y ninguno de los tres se anuncia en otra balda',
       enOtra.length === 0, enOtra.map(c => c.id).join(','));
+  }
+
+  // =========================================================================
+  //  6b. BONOS NUEVOS DEL LOTE 3: critChance y nanoPerCrate
+  // =========================================================================
+  //  El árbol creció a 15 nodos por rama (60 en total). Dos nodos nuevos usan
+  //  bonus que no existían antes: critChance (prob. de crítico plana) y
+  //  nanoPerCrate (nanitas planas por caja). Se comprueba que se compran, que
+  //  suman y que se aplican al motor.
+  {
+    const g = await boot(baseSave([collector('w', 3, { damage: 60, rarity: 'Común' })],
+      { cores: 100_000, equippedCollectorId: 'w' }));
+    // Subir core_edge a 10 niveles: abre T4 (9 puntos) y T5 (12 puntos) en Asalto
+    for (let i = 0; i < 10; i++) {
+      const r0 = g.buyNode('core_edge');
+      if (!r0.success) { check('Lote3: subir core_edge', false, r0.msg ?? ''); break; }
+    }
+    // Camino: multiplier_amp (T2) -> singularity (T4) -> crit_master (T5)
+    for (const id of ['multiplier_amp', 'singularity', 'crit_master']) {
+      const r0 = g.buyNode(id);
+      check(`Lote3: comprar ${id}`, r0.success, r0.msg ?? '');
+      if (!r0.success) break;
+    }
+    const r1 = { success: (s(g).nodeLevels as any).crit_master === 1 };
+    check('Lote3: Maestría Crítica se compra',
+      r1.success === true, r1.msg ?? '');
+    check('Lote3: y sube el bonus de crítico',
+      (s(g).bonus.critChance ?? 0) >= 0.10 - 1e-9,
+      `critChance=${s(g).bonus.critChance}`);
+    // Se aplica en el dado: la base (Común, sin afijos) critica al 0%, así que
+    // con el dado en 0.10 nunca critica sin el nodo; con crit_master (+0.15)
+    // el mismo dado sí critica. Comparamos el flag `.critico` que el motor
+    // devuelve en el resultado del click.
+    const gSin: any = await boot(baseSave([collector('w2', 3, { damage: 60, rarity: 'Común' })],
+      { cores: 100_000, equippedCollectorId: 'w2' }));
+    const sin: any = await conRoll(0.10, async () => gSin.click());
+    const con: any = await conRoll(0.10, async () => g.click());
+    check('Lote3: el crítico del árbol se aplica en el dado',
+      sin.critico === false && con.critico === true,
+      `sinNodo=${sin.critico} conNodo=${con.critico}`);
+  }
+  {
+    const g = await boot(baseSave([crate('c1', 1, 1)],
+      { cores: 100_000, nodeLevels: { insurance: 1 } }));
+    const antes = nanites(g);
+    g.openCrateBox('c1');
+    // Seguro nivel 1 = 100 nanitas planas por caja, además del botín
+    check('Lote3: el Seguro paga nanitas planas al abrir',
+      nanites(g) >= antes + 100,
+      `antes=${antes} despues=${nanites(g)}`);
+  }
+  {
+    // Y sin el nodo no paga nada: el bono es del nodo, no de la caja.
+    const g = await boot(baseSave([crate('c1', 1, 1)],
+      { cores: 100_000 }));
+    const antes = nanites(g);
+    g.openCrateBox('c1');
+    const g2 = await reload();
+    // Sin Seguro, la apertura no suma las 100 nanitas planas (el botín puede
+    // dar nanitas, así que se mide el mínimo: sin nodo no llega a 100).
+    check('Lote3: sin el nodo no hay pago plano',
+      nanites(g2) - antes < 100,
+      `antes=${antes} despues=${nanites(g2)}`);
   }
 
   resumen('compra');

@@ -53,7 +53,9 @@ export const EMPTY_BONUSES: PassiveBonuses = {
   compDescuento: 0,
   compPassivoBuffMult: 0,
   compClickBuffMult: 0,
-  compGlobalBuffMult: 0
+  compGlobalBuffMult: 0,
+  critChance: 0,
+  nanoPerCrate: 0
 };
 
 /** Umbral mínimo de producción para que un reinicio tenga sentido. */
@@ -201,7 +203,7 @@ export function canBuyNode(
  * (16 niveles en total) es más de la mitad de la rama. Si las ramas crecen
  * (Lote 3: 15 nodos), estos mínimos siguen valiendo porque son suelos.
  */
-export const UMBRAL_PUNTOS_RAMA: Record<number, number> = { 0: 0, 1: 1, 2: 3, 3: 6, 4: 9 };
+export const UMBRAL_PUNTOS_RAMA: Record<number, number> = { 0: 0, 1: 1, 2: 3, 3: 6, 4: 9, 5: 12, 6: 15 };
 
 /**
  * Niveles comprados en una rama, topados por máximo como el agregador.

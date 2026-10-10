@@ -337,6 +337,202 @@ export const TREE_NODES: TreeNode[] = [
     icon: 'gem', category: 'fortuna', tier: 3, requires: ['crate_sight'],
     baseCost: 30, costGrowth: 1.55, maxLevel: 5,
     bonus: { ecoDoble: 0.02 }, x: 3, y: 6
+  },
+  // ---------------------------------------------------------------- TIER 5 (Lote 3)
+  //  Nodos que llenan el hueco entre el tier 4 y los keystones: saltos de poder
+  //  intermedios para que la rama no muera al llegar a T4.
+  {
+    id: 'crit_master', name: 'Maestría Crítica', description: '+15% a la probabilidad de crítico por nivel.',
+    lore: 'El golpe perfecto no es suerte: es practicar el mismo golpe hasta que sale solo.',
+    icon: 'bolt', category: 'asalto', tier: 5, requires: ['singularity'],
+    baseCost: 400, costGrowth: 1.6, maxLevel: 5,
+    bonus: { critChance: 0.15 }, x: 4, y: 5
+  },
+  {
+    id: 'click_storm', name: 'Tormenta de Clicks', description: '+2 clics automáticos por segundo por nivel.',
+    lore: 'Cuando los dedos no dan más, que sigan las máquinas.',
+    icon: 'bolt', category: 'asalto', tier: 5, requires: ['full_automation'],
+    baseCost: 500, costGrowth: 1.6, maxLevel: 5,
+    bonus: { autoClick: 2 }, x: 4, y: 6
+  },
+  {
+    id: 'swarm_mind', name: 'Mente Enjambre', description: '+8% al poder de todos los compañeros por nivel.',
+    lore: 'Piensa como uno, trabaja como cien.',
+    icon: 'companion', category: 'manada', tier: 5, requires: ['quantum_amp'],
+    baseCost: 450, costGrowth: 1.6, maxLevel: 5,
+    bonus: { compPasivo: 0.08, compClick: 0.08 }, x: 4, y: 5
+  },
+  {
+    id: 'deep_storage', name: 'Almacén Profundo', description: '+10 ranuras de almacén por nivel.',
+    lore: 'Las paredes del almacén son una sugerencia.',
+    icon: 'warehouse', category: 'fortuna', tier: 5, requires: ['void_hoard'],
+    baseCost: 480, costGrowth: 1.6, maxLevel: 5,
+    bonus: { storageSlots: 10 }, x: 4, y: 5
+  },
+  {
+    id: 'insurance', name: 'Seguro', description: 'Paga 100 nanitas al abrir una caja por nivel.',
+    lore: 'Por si la caja sale vacía, que no salga gratis.',
+    icon: 'gem', category: 'fortuna', tier: 5, requires: ['eco_caja'],
+    baseCost: 420, costGrowth: 1.6, maxLevel: 3,
+    bonus: { nanoPerCrate: 100 }, x: 4, y: 6
+  },
+  {
+    id: 'anvil_song', name: 'Canto del Yunque', description: '+4% a la probabilidad de crafteo por nivel.',
+    lore: 'El yunque canta mientras trabaja. Cuando calla, algo sale mal.',
+    icon: 'collector', category: 'forja', tier: 5, requires: ['master_smith'],
+    baseCost: 460, costGrowth: 1.6, maxLevel: 5,
+    bonus: { craftLuck: 0.04 }, x: 4, y: 5
+  },
+  // ---------------------------------------------------------------- TIER 6 (Lote 3)
+  //  El fondo de cada rama. Requisitos intra-rama: lo que se ve es lo que hay que comprar.
+  {
+    id: 'furia', name: 'Furia', description: '+20% al daño de click por nivel.',
+    lore: 'Cuando el brazo se cansa, queda la rabia.',
+    icon: 'bolt', category: 'asalto', tier: 6, requires: ['crit_master'],
+    baseCost: 900, costGrowth: 1.65, maxLevel: 5,
+    bonus: { clickMult: 0.20 }, x: 5, y: 4
+  },
+  {
+    id: 'martillo', name: 'Martillo Pesado', description: '+25% al daño de click por nivel.',
+    lore: 'Cada golpe cae como si fuera el primero.',
+    icon: 'collector', category: 'asalto', tier: 6, requires: ['click_storm'],
+    baseCost: 950, costGrowth: 1.65, maxLevel: 5,
+    bonus: { clickMult: 0.25 }, x: 5, y: 5
+  },
+  {
+    id: 'ejecutor', name: 'Ejecutor', description: '+30% al daño de click por nivel.',
+    lore: 'El último golpe no se negocia.',
+    icon: 'sparkle', category: 'asalto', tier: 6, requires: ['furia'],
+    baseCost: 1000, costGrowth: 1.65, maxLevel: 4,
+    bonus: { clickMult: 0.30 }, x: 5, y: 6
+  },
+  {
+    id: 'sinergia', name: 'Sinergia Total', description: '+15% al poder de todos los compañeros por nivel.',
+    lore: 'Nadie trabaja solo cuando todos tiran del mismo lado.',
+    icon: 'companion', category: 'manada', tier: 6, requires: ['swarm_mind'],
+    baseCost: 850, costGrowth: 1.65, maxLevel: 5,
+    bonus: { compPasivo: 0.15, compClick: 0.15 }, x: 5, y: 4
+  },
+  {
+    id: 'colmena_final', name: 'Colmena Final', description: '+6% al ingreso por cada compañero activo.',
+    lore: 'La colmena entera zumba a la vez.',
+    icon: 'companion', category: 'manada', tier: 6, requires: ['sinergia'],
+    baseCost: 900, costGrowth: 1.65, maxLevel: 4,
+    bonus: { colmenaPorComp: 0.06 }, x: 5, y: 5
+  },
+  {
+    id: 'funda', name: 'Funda del Yunque', description: '+5% a la probabilidad de crafteo por nivel.',
+    lore: 'Cada golpe del martillo despierta al yunque.',
+    icon: 'collector', category: 'forja', tier: 6, requires: ['anvil_song'],
+    baseCost: 880, costGrowth: 1.65, maxLevel: 5,
+    bonus: { craftLuck: 0.05 }, x: 5, y: 4
+  },
+  {
+    id: 'temple', name: 'Temple', description: '+6% a la probabilidad de crafteo por nivel.',
+    lore: 'El acero se temple en agua fría. El jugador en paciencia.',
+    icon: 'sparkle', category: 'forja', tier: 6, requires: ['funda'],
+    baseCost: 920, costGrowth: 1.65, maxLevel: 4,
+    bonus: { craftLuck: 0.06 }, x: 5, y: 5
+  },
+  {
+    id: 'alma', name: 'Alma de la Forja', description: '+5% a la probabilidad de crafteo por nivel.',
+    lore: 'La forja recuerda cada golpe que ha dado.',
+    icon: 'collector', category: 'forja', tier: 6, requires: ['temple'],
+    baseCost: 960, costGrowth: 1.65, maxLevel: 4,
+    bonus: { craftLuck: 0.05 }, x: 5, y: 6
+  },
+  {
+    id: 'yunque_vivo', name: 'Yunque Vivo', description: '+4% a la probabilidad de crafteo por nivel.',
+    lore: 'El yunque sueña con ser espada.',
+    icon: 'sparkle', category: 'forja', tier: 6, requires: ['alma'],
+    baseCost: 1000, costGrowth: 1.65, maxLevel: 3,
+    bonus: { craftLuck: 0.04 }, x: 5, y: 7
+  },
+  //  Ramas que van justas: tres más de Asalto, cuatro de Manada y dos de Forja
+  //  para que las cuatro lleguen a 15.
+  {
+    id: 'golpe_bajo', name: 'Golpe Bajo', description: '+12% al daño de click por nivel.',
+    lore: 'No es honorable. Es eficaz. Y cuando duele, duele dos veces.',
+    icon: 'bolt', category: 'asalto', tier: 5, requires: ['crit_master'],
+    baseCost: 420, costGrowth: 1.6, maxLevel: 4,
+    bonus: { clickMult: 0.12 }, x: 4, y: 7
+  },
+  {
+    id: 'sangre_fria', name: 'Sangre Fría', description: '+10% a la probabilidad de crítico por nivel.',
+    lore: 'El que no suda, acierta. El que suda, ya está muerto.',
+    icon: 'sparkle', category: 'asalto', tier: 5, requires: ['golpe_bajo'],
+    baseCost: 440, costGrowth: 1.6, maxLevel: 4,
+    bonus: { critChance: 0.10 }, x: 4, y: 8
+  },
+  {
+    id: 'enjambre_total', name: 'Enjambre Total', description: '+18% al ingreso pasivo por nivel.',
+    lore: 'Cada pieza se mueve y cuenta. Cuando todas se mueven a la vez, el enjambre entero rinde más que la suma de sus partes.',
+    icon: 'companion', category: 'manada', tier: 5, requires: ['swarm_mind'],
+    baseCost: 430, costGrowth: 1.6, maxLevel: 5,
+    bonus: { passiveMult: 0.18 }, x: 4, y: 7
+  },
+  {
+    id: 'manada_unida', name: 'Manada Unida', description: '+14% al ingreso pasivo por nivel.',
+    lore: 'Se avisan antes de entrar. Nadie se queda atrás.',
+    icon: 'chip', category: 'manada', tier: 6, requires: ['enjambre_total'],
+    baseCost: 870, costGrowth: 1.65, maxLevel: 5,
+    bonus: { passiveMult: 0.14 }, x: 5, y: 7
+  },
+  {
+    id: 'manada_viva', name: 'Manada Viva', description: '+10% al poder de pasivos por nivel.',
+    lore: 'No son máquinas: saben cuándo apretar.',
+    icon: 'companion', category: 'manada', tier: 6, requires: ['manada_unida'],
+    baseCost: 890, costGrowth: 1.65, maxLevel: 4,
+    bonus: { compPasivo: 0.10 }, x: 5, y: 8
+  },
+  {
+    id: 'llama', name: 'Llama Interna', description: '+5% a la probabilidad de crafteo por nivel.',
+    lore: 'La forja no se apaga: solo se echa.',
+    icon: 'bolt', category: 'forja', tier: 5, requires: ['anvil_song'],
+    baseCost: 470, costGrowth: 1.6, maxLevel: 4,
+    bonus: { craftLuck: 0.05 }, x: 4, y: 8
+  },
+  {
+    id: 'yunque_frio', name: 'Yunque Frío', description: '+6% a la probabilidad de crafteo por nivel.',
+    lore: 'El yunque templado aguanta más calor.',
+    icon: 'collector', category: 'forja', tier: 6, requires: ['llama'],
+    baseCost: 980, costGrowth: 1.65, maxLevel: 3,
+    bonus: { craftLuck: 0.06 }, x: 5, y: 10
+  },
+  {
+    id: 'colneta', name: 'Cola de Núcleos', description: '+10% al ingreso pasivo por nivel.',
+    lore: 'Todo lo que cae, queda. El fondo del pozo no se ve nunca, pero está ahí.',
+    icon: 'chip', category: 'fortuna', tier: 5, requires: ['deep_storage'],
+    baseCost: 490, costGrowth: 1.6, maxLevel: 5,
+    bonus: { passiveMult: 0.10 }, x: 4, y: 7
+  },
+  {
+    id: 'punhal', name: 'Puñalada', description: '+22% al daño de click por nivel.',
+    lore: 'Un solo lugar donde duele. Y el puñal lo encuentra siempre.',
+    icon: 'bolt', category: 'asalto', tier: 6, requires: ['ejecutor'],
+    baseCost: 1050, costGrowth: 1.65, maxLevel: 4,
+    bonus: { clickMult: 0.22 }, x: 5, y: 8
+  },
+  {
+    id: 'martillo_sagrado', name: 'Martillo Sagrado', description: '+7% a la probabilidad de crafteo por nivel.',
+    lore: 'Bendice lo que golpea. Y lo que golpea, bendice.',
+    icon: 'collector', category: 'forja', tier: 6, requires: ['yunque_frio'],
+    baseCost: 1020, costGrowth: 1.65, maxLevel: 3,
+    bonus: { craftLuck: 0.07 }, x: 5, y: 9
+  },
+  {
+    id: 'mano_de_obra', name: 'Mano de Obra', description: '+8% a la probabilidad de crafteo por nivel.',
+    lore: 'Las manos saben más que las máquinas.',
+    icon: 'sparkle', category: 'forja', tier: 5, requires: ['llama'],
+    baseCost: 450, costGrowth: 1.6, maxLevel: 5,
+    bonus: { craftLuck: 0.08 }, x: 4, y: 9
+  },
+  {
+    id: 'fragua', name: 'Fragua Eterna', description: '+10% a la probabilidad de crafteo por nivel.',
+    lore: 'La fragua que nunca se apaga. El fuego no descansa, y el acero tampoco.',
+    icon: 'collector', category: 'forja', tier: 6, requires: ['mano_de_obra'],
+    baseCost: 1100, costGrowth: 1.65, maxLevel: 3,
+    bonus: { craftLuck: 0.10 }, x: 5, y: 11
   }
 ];
 

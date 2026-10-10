@@ -66,6 +66,8 @@ function bonusLabel(key: keyof PassiveBonuses, value: number): string {
     case 'compClick': return `${pct(value)} poder de clicks`;
     case 'compMulti': return `${pct(value)} efecto multiplier`;
     case 'compDescuento': return `−${Math.round(value * 100)}% coste de mejora`;
+    case 'critChance': return `+${Math.round(value * 100)}% prob. de crítico`;
+    case 'nanoPerCrate': return `+${value} nanitas por caja`;
     default: return `${key} +${value}`;
   }
 }

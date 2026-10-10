@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.31',
+    fecha: '10 de octubre de 2026',
+    titulo: 'El árbol llega a quince nodos por rama',
+    lineas: [
+      'Cada rama del árbol ahora tiene quince nodos, hasta el fondo.',
+      'Nuevos nodos que suben la probabilidad de crítico.',
+      'Abrir una caja ahora también paga nanitas si tienes el Seguro.'
+    ]
+  },
+  {
     version: '1.15.30',
     fecha: '9 de octubre de 2026',
     titulo: 'Pantalla de mantenimiento',

@@ -207,7 +207,7 @@ async function main() {
     const costes = TREE_NODES.filter(n => nodeCost(n as any, 0) !== n.baseCost);
     check('wiki: el coste base sale de nodeCost()', costes.length === 0,
       costes.map(n => n.id).join(',') || 'todos cuadran');
-    check('wiki: el árbol tiene cinco columnas', new Set(TREE_NODES.map(n => n.tier)).size === 5,
+    check('wiki: el árbol tiene siete columnas (0-6)', new Set(TREE_NODES.map(n => n.tier)).size === 7,
       [...new Set(TREE_NODES.map(n => n.tier))].join(','));
   }
 

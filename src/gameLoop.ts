@@ -660,7 +660,8 @@ export async function createGameLoop(
       sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0,
       licenciaT2: 0, licenciaT3: 0, ecoDoble: 0,
       compPasivo: 0, compClick: 0, compMulti: 0, compDescuento: 0,
-      compPassivoBuffMult: 0, compClickBuffMult: 0, compGlobalBuffMult: 0
+      compPassivoBuffMult: 0, compClickBuffMult: 0, compGlobalBuffMult: 0,
+      critChance: 0, nanoPerCrate: 0
     },
     // --- Cosméticos equipados ---
     cosmetics: {
@@ -3261,7 +3262,7 @@ function sePuedeGuardar(): boolean {
         return { critico: true, mult: state.bonus.sobrecargaMult || MULTIPLICADOR_CRITICO };
       }
     }
-    const critico = Math.random() < equippedAffixEffect().critChance;
+    const critico = Math.random() < (equippedAffixEffect().critChance + (state.bonus.critChance || 0));
     return { critico, mult: critico ? MULTIPLICADOR_CRITICO : 1 };
   }
 
@@ -6444,6 +6445,14 @@ const RITMO_GUARDADO_MS = 60_000;
 
       consumeWarehouseItem(caja.id, 1);
       state.cratesOpened += 1;
+
+      // F97 Lote 3 · Seguro: cada caja paga una cantidad plana de nanitas.
+      // Va ANTES del botín, porque lo que se cobra al abrir es lo primero que
+      // entra; y se suma al total producido igual que cualquier otro ingreso.
+      if ((state.bonus.nanoPerCrate || 0) > 0) {
+        state.nanites += state.bonus.nanoPerCrate;
+        state.totalNanitesProduced += state.bonus.nanoPerCrate;
+      }
 
       // El botín lo decide la tabla (crateLoot) y se aplica aquí. La ruleta solo
       // lo muestra: si la animación decidiera, mentiría sobre las probabilidades.

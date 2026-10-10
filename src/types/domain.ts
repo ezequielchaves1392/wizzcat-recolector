@@ -167,6 +167,10 @@ export interface PassiveBonuses {
   sobrecargaCada: number;
   /** Multiplicador del crítico asegurado de Sobrecarga. */
   sobrecargaMult: number;
+  /** Probabilidad de crítico extra (fracción, 0.10 = +10 puntos). */
+  critChance: number;
+  /** Nanitas extra que paga cada caja al abrirse (plana, no fracción). */
+  nanoPerCrate: number;
   /** Fracción de pasivo extra por cada compañero activo además del primero (Mente Colmena). */
   colmenaPorComp: number;
   /** Probabilidad de que una caja suba un tier su premio (Jackpot). */
