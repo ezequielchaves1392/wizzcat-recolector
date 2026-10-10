@@ -652,6 +652,8 @@ export async function createGameLoop(
     nodeLevels: {} as Record<string, number>, // Nivel por nodo
     forgedCount: 0, // Recolectores forjadas con exito
     sobrecargaCuenta: 0, // Clics hacia el próximo crítico asegurado (Sobrecarga)
+    jackpots: 0, // Premios subidos por el Jackpot (logro suerte_doble)
+    ecos: 0, // Botines dobles por el Eco (logro doble_eco)
     // --- Bonificaciones agregadas del arbol (se recalculan al cargar) ---
     bonus: {
       clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
@@ -2189,6 +2191,11 @@ function sePuedeGuardar(): boolean {
       }
       state.forgedCount = data.forgedCount ?? 0;
       state.sobrecargaCuenta = Math.max(0, Math.floor(Number(data.sobrecargaCuenta) || 0));
+      // F97 · Contadores de jackpot y eco: cuántas veces saltó cada uno. Son
+      // números nuevos con default 0 y coacción `?? 0`: nada irreversible, así
+      // que no suben SAVE_VERSION.
+      state.jackpots = Math.max(0, Math.floor(Number(data.jackpots) || 0));
+      state.ecos = Math.max(0, Math.floor(Number(data.ecos) || 0));
       state.cosmetics = {
         title: data.cosmetics?.title ?? 'title_default',
         frame: data.cosmetics?.frame ?? 'frame_none',
@@ -2397,6 +2404,8 @@ function sePuedeGuardar(): boolean {
         nodeLevels: state.nodeLevels,
         forgedCount: state.forgedCount,
         sobrecargaCuenta: state.sobrecargaCuenta,
+        jackpots: state.jackpots,
+        ecos: state.ecos,
         cosmetics: state.cosmetics,
         autoVenta: state.autoVenta,
         updatedAt: new Date()
@@ -3667,6 +3676,8 @@ function sePuedeGuardar(): boolean {
         nodeLevels: state.nodeLevels,
         forgedCount: state.forgedCount,
         sobrecargaCuenta: state.sobrecargaCuenta,
+        jackpots: state.jackpots,
+        ecos: state.ecos,
         cosmetics: state.cosmetics,
         autoVenta: state.autoVenta,
         updatedAt: new Date(),
@@ -6584,6 +6595,11 @@ const RITMO_GUARDADO_MS = 60_000;
       // incluyan lo que acaba de caer. Recalcularlos antes era lo que dejaba el
       // almacén y los contadores desincronizados.
       syncCrateCounters();
+      // F97 · Contadores de jackpot y eco para sus logros. Los flags viajan en
+      // el premio (`aplicarJackpot`/`aplicarEco` los ponen): si saltaron, el
+      // premio lo dice y aquí solo se cuenta. Sin flags no se cuenta nada.
+      if ((premio as any)?.jackpot === true) state.jackpots = (state.jackpots ?? 0) + 1;
+      if ((premio as any)?.eco === true) state.ecos = (state.ecos ?? 0) + 1;
       refreshAfkCardCount();
       recalculatePassiveIncome();
       onUpdate(state, isAfk);

@@ -181,7 +181,7 @@ async function main() {
   // 6 · Veintisiete logros, y los difíciles sin números
   // ------------------------------------------------------------------
   {
-    check('wiki: hay 27 logros', ACHIEVEMENTS.length === 27, `${ACHIEVEMENTS.length}`);
+    check('wiki: hay 32 logros', ACHIEVEMENTS.length === 32, `${ACHIEVEMENTS.length}`);
     const dificiles = new Set(LOGROS_DIFICILES.map(d => d.id));
     const sinBonus = ACHIEVEMENTS.filter(a =>
       dificiles.has(a.id) || (SECRET_ACHIEVEMENTS as string[]).includes(a.id));

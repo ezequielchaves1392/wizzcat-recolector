@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.32',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Cinco logros nuevos del árbol',
+    lineas: [
+      'Cinco logros nuevos celebran el árbol: tu primer keystone, una rama completa, una Obra Maestra, un premio subido y un botín doble.',
+      'Cada uno trae su banner para el perfil.',
+      'Si el juego no puede cargar tu partida por mantenimiento, el aviso ahora también lo dice así y te deja abrir la Wiki mientras esperas.'
+    ]
+  },
+  {
     version: '1.15.31',
     fecha: '10 de octubre de 2026',
     titulo: 'El árbol llega a quince nodos por rama',

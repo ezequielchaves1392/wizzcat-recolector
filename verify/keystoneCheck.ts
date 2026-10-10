@@ -102,24 +102,30 @@ async function main() {
       rarity: 'Común', potential: 3
     });
     const base = { nanites: 0, totalNanitesProduced: 0 };
+    // F97 · `primera_maestria` (+3 % pasivo) se desbloquea al comprar colmena,
+    // que ES un keystone. Sin fijarlo, el lado con nodo mediría colmena+logro
+    // y el lado sin nodo solo colmena: el test mediría dos cosas. Con el logro
+    // desbloqueado en los tres, el +3 % es constante y lo que se compara es
+    // solo la colmena (103 de base: 100 × 1,03).
+    const conLogro = { unlockedAchievements: ['primera_maestria'] };
     const g1: any = await boot(baseSave([], {
-      ...base, companions: [comp('a')], activeCompanions: ['a'],
+      ...base, ...conLogro, companions: [comp('a')], activeCompanions: ['a'],
       nodeLevels: { colmena: 1 }
     }));
     check('colmena: con uno solo no hay demas y no suma nada',
-      s(g1).passiveIncome === 100, `ingreso=${s(g1).passiveIncome}`);
+      s(g1).passiveIncome === 103, `ingreso=${s(g1).passiveIncome}`);
     const g2: any = await boot(baseSave([], {
-      ...base, companions: [comp('a'), comp('b')], activeCompanions: ['a', 'b'],
+      ...base, ...conLogro, companions: [comp('a'), comp('b')], activeCompanions: ['a', 'b'],
       nodeLevels: {}
     }));
     const g3: any = await boot(baseSave([], {
-      ...base, companions: [comp('a'), comp('b')], activeCompanions: ['a', 'b'],
+      ...base, ...conLogro, companions: [comp('a'), comp('b')], activeCompanions: ['a', 'b'],
       nodeLevels: { colmena: 1 }
     }));
-    check('colmena: sin el nodo, dos de 100 dan 200',
-      s(g2).passiveIncome === 200, `ingreso=${s(g2).passiveIncome}`);
-    check('colmena: y con el nodo, 200 por 1,04',
-      s(g3).passiveIncome === 208, `ingreso=${s(g3).passiveIncome}`);
+    check('colmena: sin el nodo, dos de 100 dan 206 con el logro',
+      s(g2).passiveIncome === 206, `ingreso=${s(g2).passiveIncome}`);
+    check('colmena: y con el nodo, 206 por 1,04',
+      s(g3).passiveIncome === 214, `ingreso=${s(g3).passiveIncome}`);
   }
 
   // -------------------------------------------------------------------------

@@ -37,6 +37,14 @@ export type AchievementId =
   | 'first_forge'
   | 'smith_25'
   | 'ascendant'
+  // F97 · Los cinco del árbol nuevo: un keystone, una rama llena, una firma,
+  // un salto de premio y un eco. Son cortos (uno por mecánica) con bono
+  // pequeño, como los de arriba: celebrar, no pagar la partida.
+  | 'primera_maestria'
+  | 'rama_completa'
+  | 'obra_firmada'
+  | 'suerte_doble'
+  | 'doble_eco'
   // Logros secretos
   | 'ghost'
   | 'hidden'
@@ -99,6 +107,12 @@ export const ACHIEVEMENT_REWARDS: Record<AchievementId, { clickBonus: number; pa
   first_forge: { clickBonus: 0.05, passiveBonus: 0 },
   smith_25: { clickBonus: 0.10, passiveBonus: 0.10 },
   ascendant: { clickBonus: 0.20, passiveBonus: 0.20 },
+  // F97 · Cortos del árbol nuevo: bono pequeño, el premio gordo es el banner.
+  primera_maestria: { clickBonus: 0, passiveBonus: 0.03 },
+  rama_completa: { clickBonus: 0.05, passiveBonus: 0 },
+  obra_firmada: { clickBonus: 0.05, passiveBonus: 0 },
+  suerte_doble: { clickBonus: 0, passiveBonus: 0.03 },
+  doble_eco: { clickBonus: 0, passiveBonus: 0.03 },
   // Secretos: sin bonificación numérica, el premio es el cosmético
   ghost: { clickBonus: 0, passiveBonus: 0 },
   hidden: { clickBonus: 0, passiveBonus: 0 },

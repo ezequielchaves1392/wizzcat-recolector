@@ -278,6 +278,10 @@ export interface PrestigeState {
   nodeLevels: Record<string, number>;
   /** Recolectores crafteadas por el jugador. */
   forgedCount: number;
+  /** Premios subidos por el Jackpot (logro suerte_doble). */
+  jackpots: number;
+  /** Botines dobles por el Eco (logro doble_eco). */
+  ecos: number;
 }
 
 export interface CosmeticState {

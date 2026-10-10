@@ -810,6 +810,90 @@ async function main() {
       d0.total === 0 && d0.intrinseco === 0 && d0.partida === 0,
       `total=${d0.total}`);
   }
+
+  // -------------------------------------------------------------------------
+  //  F97 · LOS CINCO DEL ÁRBOL NUEVO: SE DESBLOQUEAN POR SU CAMINO Y ABREN SU BANNER
+  //
+  //  Cada logro se consigue jugando (comprar, forjar, abrir) y su banner se
+  //  reconcilia solo al desbloquearse: la invariante es la misma que la de los
+  //  doce (logro → cosmético que se abre de verdad), medida por el mismo
+  //  camino (`cosmeticsAlcanzables` + motor real).
+  // -------------------------------------------------------------------------
+  {
+    const CINCO = [
+      { id: 'primera_maestria', banner: 'banner_maestria' },
+      { id: 'rama_completa', banner: 'banner_cima' },
+      { id: 'obra_firmada', banner: 'banner_firma' },
+      { id: 'suerte_doble', banner: 'banner_doble' },
+      { id: 'doble_eco', banner: 'banner_eco' },
+    ];
+    const porId = (id: string) => ACHIEVEMENTS.find(a => a.id === id) as any;
+    check('logros F97: los cinco están en el catálogo',
+      CINCO.every(c => porId(c.id)),
+      CINCO.filter(c => !porId(c.id)).map(c => c.id).join(',') || 'los cinco');
+    // Cada uno abre su banner por la vía de logro, y se abre de verdad.
+    const sinBanner: string[] = [];
+    const queNoAbren: string[] = [];
+    for (const c of CINCO) {
+      const suyos = (COSMETICS as any[]).filter(x => x.unlock.kind === 'achievement' && x.unlock.value === c.id);
+      if (!suyos.some(x => x.id === c.banner)) { sinBanner.push(c.id); continue; }
+      const abiertos = alcanzables({ unlockedAchievements: [c.id] }).map((x: any) => x.id);
+      if (!abiertos.includes(c.banner)) queNoAbren.push(`${c.id}->${c.banner}`);
+    }
+    check('logros F97: cada uno premia su banner',
+      sinBanner.length === 0, sinBanner.join(',') || 'los cinco tienen banner');
+    check('logros F97: y el banner se abre de verdad al desbloquear el logro',
+      queNoAbren.length === 0, queNoAbren.join(',') || 'los cinco se abren');
+
+    // 1. Primera Maestría: comprar un keystone la desbloquea en el motor.
+    const g1 = await boot(baseSave([], { cores: 100_000, nodeLevels: { sobrecarga: 1 } }));
+    check('logros F97: comprar un keystone desbloquea Primera Maestría',
+      (s(g1).unlockedAchievements ?? []).includes('primera_maestria'),
+      (s(g1).unlockedAchievements ?? []).join(','));
+    check('logros F97: y su banner queda desbloqueado',
+      ((s(g1).cosmetics as any)?.unlocked ?? []).includes('banner_maestria'),
+      ((s(g1).cosmetics as any)?.unlocked ?? []).join(','));
+
+    // 2. Rama Completa: 15 nodos con nivel en la misma rama.
+    const quinceAsalto = ['core_edge', 'auto_clicker', 'auto_clicker2', 'multiplier_amp', 'singularity', 'full_automation', 'sobrecarga', 'crit_master', 'click_storm', 'furia', 'martillo', 'ejecutor', 'golpe_bajo', 'sangre_fria', 'punhal'];
+    const niveles: Record<string, number> = {};
+    for (const id of quinceAsalto) niveles[id] = 1;
+    const g2 = await boot(baseSave([], { cores: 100_000, nodeLevels: niveles }));
+    check('logros F97: 15 nodos en Asalto desbloquean Rama Completa',
+      (s(g2).unlockedAchievements ?? []).includes('rama_completa'),
+      (s(g2).unlockedAchievements ?? []).join(','));
+    // Y con 14 no vale: el quinceavo es el que cuenta.
+    const catorce: Record<string, number> = {};
+    for (const id of quinceAsalto.slice(0, 14)) catorce[id] = 1;
+    const g2b = await boot(baseSave([], { cores: 100_000, nodeLevels: catorce }));
+    check('logros F97: con 14 no se desbloquea',
+      !(s(g2b).unlockedAchievements ?? []).includes('rama_completa'),
+      (s(g2b).unlockedAchievements ?? []).join(','));
+
+    // 3. Obra Firmada: una ficha con obraMaestra en el almacén.
+    const g3 = await boot(baseSave([
+      { id: 'om', name: 'X·Obra Maestra', type: 'collector', details: 'x', rarity: 'Raro', tier: 4, level: 0, damage: 10, potential: 5, obraMaestra: true }
+    ], {}));
+    check('logros F97: una Obra Maestra en el almacén desbloquea Obra Firmada',
+      (s(g3).unlockedAchievements ?? []).includes('obra_firmada'),
+      (s(g3).unlockedAchievements ?? []).join(','));
+
+    // 4 y 5. Suerte Doble y Doble Eco: por sus contadores.
+    const g4 = await boot(baseSave([], { jackpots: 1 }));
+    check('logros F97: un jackpot desbloquea Suerte Doble',
+      (s(g4).unlockedAchievements ?? []).includes('suerte_doble'),
+      (s(g4).unlockedAchievements ?? []).join(','));
+    const g5 = await boot(baseSave([], { ecos: 1 }));
+    check('logros F97: un eco desbloquea Doble Eco',
+      (s(g5).unlockedAchievements ?? []).includes('doble_eco'),
+      (s(g5).unlockedAchievements ?? []).join(','));
+    // Y en cero no se desbloquean: el contador manda, no la intención.
+    const g0b = await boot(baseSave([], {}));
+    check('logros F97: sin jackpot ni eco no se desbloquean',
+      !(s(g0b).unlockedAchievements ?? []).includes('suerte_doble')
+        && !(s(g0b).unlockedAchievements ?? []).includes('doble_eco'),
+      (s(g0b).unlockedAchievements ?? []).join(','));
+  }
 }
 
 

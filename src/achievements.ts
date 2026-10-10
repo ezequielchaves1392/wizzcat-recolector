@@ -6,6 +6,7 @@
 // al recalcular, así que no necesitan escribirse en el estado del jugador.
 
 import { ACHIEVEMENT_REWARDS, type AchievementId } from './data/achievements';
+import { TREE_BY_ID } from './data/tree';
 import { techoDeExpansor, EXPANSOR_TIERS } from './data/store';
 import { POTENTIAL_MAX } from './data/crafting';
 // **EL TECHO DE LA ESCALERA Y EL TOPE DE AFIJOS, NO LOS NÚMEROS ESCRITOS.** El logro del
@@ -165,6 +166,81 @@ export const ACHIEVEMENTS: Achievement[] = [
     rewardText: '+5% poder de click · Título "Aprendiz de Forja"',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 1), target: 1 })
+  },
+  // ------------------------------------------------------------------
+  //  F97 · LOS CINCO DEL ÁRBOL NUEVO
+  //
+  //  Uno por mecánica nueva, y cada condición mide lo que el jugador ve:
+  //  el keystone comprado en su pestaña, los nodos con nivel en la rama, la
+  //  firma en la ficha del almacén, y los contadores de salto y eco que la
+  //  tarjeta de la caja anuncia. Nada de campos que no se puedan perseguir.
+  // ------------------------------------------------------------------
+  {
+    id: 'primera_maestria',
+    title: 'Primera Maestría',
+    description: 'Compra tu primer keystone del árbol',
+    icon: 'medal',
+    rewardText: '+3% ingreso pasivo · Banner "Maestría"',
+    reward: { clickBonus: 0, passiveBonus: 0.03 },
+    // Los cuatro keystones, por id: el que esté comprado vale.
+    progress: (s) => ({
+      current: ['sobrecarga', 'colmena', 'jackpot', 'obra_maestra']
+        .some(k => ((s.nodeLevels ?? {})[k] ?? 0) > 0) ? 1 : 0,
+      target: 1
+    })
+  },
+  {
+    id: 'rama_completa',
+    title: 'Rama Completa',
+    description: 'Ten los 15 nodos de una rama comprados',
+    icon: 'sparkle',
+    rewardText: '+5% poder de click · Banner "Cima"',
+    reward: { clickBonus: 0.05, passiveBonus: 0 },
+    // Nodos con al menos un nivel, por rama; vale la que más tenga. La
+    // categoría sale de la tabla, no de un prefijo del id: un renombre no
+    // puede dejar una rama incompletable.
+    progress: (s) => {
+      const porRama: Record<string, number> = {};
+      for (const [id, nivel] of Object.entries(s.nodeLevels ?? {})) {
+        if ((nivel as number) > 0) {
+          const rama = TREE_BY_ID[id]?.category ?? 'otra';
+          porRama[rama] = (porRama[rama] ?? 0) + 1;
+        }
+      }
+      return { current: Math.min(Math.max(0, ...Object.values(porRama)), 15), target: 15 };
+    }
+  },
+  {
+    id: 'obra_firmada',
+    title: 'Obra Firmada',
+    description: 'Forja una Obra Maestra',
+    icon: 'collector',
+    rewardText: '+5% poder de click · Banner "Firma"',
+    reward: { clickBonus: 0.05, passiveBonus: 0 },
+    // La firma vive en la ficha del almacén, como el potencial: si está, se
+    // forjó. Una vez desbloqueado el logro no se pierde al venderla.
+    progress: (s) => ({
+      current: (s.warehouse ?? []).some((w: any) => w?.obraMaestra === true) ? 1 : 0,
+      target: 1
+    })
+  },
+  {
+    id: 'suerte_doble',
+    title: 'Suerte Doble',
+    description: 'Sube un premio de caja con el Jackpot',
+    icon: 'crate',
+    rewardText: '+3% ingreso pasivo · Banner "Doble"',
+    reward: { clickBonus: 0, passiveBonus: 0.03 },
+    progress: (s) => ({ current: Math.min(s.jackpots ?? 0, 1), target: 1 })
+  },
+  {
+    id: 'doble_eco',
+    title: 'Doble Eco',
+    description: 'Saca un botín doble con el Eco',
+    icon: 'gem',
+    rewardText: '+3% ingreso pasivo · Banner "Eco"',
+    reward: { clickBonus: 0, passiveBonus: 0.03 },
+    progress: (s) => ({ current: Math.min(s.ecos ?? 0, 1), target: 1 })
   },
   {
     id: 'smith_25',

@@ -162,6 +162,23 @@ export const COSMETICS: Cosmetic[] = [
   { id: 'banner_crimson', type: 'banner', name: 'Carmesí', description: 'Rojo de alarma.', rarity: 'Legendario',
     unlock: { kind: 'achievement', value: 'ascendant' },
     style: { background: 'radial-gradient(circle at 50% 35%,#dc2626,#450a0a 78%)' } },
+  // F97 · Los cinco del árbol nuevo, uno por logro. Fondos que no giran ni
+  // cambian de tono: un fondo no rota (ver Corona arriba).
+  { id: 'banner_maestria', type: 'banner', name: 'Maestría', description: 'Dorado de primer keystone.', rarity: 'Épico',
+    unlock: { kind: 'achievement', value: 'primera_maestria' },
+    style: { background: 'radial-gradient(circle at 50% 35%,#fbbf24,#451a03 78%)' } },
+  { id: 'banner_cima', type: 'banner', name: 'Cima', description: 'Púrpura de rama completa.', rarity: 'Legendario',
+    unlock: { kind: 'achievement', value: 'rama_completa' },
+    style: { background: 'radial-gradient(circle at 50% 30%,#a855f7,#2e1065 75%)' } },
+  { id: 'banner_firma', type: 'banner', name: 'Firma', description: 'Ámbar de obra firmada.', rarity: 'Legendario',
+    unlock: { kind: 'achievement', value: 'obra_firmada' },
+    style: { background: 'linear-gradient(160deg,#92400e,#f59e0b 55%,#451a03)' } },
+  { id: 'banner_doble', type: 'banner', name: 'Doble', description: 'Verde de premio subido.', rarity: 'Épico',
+    unlock: { kind: 'achievement', value: 'suerte_doble' },
+    style: { background: 'linear-gradient(180deg,#065f46,#10b981 60%,#022c22)' } },
+  { id: 'banner_eco', type: 'banner', name: 'Eco', description: 'Azul de botín doble.', rarity: 'Épico',
+    unlock: { kind: 'achievement', value: 'doble_eco' },
+    style: { background: 'repeating-linear-gradient(180deg,#0c4a6e 0 6px,#082f49 6px 12px)' } },
   // Corona: el conic dorado daba vueltas como un cuadrado girando. Ahora el fondo cambia
   // de TONO, que no mueve la caja: un fondo no rota.
   { id: 'banner_crown', type: 'banner', name: 'Corona', description: 'Solo para el primer lugar.',
