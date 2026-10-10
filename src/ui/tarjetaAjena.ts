@@ -282,7 +282,7 @@ function cifrasDeTarjeta(t: TarjetaPublica): string {
   const parcial = t.completa === false;
   const cifras: [string, number, string][] = [
     ['Nanitas producidas', t.nanitasProducidas, 'text-amber-400'],
-    ['Clics', t.totalClicks, 'text-cyan-400']
+    ['Clicks', t.totalClicks, 'text-cyan-400']
   ];
   if (!parcial) {
     cifras.push(['Ascensiones', t.resets, 'text-emerald-400']);
@@ -330,7 +330,7 @@ function bloqueDeRecolectores(t: TarjetaPublica): string {
   const valorAjeno = finalAjeno.total > 0 ? `+${formatNumber(finalAjeno.total)}` : '--';
   const detalleAjeno = finalAjeno.total > 0
     ? `Del arma +${formatNumber(finalAjeno.intrinseco)} · De la partida +${formatNumber(finalAjeno.partida)} · sin buffs temporales`
-    : 'Daño por clic, con el potencial ya aplicado';
+    : 'Recolección por click, con el potencial ya aplicado';
   return `
     ${subtitulo('Recolector', '')}
     <div class="flex flex-col gap-2">

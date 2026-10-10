@@ -258,7 +258,7 @@ export function renderLayoutHTML(
           -->
           ${!state?.equippedCollectorId ? `
             <p class="text-[10px] font-mono text-amber-400/90 text-center leading-snug max-w-[22rem]">
-              No tienes ningún recolector equipado. Cada clic te da 1 mientras tanto: abre
+              No tienes ningún recolector equipado. Cada click te da 1 mientras tanto: abre
               una caja del Mercado para conseguir uno.
             </p>` : ''}
 

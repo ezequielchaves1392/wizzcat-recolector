@@ -118,7 +118,7 @@ export interface OrdenAlmacen { id: string; label: string; filtros: string[] }
 export const ORDENES_ALMACEN: OrdenAlmacen[] = [
   { id: 'default', label: 'Default', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
   { id: 'value', label: 'Mayor valor', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
-  { id: 'stat', label: 'Recolección por clic', filtros: ['all', 'collector'] },
+  { id: 'stat', label: 'Recolección por click', filtros: ['all', 'collector'] },
   { id: 'statSeg', label: 'Recolección por segundo', filtros: ['all', 'companion'] },
   { id: 'tipo', label: 'Tipo', filtros: ['all'] },
   { id: 'rarity', label: 'Rareza', filtros: ['all', 'collector', 'companion', 'crate', 'otros'] },
@@ -460,10 +460,17 @@ function draw(
              mezcla con el filtro.
              Y el texto va en el placeholder, que es donde se lee lo que hace el campo, y no en un
              label suelto porque un buscador sin texto visible parece una casilla de
-             pegar texto. -->
+             pegar texto.
+             Y type="text" y NO type="search" (Q11): con search el navegador dibuja su
+             propia cruz de borrado —::-webkit-search-cancel-button— en la misma esquina
+             que la de aquí abajo, y el jugador veía DOS cruces para una sola acción, con
+             la del navegador tapando la nuestra. Aquí solo hay una, y es la que vacía
+             ui.buscar: el texto no vive en el campo, vive en ese estado, y de ahí sale
+             el filtro. El enterkeyhint se queda para que el teclado del móvil siga
+             diciendo "buscar", que es lo único bueno que traía search. -->
           <label class="relative flex-1 min-w-[9rem]" for="wh-buscar">
             <span class="sr-only">Buscar en el almacen</span>
-            <input id="wh-buscar" type="search" data-wh-search autocomplete="off"
+            <input id="wh-buscar" type="text" data-wh-search autocomplete="off" enterkeyhint="search"
                    placeholder="Buscar..." title="Buscar por nombre, tier o rareza"
                    value="${ui.buscar}"
                    class="h-10 w-full pl-3 pr-8 rounded-lg btn-ghost text-[11px] font-mono

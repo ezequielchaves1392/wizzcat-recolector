@@ -78,10 +78,10 @@ export const LOGROS_DIFICILES: { id: AchievementId; porQue: string }[] = [
   { id: 'cores_10k', porQue: 'Los núcleos son el residuo de la Ascensión: 10.000 son muchas vueltas.' },
   { id: 'eternidad', porQue: 'Veinte ascensiones es reiniciar veinte veces, cada una más cara que la anterior.' },
   { id: 'mil_millones', porQue: 'Un billón de nanitas producidas en total, contando todo el juego.' },
-  { id: 'incesante', porQue: 'Cien mil por segundo es ingreso pasivo con la partida madura.' },
+  { id: 'incesante', porQue: 'Cien mil por segundo es recolección por segundo con la partida madura.' },
   { id: 'cantera', porQue: 'Quinientas cajas, contando las que no sale nada.' },
-  { id: 'ninguna_bala', porQue: 'Cien mil clics son días de juego; el juego no regala nada por clic.' },
-  { id: 'doblaje', porQue: 'Cinco compañeros multiplicadores a la vez: el pasivo por el doble.' },
+  { id: 'ninguna_bala', porQue: 'Cien mil clicks son días de juego; el juego no regala nada por click.' },
+  { id: 'doblaje', porQue: 'Cinco compañeros multiplicadores a la vez: la recolección por segundo al doble.' },
   { id: 'custodio', porQue: 'Veinte nodos del árbol comprados entre las cinco ramas.' }
 ];
 

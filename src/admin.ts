@@ -723,7 +723,7 @@ function pintarDetalle() {
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
         ${campo('Nanitas', formatNumber(u.nanites), 'accent-text text-[15px] font-bold')}
         ${campo('Producidas', formatNumber(u.totalNanitesProduced))}
-        ${campo('Clics', formatNumber(u.totalClicks))}
+        ${campo('Clicks', formatNumber(u.totalClicks))}
         ${campo('Núcleos', formatNumber(u.cores))}
         ${campo('Cristales', formatNumber(Number(d.crystals) || 0))}
         ${campo('Cajas', `${cajas.common || 0}C · ${cajas.rare || 0}R · ${cajas.epic || 0}E · ${cajas.legendary || 0}L`)}
@@ -856,7 +856,7 @@ function pintarDetalle() {
                 <th class="py-1.5 pr-2 font-normal">Tipo</th>
                 <th class="py-1.5 pr-2 font-normal">Rareza</th>
                 <th class="py-1.5 pr-2 font-normal text-right">Nivel</th>
-                <th class="py-1.5 pr-2 font-normal text-right">Daño</th>
+                <th class="py-1.5 pr-2 font-normal text-right">Click</th>
                 <th class="py-1.5 pr-2 font-normal text-right">Cant.</th>
                 <th class="py-1.5 font-normal text-right">Precio</th>
               </tr>

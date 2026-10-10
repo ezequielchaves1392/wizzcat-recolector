@@ -34,7 +34,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Primer Enlace',
     description: 'Extrae 100 Nanitas en total',
     icon: 'bolt',
-    rewardText: '+2% poder de click',
+    rewardText: '+2% recolección por click',
     reward: { clickBonus: 0.02, passiveBonus: 0 },
     progress: (s) => ({ current: Math.min(s.totalNanitesProduced ?? 0, 100), target: 100 })
   },
@@ -43,7 +43,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Táctico',
     description: 'Sube un recolector al nivel 10',
     icon: 'medal',
-    rewardText: '+5% poder de click',
+    rewardText: '+5% recolección por click',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     progress: (s) => ({
       current: Math.max(0, ...(s.warehouse ?? []).filter((w: any) => w.type === 'collector').map((w: any) => w.level || 0)),
@@ -55,7 +55,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Enjambre Autómata',
     description: 'Equipa 3 compañeros a la vez',
     icon: 'companion',
-    rewardText: '+8% ingreso pasivo',
+    rewardText: '+8% recolección por segundo',
     reward: { clickBonus: 0, passiveBonus: 0.08 },
     progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 3), target: 3 })
   },
@@ -78,7 +78,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Fuera de Especificación',
     description: 'Consigue un item con 5 estrellas de potencial',
     icon: 'flame',
-    rewardText: '+10% poder de click',
+    rewardText: '+10% recolección por click',
     reward: { clickBonus: 0.10, passiveBonus: 0 },
     progress: (s) => ({
       current: (s.warehouse ?? []).some((w: any) => (w.potential ?? 0) >= 5) ? 1 : 0,
@@ -90,7 +90,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Descifrador',
     description: 'Abre 25 cajas',
     icon: 'crate',
-    rewardText: '+12% ingreso pasivo',
+    rewardText: '+12% recolección por segundo',
     reward: { clickBonus: 0, passiveBonus: 0.12 },
     progress: (s) => ({ current: Math.min(s.cratesOpened ?? 0, 25), target: 25 })
   },
@@ -99,7 +99,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Fortuna Divina',
     description: 'Consigue un compañero Mítico o Divino de caja',
     icon: 'crown',
-    rewardText: '+15% poder de click',
+    rewardText: '+15% recolección por click',
     reward: { clickBonus: 0.15, passiveBonus: 0 },
     progress: (s) => ({
       current: (s.companions ?? []).some((c: any) => c.rarity === 'Mítico' || c.rarity === 'Divino') ? 1 : 0,
@@ -111,7 +111,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'M magnate',
     description: 'Acumula 250.000 Nanitas',
     icon: 'graph',
-    rewardText: '+15% ingreso pasivo',
+    rewardText: '+15% recolección por segundo',
     reward: { clickBonus: 0, passiveBonus: 0.15 },
     progress: (s) => ({ current: Math.min(Math.floor(s.nanites ?? 0), 250000), target: 250000 })
   },
@@ -120,7 +120,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Escuadrón Completo',
     description: 'Equipa 5 compañeros a la vez',
     icon: 'chip',
-    rewardText: '+20% ingreso pasivo',
+    rewardText: '+20% recolección por segundo',
     reward: { clickBonus: 0, passiveBonus: 0.20 },
     progress: (s) => ({ current: Math.min(s.activeCompanions?.length ?? 0, 5), target: 5 })
   },
@@ -129,7 +129,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Almacén Masivo',
     description: 'Amplía el almacén a 20 slots',
     icon: 'warehouse',
-    rewardText: '+25% poder de click',
+    rewardText: '+25% recolección por click',
     reward: { clickBonus: 0.25, passiveBonus: 0 },
     // B4 · LA CAPACIDAD QUE MIDE TIENE QUE SER LA QUE EL JUGADOR VE.
     //
@@ -154,7 +154,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Barón de Nanobots',
     description: 'Alcanza 5.000 Nanitas por segundo',
     icon: 'sparkle',
-    rewardText: '+30% poder de click y +30% pasivo',
+    rewardText: '+30% recolección por click y +30% recolección por segundo',
     reward: { clickBonus: 0.30, passiveBonus: 0.30 },
     progress: (s) => ({ current: Math.min(Math.floor(s.passiveIncome ?? 0), 5000), target: 5000 })
   },
@@ -163,7 +163,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Primera Chispa',
     description: 'Forja tu primer recolector',
     icon: 'collector',
-    rewardText: '+5% poder de click · Título "Aprendiz de Forja"',
+    rewardText: '+5% recolección por click · Título "Aprendiz de Forja"',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 1), target: 1 })
   },
@@ -180,7 +180,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Primera Maestría',
     description: 'Compra tu primer keystone del árbol',
     icon: 'medal',
-    rewardText: '+3% ingreso pasivo · Banner "Maestría"',
+    rewardText: '+3% recolección por segundo · Banner "Maestría"',
     reward: { clickBonus: 0, passiveBonus: 0.03 },
     // Los cuatro keystones, por id: el que esté comprado vale.
     progress: (s) => ({
@@ -194,7 +194,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Rama Completa',
     description: 'Ten los 15 nodos de una rama comprados',
     icon: 'sparkle',
-    rewardText: '+5% poder de click · Banner "Cima"',
+    rewardText: '+5% recolección por click · Banner "Cima"',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     // Nodos con al menos un nivel, por rama; vale la que más tenga. La
     // categoría sale de la tabla, no de un prefijo del id: un renombre no
@@ -215,7 +215,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Obra Firmada',
     description: 'Forja una Obra Maestra',
     icon: 'collector',
-    rewardText: '+5% poder de click · Banner "Firma"',
+    rewardText: '+5% recolección por click · Banner "Firma"',
     reward: { clickBonus: 0.05, passiveBonus: 0 },
     // La firma vive en la ficha del almacén, como el potencial: si está, se
     // forjó. Una vez desbloqueado el logro no se pierde al venderla.
@@ -229,7 +229,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Suerte Doble',
     description: 'Sube un premio de caja con el Jackpot',
     icon: 'crate',
-    rewardText: '+3% ingreso pasivo · Banner "Doble"',
+    rewardText: '+3% recolección por segundo · Banner "Doble"',
     reward: { clickBonus: 0, passiveBonus: 0.03 },
     progress: (s) => ({ current: Math.min(s.jackpots ?? 0, 1), target: 1 })
   },
@@ -238,7 +238,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Doble Eco',
     description: 'Saca un botín doble con el Eco',
     icon: 'gem',
-    rewardText: '+3% ingreso pasivo · Banner "Eco"',
+    rewardText: '+3% recolección por segundo · Banner "Eco"',
     reward: { clickBonus: 0, passiveBonus: 0.03 },
     progress: (s) => ({ current: Math.min(s.ecos ?? 0, 1), target: 1 })
   },
@@ -247,7 +247,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Maestro de Forja',
     description: 'Forja 25 recolectores con éxito',
     icon: 'collector',
-    rewardText: '+10% click y +10% pasivo · Marco "Brasa"',
+    rewardText: '+10% recolección por click y +10% recolección por segundo · Marco "Brasa"',
     reward: { clickBonus: 0.10, passiveBonus: 0.10 },
     progress: (s) => ({ current: Math.min(s.forgedCount ?? 0, 25), target: 25 })
   },
@@ -256,7 +256,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Ascendido',
     description: 'Recicla tu progreso 5 veces',
     icon: 'sparkle',
-    rewardText: '+20% click y +20% pasivo · Banner "Carmesí"',
+    rewardText: '+20% recolección por click y +20% recolección por segundo · Banner "Carmesí"',
     reward: { clickBonus: 0.20, passiveBonus: 0.20 },
     progress: (s) => ({ current: Math.min(s.resets ?? 0, 5), target: 5 })
   },
@@ -393,7 +393,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'ninguna_bala',
     title: 'Ninguna Bala',
-    description: 'Acumula 100.000 clics',
+    description: 'Acumula 100.000 clicks',
     icon: 'power',
     rewardText: 'Título "Ninguna Bala"',
     reward: { clickBonus: 0, passiveBonus: 0 },
@@ -402,7 +402,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'doblaje',
     title: 'Doblaje',
-    description: 'Duplica el ingreso pasivo con compañeros multiplicadores',
+    description: 'Duplica la recolección por segundo con compañeros multiplicadores',
     icon: 'scale',
     rewardText: 'Marco "Prisma"',
     reward: { clickBonus: 0, passiveBonus: 0 },

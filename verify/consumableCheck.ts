@@ -26,7 +26,8 @@ import {
   EXPANSOR_TIERS, CONSUMABLES, RANURAS_POR_EXPANSOR, WAREHOUSE_BASE_CAP, WAREHOUSE_MAX_CAP,
   RANURAS_BARRA, techoDeExpansor
 } from '../src/data/store';
-import { totalConcedidoDe } from '../src/data/buffs';
+import { totalConcedidoDe, BUFF_LABELS, type BuffKey } from '../src/data/buffs';
+import { buffLabel } from '../src/ui/buffHud';
 import { unidadesDeBuff, matchesFilter } from '../src/components/warehouse';
 import {
   successChance, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION, PIEDRA_PUNTOS,
@@ -911,10 +912,14 @@ async function main() {
       'afkTotalMs=' + String((s(g2).buffs as any).afkTotalMs));
 
     // **CANCELAR LO BORRA, O LA BARRA DEL SIGUIENTE ARRANCA CON EL ANCHO DEL VIEJO.**
+    //
+    // El nombre con el que se anuncia sale de `BUFF_LABELS` y no de una tabla
+    // escrita dentro del motor: con dos copias el dialogo decia una cosa y el
+    // aviso otra (Q1). Lo comprueba `nombres:` mas abajo.
     check('b13: cancelar el click pone el total a cero',
       (() => {
         const a = g.cancelBuff('clickX2');
-        return a === 'Clics x2 (tarjeta)'
+        return a === BUFF_LABELS.clickX2
           && s(g).buffs.clickX2TotalMs === 0 && s(g).buffs.clickX2ExpiresAt === 0;
       })(),
       `total=${s(g).buffs.clickX2TotalMs} expira=${s(g).buffs.clickX2ExpiresAt}`);
@@ -1460,9 +1465,28 @@ async function main() {
     const g = await boot(baseSave([consumable('bp', 'compPassiveBoost', 1, { name: 'Buffer Pasivo' })]));
     g.useConsumable('bp');
     const r = g.cancelBuff('compPassiveBoost');
-    check('buffer: el pasivo se puede cancelar', r === 'Buffer Pasivo', String(r));
+    check('buffer: el pasivo se puede cancelar', r === BUFF_LABELS.compPassiveBoost, String(r));
     check('buffer: y el buff queda a cero', s(g).buffs.compPassiveBoostExpiresAt === 0,
       'expira=' + s(g).buffs.compPassiveBoostExpiresAt);
+  }
+
+  // =========================================================================
+  //  Q1 · EL NOMBRE DEL BUFF, IGUAL EN LOS DOS SITIOS DONDE SE LEE
+  // =========================================================================
+  //  El dialogo ("Se pierde el tiempo restante de X") y el aviso que sale al
+  //  confirmarlo ("X cancelado") son los dos momentos en los que el jugador lee
+  //  el nombre del buff. Eran DOS tablas --`BUFF_DEFS` y una copia privada dentro
+  //  de `cancelBuff()`-- y al unificar el vocabulario se movio una y no la otra.
+  //
+  //  Aqui se fija que las dos lean `BUFF_LABELS`. No es comprobar que la tabla
+  //  contiene lo que la tabla contiene: es que el dialogo no tenga la suya. Lo
+  //  que el MOTOR devuelve lo fijan los dos casos de arriba (`b13:` y `buffer:`),
+  //  que comparan `cancelBuff()` contra esa misma tabla.
+  {
+    const todos = Object.keys(BUFF_LABELS) as BuffKey[];
+    check('nombres: el dialogo dice exactamente lo que dice el aviso',
+      todos.every(k => buffLabel(k) === BUFF_LABELS[k]),
+      todos.map(k => `${k}=${buffLabel(k)}`).join(' · '));
   }
 
   resumen('consumibles');

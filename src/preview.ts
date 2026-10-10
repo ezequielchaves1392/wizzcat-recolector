@@ -115,7 +115,7 @@ const MOCK: any = {
       id: 'forged_1',
       name: 'Forja de Éter PRIMIGENIA·Absoluta',
       type: 'collector',
-      details: 'Daño base: +340',
+      details: 'Recolección por click: +340',
       rarity: 'Divino',
       tier: 11,
       level: 12,
@@ -181,12 +181,12 @@ const MOCK: any = {
     // La Click x2 está porque la barra de acceso rápido tiene una ranura puesta con ella, y
     // sin el item esa ranura saldría con el nombre y un 0: exactamente el estado que hay que
     // poder revisar, pero por el motivo equivocado.
-    { id: 'cx2', name: 'Tarjeta Click x2', type: 'consumable', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2', stackable: true, stackCount: 25 },
+    { id: 'cx2', name: 'Tarjeta Click x2', type: 'consumable', details: 'Otorga x2 a la recolección por click durante 30 segundos', rarity: 'Raro', buffId: 'clickX2', stackable: true, stackCount: 25 },
     // Y la Click x3 por un motivo más fino: con solo AFK y x2 en el almacén, la ranura
     // vacía del ejemplo abría el selector con **las tres opciones apagadas** —dos ya
     // estaban en otras ranuras y la tercera no la tenías—, y el preview no deja revisar el
     // caso que de verdad importa: elegir una y ver cerrarse la hoja.
-    { id: 'cx3', name: 'Tarjeta Click x3', type: 'consumable', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3', stackable: true, stackCount: 4 },
+    { id: 'cx3', name: 'Tarjeta Click x3', type: 'consumable', details: 'Otorga x3 a la recolección por click durante 30 segundos', rarity: 'Épico', buffId: 'clickX3', stackable: true, stackCount: 4 },
     // Cristales de mejora, y no por decoración: sin ellos el botón "Mejorar con
     // cristales" del almacén responde "No tienes cristales de mejora." y la
     // ruleta del sintonizador no se puede recorrer. El preview es la única
@@ -299,13 +299,13 @@ const fakeGame: any = {
   isPresent: () => true,
   getClickDamage: () => 1962,
   getAchievements: () => [
-    { id: 'first_click', title: 'Primer Contacto', description: 'Recolecta por primera vez', icon: 'bolt', rewardText: '+2% daño de click', reward: { clickBonus: .02, passiveBonus: 0 }, unlocked: true, current: 1, target: 1 },
-    { id: 'collector_10', title: 'Coleccionista', description: 'Equipa 10 recolectores', icon: 'collector', rewardText: '+5% daño de click', reward: { clickBonus: .05, passiveBonus: 0 }, unlocked: true, current: 10, target: 10 },
-    { id: 'crate_opener', title: 'Rompechaves', description: 'Abre 10 cajas', icon: 'crate', rewardText: '+12% ingreso pasivo', reward: { clickBonus: 0, passiveBonus: .12 }, unlocked: true, current: 128, target: 10 },
-    { id: 'first_forge', title: 'Primera Chispa', description: 'Forja tu primera recolector', icon: 'hammer', rewardText: '+5% click · Título', reward: { clickBonus: .05, passiveBonus: 0 }, unlocked: true, current: 1, target: 1 },
-    { id: 'smith_25', title: 'Maestro de Forja', description: 'Forja 25 recolectores con éxito', icon: 'anvil', rewardText: '+10% click y +10% pasivo', reward: { clickBonus: .1, passiveBonus: .1 }, unlocked: true, current: 9, target: 25 },
-    { id: 'ascendant', title: 'Ascendido', description: 'Recicla tu progreso 5 veces', icon: 'recycle', rewardText: '+20% click y +20% pasivo', reward: { clickBonus: .2, passiveBonus: .2 }, unlocked: true, current: 3, target: 5 },
-    { id: 'tycoon', title: 'Barón de Nanobots', description: 'Alcanza 5.000 Nanitas por segundo', icon: 'sparkle', rewardText: '+30% click y +30% pasivo', reward: { clickBonus: .3, passiveBonus: .3 }, unlocked: false, current: 1420, target: 5000 },
+    { id: 'first_click', title: 'Primer Contacto', description: 'Recolecta por primera vez', icon: 'bolt', rewardText: '+2% recolección por click', reward: { clickBonus: .02, passiveBonus: 0 }, unlocked: true, current: 1, target: 1 },
+    { id: 'collector_10', title: 'Coleccionista', description: 'Equipa 10 recolectores', icon: 'collector', rewardText: '+5% recolección por click', reward: { clickBonus: .05, passiveBonus: 0 }, unlocked: true, current: 10, target: 10 },
+    { id: 'crate_opener', title: 'Rompechaves', description: 'Abre 10 cajas', icon: 'crate', rewardText: '+12% recolección por segundo', reward: { clickBonus: 0, passiveBonus: .12 }, unlocked: true, current: 128, target: 10 },
+    { id: 'first_forge', title: 'Primera Chispa', description: 'Forja tu primera recolector', icon: 'hammer', rewardText: '+5% recolección por click · Título', reward: { clickBonus: .05, passiveBonus: 0 }, unlocked: true, current: 1, target: 1 },
+    { id: 'smith_25', title: 'Maestro de Forja', description: 'Forja 25 recolectores con éxito', icon: 'anvil', rewardText: '+10% recolección por click y +10% recolección por segundo', reward: { clickBonus: .1, passiveBonus: .1 }, unlocked: true, current: 9, target: 25 },
+    { id: 'ascendant', title: 'Ascendido', description: 'Recicla tu progreso 5 veces', icon: 'recycle', rewardText: '+20% recolección por click y +20% recolección por segundo', reward: { clickBonus: .2, passiveBonus: .2 }, unlocked: true, current: 3, target: 5 },
+    { id: 'tycoon', title: 'Barón de Nanobots', description: 'Alcanza 5.000 Nanitas por segundo', icon: 'sparkle', rewardText: '+30% recolección por click y +30% recolección por segundo', reward: { clickBonus: .3, passiveBonus: .3 }, unlocked: false, current: 1420, target: 5000 },
     { id: 'hidden', title: '???', description: 'Cien cajas. Ni una más.', icon: 'crate', rewardText: 'Banner oculto', reward: { clickBonus: 0, passiveBonus: 0 }, unlocked: true, current: 128, target: 100 }
   ],
   getCapacity: () => MOCK.warehouseCapacity + MOCK.bonus.storageSlots,
@@ -347,9 +347,8 @@ const fakeGame: any = {
         valor: esMult
           ? Math.round((1 + power) * 100) / 100
           : poderEfectivoDeCompanio({ power, level: w.level }),
-        etiqueta: esMult ? 'Multiplica el ingreso'
-          : tipo === 'passive' ? 'Producción por segundo'
-            : 'Ingreso por segundo',
+        etiqueta: esMult ? 'Multiplica la recolección'
+          : 'Recolección por segundo',
         prefijo: esMult ? '×' : '+',
         sufijo: esMult ? '' : '/s',
         desglose: esMult ? [] : desgloseDeStat(w.tier, power, potencialNormalizado(w.potential), w.level,
@@ -817,7 +816,7 @@ switch (vista) {
         if (grupo === "item") delItem += salto;
         mostrado = ahora;
       };
-      anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más de daño`, multPot, "item");
+      anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más de recolección por click`, multPot, "item");
       anota(`Nivel ${w?.level || 0}`, 'del recolector', multiplicadorDeNivel(w?.level), 'item');
       anota("Afijos", "del item", 1.26, "item");
       anota('Compañeros', 'de la partida', 1 + (MOCK.activeCompanions?.length || 0) * 0.05, 'partida');

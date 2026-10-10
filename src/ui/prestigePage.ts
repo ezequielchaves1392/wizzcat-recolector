@@ -202,7 +202,7 @@ export function renderPrestigePage(
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">
           <div class="label-caps mb-1" style="color:#f87171">Se pierde</div>
           <ul class="space-y-0.5 text-[var(--text-muted)] leading-snug">
-            <li>Nanitas y todo el ingreso pasivo</li>
+            <li>Nanitas y toda la recolección por segundo</li>
             <li>Recolectores, compañeros e infraestructura</li>
             <li>Llaves, cristales y cajas sin abrir</li>
           </ul>
@@ -371,7 +371,7 @@ export function nodeSheetHTML(node: any, level: number, opts: {
   /**
    * LO QUE EL NODO APORTA **AHORA**, Y POR QUÉ FALTABA.
    *
-   * `efectos` dice "+8 % daño de click" y es el **aporte de un nivel**, no el del
+   * `efectos` dice "+8 % recolección por click" y es el **aporte de un nivel**, no el del
    * nodo: el texto sale de `bonusLabel(k, v)` sobre el `bonus` del catálogo, que es
    * el valor de un nivel. Con el nodo en **7/10**, ese +8 % es el del nivel 1 y un
    * jugador que tiene 56 % se queda con la cifra de uno. **Y el nivel ya está en la

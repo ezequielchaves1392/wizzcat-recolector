@@ -57,6 +57,19 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.45',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Un solo nombre para cada cosa, en todo el juego',
+    lineas: [
+      'Ya no hay dos formas de decir lo mismo: siempre click, y clicks cuando la frase lo pide.',
+      'Recolección por click es como se llama al número del recolector, de la ficha a la wiki.',
+      'Lo que dan los compañeros es recolección por segundo, igual en la tienda y en las fichas.',
+      'Lo que subía un tier en las cajas y en la wiki es ahora el ítem siguiente.',
+      'El buscador del almacén tiene una sola cruz, la del juego, y el teclado del móvil sigue diciendo buscar.',
+      'Las tarjetas y los buffs se dicen igual en el diálogo que en el aviso que los cancela.'
+    ]
+  },
+  {
     version: '1.15.44',
     fecha: '10 de octubre de 2026',
     titulo: 'El uso de red tiene su pestaña',
@@ -212,9 +225,9 @@ export const NOTAS: NotaDeParche[] = [
     fecha: '9 de octubre de 2026',
     titulo: 'Las cajas dan buffers de compañero',
     lineas: [
-      'Las cajas dan tres buffers que suben el ingreso de un tipo de compañero.',
+      'Las cajas dan tres buffers que suben la recolección por segundo de un tipo de compañero.',
       'Cada buffer dura 30 minutos y se gasta desde el almacén.',
-      'El buffer global sube el ingreso de todos los compañeros.'
+      'El buffer global sube la recolección por segundo de todos los compañeros.'
     ]
   },
   {
@@ -223,7 +236,7 @@ export const NOTAS: NotaDeParche[] = [
     titulo: 'Los compañeros llevan afijos',
     lineas: [
       'Los compañeros ahora tienen afijos según su rareza, como los recolectores.',
-      'Cada tipo usa los suyos: los pasivos leen afijos de pasivo y los de clic, de clic.',
+      'Cada tipo usa los suyos: los compañeros pasivos leen afijos de recolección por segundo y los de click, de click.',
       'Las fichas viejas reciben sus afijos al cargar la partida.'
     ]
   },
@@ -243,7 +256,7 @@ export const NOTAS: NotaDeParche[] = [
     titulo: 'Cuatro keystones, uno por rama',
     lineas: [
       'Cada rama tiene su maestría al fondo: Sobrecarga, Mente Colmena, Jackpot y Obra Maestra.',
-      'Sobrecarga asegura un crítico triple cada cincuenta clics, tuyos y de la máquina.',
+      'Sobrecarga asegura un crítico triple cada cincuenta clicks, tuyos y de la máquina.',
       'Mente Colmena hace que cada compañero activo mejore a los demás.',
       'Jackpot puede subir un tier el premio de una caja, y la forja de dos perfectos firma una Obra Maestra.'
     ]
@@ -272,10 +285,10 @@ export const NOTAS: NotaDeParche[] = [
   {
     version: '1.15.23',
     fecha: '9 de octubre de 2026',
-    titulo: 'Los clics automáticos rinden menos y no usan tus tarjetas',
+    titulo: 'Los clicks automáticos rinden menos y no usan tus tarjetas',
     lineas: [
-      'La Automatización Total da un clic por segundo en vez de cuatro, y llega a tres niveles en vez de cinco.',
-      'Los clics automáticos ya no usan tus tarjetas de clics: esas son para tu dedo, la máquina cobra lo suyo.',
+      'La Automatización Total da un click por segundo en vez de cuatro, y llega a tres niveles en vez de cinco.',
+      'Los clicks automáticos ya no usan tus tarjetas de click: esas son para tu dedo, la máquina cobra lo suyo.',
       'Si tenías niveles de más en ese nodo, se quedan guardados pero cuentan hasta el techo nuevo.'
     ]
   },
@@ -347,9 +360,9 @@ export const NOTAS: NotaDeParche[] = [
   {
     version: '1.15.16',
     fecha: '9 de octubre de 2026',
-    titulo: 'El daño final suma arma y pasivos',
+    titulo: 'La recolección por click final suma arma y partida',
     lineas: [
-      'El daño del arma ahora suma tus pasivos: la ficha enseña el daño final, no solo el del arma.',
+      'La recolección por click del arma ahora suma la de tu partida: la ficha enseña el total, no solo el del arma.',
       'Al apoyar el número se parte en dos: cuánto es del arma y cuánto de la partida.',
       'El perfil y el ranking enseñan ese mismo final; los buffs temporales solo se cuentan donde se cobran.'
     ]
@@ -361,7 +374,7 @@ export const NOTAS: NotaDeParche[] = [
     lineas: [
       'La forja ahora dice qué rareza trae lo que vas a forjar, al lado del potencial: en recolectores la calculada, en compañeros la del tier.',
       'La ficha del compañero explica de dónde sale su número, fila por fila: potencial, rareza y nivel, con los mismos números que cobra.',
-      'Su desglose decía de más: usaba la cuenta del recolector y no traía la rareza. Ahora cuadra con el ingreso.'
+      'Su desglose decía de más: usaba la cuenta del recolector y no traía la rareza. Ahora cuadra con la recolección por segundo.'
     ]
   },
   {
@@ -381,7 +394,7 @@ export const NOTAS: NotaDeParche[] = [
     fecha: '8 de octubre de 2026',
     titulo: 'La Tarjeta AFK ya anula todos los cortes',
     lineas: [
-      'Con la Tarjeta AFK puesta, al volver de estar ausente el juego te paraba el ingreso hasta que hicieras clic. Era un cobro que no tocaba: el ingreso nunca se habia cortado, asi que no habia nada que compensar.',
+      'Con la Tarjeta AFK puesta, al volver de estar ausente el juego te paraba la recolección por segundo hasta que hicieras click. Era un cobro que no tocaba: la recolección por segundo nunca se habia cortado, asi que no habia nada que compensar.',
       'Ahora la Tarjeta AFK anula los cuatro cortes a la vez: por pestana, por ventana, por no estar mirando y por la espera al volver.',
       'Si la tarjeta se acaba mientras estas fuera, el corte vuelve con ella y el peaje tambien. Solo deja de existir mientras esta viva.',
       'Sin tarjeta no cambia nada: el juego sigue cobrando solo cuando lo estas mirando.'
@@ -394,29 +407,29 @@ export const NOTAS: NotaDeParche[] = [
     lineas: [
       'Si tenias en el almacen un amplificador de click o de pasivo, al usarlo te decia que no tenia efecto conocido. No era un fallo tuyo ni del item: esos amplificadores se retiraron del juego.',
       'Ahora el mensaje dice que se retiraron, que multiplicaba cada uno y que no vuelven. Se quitem de la tienda hace tiempo y el item seguia sin explicar nada.',
-      'El motivo de retirarlos: multiplicaban tu ingreso mientras no miraras la pantalla. Esa es justo la regla que el juego no rompe.',
+      'El motivo de retirarlos: multiplicaban tu recoleccion automatica mientras no miraras la pantalla. Esa es justo la regla que el juego no rompe.',
       'El resto de consumibles y los cuatro expansores nunca han tenido este problema, y ahora hay pruebas que lo confirman.'
     ]
   },
   {
     version: '1.15.11',
     fecha: '8 de octubre de 2026',
-    titulo: 'El ingreso de los companeros sigue sin dados',
+    titulo: 'La recoleccion por segundo de los companeros sigue sin dados',
     lineas: [
-      'Los clicks del arbol ya critiquen. Los companeros no cambian, y es a proposito: su ingreso es por segundo, no son clicks.',
-      'Un critico ahi seria cobrarte de mas sin que se vea por que, y ese ingreso se cobra aunque no estes mirando la pantalla.',
+      'Los clicks del arbol ya critiquen. Los companeros no cambian, y es a proposito: su recoleccion es por segundo, no son clicks.',
+      'Un critico ahi seria cobrarte de mas sin que se vea por que, y esa recoleccion se cobra aunque no estes mirando la pantalla.',
       'Para verlo necesitas un recolector con afijo de critico equipado: sin afijo no hay probabilidad que tirar, ni a mano ni en el arbol.'
     ]
   },
   {
     version: '1.15.10',
     fecha: '8 de octubre de 2026',
-    titulo: 'Los clics del arbol ya critican',
+    titulo: 'Los clicks del arbol ya critican',
     lineas: [
-      'Los nodos que sueltan clicks automaticos ahora tiran critico, con la misma probabilidad y el mismo doble de dano que tu click.',
+      'Los nodos que sueltan clicks automaticos ahora tiran critico, con la misma probabilidad y el mismo doble que tu click.',
       'Y se ven igual que el tuyo: sale un "CRIT" en dorado cuando pegan fuerte.',
       'Tus afijos de critico ahora valen para los dos. Antes solo mejoraban tu click a mano.',
-      'El ingreso de los companeros no cambia: sigue siendo por segundo y sin dados, porque se cobra aunque no estes mirando.'
+      'La recoleccion de los companeros no cambia: sigue siendo por segundo y sin dados, porque se cobra aunque no estes mirando.'
     ]
   },
   {
@@ -502,7 +515,7 @@ export const NOTAS: NotaDeParche[] = [
     lineas: [
       'El juego te guardaba la partida cada medio minuto aunque no hubieras hecho nada. Con la pestaña abierta mirando el almacén, eso eran 120 guardados por hora sin que ganaras ni una nanita.',
       'Ahora solo se guarda cuando algo cambia de verdad. Una hora mirando la partida no cuesta ni una escritura.',
-      'Tus clics, tu ingreso automatico y las tarjetas que uses se siguen guardando igual: si algo cambia, se guarda en el acto.',
+      'Tus clicks, tu recoleccion automatica y las tarjetas que uses se siguen guardando igual: si algo cambia, se guarda en el acto.',
       'Tambien se arreglo un fallo que hacia justo lo contrario: si se caia la conexion al guardar, la partida se quedaba sin subir hasta que tocabas algo.'
     ]
   },
@@ -657,7 +670,7 @@ export const NOTAS: NotaDeParche[] = [
       'Las cartas del mercado dicen cuántas tienes guardadas: cajas, tarjetas y piedras enseñan su stock antes de comprar.',
       'La carta de cristal ahora se llama pack y dice cuántos cristales trae cada uno, y al comprar varios el diálogo dice el total que te llevas.',
       'Los cosméticos y los logros del perfil van de diez en diez, con las flechas arriba de cada lista.',
-      'El nodo de operaciones offline sale del árbol: prometía clics al volver y no hacía nada.'
+      'El nodo de operaciones offline sale del árbol: prometía clicks al volver y no hacía nada.'
     ]
   },
   {

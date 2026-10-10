@@ -1383,13 +1383,18 @@ feature que falta):**
       oculto. Ahora el botón dice siempre lo que la vuelta va a dar (el
       pendiente), y sin nada por ganar dice lo que falta para el siguiente. La
       cartera se ve donde se gasta y arriba va lo actual.
-- [ ] **B38 · El daño de la fila del ranking está mal.** *(Para después, reportado el
+- [x] **B38 · El daño de la fila del ranking está mal.** `[f2a5bb9]` *(Reportado el
       9 de octubre con captura.)*
       > "ahi aparece el daño esta mal jaja"
-      *La evidencia: la fila propia ("TÚ", Blanqui) dice "Daño +884" y no cuadra.*
-      **Candidatos sin reproducir:** foto vieja (la fila se publica cada minutos y el
-      arma sube entre publicaciones), o descuadre entre lo publicado (`danoFinal`) y
-      la ficha viva. Falta reproducir comparando la fila con la ficha en el momento.
+      **Hecho, y la causa era el MOMENTO, no la cuenta.** La fila propia pintaba la foto
+      del documento —publicada cada 15 minutos— al lado de una ficha que se recalcula en
+      vivo: comparar las dos era comparar dos instantes distintos, y por eso no cuadraba
+      el "+884". La fila de uno propio se recalcula ya al pintar, con la misma cadena que
+      la ficha y sin ninguna lectura (`filaPropiaViva`); las ajenas siguen siendo fotos,
+      porque recalcularlas sería leer cuarenta tarjetas.
+      El barrido que lo probó (`verify/b38sweep.ts`, 1800 combinaciones, **0 diferencias
+      entre la ficha y la fila**) y ya no hace falta: lo que hay que atar vive en
+      `identidadCheck`, en las pruebas "B38: la fila propia recalcula el daño en vivo".
 
 - [x] **B33 · El cerrojo se apaga cuando no hay nadie mirando.** `[v1.15.5]`
       > "hace lo que creas mas conveniente y que mejore esta situacion"
@@ -2954,11 +2959,111 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
       `hidden`, sin re-render que la cerraría, y la elegida sobrevive en el
       módulo porque la hoja se reconstruye en cada vista (R6). Sin banco: es DOM.
 
+### Lote Q · VOCABULARIO + LOTE VISUAL (encargo del 10 de octubre)
+
+*Lo pedido, con tus palabras. Se escribe aquí antes de programarlo, para que no
+viva solo en una conversación.*
+
+- [x] **Q1 · Unificar vocabulario: siempre click, recolección por click y recolección por segundo.** `[v1.15.45]`
+      > "podremos explicarlo en la wiki? o poner un nombre mas intuitivo?" + "y algo como item del siguiente tier?"
+      > "veo que click, clic... recolecion por click, daño, y potencia de click se usan y pueden marear, podemos ver estas ambiguedades que refieren a lo mismo y les ponemos el mismo nombre? como base quiero que uses siempre click, siempre recoleccion por click (para referirnos al poder del recolector), recoleccion por segundo -> es lo que hacen los compañeros. Todo esto agreguemolo a la wiki" + "usa el plural cuando haga falta"
+      Salto pasa a `Ítem T2 siguiente`. Plural con k cuando pida la frase (clicks).
+      **Hecho, y con banco nuevo: `vocabularioCheck`, 15 pruebas.** Tres magnitudes,
+      tres nombres y ninguno repetido. Detalle en **Hecho** más abajo.
+- [ ] **Q2 · El título Singularidad, ¿cómo se logra?**
+      > "El logro singularidad 'compra con 0 nucleos de ascensión'? como se logra?"
+- [ ] **Q3 · La tarjeta AFK debe poder cancelarse con una (x).**
+      > "La tarjeta afk no se puede cancelar, deberita tener una (x)"
+- [ ] **Q4 · Versión visible abajo y en el acceso.**
+      > "Mostrar la versión en la parte de abajo a la izquierda o derecha chiquito y al ingresar en el titulo del juego."
+- [ ] **Q5 · El banner pinta el fondo del nav principal.**
+      > "El banner debe pintar el background del nav del menú principal"
+- [ ] **Q6 · Afijos (tags) y nivel visibles en principal, forja y almacén.**
+      > "Los recolectores y los compañeros deben mostrar los afijos que poseen (tags) en el menú principal, forja y almacen y el nivel igual. (ver de dejarlo lindo compacto y entendible)"
+- [ ] **Q7 · Tilde de checkboxes e iconos descentrados.**
+      > "El tilde en los checkboxes no esta centrado, algunos iconos no están centrados"
+- [ ] **Q8 · Filtro de Tier (n) en el almacén.**
+      > "Poner un filtro de Tier (n) en el almacen, filtraría todos los ítems del tier, input (numero) max (10) por ahora"
+- [ ] **Q9 · Buscadores en logros, banners, marcos y títulos.**
+      > "En logros, banners marcos y títulos poner buscadores, para encontrar mas fácil."
+- [ ] **Q10 · Al icono-hoja de la wiki ponerle (wiki) chiquito.**
+      > "En la hojita de icono de wiki ponerle chiquito (wiki)"
+- [x] **Q11 · El buscador del almacén tiene dos X y funciona mal.** `[v1.15.45]`
+      > "en el almacen hay una busqueda que tiene dos X y funciona mal"
+      **Hecho.** Con `type="search"` el navegador dibuja **su propia** cruz de borrado en
+      la misma esquina que la del juego, y salían dos cruces para una sola acción, con la
+      del navegador tapando la nuestra. El campo pasa a `type="text"` y se le añade
+      `enterkeyhint="search"`: el teclado del móvil sigue diciendo "buscar" —que es lo
+      único bueno que traía `search`— y la única cruz es la del juego, la que vacía
+      `ui.buscar`, que es de donde sale el filtro.
+
 ---
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **50 bancos, 2794**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **51 bancos, 2810**, todas en verde._
+
+- [x] **Q1 · El vocabulario del jugador, unificado — y con el banco que lo deja así.** `[v1.15.45]`
+      Tres magnitudes, tres nombres, y ninguna con dos. **Siempre "click"** (nunca
+      "clic"; "clicks" cuando pide la frase), **"recolección por click"** para el poder
+      del recolector —antes "daño", "potencia de click" y "poder"— y **"recolección por
+      segundo"** para lo que dan los compañeros —antes "ingreso pasivo", "producción por
+      segundo" y "el ingreso"—. Lo que en la wiki y en las cajas se llamaba "Salto" es
+      ahora **"Ítem T2 siguiente"**.
+      Recorrió 24 ficheros: el árbol, la forja, la tienda, los logros, los cosméticos,
+      las notas de parche históricas, las etiquetas de bono, los buffs, la wiki, el
+      simulador, el ranking y el panel de administración.
+      **LO QUE LO DEJA TERMINADO NO FUE EL RECORRIDO SINO EL BANCO.** `vocabularioCheck`
+      recoge los **953 textos que acaban en pantalla, de 17 fuentes** —los módulos de
+      datos, las fichas de la tienda, las etiquetas de bono y los dos simuladores de la
+      wiki **pintados de verdad**— (no los identificadores: `'clics'` sigue siendo la
+      clave del ranking, cambiarla rompería el guardado), prohíbe **siete familias** de
+      palabras, comprueba que las nuevas sigan donde tienen que estar —si alguien
+      borrara las descripciones del árbol, el "limpio" seguiría saliendo verde—, y
+      comprueba **que la lista sepa distinguir "click" de "clics"**, que es lo que
+      haría que todo esto aprobara sin mirar nada. Cada fuente tiene además su propio
+      mínimo, y es lo que hizo falta: la primera versión del barrido se comió **las
+      notas de parche enteras** —`lineas` es un array, y al bajar al array se perdía el
+      nombre del campo del que venía— y el banco salía en verde igual. 15 pruebas.
+      Y de paso tres duplicados que ya no lo están: el nombre de cada buff estaba escrito
+      **en dos sitios** (`BUFF_DEFS` y una copia privada dentro de `cancelBuff()`), así
+      que el renombre movió uno solo y el diálogo decía "Clicks x2" mientras el aviso
+      decía "Clics x2 (tarjeta)" —ahora hay una tabla, `BUFF_LABELS`, y las tres piezas
+      la leen—; las etiquetas del compañero de `preview.ts` ya no contradicen a las del
+      motor; y el texto de cada logro nombra la magnitud que su número da, que es lo que
+      ata este banco en su prueba de logros.
+      **Y LO QUE EL RECORRIDO SE LLEVÓ POR DELANTE, QUE FUE LO MÁS CARO.** Renombrar a
+      ciegas hizo que tres reglas del árbol dijeran lo que su nombre no eran:
+      `Sincronía` pasó a decir "+12% a la recolección por **click**" cuando su bono
+      (`compClick`) multiplica a los compañeros de tipo click, que **cobran por
+      segundo**; y `Enjambre` y `Mente Enjambre` quedaron con la misma frase exacta que
+      `Bucle de Extracción`, siendo una regla de compañeros y otra un porcentaje global.
+      Lo mismo en la etiqueta de bono de `compClick` y en el selector de tipo del
+      simulador de la wiki, que enseñaba "Recolección por click" para un compañero y
+      "Multiplier" sin traducir para otro. Tres frases corregidas, y la regla que
+      quedó escrita en el sitio: **un rótulo tiene que nombrar lo que su número cobra,
+      no lo que su nombre suena.**
+
+- [x] **Q11 · El buscador del almacén tenía dos cruces.** `[v1.15.45]`
+      `type="search"` hacía que el navegador dibujara su propia cruz de borrado **en la
+      misma esquina** que la del juego. El campo pasa a `type="text"` con
+      `enterkeyhint="search"`: una sola cruz, la del juego, y el teclado del móvil
+      diciendo "buscar". Detalle en **Lote Q**.
+
+- [x] **B38 · El daño de la fila del ranking estaba mal: se comparaban dos instantes.** `[f2a5bb9]`
+      La fila propia pintaba la foto publicada (cada 15 minutos) al lado de una ficha
+      en vivo. Ya se recalcula al pintar. Detalle y barrido de 1800 casos en **Bugs**.
+
+- [x] **`sellCheck` dejó de flaquear: G4 comparaba contra la regla sin la base.** `[v1.15.45]`
+      "un item viejo coherente no se toca" comparaba el daño contra `danioDeRango(1, 1)`,
+      que asume base ×1,0 — pero desde F74 cada item viejo recibe una base oculta
+      sorteada al cargar y su daño se recalcula con ella (±10 %, decisión 5). Con una
+      base de 1,10 el ★1 de T1 sale **7 en vez de 6**, y las pruebas del bloque G4 caían
+      **solo cuando el dado tocaba esa base**: una de cada diez corridas, que es la peor
+      forma de fallar porque parece que alguien ha roto algo sin haberlo tocado.
+      Cuatro comprobaciones del bloque pasaron a leer la base del propio item
+      (`reglaDe()`), así que el banco mide las estrellas y no el sorteo. Corre dos veces
+      seguidas con el mismo resultado.
 
 ### El sistema que se ha quitado entero
 

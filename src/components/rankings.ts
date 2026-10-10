@@ -324,7 +324,7 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
           ${r.cores ? `<span class="medal text-emerald-300" title="Núcleos ganados ascendiendo">${ic('recycle', 'w-3 h-3')} ${r.cores}</span>` : ''}
         </div>
         ${danoFila > 0 ? `<div class="mt-1 text-[10px] font-mono tabular" title="${detalleDano}">
-          <span class="text-[var(--text-muted)]">Daño</span>
+          <span class="text-[var(--text-muted)]">Click</span>
           <span class="accent-text font-bold">+${formatNumber(danoFila)}</span>
         </div>` : ''}
       </div>
@@ -350,7 +350,7 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
 function unidadesDe(kind: BoardKind): string {
   switch (kind) {
     case 'nanitas': return 'nanitas';
-    case 'clics': return 'clics';
+    case 'clics': return 'clicks';
     case 'logros': return 'puntos de logro';
     case 'nucleos': return 'núcleos ganados';
     case 'definitivo': return '◆ puntos';

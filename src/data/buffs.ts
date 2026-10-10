@@ -88,6 +88,37 @@ export const BUFF_CANCELABLE: Record<BuffKey, boolean> = {
 export function sePuedeCancelar(buffId: string): boolean {
   return (BUFF_CANCELABLE as Record<string, boolean>)[buffId] ?? true;
 }
+
+/**
+ * EL NOMBRE DE CADA BUFF, ESCRITO UNA SOLA VEZ (Q1).
+ *
+ * **POR QUE ESTA AQUI Y NO EN CADA SITIO.** El nombre se escribia en DOS tablas:
+ * la del HUD (`BUFF_DEFS`, en `ui/buffHud.ts`) y una copia privada dentro de
+ * `cancelBuff()`. Con dos copias, renombrar la palabra "clic" por "click" movio
+ * una y dejo la otra -- y el resultado era un dialogo que decia "Clicks x2
+ * (tarjeta)" y, un segundo despues, otro que decia lo mismo con el nombre viejo.
+ * Aqui vive la tabla y las dos la leen.
+ *
+ * **Y POR QUE LLEVAN EL PARENTESIS.** `clickBoost` (30 min, se compra) y
+ * `clickX2` (30 s, es la tarjeta) se ven igual en el HUD porque ahi los
+ * distingue el descriptor `rápida`; el dialogo y el aviso no llevan descriptor,
+ * asi que sin el parentesis los dos serian "Clicks x2" y el jugador no sabria
+ * cual de los dos esta a punto de perder.
+ *
+ * El HUD pinta su propia cadena corta (`BUFF_DEFS[].label`) porque esa es
+ * presentacion, como sus colores: aqui esta la IDENTIDAD, que es la que tiene
+ * que decir lo mismo en el dialogo y en el aviso.
+ */
+export const BUFF_LABELS: Record<BuffKey, string> = {
+  clickBoost: 'Clicks x2',
+  clickX2: 'Clicks x2 (tarjeta)',
+  clickX3: 'Clicks x3 (tarjeta)',
+  passiveBoost: 'Recolección por segundo x2',
+  compPassiveBoost: 'Recolección por segundo (compañero)',
+  compClickBoost: 'Clicks (compañero)',
+  compGlobalBoost: 'Recolección por segundo global (compañero)',
+  afk: 'AFK'
+};
 /**
  * CUÁNTAS VECES CABE UN CONSUMIBLE, Y POR QUÉ ES UNA FUNCIÓN Y NO UN NÚMERO EN CADA
  * `case`.

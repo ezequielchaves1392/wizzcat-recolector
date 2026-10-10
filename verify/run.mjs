@@ -87,7 +87,9 @@ const BANCOS = [
   'opsCheck',
   // F102 · El árbol en 3 columnas: topes, presupuestos y devolución.
   'equilibrioCheck',
-  'servidorCheck'
+  'servidorCheck',
+  // Q1 — El vocabulario del jugador, la lista de palabras que no vuelven.
+  'vocabularioCheck'
 ];
 
 // ==========================================================================

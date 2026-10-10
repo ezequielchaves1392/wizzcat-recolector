@@ -52,7 +52,7 @@ import {
   CAJA_REQUIERE_NODO,
   type CrateType
 } from './data/store';
-import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, sePuedeCancelar, type BuffKey } from './data/buffs';
+import { AFK_CARD_DURATION_MS, MAX_AFK_BUFF_DURATION_MS, BUFF_FIELDS, BUFF_LABELS, sePuedeCancelar, type BuffKey } from './data/buffs';
 import { rollBufferCompañero } from './components/crateLoot';
 import {
   cuantasVecesCabe, pasoDeConsumible, anotaTotalDeBuff, topeDeConsumible,
@@ -3665,7 +3665,7 @@ function sePuedeGuardar(): boolean {
     // El potencial primero porque es lo primero que se aplicó, y su detalle lleva el
     // porcentaje **sin un "+" delante**: la fila ya tiene su cifra a la derecha, y dos
     // signos más en la misma línea obligan a decidir cuál de los dos leer.
-    anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más de daño`, multPot, "item");
+    anota(`Potencial ${pot}★`, `${Math.round((multPot - 1) * 100)}% más de recolección por click`, multPot, "item");
     const nivel = Math.max(0, Math.floor(Number(item.level) || 0));
     if (nivel > 0) anota(`Nivel ${nivel}`, "del recolector", multiplicadorDeNivel(nivel), "item");
     // Los afijos son del item: van con él, salen de la forja con él y solo hay que
@@ -5124,9 +5124,8 @@ function sePuedeGuardar(): boolean {
           // nada: el "/s" pertenece a la cifra y la etiqueta es una frase. Que la frase
           // diga ya "por segundo" evita el sufijo, y de paso cada etiqueta es
           // autosuficiente si algún día se enseña sin el número al lado.
-          etiqueta: esMult ? 'Multiplica el ingreso'
-            : tipo === 'passive' ? 'Producción por segundo'
-              : 'Ingreso por segundo',
+          etiqueta: esMult ? 'Multiplica la recolección'
+            : 'Recolección por segundo',
           // El multiplicador lleva "×" delante y no "+": no suma nada, cambia por
           // cuántas veces se cuenta lo de los demás. Ponerle un "+" sería la misma
           // falsedad al revés.
@@ -5227,16 +5226,6 @@ function sePuedeGuardar(): boolean {
     cargaFallida: () => partidaNoCargada,
     cancelBuff: (buffKey: BuffKey) => {
       handleUserActivity();
-      const labels: Record<BuffKey, string> = {
-        clickBoost: 'Clics x2',
-        clickX2: 'Clics x2 (tarjeta)',
-        clickX3: 'Clics x3 (tarjeta)',
-        passiveBoost: 'Pasivo x2',
-        compPassiveBoost: 'Buffer Pasivo',
-        compClickBoost: 'Buffer Click',
-        compGlobalBoost: 'Buffer Global',
-        afk: 'AFK'
-      };
       // LA NEGACION VIENE DE LA REGLA, NO DE UN `if` ESCRITO AQUI.
       //
       // El boton de la tarjeta y esta linea leen las dos `sePuedeCancelar()`. Si cada
@@ -5260,7 +5249,7 @@ function sePuedeGuardar(): boolean {
       recalculatePassiveIncome();
       onUpdate(state, isAfk);
       saveToFirebase();
-      return labels[buffKey];
+      return BUFF_LABELS[buffKey];
     },
     /**
      * Adopta un estado completo de golpe.

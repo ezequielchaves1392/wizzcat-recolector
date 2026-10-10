@@ -5,7 +5,7 @@
 // la cabecera (móvil). Se parchean a la vez para que no haya dos implementaciones.
 
 import { ic, type IconName } from './icons';
-import { totalConcedidoDe, sePuedeCancelar } from '../data/buffs';
+import { totalConcedidoDe, sePuedeCancelar, BUFF_LABELS, type BuffKey } from '../data/buffs';
 
 /**
  * El HUD de buffs, y **por qué la barra usa el total concedido y no la duración de la
@@ -57,28 +57,28 @@ export interface BuffDef {
 
 export const BUFF_DEFS: BuffDef[] = [
   {
-    key: 'clickBoost', icon: 'bolt', label: 'Clics x2', durationMs: 30 * 60 * 1000,
+    key: 'clickBoost', icon: 'bolt', label: 'Clicks x2', durationMs: 30 * 60 * 1000,
     accent: 'border-emerald-500/40 text-emerald-500 dark:text-emerald-400',
     bar: 'bg-emerald-400',
     getExpires: (s) => s.buffs.clickBoostExpiresAt,
     getTotal: (s) => totalConcedidoDe(s, 'clickBoost')
   },
   {
-    key: 'clickX2', icon: 'bolt', label: 'Clics x2', tag: 'rápida', durationMs: 30 * 1000,
+    key: 'clickX2', icon: 'bolt', label: 'Clicks x2', tag: 'rápida', durationMs: 30 * 1000,
     accent: 'border-cyan-500/40 text-cyan-500 dark:text-cyan-400',
     bar: 'bg-cyan-400',
     getExpires: (s) => s.buffs.clickX2ExpiresAt,
     getTotal: (s) => totalConcedidoDe(s, 'clickX2')
   },
   {
-    key: 'clickX3', icon: 'bolt', label: 'Clics x3', tag: 'rápida', durationMs: 30 * 1000,
+    key: 'clickX3', icon: 'bolt', label: 'Clicks x3', tag: 'rápida', durationMs: 30 * 1000,
     accent: 'border-purple-500/40 text-purple-500 dark:text-purple-400',
     bar: 'bg-purple-400',
     getExpires: (s) => s.buffs.clickX3ExpiresAt,
     getTotal: (s) => totalConcedidoDe(s, 'clickX3')
   },
   {
-    key: 'passiveBoost', icon: 'shield', label: 'Pasivo x2', durationMs: 60 * 60 * 1000,
+    key: 'passiveBoost', icon: 'shield', label: 'Recolección por segundo x2', durationMs: 60 * 60 * 1000,
     accent: 'border-blue-500/40 text-blue-500 dark:text-blue-400',
     bar: 'bg-blue-400',
     getExpires: (s) => s.buffs.passiveBoostExpiresAt,
@@ -212,6 +212,16 @@ export function formatCountdown(ms: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 
+/**
+ * El nombre del buff para el dialogo que lo confirma.
+ *
+ * **LEE LA TABLA COMPARTIDA Y NO `BUFF_DEFS`.** El dialogo ("Se pierde el tiempo
+ * restante de X") y el aviso que sale al confirmarlo ("X cancelado") son los dos
+ * momentos en los que el jugador lee el nombre del buff, y los dos tienen que
+ * decir lo mismo: si cada uno mirara su tabla, un renombre moveria una y no la
+ * otra. La tabla es `BUFF_LABELS`, en `data/buffs.ts`, y `cancelBuff()` devuelve
+ * el mismo valor.
+ */
 export function buffLabel(key: string): string {
-  return BUFF_DEFS.find(d => d.key === key)?.label ?? 'el buff';
+  return BUFF_LABELS[key as BuffKey] ?? 'el buff';
 }

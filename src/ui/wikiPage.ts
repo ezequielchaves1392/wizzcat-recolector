@@ -116,7 +116,7 @@ function etiquetaDeEntrada(id: string, tier: CrateType): string {
     case 'collector': return `Recolector T${tier}`;
     case 'clickX3Card': return 'Tarjeta Click x3';
     case 'nextCrate': return `Caja T${tier + 1}`;
-    case 'up': return `Salto a T${tier + 1}`;
+    case 'up': return `Ítem T${tier + 1} siguiente`;
     case 'expansor': return expansorDeCaja(tier).name;
     case 'calibrationStone': return 'Piedra de Calibración';
     case 'stabilityNano': return 'Nanopartícula de Estabilidad';
@@ -160,14 +160,14 @@ function seccionMecanicas(): string {
 
   return `
     ${bloqueWiki('Cómo se gana', 'bolt', `
-      <h4 class="wiki-sub">Click</h4>
-      <p class="wiki-p">Cada pulsación cobra el daño de tu recolector equipado, con
+      <h4 class="wiki-sub">Click: recolección por click</h4>
+      <p class="wiki-p">Cada click cobra la recolección por click de tu recolector equipado, con
       sus multiplicadores encima: compañeros que multiplican, logros, árbol de pasivas y afijos
-      del arma. El número grande de la base es ese daño, ya calculado.</p>
-      <h4 class="wiki-sub">Pasivo</h4>
-      <p class="wiki-p">Los compañeros activos producen cada segundo, y se cobra
-      entero y de una vez, una vez por segundo. Las fichas del escuadrón enseñan lo que cada
-      uno aporta, y la suma es exactamente el ingreso.</p>
+      del arma. El número grande de la base es esa recolección por click, ya calculada.</p>
+      <h4 class="wiki-sub">Recolección por segundo</h4>
+      <p class="wiki-p">Los compañeros activos producen recolección por segundo, y se cobra
+      entera y de una vez, una vez por segundo. Las fichas del escuadrón enseñan lo que cada
+      uno aporta, y la suma es exactamente lo que entra.</p>
       <h4 class="wiki-sub">Sin mirar no hay ingreso</h4>
       <p class="wiki-p">Con la pestaña oculta o la ventana
       sin foco, el juego se detiene y te espera: hay que pulsar para seguir cobrando.
@@ -283,7 +283,7 @@ function tarjetaDeCaja(tier: CrateType): string {
       </div>
       <p class="text-[11px] font-mono text-[var(--text-muted)] mb-2">
         Cuesta ${formatNumber(meta.cost)} · Se abre sola · Trae el expansor ${expansorDeCaja(tier).name}
-        ${salto !== null ? ` · Salto a T${tier + 1}: ${pct(salto)}` : ' · Sin salto: es la última'}
+        ${salto !== null ? ` · Ítem T${tier + 1} siguiente: ${pct(salto)}` : ' · Sin ítem siguiente: es la última'}
         ${exclusivos > 0 ? ` · ${exclusivos} exclusivo${exclusivos > 1 ? 's' : ''}` : ''}
         ${cosmeticos.length > 0 ? ` · Cosmético: ${cosmeticos.map(c => c.name).join(', ')}` : ''}
       </p>
@@ -296,7 +296,8 @@ function seccionCajas(): string {
   return `
     ${bloqueWiki('Diez cajas, una por tier', 'crate', `
       <p class="wiki-p">La caja T{n} suelta objetos de su tier: cristales, un compañero y un
-      recolector, la caja siguiente en la cadena, un salto raro al tier de arriba, el ${enlaceWiki('items', ANCLA.itemsExpansores, 'expansor')}
+      recolector, la caja siguiente en la cadena, un ítem raro del tier siguiente —un compañero
+      o un recolector, mitad y mitad—, el ${enlaceWiki('items', ANCLA.itemsExpansores, 'expansor')}
       de su tramo y, desde la T2, ${enlaceWiki('items', ANCLA.itemsConsumibles, 'consumibles de forja')}. Los porcentajes salen del sorteo real,
       con la suerte del Ojo de Caja ya contada en cero.</p>
       <p class="wiki-p">Las cantidades de cristales crecen con el tier, y las nanitas son una
@@ -458,10 +459,10 @@ function seccionItems(): string {
 
   return `
     ${bloqueWiki('Los diez tiers', 'collector', `
-      <p class="wiki-p">El tier manda: más tier es más daño y más ingreso, con sobreprecio
-      deliberado —el tier alto rinde más por objeto y peor por nanita—. El rango es de dónde
-      sale cada objeto; la base es el daño antes del potencial; la carta es lo que costaría
-      comprarlo (las cartas de tier ya no se venden: se consigue por ${enlaceWiki('cajas', ANCLA.cajasIntro, 'cajas')} y ${enlaceWiki('mecanicas', ANCLA.mecanicaForja, 'forja')}).</p>
+      <p class="wiki-p">El tier manda: más tier es más recolección, por click y por segundo,
+      con sobreprecio deliberado —el tier alto rinde más por objeto y peor por nanita—. El
+      rango es de dónde sale cada objeto; la base es lo que rinde antes del potencial; la
+      carta es lo que costaría comprarlo (las cartas de tier ya no se venden: se consigue por ${enlaceWiki('cajas', ANCLA.cajasIntro, 'cajas')} y ${enlaceWiki('mecanicas', ANCLA.mecanicaForja, 'forja')}).</p>
       <div class="wiki-box">${filasTier}</div>
     `, ANCLA.itemsTiers)}
     ${bloqueWiki('Exclusivos de caja', 'crown', `
@@ -521,7 +522,7 @@ function seccionLogros(): string {
 
   return `
     ${bloqueWiki('Qué dan', 'achievement', `
-      <p class="wiki-p">Los logros cortos dan bonus permanente de click o de pasivo, que se
+      <p class="wiki-p">Los logros cortos dan bonus permanente a la recolección por click o a la de por segundo, que se
       suma solo. Los doce difíciles y los dos secretos no dan números: su premio es el
       cosmético. Hay ${ACHIEVEMENTS.length} en total.</p>
       <div class="wiki-box">${filas}</div>
@@ -542,10 +543,10 @@ function seccionPasivas(): string {
   // En qué se enfoca cada rama: prosa, sin cifras a mano. Las cifras las
   // pone cada nodo con su descripción y su coste base.
   const ENFOQUE_RAMA: Record<string, string> = {
-    asalto: 'Rama del click: sube el daño por pulsación, los clics automáticos que pegan solos y los críticos —la probabilidad y el crítico asegurado de Sobrecarga—. Es la rama de quien juega pulsando y de quien deja que la base pegue sola.',
-    manada: 'Rama del escuadrón y del ingreso pasivo: sube el pasivo global, el poder de los compañeros por tipo (pasivos, clicks y multiplier), abarata su mejora y da ranuras para llevar más activos. Sus keystones premian llevar el escuadrón lleno.',
-    fortuna: 'Rama de la economía y las cajas: precio de venta, coste de la tienda, ranuras de almacén, suerte y botín de cajas (salto, eco y premio gordo), núcleos por reinicio y tiempo de tarjeta AFK. También abre la compra de cajas altas con las licencias.',
-    forja: 'Rama de la fusión: probabilidad de acierto en todos los tramos, más cristales de consuelo cuando la tirada falla y la firma de Obras Maestras al fundir dos potenciales máximos. No toca el click ni el pasivo: solo que la forja salga mejor.'
+    asalto: 'Rama del click: sube la recolección por click, los clicks automáticos que pegan solos y los críticos —la probabilidad y el crítico asegurado de Sobrecarga—. Es la rama de quien juega pulsando y de quien deja que la base pegue sola.',
+    manada: 'Rama del escuadrón y de la recolección por segundo: sube la recolección por segundo global y la de cada compañero según su tipo, abarata su mejora y da ranuras para llevar más activos. Sus keystones premian llevar el escuadrón lleno.',
+    fortuna: 'Rama de la economía y las cajas: precio de venta, coste de la tienda, ranuras de almacén, suerte y botín de cajas (ítem siguiente, eco y premio gordo), núcleos por reinicio y tiempo de tarjeta AFK. También abre la compra de cajas altas con las licencias.',
+    forja: 'Rama de la fusión: probabilidad de acierto en todos los tramos, más cristales de consuelo cuando la tirada falla y la firma de Obras Maestras al fundir dos potenciales máximos. No toca el click ni la recolección por segundo: solo que la forja salga mejor.'
   };
 
   const fichaNodo = (n: typeof TREE_NODES[number], tinte: string): string => {
@@ -675,7 +676,7 @@ function bloqueHerrArbol(): string {
 function bloqueHerrBase(): string {
   return bloqueWiki('Simulador de base', 'star', `
       <p class="wiki-p">Elige lado, tier, base, potencial, nivel y afijos, y
-      mira el daño final. Es una combinación ilustrativa, sin forja: aquí eliges
+      mira la recolección por click final. Es una combinación ilustrativa, sin forja: aquí eliges
       todo y el juego lo sortea.</p>
       <div data-herr-zona="base">${baseSimHTML()}</div>
     `, ANCLA.herramientasBase);

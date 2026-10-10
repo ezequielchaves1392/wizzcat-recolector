@@ -100,7 +100,9 @@ export default defineConfig({
         // F103 · La elección de servidor se decide en un solo sitio.
         servidorCheck: resolve(here, 'servidorCheck.ts'),
         // F102 · El árbol en 3 columnas: topes, presupuestos y devolución.
-        equilibrioCheck: resolve(here, 'equilibrioCheck.ts')
+        equilibrioCheck: resolve(here, 'equilibrioCheck.ts'),
+        // Q1 — El vocabulario del jugador, la lista de palabras que no vuelven.
+        vocabularioCheck: resolve(here, 'vocabularioCheck.ts')
       },
       formats: ['es']
     }

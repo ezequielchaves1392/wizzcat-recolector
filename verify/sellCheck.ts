@@ -10,7 +10,24 @@
 
 import { createGameLoop, SAVE_VERSION } from '../src/gameLoop';
 import { danioDeRango, estrellasDe } from '../src/data/crafting';
+import { basePorId } from '../src/data/bases';
 import * as factories from './kit';
+
+/**
+ * El daño que la regla le pide a **este** item, con la base oculta que tenga.
+ *
+ * **POR QUÉ NO VALE `danioDeRango(tier, ★)` A SECAS.** Desde F74 cada item
+ * lleva una base oculta (±10 %) sorteada al cargar, y el daño sale de
+ * `baseDelTier × base × potencial`. Comparar contra la función sin base es
+ * comparar contra ×1,0: un ★1 de T1 con base ×1,10 sale 7 en vez de 6 y el
+ * banco falla **solo cuando el dado toca esa base**, que era el fallo intermitente
+ * de este fichero. Aquí se lee la base del propio item, así que la comprobación
+ * mide lo que dice medir —que las estrellas y el número cuadren— y no el sorteo.
+ */
+const reglaDe = (w: any) => danioDeRango(
+  w?.tier ?? 1, w?.potential,
+  typeof w?.baseId === 'string' ? basePorId(w.baseId) ?? null : null
+);
 
 type Row = { name: string; ok: boolean; detail: string };
 const rows: Row[] = [];
@@ -444,9 +461,17 @@ async function main() {
 
     check('renombre: el item viejo pasa a ser recolector', deType(g, 'collector') === 1 && deType(g, 'weapon') === 0,
       ids(g).join(','));
-    check('renombre: conserva su id, su daño y su descripción',
-      find(g, 'weapon_blaster_001')?.damage === danioDeRango(1, 1)
-        && find(g, 'weapon_blaster_001')?.details === `Recolección por click: +${danioDeRango(1, 1)}`,
+    // **LO QUE "CONSERVA" SIGNIFICA AHORA, CON F74 DEL MEDIO.** El daño puede
+    // moverse ±10 % porque al cargar se le sortea una base oculta (decisión 5),
+    // así que lo que no puede fallar es que **la descripción diga el daño que el
+    // item tiene y que ese daño sea el de la regla con su base**. Antes se
+    // comparaba contra `danioDeRango(1, 1)` y saltaba solo con las bases altas.
+    check('renombre: conserva su id, y su descripción dice su daño',
+      (() => {
+        const it = find(g, 'weapon_blaster_001');
+        return !!it && it.damage === reglaDe(it)
+          && it.details === `Recolección por click: +${it.damage}`;
+      })(),
       JSON.stringify(find(g, 'weapon_blaster_001')));
 
     // El id del equipado se renombró a la vez. Sin adoptarlo, el click se
@@ -482,8 +507,18 @@ async function main() {
   //  G4 · UN ITEM VIEJO INCOHERENTE SE ARREGLA AL CARGAR
   // =========================================================================
   //  El bloque del renombre de arriba usa un item que **ya viene coherente** con
-  //  su potencial, y por eso la migración no lo toca: eso es lo que hay que
-  //  comprobar, que una partida bien puesta no se mueva sola.
+  //  su potencial, y por eso la migración de G4 no le cambia las estrellas: eso
+  //  es lo que hay que comprobar, que una partida bien puesta no se mueva sola.
+  //
+  //  **OJO: "NO SE TOCA" YA NO ES VERDAD PARA EL NÚMERO, Y ES F74.** La
+  //  migración de bases sortea a cada item viejo una base oculta y recalcula el
+  //  daño con ella (±10 %, decisión 5 del diseño), así que el daño **puede
+  //  cambiar sin que nada esté mal**. Por eso la comparación de este bloque es
+  //  contra `reglaDe()`, que es la regla con la base DEL ITEM, y no contra
+  //  `danioDeRango(tier, ★)` a secas: con la función suelta, un ★1 de T1 con
+  //  base ×1,10 sale 7 y el banco grita, y la mitad de las corridas lo hacía.
+  //  Un banco que falla una de cada diez veces no está midiendo nada: está
+  //  midiendo el dado.
   //
   //  Este es el otro caso: un item guardado con daño 5 y sin potencial, que es lo
   //  que había en las partidas de antes de la escala. El suelo del T1 son 6, así
@@ -494,6 +529,9 @@ async function main() {
   //  `potencialYDanoDe()` elige el potencial MÁS CERCANO y a empate el MENOR: una
   //  migración no puede acabar siendo un regalo para quien lleva más tiempo.
   {
+    // La regla que este item tiene que cumplir está arriba (`reglaDe`), con la
+    // base oculta que le tocó: sin base declarada usa ×1,0, que es exactamente
+    // lo que decía `danioDeRango(tier, ★)` antes de F74.
     const g = await boot(baseSave([
       legacyWeapon('viejo_ok'),
       legacyWeapon('viejo_mal', { damage: 5, details: 'Recolección por click: +5', potential: undefined })
@@ -501,17 +539,17 @@ async function main() {
     const ok = find(g, 'viejo_ok');
     const mal = find(g, 'viejo_mal');
 
-    check('G4: un item viejo coherente no se toca al cargar',
-      ok?.damage === danioDeRango(1, 1) && ok?.potential === 1,
-      `daño=${ok?.damage} potencial=${ok?.potential}`);
+    check('G4: un item viejo coherente no cambia de estrellas al cargar',
+      ok?.damage === reglaDe(ok) && ok?.potential === 1,
+      `daño=${ok?.damage} potencial=${ok?.potential} (la regla con su base: ${reglaDe(ok)})`);
 
     check('G4: y uno incoherente se pone de acuerdo con sus estrellas',
-      mal?.potential === 1 && mal?.damage === danioDeRango(1, 1),
-      `daño=${mal?.damage} potencial=${mal?.potential} · el ★1 de T1 es ${danioDeRango(1, 1)}`);
+      mal?.potential === 1 && mal?.damage === reglaDe(mal),
+      `daño=${mal?.damage} potencial=${mal?.potential} · la regla con su base: ${reglaDe(mal)}`);
 
     check('G4: y el texto que se pinta pasa a decir la verdad',
-      mal?.details === `Recolección por click: +${danioDeRango(1, 1)}`,
-      `details="${mal?.details}"`);
+      mal?.details === `Recolección por click: +${reglaDe(mal)}`,
+      `details="${mal?.details}" esperado="Recolección por click: +${reglaDe(mal)}"`);
 
     // **Y LA REGLA DE LAS ESTRELLAS, QUE ANTES NO EXISTÍA COMO REGLA.** Siete
     // plantillas pintaban "estrellas si hay potencial, nada si no", así que un
@@ -522,12 +560,13 @@ async function main() {
         && estrellasDe(7) === '★★★' && estrellasDe(1) === '★' && estrellasDe(5) === '★★★★★',
       `ausente="${estrellasDe(undefined)}" cero="${estrellasDe(0)}" siete="${estrellasDe(7)}"`);
 
-    // Y la razón de que todo esto sirva: **daño = potencial × la regla**.
-    const incoherentes = wh(g).filter((w: any) =>
-      w.type === 'collector' && w.damage !== danioDeRango(w.tier ?? 1, w.potential));
+    // Y la razón de que todo esto sirva: **daño = potencial × la regla, con la
+    // base que el item tenga**. Que las estrellas y el número digan lo mismo es
+    // lo que el jugador ve en la ficha; lo de la base es F74.
+    const incoherentes = wh(g).filter((w: any) => w.type === 'collector' && w.damage !== reglaDe(w));
     check('G4: en el almacén no queda ni un item con el daño de otras estrellas',
       incoherentes.length === 0,
-      incoherentes.map((w: any) => `${w.id}:★${w.potential} daño=${w.damage} (debería ${danioDeRango(w.tier ?? 1, w.potential)})`).join(' '));
+      incoherentes.map((w: any) => `${w.id}:★${w.potential} daño=${w.damage} (debería ${reglaDe(w)})`).join(' '));
   }
   {
     // El caso que reportado el jugador tal cual: el Blaster de partida, solo en

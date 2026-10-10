@@ -12,32 +12,37 @@ import type { PassiveBonuses } from '../types/domain';
 export function bonusLabel(key: keyof PassiveBonuses, value: number): string {
   const pct = (v: number) => `+${Math.round(v * 100)}%`;
   switch (key) {
-    case 'clickMult': return `${pct(value)} daño de click`;
+    case 'clickMult': return `${pct(value)} recolección por click`;
     case 'clickPorForja': return `${Math.round(value * 100)}% de tu forja como click`;
-    case 'passiveMult': return `${pct(value)} ingreso pasivo`;
+    case 'passiveMult': return `${pct(value)} recolección por segundo`;
     case 'costReduction': return `−${Math.round(value * 100)}% coste de tienda`;
     case 'sellMult': return `${pct(value)} precio de venta`;
     case 'craftLuck': return `${pct(value)} éxito de forja`;
     case 'forgePotential': return `${pct(value)} subida de potencial`;
     case 'consolationBonus': return `${pct(value)} cristales por fallo`;
-    case 'autoClick': return `+${value} clics/s automáticos`;
+    case 'autoClick': return `+${value} clicks/s automáticos`;
     case 'afkHours': return `+${value * 60} min de AFK`;
-    case 'offlineClicks': return `+${value} clics al volver`;
-    case 'crateLuck': return `${pct(value)} salto de caja`;
+    case 'offlineClicks': return `+${value} clicks al volver`;
+    case 'crateLuck': return `${pct(value)} de que la caja dé un tier más`;
     case 'coreGain': return `${pct(value)} núcleos por reinicio`;
     case 'storageSlots': return `+${value} slots de almacén`;
     case 'companionSlots': return `+${value} slots de compañero`;
-    case 'sobrecargaCada': return `crítico asegurado cada ${value} clics`;
-    case 'sobrecargaMult': return `el asegurado pega ×${value}`;
-    case 'colmenaPorComp': return `${pct(value)} pasivo por compañero activo`;
+    case 'sobrecargaCada': return `crítico asegurado cada ${value} clicks`;
+    case 'sobrecargaMult': return `el asegurado multiplica ×${value}`;
+    case 'colmenaPorComp': return `${pct(value)} recolección por segundo por compañero activo`;
     case 'jackpotChance': return `${pct(value)} de subida de tier en cajas`;
     case 'obraMaestra': return `firma Obras Maestras al forjar`;
     case 'licenciaT2': return `vende cajas T2 en la tienda`;
     case 'licenciaT3': return `vende cajas T3 en la tienda`;
     case 'ecoDoble': return `${pct(value)} de botín doble en cajas`;
-    case 'compPasivo': return `${pct(value)} poder de pasivos`;
-    case 'compClick': return `${pct(value)} poder de clicks`;
-    case 'compMulti': return `${pct(value)} efecto multiplier`;
+    //  LOS DOS QUE NOMBRAN A LOS COMPAÑEROS, NO A LA COLECCIÓN EN GENERAL.
+    //  `compPasivo` y `compClick` multiplican a un TIPO de compañero, no al total:
+    //  decir solo "recolección por segundo" (que es lo que dice `passiveMult`) o
+    //  "recolección por click" (que es del recolector, y estos compañeros no
+    //  cobran por click) dejaba dos reglas distintas con el mismo rótulo.
+    case 'compPasivo': return `${pct(value)} recolección por segundo de tus compañeros pasivos`;
+    case 'compClick': return `${pct(value)} recolección por segundo de tus compañeros de click`;
+    case 'compMulti': return `${pct(value)} efecto de los compañeros multiplicadores`;
     case 'compDescuento': return `−${Math.round(value * 100)}% coste de mejora`;
     case 'critChance': return `+${Math.round(value * 100)}% prob. de crítico`;
     case 'nanoPerCrate': return `+${value} nanitas por caja`;

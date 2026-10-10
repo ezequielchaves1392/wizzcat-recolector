@@ -181,20 +181,20 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
     detail: 'El tiempo de la tarjeta se suma, hasta un máximo de 3 tarjetas a la vez. Cuanto más invertido tengas en compañeros activos, más rinde.'
   },
   clickBuff: {
-    what: 'x2 al daño de click durante 30 minutos.',
-    detail: 'Afecta al recolector, no al ingreso pasivo. Conviene usarlo cuando vas a dedicate a pulsar en vez de a mirar los números.'
+    what: 'x2 a la recolección por click durante 30 minutos.',
+    detail: 'Afecta al recolector, no a la recolección por segundo. Conviene usarlo cuando vas a dedicate a pulsar en vez de a mirar los números.'
   },
   passiveBuff: {
-    what: 'x2 a todo el ingreso pasivo durante 1 hora.',
-    detail: 'Multiplica a los compañeros activos, no al daño de click. Es la mejor carta si tu estilo es dejar que trabajen solos.'
+    what: 'x2 a toda la recolección por segundo durante 1 hora.',
+    detail: 'Multiplica a los compañeros activos, no a la recolección por click. Es la mejor carta si tu estilo es dejar que trabajen solos.'
   },
   clickX2Card: {
     what: 'x2 al click durante 30 segundos.',
-    detail: 'Muy corta a propósito: para gastarla en el pico de una racha de clics, no para llevarla puesta.'
+    detail: 'Muy corta a propósito: para gastarla en el pico de una racha de clicks, no para llevarla puesta.'
   },
   clickX3Card: {
     what: 'x3 al click durante 30 segundos.',
-    detail: 'El doble de efecto que la x2 por cinco veces el precio. Solo sale rentable con muchos clics por segundo.'
+    detail: 'El doble de efecto que la x2 por cinco veces el precio. Solo sale rentable con muchos clicks por segundo.'
   },
 
   calibrationStone: {
@@ -212,7 +212,7 @@ export const DESCRIPTIONS: Record<string, { what: string; detail: string }> = {
 
   companionSlot1: {
     what: 'Una ranura más de compañero activo.',
-    detail: 'Los compañeros activos son los que generan ingreso pasivo. Con más ranuras puedes usar a los que tengas, pero también subirlos de tier.'
+    detail: 'Los compañeros activos son los que generan recolección por segundo. Con más ranuras puedes usar a los que tengas, pero también subirlos de tier.'
   },
   companionSlot2: {
     what: 'Abre hasta 3 ranuras de compañero de golpe.',
@@ -261,13 +261,13 @@ function tierDescription(kind: 'companion' | 'collector', tier: number): { what:
   const r = tierRarity(tier);
   if (kind === 'companion') {
     return {
-      what: `Compañero de tier ${tier} (${r}): entre +${range[0]} y +${range[1]} de ingreso por segundo.`,
+      what: `Compañero de tier ${tier} (${r}): entre +${range[0]} y +${range[1]} de recolección por segundo.`,
       detail: 'Solo cuenta si lo equipas en una ranura activa. El nombre, el poder exacto y la rareza se sortean al comprarlo.'
     };
   }
   return {
-    what: `Recolector de tier ${tier} (${r}): entre +${range[0]} y +${range[1]} de daño por click.`,
-    detail: 'El daño y la rareza se sortean al comprarlo. Los tiers altos suben de precio por estilo, no por ser objetivamente mejores: el coste por punto de daño se mantiene plano en toda la curva.'
+    what: `Recolector de tier ${tier} (${r}): entre +${range[0]} y +${range[1]} de recolección por click.`,
+    detail: 'La recolección por click y la rareza se sortean al comprarlo. Los tiers altos suben de precio por estilo, no por ser objetivamente mejores: el coste por punto se mantiene plano en toda la curva.'
   };
 }
 
@@ -766,7 +766,7 @@ function showPurchaseModal(game: any, item: any, onClose: () => void) {
   const poder = ficha?.power ?? item.power ?? item.damage ?? 0;
   const lineaPoder = esCompanero
     ? lineaTipoCompanion(tipo, poder)
-    : `Hace +${item.damage ?? poder} de daño por click`;
+    : `Da +${item.damage ?? poder} de recolección por click`;
   const lore = lorePara(item.name);
 
   const overlay = document.createElement('div');

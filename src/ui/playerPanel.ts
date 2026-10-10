@@ -124,7 +124,7 @@ export function renderPanel(
 
           <div class="flex items-baseline justify-between gap-2 mt-1.5 pt-1.5
                       border-t border-[var(--border-color)]">
-            <span class="text-[9px] font-mono accent-text font-bold">Total por click</span>
+            <span class="text-[9px] font-mono accent-text font-bold">Recolección por click</span>
             <span class="text-[10px] font-mono font-bold tabular accent-text">
               +${formatNumber(partes.total)}
             </span>

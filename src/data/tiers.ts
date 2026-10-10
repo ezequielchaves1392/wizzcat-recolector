@@ -168,9 +168,9 @@ export const LORE: Record<string, string> = {
   // ---------------------------------------------------------- COMPAÑEROS T10
   'Dios de la Guerra': 'La batalla es su culto y el botín su ofrenda.',
   'El Omnipotente': 'No necesita razones. Solo resultados.',
-  'El Infinito': 'Su turno no termina nunca. Tu ingreso tampoco.',
+  'El Infinito': 'Su turno no termina nunca. Tu recolección por segundo tampoco.',
   // --------------------------------------------------------- RECOLECTORES T1
-  'Blaster Láser': 'El primer clic de todo operativo.',
+  'Blaster Láser': 'El primer click de todo operativo.',
   'Pistola de Plasma': 'Calienta la veta antes de partirla.',
   'Rifle de Pulso': 'Dispara al ritmo de tu dedo.',
   // --------------------------------------------------------- RECOLECTORES T2
@@ -187,7 +187,7 @@ export const LORE: Record<string, string> = {
   'Juicio Final': 'Dicta sentencia sobre cada veta.',
   // --------------------------------------------------------- RECOLECTORES T5
   'Apocalipsis': 'El fin del mundo, en tu mano.',
-  'Armagedón': 'La última batalla se libra en cada clic.',
+  'Armagedón': 'La última batalla se libra en cada click.',
   'Ragnarök': 'Los dioses cayeron. Sus restos rinden.',
   // --------------------------------------------------------- RECOLECTORES T6
   'Excalibur': 'Solo un digno la empuña. Eres tú.',
@@ -206,7 +206,7 @@ export const LORE: Record<string, string> = {
   'Instrumento de la Muerte': 'Toca la melodía que abre la roca.',
   'Herencia de los Dioses': 'Lo que dejaron atrás, ahora es tuyo.',
   // -------------------------------------------------------- RECOLECTORES T10
-  'El Principio y El Fin': 'Todo empieza y termina en tu clic.',
+  'El Principio y El Fin': 'Todo empieza y termina en tu click.',
   'La Última Palabra': 'Después de ella no hay más veta.',
   'El Todo y La Nada': 'Extrae del todo. Guarda la nada.',
   // ------------------------------------------------- EXCLUSIVOS DE CAJA
@@ -304,8 +304,8 @@ export function lorePara(nombre: string): string | null {
 export function lineaTipoCompanion(tipo: string, power: number): string {
   if (tipo === 'multiplier') {
     const mult = Math.round((1 + power) * 100) / 100;
-    return `Multiplica el ingreso ×${mult}`;
+    return `Multiplica la recolección ×${mult}`;
   }
-  if (tipo === 'passive') return `Produce +${power}/s en pasivo`;
-  return `Aporta +${power}/s al clickear`;
+  if (tipo === 'passive') return `Recolección por segundo: +${power}/s`;
+  return `Recolección por segundo: +${power}/s (tipo click)`;
 }

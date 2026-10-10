@@ -298,8 +298,8 @@ export function showSintonizacion(
                   // TEXTO ÚNICO.** El recolector sube daño y el compañero sube el ingreso
                   // del recolector, así que decir lo mismo en los dos sería mentir en uno
                   // de los dos. Es la única línea de la hoja que cambia por tipo.
-                  ? 'Sube el nivel y el ingreso que da al recolector.'
-                  : 'Sube el nivel y el daño del recolector.')
+                  ? 'Sube el nivel y lo que el compañero aporta.'
+                  : 'Sube el nivel y la recolección por click del recolector.')
               : `Te faltan ${formatNumber(coste - tienes)}. Salen de las cajas T${tierItem}.`}
           </span>
         </span>

@@ -324,7 +324,7 @@ export const COSMETICS: Cosmetic[] = [
     rarity: 'Legendario', unlock: { kind: 'achievement', value: 'cantera' },
     style: { color: '#fdba74', font: 'display', glow: 'true' } },
   {
-    id: 'title_ninguna_bala', type: 'title', name: 'Ninguna Bala', description: 'Cien mil clics. Ni uno desperdiciado.',
+    id: 'title_ninguna_bala', type: 'title', name: 'Ninguna Bala', description: 'Cien mil clicks. Ni uno desperdiciado.',
     rarity: 'Legendario', unlock: { kind: 'achievement', value: 'ninguna_bala' },
     style: { color: '#e5e7eb', font: 'mono' } },
   {

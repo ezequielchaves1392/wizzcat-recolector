@@ -81,19 +81,19 @@ import { multiplicadorDeBase, basePorId, basePorPosicion, posicionFusionada, pos
 // ==========================================================================
 
 export const AFFIXES: Affix[] = [
-  { id: 'aff_sharp', name: 'Afilado', description: '+18% al daño de click.', rarity: 'Raro',
+  { id: 'aff_sharp', name: 'Afilado', description: '+18% a la recolección por click.', rarity: 'Raro',
     effect: { clickMult: 0.18 } },
-  { id: 'aff_rapid', name: 'Cadencia', description: '+12% al daño de click.', rarity: 'Raro',
+  { id: 'aff_rapid', name: 'Cadencia', description: '+12% a la recolección por click.', rarity: 'Raro',
     effect: { clickMult: 0.12 } },
-  { id: 'aff_yield', name: 'Rendimiento', description: '+20% al ingreso pasivo.', rarity: 'Raro',
+  { id: 'aff_yield', name: 'Rendimiento', description: '+20% a la recolección por segundo.', rarity: 'Raro',
     effect: { passiveMult: 0.20 } },
-  { id: 'aff_flow', name: 'Flujo', description: '+14% al ingreso pasivo.', rarity: 'Raro',
+  { id: 'aff_flow', name: 'Flujo', description: '+14% a la recolección por segundo.', rarity: 'Raro',
     effect: { passiveMult: 0.14 } },
-  { id: 'aff_bulwark', name: 'Baluarte', description: '+35% al daño de click.', rarity: 'Épico',
+  { id: 'aff_bulwark', name: 'Baluarte', description: '+35% a la recolección por click.', rarity: 'Épico',
     effect: { clickMult: 0.35 } },
-  { id: 'aff_core', name: 'Núcleo', description: '+25% al ingreso pasivo.', rarity: 'Épico',
+  { id: 'aff_core', name: 'Núcleo', description: '+25% a la recolección por segundo.', rarity: 'Épico',
     effect: { passiveMult: 0.25 } },
-  { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 daño).', rarity: 'Épico',
+  { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 a la recolección por click).', rarity: 'Épico',
     effect: { critChance: 0.08 } },
   { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', rarity: 'Legendario',
     effect: { critChance: 0.14 } },
@@ -108,13 +108,13 @@ export const AFFIXES: Affix[] = [
   // items guardados; lo que ya filtraba ids desconocidos lo ignora igual.
   { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', rarity: 'Legendario',
     effect: { clickMult: 0.35, passiveMult: 0.35 } },
-  { id: 'aff_eternal', name: 'Eterno', description: '+2% de daño por cada nivel del recolector.', rarity: 'Mítico',
+  { id: 'aff_eternal', name: 'Eterno', description: '+2% a la recolección por click por cada nivel del recolector.', rarity: 'Mítico',
     effect: { clickMultPorNivel: 0.02 } },
-  { id: 'aff_absorb', name: 'Absorción', description: '+5% de ingreso por cada 5 niveles.', rarity: 'Mítico',
+  { id: 'aff_absorb', name: 'Absorción', description: '+5% a la recolección por segundo por cada 5 niveles.', rarity: 'Mítico',
     effect: { passiveMultPorNiveles: 0.05 } },
   { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', rarity: 'Mítico',
     effect: { clickMult: 0.55, passiveMult: 0.55 } },
-  { id: 'aff_void', name: 'Vacío Devorador', description: '+25% al daño, +25% al pasivo, +10% crítico.', rarity: 'Divino',
+  { id: 'aff_void', name: 'Vacío Devorador', description: '+25% a la recolección por click y por segundo, +10% crítico.', rarity: 'Divino',
     effect: { clickMult: 0.25, passiveMult: 0.25, critChance: 0.10 } }
 ];
 
@@ -1835,7 +1835,7 @@ export function attemptForge(
     id: `forged_${Date.now()}_${rng().toString(36).substring(2, 8)}`,
     name,
     type: 'collector',
-    details: `Daño base: +${damage}`,
+    details: `Recolección por click: +${damage}`,
     rarity,
     tier: newTier,
     level: 0,

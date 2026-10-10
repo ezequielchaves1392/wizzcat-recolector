@@ -51,13 +51,13 @@ import { PIEDRA_PUNTOS, pctDe, BONO_ETTER } from './constants';
 // Es lo mismo que se hizo con las ampliaciones de huecos del almacén.
 export const CONSUMABLES_SIN_EXPANSOR = {
   afkCard: { name: 'Tarjeta AFK', details: 'Permite juego sin la ventana activa 10 min (acumulable x3)', rarity: 'Raro', buffId: 'afk' },
-  clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 al click por 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
-  clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 al click por 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
+  clickX2Card: { name: 'Tarjeta Click x2', details: 'Otorga x2 a la recolección por click durante 30 segundos', rarity: 'Raro', buffId: 'clickX2' },
+  clickX3Card: { name: 'Tarjeta Click x3', details: 'Otorga x3 a la recolección por click durante 30 segundos', rarity: 'Épico', buffId: 'clickX3' },
   // F97 Lote 2d · Los tres buffers de compañero. Caen de cajas y se usan
   // desde el almacén. Cada uno da boost a un tipo: pasivos, clicks o global.
-  compPassiveBoost: { name: 'Buffer Pasivo', details: '+50% al ingreso de pasivos por 30 min', rarity: 'Raro', buffId: 'compPassiveBoost' },
-  compClickBoost: { name: 'Buffer Click', details: '+50% al ingreso de clicks por 30 min', rarity: 'Raro', buffId: 'compClickBoost' },
-  compGlobalBoost: { name: 'Buffer Global', details: '+25% al ingreso de todos por 30 min', rarity: 'Épico', buffId: 'compGlobalBoost' },
+  compPassiveBoost: { name: 'Buffer Pasivo', details: '+50% a la recolección por segundo de los compañeros pasivos por 30 min', rarity: 'Raro', buffId: 'compPassiveBoost' },
+  compClickBoost: { name: 'Buffer Click', details: '+50% a la recolección por segundo de los compañeros de click por 30 min', rarity: 'Raro', buffId: 'compClickBoost' },
+  compGlobalBoost: { name: 'Buffer Global', details: '+25% a la recolección por segundo de todos los compañeros por 30 min', rarity: 'Épico', buffId: 'compGlobalBoost' },
   calibrationStone: { name: 'Piedra de Calibración', details: `Sube ${PIEDRA_PUNTOS} puntos la probabilidad de la próxima fusión`, rarity: 'Raro', buffId: 'calibrationStone' },
   // **LO QUE ES AHORA LA NANOPARTÍCULA, Y LO QUE DEJÓ DE SER.** Ya no toca la
   // probabilidad ni garantiza afijos: su efecto entero es subir un escalón la

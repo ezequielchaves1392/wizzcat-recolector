@@ -486,10 +486,10 @@ export function baseSimHTML(): string {
         </div>
       </div>
       ${sel.lado === 'com' ? selectorSim('tipo', 'Tipo', sel.tipo, [
-        { v: 'click', t: 'De click' }, { v: 'passive', t: 'Pasivo' }, { v: 'multiplier', t: 'Multiplier' }
+        { v: 'click', t: 'De click' }, { v: 'passive', t: 'Pasivo' }, { v: 'multiplier', t: 'Multiplicador' }
       ]) : `
-      <div class="block min-w-0" aria-label="Daño del item simulado">
-        <span class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">Daño final</span>
+      <div class="block min-w-0" aria-label="Recolección por click del item simulado">
+        <span class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">Recolección por click</span>
         <div class="h-11 w-full px-2 rounded-xl border border-[var(--border-color)] text-[12px] font-mono font-bold accent-text
                     flex items-center tabular">+${formatNumber(f.total)}</div>
       </div>`}

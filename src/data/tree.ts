@@ -37,14 +37,14 @@ const G = 1.55;
 export const TREE_NODES: TreeNode[] = [
   // ---------------------------------------------------------------- TIER 0
   {
-    id: 'core_sink', name: 'Sumidero de Núcleos', description: '+6% al ingreso pasivo por nivel.',
+    id: 'core_sink', name: 'Sumidero de Núcleos', description: '+6% a la recolección por segundo por nivel.',
     lore: 'Un pozo que no se llena: todo lo que cae por el, se queda. Cuanto mas hondo, mas fondo traga.',
     icon: 'chip', category: 'manada', tier: 0, requires: [],
     baseCost: 1, costGrowth: G, maxLevel: 10,
     bonus: { passiveMult: 0.06 }, x: 0, y: 0, columna: 'izq'
   },
   {
-    id: 'core_edge', name: 'Filo Afilado', description: '+8% al daño de click por nivel.',
+    id: 'core_edge', name: 'Filo Afilado', description: '+8% a la recolección por click por nivel.',
     lore: 'El filo se afila solo. Solo hay que acordarse de no cortarse con el.',
     icon: 'collector', category: 'asalto', tier: 0, requires: [],
     baseCost: 1, costGrowth: G, maxLevel: 10,
@@ -93,14 +93,14 @@ export const TREE_NODES: TreeNode[] = [
 
   // ---------------------------------------------------------------- TIER 1
   {
-    id: 'auto_clicker', name: 'Autómata de Clicks', description: '+0.5 clics automáticos por segundo.',
+    id: 'auto_clicker', name: 'Autómata de Clicks', description: '+0.5 clicks automáticos por segundo.',
     lore: 'Un brazo mecanico que golpea aunque nadie este delante. No se cansa y no mira el reloj.',
     icon: 'bolt', category: 'asalto', tier: 1, requires: ['core_edge'],
     baseCost: 3, costGrowth: 1.6, maxLevel: 10,
     bonus: { autoClick: 0.5 }, x: 1, y: 0, columna: 'der'
   },
   {
-    id: 'passive_loop', name: 'Bucle de Extracción', description: '+8% al ingreso pasivo por nivel.',
+    id: 'passive_loop', name: 'Bucle de Extracción', description: '+8% a la recolección por segundo por nivel.',
     lore: 'El circuito se cierra solo: lo que extrae vuelve a entrar en vez de quedarse en el suelo.',
     icon: 'companion', category: 'manada', tier: 1, requires: ['core_sink'],
     baseCost: 3, costGrowth: G, maxLevel: 6,
@@ -135,14 +135,14 @@ export const TREE_NODES: TreeNode[] = [
 
   // ---------------------------------------------------------------- TIER 2
   {
-    id: 'auto_clicker2', name: 'Dedo de Acero', description: '+1 clic automático por segundo.',
+    id: 'auto_clicker2', name: 'Dedo de Acero', description: '+1 click automático por segundo.',
     lore: 'Cuatro brazos mas y el mismo gesto. La cadencia ya no la marca una persona.',
     icon: 'bolt', category: 'asalto', tier: 2, requires: ['auto_clicker'],
     baseCost: 10, costGrowth: 1.7, maxLevel: 6,
     bonus: { autoClick: 1 }, x: 2, y: 0, columna: 'der'
   },
   {
-    id: 'multiplier_amp', name: 'Amplificador de Asalto', description: '+5% al daño de click por nivel.',
+    id: 'multiplier_amp', name: 'Amplificador de Asalto', description: '+5% a la recolección por click por nivel.',
     lore: 'Todo el ruido del taller metido en un solo golpe. No hace más cosas: hace una, más fuerte.',
     icon: 'sparkle', category: 'asalto', tier: 2, requires: ['core_edge'],
     baseCost: 12, costGrowth: 1.65, maxLevel: 6,
@@ -176,14 +176,14 @@ export const TREE_NODES: TreeNode[] = [
   // tipo y descuento de mejora. Los afijos innatos (pool propio, magnitud por
   // tier) vienen del sorteo, no de un nodo, y la forja sigue en potencial.
   {
-    id: 'comp_pasivo', name: 'Enjambre', description: '+12% al poder de pasivos por nivel.',
+    id: 'comp_pasivo', name: 'Enjambre', description: '+12% a la recolección por segundo de tus compañeros pasivos por nivel.',
     lore: 'Más bocas comiendo del mismo cable: cada una muerde más fuerte.',
     icon: 'companion', category: 'manada', tier: 2, requires: ['passive_loop'],
     baseCost: 10, costGrowth: 1.6, maxLevel: 5,
     bonus: { compPasivo: 0.12 }, x: 2, y: 5, columna: 'centro'
   },
   {
-    id: 'comp_click', name: 'Sincronía', description: '+12% al poder de clicks por nivel.',
+    id: 'comp_click', name: 'Sincronía', description: '+12% a la recolección por segundo de tus compañeros de click por nivel.',
     lore: 'Los que golpean aprenden el ritmo de los que golpean al lado.',
     icon: 'companion', category: 'manada', tier: 2, requires: ['passive_loop'],
     baseCost: 10, costGrowth: 1.6, maxLevel: 5,
@@ -197,7 +197,7 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { compDescuento: 0.10 }, x: 2, y: 7, columna: 'centro'
   },
   {
-    id: 'comp_multi', name: 'Mando', description: '+15% al efecto multiplier por nivel.',
+    id: 'comp_multi', name: 'Mando', description: '+15% al efecto de los compañeros multiplicadores por nivel.',
     lore: 'Alguien tiene que gritar las órdenes. Grita mejor cada vez.',
     icon: 'companion', category: 'manada', tier: 3, requires: ['squad_slots'],
     baseCost: 40, costGrowth: 1.7, maxLevel: 4,
@@ -226,7 +226,7 @@ export const TREE_NODES: TreeNode[] = [
   // sin eso, el nodo seria inalcanzable para quien no lo tuviera ya comprado.
   // ---------------------------------------------------------------------------
   {
-    id: 'quantum_amp', name: 'Amplificador de Manada', description: '+8% al ingreso pasivo por nivel.',
+    id: 'quantum_amp', name: 'Amplificador de Manada', description: '+8% a la recolección por segundo por nivel.',
     lore: 'El gemelo tranquilo del de asalto: no toca tu mano, toca tu enjambre.',
     icon: 'crystal', category: 'manada', tier: 3, requires: ['passive_loop'],
     baseCost: 60, costGrowth: 1.75, maxLevel: 5,
@@ -256,14 +256,14 @@ export const TREE_NODES: TreeNode[] = [
 
   // ---------------------------------------------------------------- TIER 4
   {
-    id: 'singularity', name: 'Singularidad', description: '+10% al daño de click y al ingreso pasivo por nivel.',
+    id: 'singularity', name: 'Singularidad', description: '+10% a la recolección por click y por segundo por nivel.',
     lore: 'El ultimo nodo del arbol. Ponerlo es una decision: para por aqui.',
     icon: 'sparkle', category: 'asalto', tier: 4, requires: ['multiplier_amp'],
     baseCost: 220, costGrowth: 2.0, maxLevel: 5,
     bonus: { clickMult: 0.10, passiveMult: 0.10 }, x: 4, y: 1, columna: 'centro'
   },
   {
-    id: 'full_automation', name: 'Automatización Total', description: '+1 clic automático por segundo.',
+    id: 'full_automation', name: 'Automatización Total', description: '+1 click automático por segundo.',
     lore: 'Que la base juegue sola. Se ha arreglado todo lo que hacia falta para dejarlo.',
     icon: 'bolt', category: 'asalto', tier: 4, requires: ['auto_clicker2'],
     baseCost: 180, costGrowth: 1.9, maxLevel: 3,
@@ -290,14 +290,14 @@ export const TREE_NODES: TreeNode[] = [
   // la descripción las nombra y el banco las lee de ahí—, y todos son de un
   // solo nivel: un keystone no se sube, se consigue.
   {
-    id: 'sobrecarga', name: 'Sobrecarga', description: 'Cada 50 clics, el siguiente critica ×3.',
+    id: 'sobrecarga', name: 'Sobrecarga', description: 'Cada 50 clicks, el siguiente critica ×3.',
     lore: 'Cincuenta golpes cargando el mismo condensador. El cincuenta y uno no golpea: detona.',
     icon: 'bolt', category: 'asalto', tier: 4, requires: ['singularity'],
     baseCost: 300, costGrowth: 1, maxLevel: 1,
     bonus: { sobrecargaCada: 50, sobrecargaMult: 3 }, x: 4, y: 4, columna: 'centro'
   },
   {
-    id: 'colmena', name: 'Mente Colmena', description: '+4% al ingreso por cada compañero activo además del primero.',
+    id: 'colmena', name: 'Mente Colmena', description: '+4% a la recolección por segundo por cada compañero activo además del primero.',
     lore: 'Ninguna abeja hace miel sola. Cada una que se suma endulza el trabajo de las demás.',
     icon: 'companion', category: 'manada', tier: 4, requires: ['quantum_amp'],
     baseCost: 280, costGrowth: 1, maxLevel: 1,
@@ -354,14 +354,14 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { critChance: 0.15 }, x: 4, y: 5, columna: 'centro'
   },
   {
-    id: 'click_storm', name: 'Tormenta de Clicks', description: '+1.5 clics automáticos por segundo por nivel.',
+    id: 'click_storm', name: 'Tormenta de Clicks', description: '+1.5 clicks automáticos por segundo por nivel.',
     lore: 'Cuando los dedos no dan más, que sigan las máquinas.',
     icon: 'bolt', category: 'asalto', tier: 5, requires: ['full_automation'],
     baseCost: 500, costGrowth: 1.6, maxLevel: 4,
     bonus: { autoClick: 1.5 }, x: 4, y: 6, columna: 'der'
   },
   {
-    id: 'swarm_mind', name: 'Mente Enjambre', description: '+8% al poder de todos los compañeros por nivel.',
+    id: 'swarm_mind', name: 'Mente Enjambre', description: '+8% a la recolección por segundo de tus compañeros pasivos y de click por nivel.',
     lore: 'Piensa como uno, trabaja como cien.',
     icon: 'companion', category: 'manada', tier: 5, requires: ['quantum_amp'],
     baseCost: 450, costGrowth: 1.6, maxLevel: 4,
@@ -391,28 +391,28 @@ export const TREE_NODES: TreeNode[] = [
   // ---------------------------------------------------------------- TIER 6 (Lote 3)
   //  El fondo de cada rama. Requisitos intra-rama: lo que se ve es lo que hay que comprar.
   {
-    id: 'furia', name: 'Furia', description: '+10% al daño de click por nivel.',
+    id: 'furia', name: 'Furia', description: '+10% a la recolección por click por nivel.',
     lore: 'Cuando el brazo se cansa, queda la rabia.',
     icon: 'bolt', category: 'asalto', tier: 6, requires: ['crit_master'],
     baseCost: 900, costGrowth: 1.65, maxLevel: 3,
     bonus: { clickMult: 0.10 }, x: 5, y: 4, columna: 'izq'
   },
   {
-    id: 'martillo', name: 'Martillo Pesado', description: '+10% al daño de click por nivel.',
+    id: 'martillo', name: 'Martillo Pesado', description: '+10% a la recolección por click por nivel.',
     lore: 'Cada golpe cae como si fuera el primero.',
     icon: 'collector', category: 'asalto', tier: 6, requires: ['click_storm'],
     baseCost: 950, costGrowth: 1.65, maxLevel: 4,
     bonus: { clickMult: 0.10 }, x: 5, y: 5, columna: 'izq'
   },
   {
-    id: 'ejecutor', name: 'Ejecutor', description: '+12% al daño de click por nivel.',
+    id: 'ejecutor', name: 'Ejecutor', description: '+12% a la recolección por click por nivel.',
     lore: 'El último golpe no se negocia.',
     icon: 'sparkle', category: 'asalto', tier: 6, requires: ['furia'],
     baseCost: 1000, costGrowth: 1.65, maxLevel: 3,
     bonus: { clickMult: 0.12 }, x: 5, y: 6, columna: 'izq'
   },
   {
-    id: 'sinergia', name: 'Manada Cazadora', description: '+6% al daño de click por nivel.',
+    id: 'sinergia', name: 'Manada Cazadora', description: '+6% a la recolección por click por nivel.',
     lore: 'La manada que caza junta aprende a golpear junta: cada colmillo cuenta también en tu mano.',
     icon: 'companion', category: 'manada', tier: 6, requires: ['swarm_mind'],
     baseCost: 850, costGrowth: 1.65, maxLevel: 4,
@@ -456,7 +456,7 @@ export const TREE_NODES: TreeNode[] = [
   //  Ramas que van justas: tres más de Asalto, cuatro de Manada y dos de Forja
   //  para que las cuatro lleguen a 15.
   {
-    id: 'golpe_bajo', name: 'Manos Calientes', description: '+25% de tu forja como daño de click por nivel.',
+    id: 'golpe_bajo', name: 'Manos Calientes', description: '+25% de tu forja como recolección por click por nivel.',
     lore: 'El martillo enseña a la mano y la mano al martillo: golpear bien sirve en los dos lados del yunque.',
     icon: 'bolt', category: 'asalto', tier: 5, requires: ['crit_master'],
     baseCost: 420, costGrowth: 1.6, maxLevel: 4,
@@ -470,28 +470,28 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { nanoPerCrate: 20 }, x: 4, y: 8, columna: 'der'
   },
   {
-    id: 'enjambre_total', name: 'Enjambre Total', description: '+12% al ingreso pasivo por nivel.',
+    id: 'enjambre_total', name: 'Enjambre Total', description: '+12% a la recolección por segundo por nivel.',
     lore: 'Cada pieza se mueve y cuenta. Cuando todas se mueven a la vez, el enjambre entero rinde más que la suma de sus partes.',
     icon: 'companion', category: 'manada', tier: 5, requires: ['swarm_mind'],
     baseCost: 430, costGrowth: 1.6, maxLevel: 4,
     bonus: { passiveMult: 0.12 }, x: 4, y: 7, columna: 'izq'
   },
   {
-    id: 'manada_unida', name: 'Manada Unida', description: '+10% al ingreso pasivo por nivel.',
+    id: 'manada_unida', name: 'Manada Unida', description: '+10% a la recolección por segundo por nivel.',
     lore: 'Se avisan antes de entrar. Nadie se queda atrás.',
     icon: 'chip', category: 'manada', tier: 6, requires: ['enjambre_total'],
     baseCost: 870, costGrowth: 1.65, maxLevel: 4,
     bonus: { passiveMult: 0.10 }, x: 5, y: 7, columna: 'izq'
   },
   {
-    id: 'manada_viva', name: 'Manada Alfa', description: '+10% al efecto multiplier por nivel.',
+    id: 'manada_viva', name: 'Manada Alfa', description: '+10% al efecto de los compañeros multiplicadores por nivel.',
     lore: 'Un alfa no manda más fuerte: manda mejor, y la orden rinde en cada dron.',
     icon: 'companion', category: 'manada', tier: 6, requires: ['manada_unida'],
     baseCost: 890, costGrowth: 1.65, maxLevel: 3,
     bonus: { compMulti: 0.10 }, x: 5, y: 8, columna: 'centro'
   },
   {
-    id: 'llama', name: 'Temple Cruzado', description: '+25% de tu forja como daño de click por nivel.',
+    id: 'llama', name: 'Temple Cruzado', description: '+25% de tu forja como recolección por click por nivel.',
     lore: 'El acero templado enseña paciencia, y la paciencia enseña a golpear donde duele.',
     icon: 'bolt', category: 'forja', tier: 5, requires: ['anvil_song'],
     baseCost: 470, costGrowth: 1.6, maxLevel: 3,
@@ -512,7 +512,7 @@ export const TREE_NODES: TreeNode[] = [
     bonus: { compDescuento: 0.05 }, x: 4, y: 7, columna: 'der'
   },
   {
-    id: 'punhal', name: 'Puñalada', description: '+12% al daño de click por nivel.',
+    id: 'punhal', name: 'Puñalada', description: '+12% a la recolección por click por nivel.',
     lore: 'Un solo lugar donde duele. Y el puñal lo encuentra siempre.',
     icon: 'bolt', category: 'asalto', tier: 6, requires: ['ejecutor'],
     baseCost: 1050, costGrowth: 1.65, maxLevel: 3,

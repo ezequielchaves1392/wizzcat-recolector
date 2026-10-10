@@ -136,7 +136,7 @@ export function buscarEnWiki(q: string, indice: EntradaWiki[] = INDICE_WIKI): En
 
 function mecanicas(): EntradaWiki[] {
   const bloques: Array<[string, string, string]> = [
-    [ANCLA.mecanicaGanar, 'Cómo se gana', 'click pasivo ingreso recolector compañero daño mirar pantalla afk tarjeta'],
+    [ANCLA.mecanicaGanar, 'Cómo se gana', 'click recoleccion por segundo recolector companiero nanitas mirar pantalla afk tarjeta'],
     [ANCLA.mecanicaForja, 'La forja: dos entran, uno sale', 'forja fusion fusionar materiales yunque potencial media probabilidad piedra calibracion nanoparticula estabilidad eter refinamiento estrella cristales fallo'],
     [ANCLA.mecanicaSinto, 'Sintonizar con cristales', 'sintonizar cristal nivel intento probabilidad coste techo'],
     [ANCLA.mecanicaAscension, 'La Ascensión', 'ascension reciclar nucleos prestigio conservar perder arbol'],
@@ -148,7 +148,7 @@ function mecanicas(): EntradaWiki[] {
 function cajas(): EntradaWiki[] {
   const intro: EntradaWiki = {
     seccion: 'cajas', ancla: ANCLA.cajasIntro, titulo: 'Diez cajas, una por tier',
-    texto: 'caja cajas tier sorteo reparto probabilidad suerte expansor consumible cosmetico salto'
+    texto: 'caja cajas tier sorteo reparto probabilidad suerte expansor consumible cosmetico item siguiente'
   };
   const tarjetas: EntradaWiki[] = (CRATE_TIERS as readonly number[]).map(t => ({
     seccion: 'cajas' as const,
@@ -194,7 +194,7 @@ function bases(): EntradaWiki[] {
 
 function items(): EntradaWiki[] {
   const entradas: EntradaWiki[] = [
-    { seccion: 'items', ancla: ANCLA.itemsTiers, titulo: 'Los diez tiers', texto: 'tier tiers rango dano ingreso carta comprar forja caja' },
+    { seccion: 'items', ancla: ANCLA.itemsTiers, titulo: 'Los diez tiers', texto: 'tier tiers rango recoleccion click segundos carta comprar forja caja' },
     { seccion: 'items', ancla: ANCLA.itemsExclusivos, titulo: 'Exclusivos de caja', texto: 'exclusivo exclusivos caja tienda multiplicador' },
     { seccion: 'items', ancla: ANCLA.itemsConsumibles, titulo: 'Consumibles', texto: 'consumible consumibles tarjeta buff afk click piedra nanoparticula eter forja' },
     { seccion: 'items', ancla: ANCLA.itemsExpansores, titulo: 'Expansores y cristal', texto: 'expansor expansores ranura capacidad cristal recurso' },
@@ -276,7 +276,7 @@ function herramientas(): EntradaWiki[] {
     },
     {
       seccion: 'herramientas', ancla: ANCLA.herramientasBase, titulo: 'Simulador de base',
-      texto: 'simulador base dano poder potencial nivel afijo afijos tier caza comparar'
+      texto: 'simulador base recoleccion click poder potencial nivel afijo afijos tier caza comparar'
     }
   ];
 }

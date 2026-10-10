@@ -230,7 +230,7 @@ export const CAMPOS_EDITABLES = [
   { campo: 'warehouseCapacity', etiqueta: 'Capacidad del almacén' },
   { campo: 'maxCompanionSlots', etiqueta: 'Huecos de compañero' },
   { campo: 'cratesOpened', etiqueta: 'Cajas abiertas' },
-  { campo: 'totalClicks', etiqueta: 'Clics totales' },
+  { campo: 'totalClicks', etiqueta: 'Clicks totales' },
   { campo: 'cores', etiqueta: 'Núcleos' },
   { campo: 'totalCores', etiqueta: 'Núcleos totales' }
 ] as const;

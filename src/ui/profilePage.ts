@@ -373,7 +373,7 @@ export function renderProfilePage(
             </div>
           </div>
           <div class="text-right flex-shrink-0" ${bestParte ? `title="${bestParte}"` : ''}>
-            <div class="label-caps leading-none">Daño</div>
+            <div class="label-caps leading-none">Click</div>
             <div class="font-['Orbitron'] font-bold text-[13px] accent-text tabular">+${formatNumber(bestDano)}</div>
           </div>
         </div>

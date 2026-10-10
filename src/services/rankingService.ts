@@ -119,8 +119,8 @@ export const BOARDS: BoardDef[] = [
   },
   {
     id: 'clics',
-    label: 'Clics',
-    hint: 'Quién más tiempo ha dedicado a la partida. Un clic es una decisión activa: subir en esta tabla cuesta más que en la de nanitas.',
+    label: 'Clicks',
+    hint: 'Quién más tiempo ha dedicado a la partida. Un click es una decisión activa: subir en esta tabla cuesta más que en la de nanitas.',
     icon: 'collector'
   },
   {
