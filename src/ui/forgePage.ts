@@ -29,7 +29,7 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado, POOL_AFIJOS_COMPANERO } from '../data/crafting';
 import { pctDe, PROB_SUBE_POTENCIAL, BONO_ETTER } from '../data/constants';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -322,12 +322,13 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   if (potMedio >= 5) ui.eter = false;
 
   const matTier = elegidos[0]?.tier ?? 0;
-  // **LOS COMPAÑEROS NO SUMAN `affixLuck` PORQUE NO TIENEN AFIJOS.** No es un trato
-  // peor: es que no tienen la entrada que lo suma. Por eso la cuenta sale de aquí
-  // y no del motor, y por eso los dos tienen que usar la misma fórmula.
-  const affixLuck = ui.tipo === 'collector'
-    ? elegidos.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0)
-    : 0;
+  // **LOS COMPAÑEROS TAMBIÉN SUMAN `affixLuck`: TAMBIÉN HEREDAN.** La suerte
+  // de afijos es +2 % por afijo de los materiales, y cuenta en las dos
+  // fusiones desde que el compañero forjado hereda afijos con la misma regla
+  // que el recolector. La cuenta sale de aquí y no del motor porque la
+  // probabilidad se enseña antes de tirar, y los dos tienen que usar la misma
+  // fórmula (R3).
+  const affixLuck = elegidos.reduce((a, w) => a + (w.affixes?.length || 0) * 0.02, 0);
   const chance = elegidos.length === MATERIALES_POR_FUSION && matTier
     ? successChance(matTier, info.craftLuck, ui.stones, affixLuck)
     : 0;
@@ -365,7 +366,15 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
   const rarezaCompartida = ui.tipo === 'collector' && ready && elegidos.length === MATERIALES_POR_FUSION
     && elegidos[0].rarity && elegidos[0].rarity === elegidos[1].rarity
     ? String(elegidos[0].rarity) : null;
-  const compartidos = ui.tipo === 'collector' && ready ? afijosCompartidos(elegidos) : [];
+  // Los compartidos entran primero en las DOS forjas —el compañero ahora
+  // hereda afijos—, pero lo que no está en el pool de compañero no cuenta, y
+  // esta pantalla lo filtra igual que filtra el motor: si enseñara un
+  // compartido que la mezcla va a descartar, el cartel prometería un linaje
+  // que no sale (R3).
+  const compartidos = ready
+    ? afijosCompartidos(elegidos).filter(id =>
+        ui.tipo === 'collector' || POOL_AFIJOS_COMPANERO.some(a => a.id === id))
+    : [];
   const nombresCompartidos = compartidos.map(id => AFFIX_BY_ID[id]?.name ?? id).filter(Boolean);
 
   // --- Fragmentos -------------------------------------------------------
@@ -480,7 +489,7 @@ function nivelDe(w: any): number {
     <p class="text-[9px] text-[var(--text-muted)] mb-3 leading-relaxed">
       ${ui.tipo === 'collector'
         ? 'El recolector forjado hereda los afijos de sus materiales; cuántos lleva los decide la rareza que le toca.'
-        : 'El compañero forjado hereda el potencial por media, con la misma tirada de subida que el recolector.'}
+        : 'El compañero forjado hereda el potencial por media y los afijos de sus materiales; cuántos lleva los decide la rareza que le pone el tier.'}
       Misma probabilidad, mismas piedras y mismo fallo en las dos.
     </p>
 
@@ -551,9 +560,11 @@ function nivelDe(w: any): number {
           misma pieza que usa la regla. Los compartidos van en su propia línea
           debajo, con sus nombres.
         -->
-        ${ready && ui.tipo === 'collector' ? `
+        ${ready ? `
           <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
-            Lleva los afijos de su rareza · ${explicacionDeAfijos()}
+            ${ui.tipo === 'collector'
+              ? `Lleva los afijos de su rareza · ${explicacionDeAfijos()}`
+              : `Lleva los afijos de su rareza (la pone el tier) · ${explicacionDeAfijos()}`}
           </p>
         ` : ''}
         ${rarezaCompartida && ready ? `

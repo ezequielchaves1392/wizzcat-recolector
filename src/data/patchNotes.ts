@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.47',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Los compañeros forjados ya tienen afijos',
+    lineas: [
+      'Un compañero forjado ahora nace con los afijos de su rareza, igual que uno de caja.',
+      'Los afijos que traen los dos materiales pasan al resultado: los que comparten entran primero.',
+      'La forja de compañeros cuenta ahora la suerte de afijos de los materiales, como la de recolectores.',
+      'Los compañeros forjados de antes reciben sus afijos al cargar la partida.'
+    ]
+  },
+  {
     version: '1.15.46',
     fecha: '10 de octubre de 2026',
     titulo: 'Lote Q: vocabulario, afiches y filtros',

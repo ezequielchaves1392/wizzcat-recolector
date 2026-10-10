@@ -65,12 +65,12 @@ const NOMBRE_PIEDRA = 'Piedra de Calibración';
 const NOMBRE_NANO = 'Nanopartícula de Estabilidad';
 const NOMBRE_ETER = 'Éter de Refinamiento';
 import {
-  attemptForge, rangoDeAfijosForjados, danioDeRango,
-  AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, collectorMaxLevel, MATERIALES_POR_FUSION,
+  attemptForge, attemptForgeCompanion, rangoDeAfijosForjados, danioDeRango,
+  AFIX_MIN_POR_RARIDAD, AFIX_MAX, AFFIXES, POOL_AFIJOS_COMPANERO, collectorMaxLevel, MATERIALES_POR_FUSION,
   valorDeUnCristal, cristalesDeConsuelo, rarezaFusionada, afijosCompartidos,
   PROB_CONSERVA_RAREZA, subirRareza, piedrasParaObjetivo, MAX_PIEDRAS_POR_FUSION,
   rarezaCalculadaDeForja, potencialFusionado, afijosParaRareza, migraAfijosPorRareza,
-  efectoDeAfijos, potenciaDeAfijoPorTier
+  efectoDeAfijos, potenciaDeAfijoPorTier, rarezaDeCompanionForjado
 } from '../src/data/crafting';
 import { generateCollectorByTier } from '../src/data/generators';
 import { basePorId } from '../src/data/bases';
@@ -854,6 +854,108 @@ async function main() {
         && rPow.companion?.baseId === 'base_com_t4_6',
       `power=${rPow.companion?.power} esperado=${poderDeCompanero(4, 5, basePorId('base_com_t4_6'))} base=${rPow.companion?.baseId}`);
   }
+
+  // =========================================================================
+  //  8b. LOS AFIJOS DEL COMPAÑERO FORJADO
+  // =========================================================================
+  //  El super bug: la forja de compañeros era la ÚNICA vía del juego que creaba
+  //  items sin afijos. Un compañero de caja nace con los de su rareza, uno de
+  //  tienda también, y el forjado —que cuesta dos items, una tirada y sus
+  //  consumibles— salía sin ninguno: su ficha enseñaba menos que el botín
+  //  gratis, y el ingreso no cobraba nada por el linaje.
+  //
+  //  Lo que se comprueba aquí:
+  //
+  //  · Que el forjado TRAE afijos, con la cantidad de su rareza —la pone el
+  //    tier— y solo del pool de compañero (sin crítico puro: no critica).
+  //  · Que viajan a la FICHA del almacén en la misma llamada, y que sobreviven
+  //    a la recarga. El ingreso y la ficha leen los afijos del almacén
+  //    cruzando por id: forjarlos sin sincronizarlos sería forjar a medias.
+  //  · Que la HERENCIA funciona: lo que traen los dos padres entra primero.
+  //  · Que la suerte de afijos (+2 % por afijo de material) cuenta en la
+  //    tirada del compañero como en la del recolector, y que las dos siguen
+  //    empatadas CON padres con afijos —antes la igualdad solo se probaba con
+  //    padres Comunes, que no traían ninguno—.
+  // =========================================================================
+  {
+    // --- El forjado trae los afijos de su rareza, y solo del pool de compañero --
+    const gAf = await boot(baseSave([
+      companion('a1', 3, { potential: 3 }), companion('a2', 3, { potential: 3 }),
+      ficha('a1', 3, { potential: 3 }), ficha('a2', 3, { potential: 3 })
+    ], { warehouseCapacity: 20 }));
+    const rAf: any = conRoll(0.001, () => gAf.forgeCompanion(['a1', 'a2']));
+    const rarezaNina = rarezaDeCompanionForjado(4);
+    const tablaNina = AFIX_MIN_POR_RARIDAD[rarezaNina] ?? -1;
+    check('compañero forjado: trae afijos, los de la rareza que le pone el tier',
+      Array.isArray(rAf.companion?.affixes) && rAf.companion.affixes.length === tablaNina,
+      `rareza=${rarezaNina} tabla=${tablaNina} afijos=${JSON.stringify(rAf.companion?.affixes)}`);
+    const fueraDePool = (rAf.companion?.affixes ?? []).filter(
+      (id: string) => !POOL_AFIJOS_COMPANERO.some(a => a.id === id));
+    check('compañero forjado: y solo del pool de compañero, sin crítico puro',
+      Array.isArray(rAf.companion?.affixes) && fueraDePool.length === 0,
+      `fuera=${fueraDePool.join(',') || 'ninguno'}`);
+
+    // --- Y los afijos viajan a la FICHA, que es donde los leen el ingreso y la
+    //     pantalla, y se quedan tras recargar -------------------------------
+    const fichaNina = (gAf.getState().warehouse as any[]).find((w: any) => w.id === rAf.companion?.id);
+    check('compañero forjado: los afijos viajan a la ficha del almacén en la misma llamada',
+      Array.isArray(fichaNina?.affixes)
+        && fichaNina.affixes.length === (rAf.companion?.affixes?.length ?? -1)
+        && fichaNina.affixes.every((id: string, i: number) => id === rAf.companion.affixes[i]),
+      `ficha=${JSON.stringify(fichaNina?.affixes)}`);
+    await reload();
+    const trasRecarga = (gAf.getState().warehouse as any[]).find((w: any) => w.id === rAf.companion?.id);
+    check('compañero forjado: y sobreviven a la recarga, sin relleno ni recorte',
+      Array.isArray(trasRecarga?.affixes)
+        && trasRecarga.affixes.length === (rAf.companion?.affixes?.length ?? -1),
+      `recarga=${JSON.stringify(trasRecarga?.affixes)}`);
+
+    // --- La herencia: lo que traen LOS DOS padres entra primero ---------------
+    //  Se llama al motor de datos directamente, con el dado clavado: la prueba
+    //  mide la REGLA de la mezcla, no una tirada. T4 → T5 es Épico, que son 2
+    //  afijos: el primero tiene que ser el compartido y el segundo, del linaje.
+    const compA = companion('ha', 4, { potential: 3, affixes: ['aff_yield', 'aff_flow'] });
+    const compB = companion('hb', 4, { potential: 3, affixes: ['aff_yield', 'aff_sharp'] });
+    const rHer: any = attemptForgeCompanion([compA as any, compB as any], 4, opts({ rng: () => 0 }));
+    check('compañero forjado: lo que traen LOS DOS padres entra primero',
+      rHer.companion?.affixes?.[0] === 'aff_yield',
+      `afijos=${JSON.stringify(rHer.companion?.affixes)}`);
+    const delLinaje = new Set(['aff_yield', 'aff_flow', 'aff_sharp']);
+    check('compañero forjado: y el resto sale del linaje, no del azar del catálogo',
+      (rHer.companion?.affixes ?? []).every((id: string) => delLinaje.has(id)),
+      `afijos=${JSON.stringify(rHer.companion?.affixes)}`);
+    //  Y un afijo de crítico en un material NO se hereda: no está en el pool
+    //  de compañero, y heredarlo sería un hueco vacío que la ficha anunciaría.
+    const compCritA = companion('ca', 4, { potential: 3, affixes: ['aff_crit', 'aff_yield'] });
+    const compCritB = companion('cb', 4, { potential: 3, affixes: ['aff_crit', 'aff_flow'] });
+    const rCrit: any = attemptForgeCompanion([compCritA as any, compCritB as any], 4, opts({ rng: () => 0 }));
+    check('compañero forjado: el crítico de un material no se hereda: no está en su pool',
+      !(rCrit.companion?.affixes ?? []).includes('aff_crit'),
+      `afijos=${JSON.stringify(rCrit.companion?.affixes)}`);
+
+    // --- Y la suerte de afijos cuenta en la tirada, en las DOS forjas ----------
+    //  El mismo cobro de +2 % por afijo para el compañero que para el
+    //  recolector, CON padres que traen afijos: antes la igualdad de
+    //  probabilidad solo se probaba con padres Comunes, que no traían ninguno,
+    //  y la rama de compañero pasaba la suya por alto en silencio.
+    const gSu = await boot(baseSave([
+      companion('l1', 3, { rarity: 'Épico', affixes: ['aff_yield', 'aff_flow'], potential: 5 }),
+      companion('l2', 3, { rarity: 'Épico', affixes: ['aff_yield', 'aff_flow'], potential: 5 }),
+      ficha('l1', 3, { potential: 5 }), ficha('l2', 3, { potential: 5 }),
+      collector('lr1', 3, { rarity: 'Épico', affixes: ['aff_yield', 'aff_flow'], potential: 5, damage: 100 }),
+      collector('lr2', 3, { rarity: 'Épico', affixes: ['aff_yield', 'aff_flow'], potential: 5, damage: 100 })
+    ], { warehouseCapacity: 20 }));
+    const rLC: any = conRoll(0.001, () => gSu.forgeCompanion(['l1', 'l2']));
+    const rLR: any = conRoll(0.001, () => gSu.forgeCollector(['lr1', 'lr2']));
+    //  4 afijos de material × 2 % = +8 puntos, la misma cuenta que en el
+    //  recolector, y sale de `successChance`, la función que cobra.
+    check('compañero forjado: la suerte de afijos cuenta en la tirada, +2 % por afijo',
+      Math.abs(rLC.chance - successChance(3, 0, 0, 0.08)) < 1e-9,
+      `tirada=${rLC.chance} regla=${successChance(3, 0, 0, 0.08)}`);
+    check('compañero forjado: y las dos forjas siguen empatadas CON padres con afijos',
+      Math.abs(rLC.chance - rLR.chance) < 1e-9,
+      `compañero=${rLC.chance} recolector=${rLR.chance}`);
+  }
 // =========================================================================
 //  EL FALLO DE FORJA DEJA CRISTALES
 // =========================================================================
@@ -1211,6 +1313,38 @@ const falloCon = async () => {
     check('autoforge: y la serie se completa igualmente sin piedras',
       r10.success === true && r10.resultados.length === 1,
       `success=${r10.success} resultados=${r10.resultados.length}`);
+  }
+
+  // --- Y LA SERIE DE COMPAÑEROS CUENTA LOS AFIJOS EN EL PLAN, COMO EL COBRO --
+  // **ESTA ES LA MITAD DE R3 QUE MIRABA EL OTRO SENTIDO.** El cobro de la serie
+  // usa la suerte de afijos del par —la forja de compañeros la cuenta desde que
+  // hereda afijos—, y el plan tenía una rama que la ponía a cero solo para
+  // compañeros: el diálogo prometía MÁS piedras de las que la serie cobraba, y
+  // el jugador veía quedarse el contador de piedras por debajo de lo dicho.
+  //
+  // Se mide en T1 porque ahí la diferencia se ve sin que la sature el tope: la
+  // base es 0,78, sin afijos el par pide las 10 de siempre y con 4 afijos de
+  // material (+8 puntos) pide las de la regla, que son 8. Y lo cobrado tiene
+  // que ser exactamente lo prometido.
+  {
+    const gA = await boot(baseSave([
+      companion('s1', 1, { potential: 5, rarity: 'Épico', affixes: ['aff_yield', 'aff_flow'] }),
+      companion('s2', 1, { potential: 4, rarity: 'Épico', affixes: ['aff_yield', 'aff_bulwark'] }),
+      consumable('piedras', 'calibrationStone', 40)
+    ], { warehouseCapacity: 40 }));
+    const planA = gA.autoForgePreview('companion', 1);
+    check('autoforge: el plan de compañeros cuenta los afijos, como el cobro',
+      planA.stones[0] === piedrasParaObjetivo(1, 0, 0.08)
+        && planA.stones[0] < piedrasParaObjetivo(1, 0, 0),
+      `porTirada=${JSON.stringify(planA.stones)} conAfijos=${piedrasParaObjetivo(1, 0, 0.08)} sin=${piedrasParaObjetivo(1, 0, 0)}`);
+    const antesA = wh(gA).filter((w: any) => w.buffId === 'calibrationStone')
+      .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    const rA = conRoll(0.001, () => gA.autoForge('companion', 1));
+    const despuesA = wh(gA).filter((w: any) => w.buffId === 'calibrationStone')
+      .reduce((a: number, w: any) => a + (w.stackCount || 1), 0);
+    check('autoforge: y la serie de compañeros cobra exactamente lo que prometió el plan',
+      rA.stonesTotal === planA.stonesTotal && antesA - despuesA === planA.stonesTotal,
+      `prometidas=${planA.stonesTotal} cobradas=${antesA - despuesA} devueltas=${rA.stonesTotal}`);
   }
 
   // --- F65 · LA SERIE CON DOS CHECKS: PIEDRAS Y NANO, POR SEPARADO --------

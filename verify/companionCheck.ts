@@ -338,7 +338,9 @@ async function main() {
   // -------------------------------------------------------------------------
   //  Los compañeros ahora llevan afijos innatos por rareza, como los
   //  recolectores, pero con su propio pool (sin crítico) y su propio efecto
-  //  según el tipo (passive/click). Sin herencia de forja.
+  //  según el tipo (passive/click). **Y la forja ahora también les da afijos,
+  //  con herencia de linaje** —cubierto en `forjaCheck`—, así que la migración
+  //  de abajo ya no salta a los forjados: los cura como a los demás.
   {
     // El pool excluye crítico puro: un compañero no critica.
     const conCrit = POOL_AFIJOS_COMPANERO.filter(a => a.id === 'aff_crit' || a.id === 'aff_focus');
@@ -425,6 +427,25 @@ async function main() {
       otra.fichas[0].affixes.length === todos.length
         && otra.fichas[0].affixes.every((id: string, i: number) => id === todos[i]),
       JSON.stringify(otra.fichas[0].affixes));
+
+    // Y el forjado VIEJO, que salió sin afijos: la migración lo cura. El skip
+    // por `forgedBy` que existía no saltaba a nadie —la forja de compañeros
+    // nunca escribió ese campo, solo la de recolectores— y ahora está fuera:
+    // forjado o no, la tabla manda, y el que ya trae los suyos no se toca.
+    const viejas = [
+      { id: 'f1', type: 'companion', tier: 4, rarity: 'Raro', companionType: 'click' },
+      { id: 'f2', type: 'companion', tier: 8, rarity: 'Legendario', companionType: 'click', forgedBy: 'Alguien' }
+    ];
+    const curadas = migraAfijosDeCompaneros(viejas, () => 0.5);
+    const f1 = curadas.fichas.find((f: any) => f.id === 'f1');
+    const f2 = curadas.fichas.find((f: any) => f.id === 'f2');
+    check('afijos companero: la migración cura al forjado viejo sin afijos',
+      (f1?.affixes?.length ?? -1) === (AFIX_MIN_POR_RARIDAD['Raro'] ?? -1)
+        && (f1?.affixes ?? []).every((id: string) => POOL_AFIJOS_COMPANERO.some(a => a.id === id)),
+      `raro=${JSON.stringify(f1?.affixes)}`);
+    check('afijos companero: y uno con forgedBy tampoco se salta, que ese campo no es suyo',
+      (f2?.affixes?.length ?? -1) === (AFIX_MIN_POR_RARIDAD['Legendario'] ?? -1),
+      `legendario=${JSON.stringify(f2?.affixes)}`);
 
     // Desglose con filas extra: se colocan antes del total.
     const conExtras = desgloseDeStat(5, 100, 5, 0, 117, [

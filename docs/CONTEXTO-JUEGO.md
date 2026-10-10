@@ -100,7 +100,7 @@ tres independientes: el buff AFK restante, y el tope duro de 30 minutos.
 | **Cajas** | 4 tipos (común/rara/épica/legendaria). Necesita llave de nivel igual o superior. Tabla de botín con pesos en `crateLoot.ts`. | `components/crateLoot.ts` |
 | **Cartel de cajas** | El premio decidido por el motor va directo al cartel, sin giro (la ruleta se ha quitado en B17). | `components/crateRoulette.ts` (el cartel) |
 | **Sintonizador** | El motor tira el dado y el cartel enseña el `success` que ya vino, con la flecha de niveles. | `components/tuningRoulette.ts` |
-| **Forja** | 2 recolectores (o 2 compañeros) del mismo tier → 1. Potencial 1-5, afijos heredados, autor, fecha. Consolida: los dos materiales se van. | `data/crafting.ts`, `ui/forgePage.ts` |
+| **Forja** | 2 recolectores (o 2 compañeros) del mismo tier → 1. Potencial 1-5, afijos heredados —los dos tipos desde `v1.15.47`; el compañero usa el pool de compañero, sin crítico—, autor y fecha solo en el recolector. Consolida: los dos materiales se van. | `data/crafting.ts`, `ui/forgePage.ts` |
 | **Afijos** | 14 afijos en 6 rarezas. Modifican daño, pasivo y suerte de forja. | `data/crafting.ts:42-71` |
 | **Valoración** | El precio es dinámico: tier × nivel × rareza × potencial × afijos × fama × antigüedad. El jugador se queda el 42 %. | `data/valuation.ts` |
 | **Ascensión** | Reinicia progreso a cambio de núcleos. Umbral: 1 M de producción. Curva `(produccion / 1e6)^0.6`. | `data/prestige.ts`, `ui/prestigePage.ts` |

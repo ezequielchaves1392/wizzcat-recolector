@@ -106,7 +106,7 @@ export interface CompanionItem {
   /** Obra Maestra de la forja: dos ★5 dieron este ★5 con el nodo comprado. */
   obraMaestra?: boolean;
   /**
-   * Afijos innatos (tienda y cajas, nunca forja). Solo los lee el ingreso,
+   * Afijos innatos (tienda, cajas y forja). Solo los lee el ingreso,
    * cruzando por id con la ficha: en `state.companions` vive lo que paga y
    * aquí no hay segundo campo que sincronizar.
    */

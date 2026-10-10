@@ -2210,8 +2210,10 @@ function sePuedeGuardar(): boolean {
         warehouseNeedsMigration = true;
       }
       // F97 Lote 2d · Lo mismo para los compañeros, en sus fichas: los innatos
-      // por rareza, sin tocar forjados (su eje es el potencial), multipliers
-      // ni rarezas desconocidas. El ingreso los cruza por id al recalcular.
+      // por rareza, **ahora también los forjados** —la forja les da afijos y
+      // esta migración cura a los viejos, que salieron sin ninguno—, sin tocar
+      // multipliers ni rarezas desconocidas. El ingreso los cruza por id al
+      // recalcular.
       const compConAfijos = migraAfijosDeCompaneros(state.warehouse);
       if (compConAfijos.changed) {
         state.warehouse = compConAfijos.fichas;
@@ -2625,6 +2627,13 @@ function sePuedeGuardar(): boolean {
           // cosas distintas del mismo objeto.
           level: comp.level ?? 0,
           maxLevel: comp.maxLevel ?? nivelMaximoDeCompanio(comp.potential),
+          // **LOS AFIJOS VAN TAMBIÉN EN LA FICHA, Y ESTE ES EL ÚNICO CAMINO QUE
+          // TIENEN PARA LLEGAR.** El ingreso y la ficha leen los afijos del
+          // almacén, cruzando por id; si la forja los dejara solo en el array,
+          // un compañero recién forjado saldría sin afijos hasta la siguiente
+          // recarga, que es cuando la migración los rellena. Un `undefined` aquí
+          // es inofensivo: el JSON lo suelta y la migración cura al cargar.
+          affixes: comp.affixes,
           sellPrice: comp.rarity === 'Común' ? 100 : comp.rarity === 'Raro' ? 500 : comp.rarity === 'Épico' ? 2000 : 10000
         } as any);
       }
@@ -7150,6 +7159,12 @@ function sePuedeGuardar(): boolean {
       // resuelve aquí y no en el modal para que lo que promete el botón sea lo que
       // cobra `autoForge()`.
       //
+      // **Y CUENTA LOS AFIJOS EN LAS DOS SERIES.** Estuvo contando solo los de
+      // recolector mientras la forja de compañeros no les daba afijos; desde
+      // que los hereda, la rama que ponía cero aquí prometía MÁS piedras de las
+      // que el motor cobraba a la pareja con afijos, que es R3 del revés: el
+      // modal pedía de más.
+      //
       // **Y SI EL CHECK DE PIEDRAS ESTÁ APAGADO, SON CERO.** El `usarPiedras` lo
       // pone la pantalla con su check, y `autoForge()` lee este mismo plan: el
       // diálogo y el cobro no pueden separarse ni aunque alguien cambie uno de
@@ -7160,10 +7175,8 @@ function sePuedeGuardar(): boolean {
           piedrasParaObjetivo(
             tier,
             state.bonus.craftLuck,
-            tipoForge === 'collector'
-              ? par.reduce((a: number, id: string) =>
-                  a + ((porId.get(id)?.affixes?.length || 0) * 0.02), 0)
-              : 0
+            par.reduce((a: number, id: string) =>
+              a + ((porId.get(id)?.affixes?.length || 0) * 0.02), 0)
           ),
           stonesDisponibles()
         )
@@ -7476,9 +7489,13 @@ function sePuedeGuardar(): boolean {
      * reglas: dos tiradas cuestan lo mismo y salen igual de bien.
      *
      * **LO QUE CAMBIA ES EL RESULTADO, Y POR QUÉ NO ES UNA COPIA.** El compañero
-     * no tiene afijos: su calidad es el potencial, y sale de la media de los dos
-     * materiales **más la misma tirada de subida** que tira la de recolectores,
-     * con el Éter de Refinamiento sumando puntos igual que allí.
+     * hereda el **potencial** por media de los dos materiales **más la misma
+     * tirada de subida** que tira la de recolectores, con el Éter de
+     * Refinamiento sumando puntos igual que allí; y hereda **afijos** con la
+     * misma regla que el recolector —la rareza, que aquí la pone el tier,
+     * decide cuántos y el linaje decide cuáles, con los compartidos primero—,
+     * en el pool de compañero, que deja fuera el crítico puro porque un
+     * compañero no critica.
      *
      * **Y LA NANOPARTÍCULA SE IGNORA SIN COBRARLA, AQUÍ TAMBIÉN.** Su efecto es
      * subir la rareza, y la rareza del compañero la pone el tier: no hay escalón

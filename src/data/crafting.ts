@@ -1660,8 +1660,9 @@ export function validaMateriales(
  *
  * Sale de aquí en las dos fusiones, así que **a igualdad de materiales la
  * probabilidad es la misma** en las dos: el yunque es el mismo y el escribano
- * es el mismo. Lo que cambia son los materiales que cada una acepta, y por eso
- * la suerte de afijos solo cuenta en recolectores (ver abajo).
+ * es el mismo. Y la suerte de afijos cuenta en las dos: desde que el compañero
+ * forjado hereda afijos, sus materiales aportan lo mismo que los del
+ * recolector (ver abajo).
  */
 export function tiraDeForja(
   tier: number,
@@ -1669,12 +1670,12 @@ export function tiraDeForja(
   options: IntentosDeForja,
   cuentaAfijos = true
 ): { acierto: boolean; chance: number; crystals: number } {
-  // Los compañeros no tienen afijos, así que aquí aportan cero. No es que se les
-  // dé un trato peor: es que no tienen la entrada que suma esto.
-  // F97 Lote 2d · Y CON AFIJOS INNATOS, TAMPOCO. Los de compañero son de
-  // ingreso y no heredan en la forja (su eje es el potencial): contarlos aquí
-  // pagaría suerte por algo que sale gratis en cada caja. Solo cuentan los de
-  // recolector, que es lo que el plan de la serie promete al calcular piedras.
+  // **LOS AFIJOS DE LOS MATERIALES SUMAN SUERTE EN LAS DOS FORJAS.** +2 % por
+  // afijo, con la misma cuenta para recolector y compañero. Estuvo excluido en
+  // compañeros mientras la forja no les daba afijos —contarlos habría pagado
+  // suerte por algo que el resultado no usaba—, pero desde que el compañero
+  // forjado hereda afijos con la misma regla que el recolector, excluirlos
+  // sería un segundo peso para la misma regla.
   const afixLuck = cuentaAfijos
     ? materials.reduce((acc, m) => acc + (m.affixes?.length || 0) * 0.02, 0)
     : 0;
@@ -1860,13 +1861,14 @@ export function attemptForge(
 /**
  * Intenta fusionar 2 compañeros del mismo tier.
  *
- * **LO QUE PRODUCE Y DE DÓNDE SALE SU CALIDAD, Y POR QUÉ NO ES IGUAL AL
- * RECOLECTOR.** El recolector forjado hereda **afijos** de la rareza de sus
- * materiales. El compañero no tiene afijos: su eje de calidad es el
- * **potencial**, y sale de la media de los dos, con la misma regla que el del
- * recolector —promediar no sube por sí solo—, **más la misma tirada de
- * potencial** que tira la de recolectores: una estrella más con
- * `PROB_SUBE_POTENCIAL`, y `BONO_ETTER` puntos si se gasta Éter.
+ * **LO QUE PRODUCE Y DE DÓNDE SALE SU CALIDAD.** El compañero forjado hereda
+ * **potencial** —la media de los dos materiales, con la misma tirada de subida
+ * que tira la de recolectores, una estrella más con `PROB_SUBE_POTENCIAL` y
+ * `BONO_ETTER` puntos si se gasta Éter— **y afijos**, con la misma regla que el
+ * recolector: la rareza decide cuántos —y en un compañero la rareza la pone el
+ * tier— y el linaje decide cuáles, con los compartidos primero. Los afijos
+ * salen del pool de compañero (`POOL_AFIJOS_COMPANERO`), que deja fuera el
+ * crítico puro porque un compañero no critica.
  *
  * **QUÉ PASA AHORA CON LA NANOPARTÍCULA AQUÍ: NO HACE NADA, Y NO SE COBRA.**
  * Antes su efecto en el compañero era +1 de potencial; con la nanopartícula
@@ -1877,7 +1879,7 @@ export function attemptForge(
  * encima de la media en esta fusión es la tirada, con o sin Éter.
  */
 export function attemptForgeCompanion(
-  materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number; baseId?: string }>,
+  materials: Array<{ id: string; tier?: number; rarity?: string; potential?: number; baseId?: string; affixes?: string[] }>,
   tier: number,
   options: IntentosDeForja
 ): { success: boolean; companion?: any; error?: string; crystals?: number; chanceUsed?: number } {
@@ -1887,9 +1889,10 @@ export function attemptForgeCompanion(
   const error = validaMateriales(materials, tier, 'compañeros', maxTier);
   if (error) return { success: false, error };
 
-  // Sin suerte de afijos: los innatos del compañero son de ingreso y no
-  // heredan, y contarlos pagaría probabilidad por algo gratis.
-  const tira = tiraDeForja(tier, materials, options, false);
+  // La suerte de afijos cuenta, como en el recolector: el compañero forjado
+  // hereda afijos, así que los de sus materiales aportan a la tirada lo mismo
+  // que los de un material de recolector.
+  const tira = tiraDeForja(tier, materials, options, true);
   if (!tira.acierto) {
     return { success: false, crystals: tira.crystals, chanceUsed: tira.chance };
   }
@@ -1917,6 +1920,15 @@ export function attemptForgeCompanion(
   const baseNueva = basePorPosicion(newTier, posNueva, 'companero') ?? null;
 
   const forjado: any = crearCompanioDeTier(newTier, potential, rng, baseNueva);
+  // **LOS AFIJOS, CON LA MISMA REGLA QUE EL RECOLECTOR Y EN EL POOL DE
+  // COMPAÑERO.** La rareza que decide cuántos la pone el tier
+  // (`rarezaDeCompanionForjado`), así que el número sale de la misma tabla
+  // `AFIX_MIN_POR_RARIDAD` que usa todo el juego, y los *cuáles* heredan de los
+  // dos materiales —los compartidos primero—. Sin esto la forja de compañeros
+  // era la única vía del juego que creaba items sin afijos: un compañero de
+  // caja nace con los de su rareza y el forjado —que cuesta dos items y una
+  // tirada— salía sin ninguno.
+  forjado.affixes = pickAffixesDeCompanero(materials, forjado.rarity, rng);
   // La obra también se firma aquí, con la misma regla y el mismo sufijo: un
   // compañero perfecto de padres perfectos es tan obra como un recolector.
   if (esObraMaestra(materials, potential, (options.obraMaestra ?? 0) > 0)) {
@@ -2074,7 +2086,7 @@ export const AFIX_MAX = 6;
  * sale de la tabla. Quien busque de dónde salen los *cuáles*, es `pickAffixes()`.
  */
 export function rangoDeAfijosForjados(
-  materials: CollectorItem[], rarity: string
+  materials: Array<{ affixes?: string[] }>, rarity: string
 ): { minimo: number; maximo: number } {
   void materials;
   const suelo = AFIX_MIN_POR_RARIDAD[rarity] ?? 0;
@@ -2172,10 +2184,19 @@ export function explicacionDePotencial(): string {
  *
  * Con dos materiales no se puede pasar de 12 afijos distintos, pero el tope de 6
  * hace esa cuenta irrelevante.
+ *
+ * **Y EL POOL ES PARÁMETRO, PORQUE LA FORJA DE COMPAÑEROS HEREDA LO MISMO EN
+ * OTRO CATÁLOGO.** El compañero forjado usa esta misma mezcla —cantidad de su
+ * rareza, compartidos primero, relleno ponderado— con `POOL_AFIJOS_COMPANERO`,
+ * que deja fuera el crítico puro: un compañero no critica y heredar un afijo
+ * que solo da crítico sería heredar un hueco vacío. Sin el parámetro habría
+ * que copiar la mezcla entera para cambiarle una lista, y las dos copias
+ * acabarían divergiendo.
  */
 function pickAffixes(
-  materials: CollectorItem[], rarity: string,
-  rng: () => number = Math.random
+  materials: Array<{ affixes?: string[] }>, rarity: string,
+  rng: () => number = Math.random,
+  pool: Affix[] = AFFIXES
 ): string[] {
   const { minimo } = rangoDeAfijosForjados(materials, rarity);
 
@@ -2191,8 +2212,11 @@ function pickAffixes(
 
   // 1 · Herencia: primero lo que traen LOS DOS, en orden. Es lo que permite
   // forzar un afijo: dos materiales con Baluarte lo ponen el primero mientras
-  // haya hueco. Después, al azar entre el resto de lo que traen juntos.
-  const compartidos = afijosCompartidos(materials);
+  // haya hueco. Después, al azar entre el resto de lo que traen juntos. Lo que
+  // no está en el pool no se hereda, aunque lo traigan: el crítico en un
+  // compañero sería un afijo que no hace nada.
+  const compartidos = afijosCompartidos(materials)
+    .filter(id => pool.some(a => a.id === id));
   for (const id of compartidos) {
     if (picked.length >= objetivo) break;
     picked.push(id);
@@ -2201,7 +2225,7 @@ function pickAffixes(
   const heredables: string[] = [];
   for (const m of materials) {
     for (const id of m.affixes ?? []) {
-      if (!usados.has(id) && !heredables.includes(id) && AFFIXES.some(a => a.id === id)) {
+      if (!usados.has(id) && !heredables.includes(id) && pool.some(a => a.id === id)) {
         heredables.push(id);
       }
     }
@@ -2214,8 +2238,10 @@ function pickAffixes(
     heredables.splice(i, 1);
   }
 
-  // 2 · Relleno del catálogo completo, con los afijos raros pesando menos.
-  const restantes = AFFIXES.filter(a => !usados.has(a.id));
+  // 2 · Relleno del catálogo, con los afijos raros pesando menos. El catálogo
+  // es el pool que se haya pedido: el entero para el recolector, el de
+  // compañero para el compañero forjado.
+  const restantes = pool.filter(a => !usados.has(a.id));
   while (picked.length < objetivo && restantes.length > 0) {
     const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
     const total = weights.reduce((a, b) => a + b, 0);
@@ -2360,6 +2386,29 @@ export function afijosParaCompanero(
 }
 
 /**
+ * LOS AFIJOS DEL COMPAÑERO FORJADO: LA MISMA HERENCIA, EN EL POOL DE COMPAÑERO.
+ *
+ * Es `pickAffixes()` con `POOL_AFIJOS_COMPANERO`: la cantidad la pone la rareza
+ * —que en un compañero la pone el tier, `rarezaDeCompanionForjado()`— y los
+ * *cuáles* los decide el linaje, con los compartidos primero, igual que en el
+ * recolector. Lo que no está en el pool no se hereda aunque lo traigan los
+ * materiales: un `aff_crit` en un compañero sería un hueco vacío, porque un
+ * compañero no critica.
+ *
+ * **Y EXISTE PORQUE SIN ELLA LA FORJA ERA LA ÚNICA VÍA DEL JUEGO QUE CREABA
+ * COMPAÑEROS SIN AFIJOS.** Un compañero de caja nace con los de su rareza y uno
+ * forjado —que cuesta dos items, una tirada y sus consumibles— salía sin
+ * ninguno: el camino que más costaba era el único que no daba afijos, y en
+ * pantalla la ficha del forjado enseñaba menos que la del botín gratis.
+ */
+export function pickAffixesDeCompanero(
+  materials: Array<{ affixes?: string[] }>, rarity: string,
+  rng: () => number = Math.random
+): string[] {
+  return pickAffixes(materials, rarity, rng, POOL_AFIJOS_COMPANERO);
+}
+
+/**
  * EL EFECTO DE LOS AFIJOS DE UN COMPAÑERO, SEGÚN SU TIPO (F97 Lote 2d).
  *
  * Los afijos hablan dos idiomas y el compañero solo entiende uno: en un
@@ -2400,10 +2449,17 @@ export function efectoDeAfijosDeCompanero(
  *
  * Solo fichas del almacén (`type === 'companion'`): en `state.companions`
  * vive lo que paga y el ingreso cruza por id, así que no hay segundo campo
- * que sincronizar. Se salta lo forjado (lleva `forgedBy` y la forja no da
- * afijos: su eje es el potencial), los `multiplier` y los sin tier (los
- * exclusivos de caja, de poder fijo y hechos a mano). Lo demás sigue la
- * tabla universal: si es Épico lleva 2.
+ * que sincronizar. **Y TAMBIÉN A LOS FORJADOS: NO SE LES SALTA.** Estuvo
+ * saltándolos mientras la forja no les daba afijos, pero el skip miraba
+ * `forgedBy`, un campo que solo llevan los recolectores forjados —la forja de
+ * compañeros nunca lo escribió—, así que en la práctica no saltaba a nadie y
+ * lo único que hacía era dejar escrito que los forjados eran distintos. Ahora
+ * la forja les da afijos con la misma tabla, y esta migración es idempotente:
+ * los que ya los traen se conservan y lo único que cura es el compañero
+ * forjado de antes del cambio, que salió sin ninguno. Se salta los
+ * `multiplier` —su aura es fija y no lee afijos— y los sin tier (los
+ * exclusivos de caja, de poder fijo y hechos a mano). Lo demás sigue la tabla
+ * universal: si es Épico lleva 2.
  */
 export function migraAfijosDeCompaneros(
   fichas: any[],
@@ -2413,7 +2469,6 @@ export function migraAfijosDeCompaneros(
   const pool = POOL_AFIJOS_COMPANERO;
   const salida = (fichas ?? []).map((f) => {
     if (f?.type !== 'companion') return f;
-    if (typeof (f as any).forgedBy === 'string' && (f as any).forgedBy) return f;
     if ((f as any).companionType === 'multiplier') return f;
     const tier = Number((f as any).tier);
     if (!Number.isFinite(tier) || tier < 1) return f;
