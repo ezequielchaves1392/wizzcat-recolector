@@ -36,6 +36,8 @@ import {
   fraseDeAfijosDeRareza, desgloseDeStat
 } from '../data/crafting';
 import { rarezaDeTier } from '../data/tiers';
+import { raritySlug, rarityClass, RARITY_TEXT } from '../components/crateLoot';
+import { marcoDeBrillo, textoDeBrillo } from './brillo';
 import type { PassiveBonuses } from '../types/domain';
 
 // --------------------------------------------------------------------------
@@ -48,7 +50,6 @@ export interface SelBaseSim {
   baseId: string | null;
   potencial: number;
   nivel: number;
-  rareza: string;
   tipo: 'click' | 'passive' | 'multiplier';
   afijos: string[];
 }
@@ -71,7 +72,7 @@ export const simHerr: {
   produccion: null,
   base: {
     lado: 'rec', tier: 1, baseId: baseNeutra(1, 'rec'),
-    potencial: 3, nivel: 0, rareza: rarezaDeTier(1),
+    potencial: 3, nivel: 0,
     tipo: 'click', afijos: []
   }
 };
@@ -184,6 +185,11 @@ function tarjetaNodoSim(
   const caro = coste !== null && restantes !== null && coste > restantes;
   const cat = (TREE_CATEGORY_META as Record<string, { label: string; color: string }>)[node.category];
   const puedeSubir = !tope && !bloqueado && !caro;
+  // Lo pagado en ESTE nodo, nivel a nivel con la misma regla que cobra
+  // (`nodeCost`, la que suma `coresGastadosEnArbol`): el resumen de abajo
+  // dice el total de la build, pero mientras se sube hace falta verlo aquí.
+  let pagado = 0;
+  for (let i = 0; i < nivel; i++) pagado += nodeCost(node as any, i);
 
   return `
     <div class="card-glass border rounded-xl p-2 flex flex-col gap-1.5 ${bloqueado ? 'opacity-55' : ''}">
@@ -215,6 +221,7 @@ function tarjetaNodoSim(
                 class="h-11 w-11 rounded-lg font-mono font-bold text-[14px] cursor-pointer flex-shrink-0
                        ${puedeSubir ? 'accent-bg text-slate-950' : 'btn-ghost opacity-30 cursor-not-allowed'}">+</button>
       </div>
+      ${nivel > 0 ? `<p class="text-[10px] font-mono text-[var(--text-muted)] tabular leading-snug">Pagado ${formatNumber(pagado)} ◆ en este nodo</p>` : ''}
       ${!puedeSubir && !tope ? `<p class="text-[10px] font-mono text-[var(--text-muted)] leading-snug">${chk.reason ?? ''}</p>` : ''}
     </div>`;
 }
@@ -343,6 +350,7 @@ export function resumenBuildHTML(): string {
 export interface FichaSimulada {
   techo: number;
   nivel: number;
+  pot: number;
   total: number;
   filas: Array<{ texto: string; valor: string }>;
   crit: number;
@@ -360,6 +368,10 @@ export interface FichaSimulada {
 export function fichaSimulada(sel: SelBaseSim): FichaSimulada {
   const pot = Math.min(5, Math.max(1, Math.round(sel.potencial) || 3));
   const tier = Math.min(10, Math.max(1, Math.floor(sel.tier) || 1));
+  // La rareza la pone el tier y nada más: la misma tabla que ordena la
+  // tienda, las cajas y la forja de compañeros. Un T10 es Divino sin que
+  // nadie lo elija, y un T1 Divino no sale de ningún sitio.
+  const rareza = rarezaDeTier(tier);
   const cruda = sel.baseId ? basePorId(sel.baseId) : undefined;
   // Una base de otro tier o de otro lado no pinta: cuenta como neutra en vez
   // de multiplicar con un número que no es el suyo.
@@ -379,12 +391,12 @@ export function fichaSimulada(sel: SelBaseSim): FichaSimulada {
     const power = poderDeCompanero(tier, pot, base);
     const multAf = 1 + efectoDeAfijosDeCompanero(afijos, nivel, tier, sel.tipo);
     const total = poderEfectivoDeCompanio(
-      { power, level: nivel, rarity: sel.rareza, potential: pot },
+      { power, level: nivel, rarity: rareza, potential: pot },
       { multAfijos: multAf }
     );
     const filas = [
       { texto: `Poder T${tier}`, valor: String(power) },
-      { texto: `Rareza ${sel.rareza}`, valor: `×${multiplicadorDeRarezaDeCompanero(sel.rareza).toFixed(2)}` }
+      { texto: `Rareza ${rareza}`, valor: `×${multiplicadorDeRarezaDeCompanero(rareza).toFixed(2)}` }
     ];
     if (multiplicadorPorPotencialDeCompanero(pot) > 1) {
       filas.push({ texto: `Potencial ${pot}★`, valor: `×${multiplicadorPorPotencialDeCompanero(pot).toFixed(2)}` });
@@ -392,7 +404,7 @@ export function fichaSimulada(sel: SelBaseSim): FichaSimulada {
     if (nivel > 0) filas.push({ texto: `Nivel ${nivel}`, valor: `×${multiplicadorDeNivel(nivel).toFixed(2)}` });
     if (afijos.length > 0) filas.push({ texto: `${afijos.length} afijo${afijos.length > 1 ? 's' : ''}`, valor: `×${multAf.toFixed(2)}` });
     filas.push({ texto: 'Total', valor: `${total}/s` });
-    return { techo, nivel, total, filas, crit: 0, afijos };
+    return { techo, nivel, pot, total, filas, crit: 0, afijos };
   }
 
   const dmg = danioDeRango(tier, pot, base);
@@ -408,7 +420,7 @@ export function fichaSimulada(sel: SelBaseSim): FichaSimulada {
     filas.push({ texto: `${afijos.length} afijo${afijos.length > 1 ? 's' : ''}`, valor: `×${(1 + ef.clickMult).toFixed(2)}` });
   }
   filas.push({ texto: 'Total', valor: String(total) });
-  return { techo, nivel, total, filas, crit: ef.critChance, afijos };
+  return { techo, nivel, pot, total, filas, crit: ef.critChance, afijos };
 }
 
 // --------------------------------------------------------------------------
@@ -416,14 +428,14 @@ export function fichaSimulada(sel: SelBaseSim): FichaSimulada {
 // --------------------------------------------------------------------------
 
 function selectorSim(
-  clave: string, etiqueta: string, valor: string | number, opciones: Array<{ v: string | number; t: string }>
+  clave: string, etiqueta: string, valor: string | number, opciones: Array<{ v: string | number; t: string }>, extra = ''
 ): string {
   return `
     <label class="block min-w-0">
       <span class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">${etiqueta}</span>
       <select data-herr-sel="${clave}" aria-label="${etiqueta}"
               class="h-11 w-full px-2 rounded-xl btn-ghost text-[12px] font-mono cursor-pointer
-                     focus:outline-none focus:ring-1 focus:ring-[var(--accent)]">
+                     focus:outline-none focus:ring-1 focus:ring-[var(--accent)] ${extra}">
         ${opciones.map(o => `<option value="${o.v}" ${String(o.v) === String(valor) ? 'selected' : ''}>${o.t}</option>`).join('')}
       </select>
     </label>`;
@@ -437,8 +449,22 @@ export function baseSimHTML(): string {
   const sumaSorteo = lista.reduce((a, b) => a + b.pesoDrop, 0) || 1;
   const baseElegida = sel.baseId ? basePorId(sel.baseId) : undefined;
   const f = fichaSimulada(sel);
+  // La rareza la pone el tier y nada más: T10 es Divino sin elegirlo.
+  // Sale de la misma tabla que la tienda, las cajas y la forja (R2).
+  const rareza = rarezaDeTier(sel.tier);
+  const tinteRareza = RARITY_TEXT[rareza] ?? 'accent-text';
   const pool = sel.lado === 'com' ? POOL_AFIJOS_COMPANERO : AFFIXES;
-  const rarezas = ['Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'];
+  const iconoSim = sel.lado === 'com' ? 'companion' : 'collector';
+  // El item simulado, con lo que el brillo necesita: el techo es el que nace
+  // con el item, igual que el `maxLevel` guardado que lee `brilloDeItem`.
+  // Por eso el icono lleva su anillo de verdad, como en la app.
+  const wSim = {
+    type: sel.lado === 'com' ? 'companion' : 'collector',
+    potential: f.pot, level: f.nivel, rarity: rareza, maxLevel: f.techo
+  };
+  const explicacionBrillo = textoDeBrillo(wSim);
+  const fraseAfijos = fraseDeAfijosDeRareza(rareza);
+  const partesFrase = fraseAfijos.split(rareza);
 
   return `
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-2">
@@ -450,8 +476,15 @@ export function baseSimHTML(): string {
       ${selectorSim('base', 'Base oculta', sel.baseId ?? '',
         lista.map(b => ({ v: b.id, t: `${b.nombre} ×${String(b.pesoStat).replace('.', ',')}` })))}
       ${selectorSim('potencial', 'Potencial', sel.potencial,
-        [1, 2, 3, 4, 5].map(p => ({ v: p, t: `${'★'.repeat(p)} (${p})` })))}
-      ${selectorSim('rareza', 'Rareza', sel.rareza, rarezas.map(r => ({ v: r, t: r })))}
+        [1, 2, 3, 4, 5].map(p => ({ v: p, t: `${'★'.repeat(p)} (${p})` })),
+        'text-amber-400')}
+      <div class="block min-w-0" aria-label="Rareza del item simulado">
+        <span class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">Rareza (la pone el tier)</span>
+        <div class="h-11 w-full px-2 rounded-xl border border-[var(--border-color)] text-[12px] font-mono font-bold
+                    flex items-center">
+          <span class="${tinteRareza}">${rareza}</span>
+        </div>
+      </div>
       ${sel.lado === 'com' ? selectorSim('tipo', 'Tipo', sel.tipo, [
         { v: 'click', t: 'De click' }, { v: 'passive', t: 'Pasivo' }, { v: 'multiplier', t: 'Multiplier' }
       ]) : `
@@ -463,7 +496,7 @@ export function baseSimHTML(): string {
     </div>
     <label class="block mb-2">
       <span class="block text-[10px] font-mono text-[var(--text-muted)] mb-1">
-        Nivel (techo ${f.techo} con ${estrellasDe(sel.potencial)} y esta base)
+        Nivel (techo ${f.techo} con <span class="text-amber-400">${estrellasDe(sel.potencial)}</span> y esta base)
       </span>
       <input data-herr-num="nivel" type="number" inputmode="numeric" min="0" max="${f.techo}"
              value="${sel.nivel}" aria-label="Nivel del item simulado"
@@ -477,25 +510,28 @@ export function baseSimHTML(): string {
         const lleno = !puesto && f.afijos.length >= AFIX_MAX;
         return `
         <button data-herr="afijo" data-afijo="${a.id}" aria-pressed="${puesto}" ${lleno ? 'disabled' : ''}
+                title="${a.description ?? a.name}"
+                style="border-color: currentColor;${puesto ? ' background: color-mix(in srgb, currentColor 14%, transparent);' : ''}"
                 class="min-h-[44px] px-2.5 rounded-lg text-[10px] font-mono border cursor-pointer
-                       ${puesto ? 'accent-bg text-slate-950 border-transparent font-bold'
-                                : 'btn-ghost text-[var(--text-main)]'} ${lleno ? 'opacity-30 cursor-not-allowed' : ''}">
-          ${a.name}
+                       inline-flex items-center gap-1 rarity-${raritySlug(a.rarity)}
+                       ${puesto ? 'font-bold' : ''} ${lleno ? 'opacity-30 cursor-not-allowed' : ''}">
+          <span class="[&>span>svg]:w-3 [&>span>svg]:h-3 flex-shrink-0">${icSafe('sparkle')}</span>${a.name}
         </button>`;
       }).join('')}
     </div>
-    <p class="text-[10px] font-mono text-[var(--text-muted)] mb-2 leading-relaxed">${fraseDeAfijosDeRareza(sel.rareza)}</p>
+    <p class="text-[10px] font-mono text-[var(--text-muted)] mb-2 leading-relaxed">${partesFrase[0] ?? ''}<span class="${tinteRareza}">${rareza}</span>${partesFrase.slice(1).join(rareza)}</p>
     <section class="card-glass border rounded-2xl p-3.5" aria-label="Resultado de la simulación">
       <div class="flex items-center justify-between gap-2 mb-1">
-        <span class="text-[12px] font-mono font-bold text-[var(--text-main)] truncate">
-          ${baseElegida?.nombre ?? (sel.lado === 'com' ? 'Compañero' : 'Recolector')} ${estrellasDe(sel.potencial)}
+        ${marcoDeBrillo(wSim, `<span class="ring-${raritySlug(rareza)} w-10 h-10 rounded-xl grid place-items-center flex-shrink-0 ${rarityClass(rareza)} [&>span>svg]:w-5 [&>span>svg]:h-5"${explicacionBrillo ? ` title="${explicacionBrillo}"` : ''}>${icSafe(iconoSim)}</span>`, 'rarity-' + raritySlug(rareza))}
+        <span class="min-w-0 flex-1 text-[12px] font-mono font-bold text-[var(--text-main)] truncate">
+          ${baseElegida?.nombre ?? (sel.lado === 'com' ? 'Compañero' : 'Recolector')} <span class="text-amber-400">${estrellasDe(sel.potencial)}</span>
         </span>
         <span class="font-['Orbitron'] font-bold text-lg accent-text tabular flex-shrink-0">
           ${formatNumber(f.total)}${sel.lado === 'com' ? '<span class="text-[10px]">/s</span>' : ''}
         </span>
       </div>
       <p class="text-[10px] font-mono text-[var(--text-muted)] mb-2">
-        T${sel.tier} · ${sel.rareza} · Nivel ${f.nivel}/${f.techo}
+        T${sel.tier} · <span class="${tinteRareza}">${rareza}</span> · Nivel ${f.nivel}/${f.techo}
         ${baseElegida ? ` · sale 1 de cada ${Math.round(sumaSorteo / baseElegida.pesoDrop)} aprox.` : ''}
         ${sel.lado === 'rec' && f.crit > 0 ? ` · crítico ${(f.crit * 100).toFixed(0).replace('.', ',')} %` : ''}
         ${sel.lado === 'com' && sel.tipo === 'multiplier' ? ' · el aura es fija: los afijos no la mueven' : ''}

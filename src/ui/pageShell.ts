@@ -344,12 +344,12 @@ export function statStrip(stats: Array<{
   `;
 }
 
-/** Sección con título y contador opcional. */
-export function sectionHead(title: string, iconName: string, right = ''): string {
+/** Sección con título y contador opcional. El tinte pinta icono y título: por defecto el acento, pero una rama del árbol trae el suyo. */
+export function sectionHead(title: string, iconName: string, right = '', tinte = 'accent-text'): string {
   return `
     <div class="flex items-center justify-between gap-2 mb-2.5">
       <h2 class="label-caps flex items-center gap-1.5">
-        <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(iconName as any)}</span>
+        <span class="${tinte} [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(iconName as any)}</span>
         ${title}
       </h2>
       ${right}

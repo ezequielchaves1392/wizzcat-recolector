@@ -84,7 +84,8 @@ const SECCIONES: Array<{ id: SeccionWiki; label: string; icon: string }> = [
 ];
 
 /** Lo que sobrevive al repintado: la pestaña abierta y lo que se busca (R6). */
-const ui: { seccion: SeccionWiki; q: string } = { seccion: 'mecanicas', q: '' };
+const ui: { seccion: SeccionWiki; q: string; herr: 'arbol' | 'base' } =
+  { seccion: 'mecanicas', q: '', herr: 'arbol' };
 
 /** La etiqueta legible de cada sección, para la lista de resultados. */
 const ETIQUETA_SECCION: Record<SeccionWiki, string> = {
@@ -547,13 +548,13 @@ function seccionPasivas(): string {
     forja: 'Rama de la fusión: probabilidad de acierto en todos los tramos, más cristales de consuelo cuando la tirada falla y la firma de Obras Maestras al fundir dos potenciales máximos. No toca el click ni el pasivo: solo que la forja salga mejor.'
   };
 
-  const fichaNodo = (n: typeof TREE_NODES[number]): string => {
+  const fichaNodo = (n: typeof TREE_NODES[number], tinte: string): string => {
     const reqs = (n.requires ?? []).map(id => (TREE_NODES as any[]).find(x => x.id === id)?.name ?? id);
     return `
         <div class="py-2 border-b border-[var(--border-color)] last:border-0" id="${anclaNodo(n.id)}">
           <div class="flex items-center justify-between gap-2">
             <span class="text-[11px] font-mono font-bold text-[var(--text-main)] flex items-center gap-1.5 min-w-0">
-              <span class="accent-text flex-shrink-0 [&>span>svg]:w-4 [&>span>svg]:h-4">${icSafe(n.icon)}</span>
+              <span class="${tinte} flex-shrink-0 [&>span>svg]:w-4 [&>span>svg]:h-4">${icSafe(n.icon)}</span>
               <span class="truncate">${n.name}</span>
             </span>
             <span class="text-[10px] font-mono text-[var(--text-muted)] flex-shrink-0">Tier ${n.tier} · Máx ${n.maxLevel} · ${formatNumber(nodeCost(n as any, 0))} ◆ base</span>
@@ -566,6 +567,10 @@ function seccionPasivas(): string {
 
   const bloquesRama = RAMAS.map(rama => {
     const meta = TREE_CATEGORY_META[rama as string];
+    // El color es el de la pestaña del juego: Asalto en rojo, Manada en
+    // verde, Fortuna en ámbar y Forja en rosa. Sale del catálogo (R2), no
+    // está escrito al lado de cada bloque.
+    const tinte = meta?.color ?? 'accent-text';
     const nodos = TREE_NODES.filter(n => n.category === rama);
     const porTier: Record<number, typeof nodos> = {};
     for (const n of nodos) (porTier[n.tier] ||= []).push(n);
@@ -575,9 +580,9 @@ function seccionPasivas(): string {
       <p class="wiki-p">${nodos.length} nodos en esta rama. Cada fila se abre por puntos en la rama —niveles comprados en ella—: ${tiers.map(t => `T${t} pide ${UMBRAL_PUNTOS_RAMA[t] ?? 0}`).join(' · ')}.</p>
       ${tiers.map(tier => `
         <h4 class="wiki-sub">Tier ${tier}</h4>
-        <div class="wiki-box">${(porTier[tier] ?? []).map(fichaNodo).join('')}</div>
+        <div class="wiki-box">${(porTier[tier] ?? []).map(n => fichaNodo(n, tinte)).join('')}</div>
       `).join('')}
-    `);
+    `, undefined, tinte);
   }).join('');
 
   return `
@@ -596,11 +601,11 @@ function seccionPasivas(): string {
 //  Armazón
 // --------------------------------------------------------------------------
 
-/** Un bloque de texto con título: la unidad de la Wiki. Con ancla, el bloque es un destino de salto (buscador y enlaces). */
-function bloqueWiki(titulo: string, icono: string, cuerpo: string, ancla?: string): string {
+/** Un bloque de texto con título: la unidad de la Wiki. Con ancla, el bloque es un destino de salto (buscador y enlaces). El tinte es el color de la cabecera: las ramas del árbol traen el suyo, el resto usa el acento. */
+function bloqueWiki(titulo: string, icono: string, cuerpo: string, ancla?: string, tinte = 'accent-text'): string {
   return `
     <section class="card-glass border rounded-2xl p-3.5 md:p-4 mb-3"${ancla ? ` id="${ancla}"` : ''}>
-      ${sectionHead(titulo, icono)}
+      ${sectionHead(titulo, icono, '', tinte)}
       ${cuerpo}
     </section>
   `;
@@ -626,21 +631,73 @@ function cuerpoDeSeccion(): string {
 //  arriba en cada + sería decidir y perder el sitio (precedente A5).
 // --------------------------------------------------------------------------
 
+/**
+ * Las dos herramientas en subpestañas: una visible a la vez, como las
+ * pestañas del juego. La abierta sobrevive al repintado (R6, en `ui.herr`)
+ * y cambiar no mueve el scroll: solo se sustituye `[data-herramientas]`.
+ */
 function seccionHerramientas(): string {
+  const t = ui.herr;
+  const tabs = ([
+    { id: 'arbol', label: 'Simulador de árbol', icon: 'tree' },
+    { id: 'base', label: 'Simulador de base', icon: 'star' },
+  ] as const).map(s => {
+    const activa = t === s.id;
+    return `
+      <button data-herr-tab="${s.id}" role="tab" aria-selected="${activa}"
+        class="h-9 px-3 rounded-lg text-[11px] font-mono font-bold cursor-pointer transition
+               flex items-center gap-1.5 flex-shrink-0 border min-h-[44px]
+               ${activa ? 'accent-bg text-slate-950 border-transparent'
+                        : 'btn-ghost text-[var(--text-muted)]'}">
+        <span class="[&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(s.icon as any)}</span>
+        ${s.label}
+      </button>`;
+  }).join('');
   return `
-    ${bloqueWiki('Simulador de árbol', 'tree', `
+    <div class="flex gap-1.5 overflow-x-auto pb-1 mb-3 overscroll-contain" role="tablist" aria-label="Herramientas">
+      ${tabs}
+    </div>
+    <div data-herramientas>${t === 'arbol' ? bloqueHerrArbol() : bloqueHerrBase()}</div>
+  `;
+}
+
+/** El simulador de árbol con su resumen: lo que se ve en su subpestaña. */
+function bloqueHerrArbol(): string {
+  return bloqueWiki('Simulador de árbol', 'tree', `
       <p class="wiki-p">Arma una build con núcleos de mentira: toca + en los nodos
       y mira abajo lo que otorga y lo que cuesta. Empieza de cero y se reinicia
       cuantas veces quieras. No toca tu partida ni tus núcleos de verdad.</p>
       <div data-herr-zona="arbol">${arbolSimHTML()}${resumenBuildHTML()}</div>
-    `, ANCLA.herramientasArbol)}
-    ${bloqueWiki('Simulador de base', 'star', `
-      <p class="wiki-p">Elige lado, tier, base, potencial, nivel, rareza y afijos, y
+    `, ANCLA.herramientasArbol);
+}
+
+/** El comparador de bases: lo que se ve en su subpestaña. */
+function bloqueHerrBase(): string {
+  return bloqueWiki('Simulador de base', 'star', `
+      <p class="wiki-p">Elige lado, tier, base, potencial, nivel y afijos, y
       mira el daño final. Es una combinación ilustrativa, sin forja: aquí eliges
       todo y el juego lo sortea.</p>
       <div data-herr-zona="base">${baseSimHTML()}</div>
-    `, ANCLA.herramientasBase)}
-  `;
+    `, ANCLA.herramientasBase);
+}
+
+/**
+ * Cambia de subpestaña sin mover el scroll ni recargar la página: solo se
+ * sustituye `[data-herramientas]`. La abierta queda en `ui.herr` (R6) y en el
+ * hash, para que el enlace se pueda copiar y abrir directo.
+ */
+function cambiaHerrTab(t: 'arbol' | 'base'): void {
+  if (t === ui.herr) return;
+  ui.herr = t;
+  const cont = vista.mount?.querySelector('[data-herramientas]');
+  if (cont) cont.innerHTML = t === 'arbol' ? bloqueHerrArbol() : bloqueHerrBase();
+  const boton = vista.mount?.querySelector(`[data-herr-tab="${t}"]`) as HTMLElement | null;
+  if (boton) boton.focus({ preventScroll: true });
+  try {
+    history.replaceState(null, '', `#herramientas/${t === 'base' ? ANCLA.herramientasBase : ANCLA.herramientasArbol}`);
+  } catch {
+    // file:// o un iframe con sandbox: el hash es comodidad, no regla.
+  }
 }
 
 /**
@@ -670,8 +727,6 @@ function cambiaSelBase(clave: string | null, valor: string): void {
     sel.baseId = valor || null;
   } else if (clave === 'potencial') {
     sel.potencial = Math.min(5, Math.max(1, Math.round(Number(valor) || 3)));
-  } else if (clave === 'rareza') {
-    if (['Común', 'Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'].includes(valor)) sel.rareza = valor;
   } else if (clave === 'tipo') {
     sel.tipo = valor === 'passive' ? 'passive' : valor === 'multiplier' ? 'multiplier' : 'click';
   } else {
@@ -907,6 +962,12 @@ export function renderWikiStandalone(container: HTMLElement) {
       pintaWiki();
       return;
     }
+    const herrTab = (e.target as HTMLElement).closest('[data-herr-tab]') as HTMLElement | null;
+    if (herrTab) {
+      e.preventDefault();
+      cambiaHerrTab(herrTab.getAttribute('data-herr-tab') === 'base' ? 'base' : 'arbol');
+      return;
+    }
     const herr = (e.target as HTMLElement).closest('[data-herr]') as HTMLElement | null;
     if (herr) {
       e.preventDefault();
@@ -939,7 +1000,12 @@ export function renderWikiStandalone(container: HTMLElement) {
     const salto = (e.target as HTMLElement).closest('[data-wiki-ir]') as HTMLElement | null;
     if (salto) {
       e.preventDefault();
-      irA(salto.getAttribute('data-wiki-ir') as SeccionWiki, salto.getAttribute('data-wiki-ancla'));
+      const sec = salto.getAttribute('data-wiki-ir') as SeccionWiki;
+      const anc = salto.getAttribute('data-wiki-ancla');
+      // Un salto a una herramienta abre su subpestaña: caer en un ancla
+      // oculta sería no ir a ningún sitio sin avisar.
+      if (sec === 'herramientas') ui.herr = anc === ANCLA.herramientasBase ? 'base' : 'arbol';
+      irA(sec, anc);
       return;
     }
     const tab = (e.target as HTMLElement).closest('[data-wiki-seccion]') as HTMLElement | null;
@@ -981,12 +1047,14 @@ export function renderWikiStandalone(container: HTMLElement) {
     const primera = buscarEnWiki(ui.q)[0];
     if (!primera) return;
     e.preventDefault();
+    if (primera.seccion === 'herramientas') ui.herr = primera.ancla === ANCLA.herramientasBase ? 'base' : 'arbol';
     irA(primera.seccion, primera.ancla);
   });
 
   const destino = destinoDeHash();
   if (destino) {
     ui.seccion = destino.seccion;
+    if (destino.seccion === 'herramientas') ui.herr = destino.ancla === ANCLA.herramientasBase ? 'base' : 'arbol';
     pintaWiki();
     if (destino.ancla) llevaAlAncla(destino.ancla);
   } else {

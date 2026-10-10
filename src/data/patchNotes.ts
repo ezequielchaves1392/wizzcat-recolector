@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.35',
+    fecha: '10 de octubre de 2026',
+    titulo: 'La Wiki con los colores del juego',
+    lineas: [
+      'La sección de Pasivas pinta cada rama con su color del juego, como las pestañas de la Ascensión.',
+      'El simulador de base enseña el icono con su brillo, las estrellas en amarillo y cada afijo con su color.',
+      'La rareza del simulador la pone el tier y cada nodo del árbol dice lo que lleva pagado.',
+      'Las dos herramientas viven en subpestañas propias dentro de la sección.'
+    ]
+  },
+  {
     version: '1.15.34',
     fecha: '10 de octubre de 2026',
     titulo: 'Pasivas de la Wiki por ramas',

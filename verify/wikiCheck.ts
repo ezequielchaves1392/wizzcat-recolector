@@ -258,7 +258,7 @@ async function main() {
       check('herr: con poco no cabe y lo dice', !noCabe.cabe, `${noCabe.darian}`);
     }
 
-    const baseRec = { lado: 'rec' as const, tier: 1, baseId: null as string | null, potencial: 3, nivel: 0, rareza: 'Común', tipo: 'click' as const, afijos: [] as string[] };
+    const baseRec = { lado: 'rec' as const, tier: 1, baseId: null as string | null, potencial: 3, nivel: 0, tipo: 'click' as const, afijos: [] as string[] };
     const fRec = fichaSimulada(baseRec);
     check('herr: la base neutra da el daño de la regla',
       fRec.total === danioDeRango(1, 3, null), `${fRec.total}`);
@@ -272,7 +272,7 @@ async function main() {
     check('herr: los afijos topan en seis y el inventado no cuenta',
       fAf.afijos.length === AFIX_MAX && !fAf.afijos.includes('aff_inventado'),
       fAf.afijos.join(','));
-    const baseCom = { lado: 'com' as const, tier: 5, baseId: null as string | null, potencial: 3, nivel: 0, rareza: 'Épico', tipo: 'click' as const, afijos: [] as string[] };
+    const baseCom = { lado: 'com' as const, tier: 5, baseId: null as string | null, potencial: 3, nivel: 0, tipo: 'click' as const, afijos: [] as string[] };
     const fCom = fichaSimulada(baseCom);
     check('herr: el compañero simulado rinde el poder de la regla',
       fCom.total === Math.round(poderDeCompanero(5, 3, null)
