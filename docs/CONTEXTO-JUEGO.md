@@ -391,6 +391,18 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
     con un guardia de 6× puesto por encima del valor real para que una subida de
     precios no lo dispare en silencio.
 
+27. **`buyCheck` tiene una prueba flákena: "sin el nodo no hay pago plano".**
+    Compara el saldo antes y después de abrir una caja T1 sin el Seguro y
+    asume que el botín planto es < 100 nanitas. Pero el botín aleatorio de la
+    caja puede dar más de 100 nanitas por sí solo, y entonces la prueba falla
+    sin que nada esté roto: al repetirla pasó con 183/183.
+
+    Apareció en la suite completa tras el lote del Seguro y **no se arregló
+    aquí**: clavar el botín exige `conRoll()` sobre la apertura, que sortea
+    varias veces (nanitas, compañero, cosmético). Lo toca quien toque el
+    Seguro o `buyCheck`. Mientras tanto, un rojo aislado en ese check que
+    vuelva a pasar al repetir es este caso, no una regla rota.
+
 ### Resumen
 
 | # | Discrepancia | Estado |
@@ -421,6 +433,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 24 | El precio de las cartas NO seguia al poder: el T10 salia 3,7x mas rentable que el T1 | **arreglada** |
 | 25 | Sintonizar un recolector a nivel maximo costaba un 4% del item: no habia decision | **arreglada** |
 | 26 | Los companeros de tipo `passive` no anunciaban su ingreso: el Avatar del Vacio (power 65) salia de una caja y no mostraba nada | **arreglada** |
+| 27 | Una prueba de `buyCheck` falla sin motivo: el botín aleatorio de la caja T1 supera el umbral que mide | **documentada**: es flákena, no una regla rota |
 
 ### 21. La sintonización no tenía ruleta — ARREGLADA
 

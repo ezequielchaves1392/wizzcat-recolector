@@ -234,14 +234,15 @@ export function renderErrorDeCarga(
   // es ninguna de las dos suele ser una pestaña abierta en otra parte. Decirle a alguien
   // que espere cuando lo que necesita es reintentar es la forma de que se vaya a esperar.
   const titulo = cuota
-    ? 'Se ha agotado la cuota del juego'
+    ? 'El servidor está en mantenimiento'
     : sinRespuesta
       ? 'El servidor no está contestando'
       : 'No se ha podido cargar la partida';
   const explicacion = cuota
-    ? 'El servidor de la partida ha llegado a su límite de uso de hoy. No es un fallo de tu '
-      + 'equipo ni de tu navegador, y tu partida sigue guardada donde estaba: no se ha '
-      + 'tocado nada. El límite se repone solo, así que dentro de un rato vuelve a funcionar.'
+    ? 'El servidor de la partida está en mantenimiento y ahora mismo no puede atenderte. '
+      + 'No es un fallo de tu equipo ni de tu navegador, y tu partida sigue guardada donde '
+      + 'estaba: no se ha tocado nada. El mantenimiento termina solo, así que dentro de un '
+      + 'rato vuelve a funcionar.'
     : sinRespuesta
       ? 'Se le ha pedido tu partida al servidor y no ha contestado a tiempo. No se ha '
         + 'guardado nada, así que tu progreso sigue donde estaba. Esto es una espera, no un '
@@ -249,7 +250,7 @@ export function renderErrorDeCarga(
       : 'El juego no ha conseguido leer tu partida del servidor. No se ha guardado nada, '
         + 'así que tu progreso sigue donde estaba. Esto suele ser la conexión.';
   const pie = cuota
-    ? 'Si vuelve a pasar en cuanto se reponga el límite, el culpable es el ritmo de '
+    ? 'Si vuelve a pasar en cuanto termine el mantenimiento, el culpable es el ritmo de '
       + 'guardado, no tu juego.'
     : 'Si tienes el juego abierto en otra pestaña, ciérrala antes de reintentar.';
 
@@ -264,6 +265,13 @@ export function renderErrorDeCarga(
                        rounded-xl hover:opacity-90 transition cursor-pointer">
           REINTENTAR
         </button>
+        ${cuota ? `
+        <button data-wiki-externo
+                class="w-full py-2.5 btn-ghost font-['Orbitron'] font-bold text-xs rounded-xl
+                       hover:opacity-90 transition cursor-pointer flex items-center justify-center gap-2">
+          <span class="[&>span>svg]:w-4 [&>span>svg]:h-4">${ic('scroll')}</span>
+          ABRIR LA WIKI
+        </button>` : ''}
         <div class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
           ${esc(pie)}
         </div>
@@ -275,6 +283,13 @@ export function renderErrorDeCarga(
   // atributo `onclick`: es la misma red de seguridad que R5, y aquí importa más porque
   // este nodo vive dentro de `#app`.
   container.querySelector('[data-reintentar]')?.addEventListener('click', onReintentar);
+
+  // Mismo destino que el botón de mantenimiento y el de la cabecera: la Wiki vive en
+  // `wiki.html`, en pestaña aparte, sin game loop y sin tocar la partida. Aquí es donde
+  // más sirve: el mantenimiento es tiempo muerto, y leer la Wiki no gasta cuota.
+  container.querySelector('[data-wiki-externo]')?.addEventListener('click', () => {
+    window.open('wiki.html', '_blank', 'noopener');
+  });
 }
 
 /**
