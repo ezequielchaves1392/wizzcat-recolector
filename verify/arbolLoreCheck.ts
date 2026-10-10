@@ -236,7 +236,7 @@ async function main() {
       ramas.length === 4 && sinRaiz.length === 0,
       `ramas=${ramas.join(',')} sin raiz=${sinRaiz.join(',') || 'ninguna'}`);
 
-    const tiers = [0, 1, 2, 3, 4].map(t => UMBRAL_PUNTOS_RAMA[t] ?? -1);
+    const tiers = [0, 1, 2, 3, 4, 5, 6].map(t => UMBRAL_PUNTOS_RAMA[t] ?? -1);
     check('ramas: los umbrales empiezan en cero y suben por tier',
       tiers[0] === 0 && tiers.every((u, i) => i === 0 || u > tiers[i - 1]),
       `umbrales=${tiers.join(',')}`);

@@ -23,10 +23,9 @@
 //  tarjeta no lleva. Preferimos no enseñar una cifra a inventar una: en una pantalla
 //  comparativa, un número inventado es peor que un hueco, porque el hueco se ve.
 //
-//  ## UN CONTADOR DE VISITAS, Y POR QUÉ NO CUENTA AL DUEÑO
+//  ## EL CONTADOR DE VISITAS SE QUITÓ (F104): ABRIR UN PERFIL ES GRATIS
 //
-//  Es lo que se pidió, y el que mira se cuenta **una vez por persona**: está en
-//  `registrarVisita()`, que se niega a contar al dueño antes de hacer nada. Aquí solo se
+//  Cada apertura costaba una escritura en el documento de otro. Aquí solo se
 //  pinta lo que venga.
 
 import { ic, type IconName } from './icons';
@@ -41,13 +40,10 @@ import { ACHIEVEMENTS } from '../achievements';
 import { fichaDeRecolector, casillaDeCompanero } from './fichas';
 import { TREE_CATEGORY_META } from '../data/tree';
 import { rarityClass } from '../components/crateLoot';
-import { leerTarjeta, registrarVisita } from '../services/profileService';
+import { leerTarjeta } from '../services/profileService';
 import { tarjetaDesdeRanking, type DatosDeRanking } from '../data/perfilParcial';
 import { type TarjetaPublica, danoFinalDeTarjeta } from '../data/profile';
 import { sfx } from '../utils/audio';
-
-/** El uid del jugador que está mirando, para no contarse a sí mismo. */
-let miUid = '';
 
 /**
  * El nombre de cada logro, por id.
@@ -64,7 +60,6 @@ let miUid = '';
 const LOGRO_POR_ID: Record<string, string> = Object.fromEntries(
   ACHIEVEMENTS.map(a => [a.id, a.title])
 );
-export function ponMiUid(uid: string): void { miUid = uid || ''; }
 
 /**
  * Abre la tarjeta de un jugador.
@@ -177,14 +172,7 @@ async function carga(
     return;
   }
 
-  // El contador va **después** de pintar, para que abrir un perfil no espere a una
-  // escritura. Y solo si no es el tuyo: eso ya está dentro de la función.
-  // B39 · Se pasa la tarjeta que se acaba de leer: `registrarVisita` la reutiliza
-  // en vez de volver a pedir el mismo documento (una lectura cobrada de menos
-  // por apertura, con el mismo conteo).
-  const tarjetaPintada = lectura.tarjeta;
-  window.setTimeout(() => { void registrarVisita(uid, miUid, tarjetaPintada); }, 400);
-
+  // F104 · Sin contador: abrir un perfil ajeno ya no escribe nada.
   sfx.nav();
   cuerpo.innerHTML = cuerpoDeTarjeta(lectura.tarjeta);
   overlay.scrollTop = 0;

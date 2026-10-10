@@ -19,7 +19,7 @@
 //  combinaciones de "qué escritura falló" con "qué dice el aviso".
 // ==========================================================================
 
-import { boot, reload, check, resumen, baseSave, guardado } from './kit';
+import { boot, reload, check, resumen, baseSave, guardado, s } from './kit';
 import { computeScore } from '../src/services/rankingService';
 import { CLAVE_MODO_PRUEBAS } from '../src/gameLoop';
 
@@ -222,6 +222,50 @@ async function main() {
   });
 
   // -------------------------------------------------------------------------
+  //  B38 · UN FALLO AL PUBLICAR LA FILA REINTENTA EN EL SIGUIENTE PERIODO.
+  // -------------------------------------------------------------------------
+  //  La fila sale como mucho una vez cada quince minutos (F104), y el envío
+  //  solo se marca después de escribir: con la escritura fallida, el siguiente
+  //  periodo la ve pendiente y no espera al siguiente. Sin esto, un fallo
+  //  dejaría la fila congelada un cuarto de hora con un daño viejo.
+  //
+  //  **EL RELOJ SIMULADO, Y POR QUÉ.** Quince minutos no se esperan en un
+  //  banco: se adelanta `Date.now` y se devuelve en `finally`. Sin reboot en
+  //  medio no hay comparación de fechas que romper, y la cola usa la misma
+  //  marca para anotar y confirmar, así que tampoco se descompasa.
+  {
+    const g = await boot(baseSave([], { nanites: 1234, totalNanitesProduced: 5000 }));
+    g.click();
+    const saldo = s(g).nanites;
+    (globalThis as any).__MEM_DB__.fallarDoc = 'rankings/';
+    await g.flush();
+    await asentar();
+    delete (globalThis as any).__MEM_DB__.fallarDoc;
+    const usersDoc = (globalThis as any).__MEM_DB__['users/test'];
+    const rankDoc1 = (globalThis as any).__MEM_DB__[claveDeRanking()];
+    check('B38: con la red caída en rankings, la partida se guarda y la fila no sale',
+      usersDoc?.nanites === saldo && rankDoc1?.totalClicks === 0,
+      `users=${usersDoc?.nanites} fila-clics=${rankDoc1?.totalClicks}`);
+    // El siguiente periodo, con la red vuelta: la fila sale aunque no haya
+    // nada nuevo en ella que la dispare.
+    const ahoraReal = Date.now;
+    let t = ahoraReal();
+    Date.now = () => t;
+    try {
+      t += 16 * 60_000;
+      s(g).afkCards = 1;
+      await g.flush();
+      await asentar();
+    } finally {
+      Date.now = ahoraReal;
+    }
+    const rankDoc2 = (globalThis as any).__MEM_DB__[claveDeRanking()];
+    check('B38: el siguiente periodo reintenta la fila aunque no haya nada nuevo en ella',
+      rankDoc2?.totalClicks === 1 && rankDoc2?.danoFinal !== undefined,
+      `fila=${JSON.stringify(rankDoc2)}`);
+  }
+
+  // -------------------------------------------------------------------------
   //  3. UN FALLO DE VERDAD SÍ LO ENCIENDE
   // -------------------------------------------------------------------------
   await conIndicador(async () => {
@@ -408,20 +452,33 @@ async function main() {
       `filas=${filasAlArrancar}`
     );
 
-    // Y LA CONTRAPARTIDA OBLIGATORIA: si el marcador cambia, el ranking se escribe
-    // aunque no haya pasado el rato. Una clasificación que no sube cuando subes es
-    // peor que no haberla, así que el ahorro no puede quedarse con el marcador.
+    // Y LA CONTRAPARTIDA NUEVA (F104): EL RANKING YA NO SIGUE AL MARCADOR.
+    //
+    // Antes, si el marcador cambiaba, la fila se escribía aunque no hubiera
+    // pasado el rato: el pasivo mueve el producido cada segundo, así que en la
+    // práctica la fila salía en cada guardado con red. Ahora sale como mucho
+    // una vez cada quince minutos, y un clic no la adelanta. Una clasificación
+    // con un cuarto de hora de retraso no miente a nadie; cuarenta escrituras
+    // por revisita sí cuestan. Si la fila falló, el siguiente bloque la
+    // reintenta sin esperar al periodo (B38 sigue valiendo).
     db.filas = 0;
-    // Un clic sube `totalNanitesProduced`, que es justo lo que la fila enseña. El clic no
-    // guarda por su cuenta —guardar en cada clic sería lo contrario de lo que se está
-    // buscando—, así que el guardado se pide a mano, como lo haría cualquier otra acción.
+    db.escrituras = 0;
+    // Un clic sube `totalNanitesProduced`, que es justo lo que la fila enseña.
+    // El clic no guarda por su cuenta —guardar en cada clic sería lo contrario
+    // de lo que se está buscando—, así que el guardado se pide a mano, como lo
+    // haría cualquier otra acción.
     g.click();
     await g.flush();
     await new Promise((r) => setTimeout(r, 0));
     check(
-      'cuota: pero si el marcador cambia, el ranking se escribe',
-      db.filas === 1,
+      'cuota: un clic ya NO publica la fila (sale cada 15 min, no por marcador)',
+      db.filas === 0,
       `filas=${db.filas} tras un clic`
+    );
+    check(
+      'cuota: pero la partida SI se escribe en el mismo bloque',
+      (db.escrituras ?? 0) >= 1,
+      `escrituras=${db.escrituras} tras un clic`
     );
   }
 
@@ -433,7 +490,8 @@ async function main() {
   //  publica dentro del mismo `if` que el ranking, o sea que **no cuesta una
   //  escritura por guardado**: escribirla en cada guardado la convertiría en media
   //  partida de las escrituras del juego, que es justo lo que el arreglo anterior se
-  //  quitó de en medio.
+  //  quitó de en medio. Con F104 el ritmo son quince minutos: un clic no la
+  //  republica, y lo que se afirma es que tampoco la ensucia.
   {
     const perfil = 'perfiles/test';
     const g = await boot(baseSave([], { nanites: 5_000, totalNanitesProducidas: 5_000 }));
@@ -450,12 +508,12 @@ async function main() {
       Object.keys(db[perfil] ?? {}).join(',')
     );
 
-    // **LO QUE SE COMPRUEBA ES QUIÉN ESCRIBE QUÉ, Y HAY QUE FORZAR LA PUBLICACIÓN.**
-    // El contador lo pone quien mira, así que aquí se escribe a mano como lo dejaría un
-    // visitante, y luego se fuerza una publicación nueva —subiendo el marcador, que es
-    // lo que de verdad dispara el `if`— para ver qué sobrevive.
+    // **LO QUE SE COMPRUEBA ES QUIÉN ESCRIBE QUÉ.** Se deja un contador
+    // heredado a mano, se juega un clic y se fuerza el bloque: como la fila no
+    // toca (quince minutos), la tarjeta tampoco, y el contador sigue intacto.
     db[perfil].visitas = 7;
     db[perfil].visitantes = ['a', 'b'];
+    const clicsPublicados = db[perfil].totalClicks;
 
     db.escrituras = 0;
     db.filas = 0;
@@ -469,14 +527,63 @@ async function main() {
       `visitas=${db[perfil].visitas} lista=${JSON.stringify(db[perfil].visitantes)}`
     );
     check(
-      // Lo que se mira es `totalClicks`, y no el producido: el clic lo sube a 1 siempre,
-      // mientras que el producido depende de cuánto dé el clic en la partida de prueba.
-      // Un número que depende del daño del click es un número que puede fallar sin que
-      // nada esté roto.
-      'cuota: y sí actualiza lo suyo',
-      db[perfil].totalClicks === 1,
-      `clics=${db[perfil].totalClicks} producido=${db[perfil].nanitasProducidas}`
+      // Sin republicación, la tarjeta sigue con lo del arranque: el clic sube
+      // el contador en memoria, pero el documento no se toca hasta el periodo.
+      // Si esto cambiara, la tarjeta estaría saliendo en cada bloque.
+      'cuota: y un clic no la republica antes del periodo',
+      db[perfil].totalClicks === clicsPublicados && (db.filas ?? 0) === 0,
+      `clics=${db[perfil].totalClicks} filas=${db.filas}`
     );
+  }
+
+  // =========================================================================
+  //  F104 · VEINTE ACCIONES SEGUIDAS SON UNA SOLA ESCRITURA, Y LA FILA NI UNA
+  // =========================================================================
+  //
+  // **ESTA ES LA COMPROBACIÓN QUE FALTABA, Y ES LA QUE CONTESTA AL PICO.** El
+  // gráfico que agotó la cuota no era el reloj: eran ráfagas de hasta 150
+  // escrituras por minuto, una por acción (más sus derivadas). Con el agrupado,
+  // las llamadas intermedias anotan la cola local y vuelven; la red se toca
+  // una vez por bloque.
+  //
+  // **POR QUÉ `updateState` Y NO VEINTE COMPRAS.** Lo que se mide es el
+  // agrupado, no la tienda: veinte llamadas por la vía real que guarda en el
+  // acto, sin montar veinte items ni veinte saldos. Cada una cambia el estado,
+  // así que sin agrupado serían veinte escrituras.
+  {
+    const { fijarCoalescenciaMs, RITMO_GUARDADO_MS } = await import('../src/gameLoop');
+    const g = await boot(baseSave([], { nanites: 5_000 }));
+    await g.flush();
+    await asentar();
+    // Con el ritmo de verdad, como en producción: `boot()` lo pone a 0 para
+    // que los demás bancos midan lo suyo, y aquí se sube a propósito.
+    fijarCoalescenciaMs(RITMO_GUARDADO_MS);
+    try {
+      const db = (globalThis as any).__MEM_DB__;
+      db.escrituras = 0;
+      db.filas = 0;
+      for (let n = 0; n < 20; n++) g.updateState({ nanites: 5_000 + n });
+      await asentar();
+      check(
+        'cuota: veinte acciones seguidas no tocan la red (se agrupan)',
+        (db.escrituras ?? 0) === 0,
+        `escrituras=${db.escrituras} de 20 acciones`
+      );
+      await g.flush();
+      await asentar();
+      check(
+        'cuota: y el siguiente bloque lo sube todo de una vez',
+        (db.escrituras ?? 0) === 1,
+        `escrituras=${db.escrituras} de 1 bloque`
+      );
+      check(
+        'cuota: ...y la fila sigue a su ritmo, no en cada bloque',
+        (db.filas ?? 0) === 0,
+        `filas=${db.filas}`
+      );
+    } finally {
+      fijarCoalescenciaMs(0);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -520,12 +627,22 @@ async function main() {
       localStorage.removeItem(CLAVE_MODO_PRUEBAS);
     }
 
-    // Sin el flag vuelve a publicar: el modo pausa el ritmo, no lo rompe.
-    g.click();
-    await g.flush();
-    await asentar();
+    // Sin el flag vuelve a publicar en su periodo: el modo pausa el ritmo, no
+    // lo rompe. Quince minutos no se esperan: se adelanta el reloj y se
+    // devuelve en `finally`, igual que en B38.
+    const ahoraReal = Date.now;
+    let t = ahoraReal();
+    Date.now = () => t;
+    try {
+      t += 16 * 60_000;
+      g.click();
+      await g.flush();
+      await asentar();
+    } finally {
+      Date.now = ahoraReal;
+    }
     check(
-      'cuota: sin el flag la fila vuelve a escribirse',
+      'cuota: sin el flag la fila vuelve a publicarse en su periodo',
       (db().filas ?? 0) > filasAntes,
       `filas=${db().filas} antes=${filasAntes}`
     );

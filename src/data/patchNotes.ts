@@ -57,6 +57,26 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.41',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Guardado en bloque para cuidar la cuota',
+    lineas: [
+      'La partida se guarda en bloque cada poco tiempo en vez de con cada cosa que haces, para que la cuota no se agote a mitad del día.',
+      'La tabla de posiciones va con algo de retraso: lo que consigas ahora aparece al rato.',
+      'Mirar el perfil de otro jugador ya no deja contador de visitas y la tabla ya no dice quién está en línea.'
+    ]
+  },
+  {
+    version: '1.15.40',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Elige tu servidor al entrar',
+    lineas: [
+      'Al abrir el juego eliges en qué servidor jugar antes de identificarte.',
+      'Cada servidor tiene sus jugadores y sus partidas: lo de uno no aparece en el otro.',
+      'Desde el acceso y desde el aviso de mantenimiento puedes cambiar de servidor.'
+    ]
+  },
+  {
     version: '1.15.39',
     fecha: '10 de octubre de 2026',
     titulo: 'Núcleos: lo que ganas y lo que te falta',

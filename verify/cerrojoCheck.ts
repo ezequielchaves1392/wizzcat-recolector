@@ -21,8 +21,7 @@
 //  evitar. Por eso el banco afirma **las dos mitades**: que la ventana caduca y que la
 //  pregunta al volver decide.
 import { check, resumen } from './kit';
-
-const VENTANA_MS = 45_000;
+import { VENTANA_MS } from '../src/services/sessionService';
 
 async function main() {
   // ---- 1. LA VENTANA CADUCA, Y POR ESO PARAR EL LATIDO LIBERA LA CUENTA ----
@@ -39,16 +38,22 @@ async function main() {
     VENTANA_MS > 0,
     `ventana=${VENTANA_MS}ms`);
 
-  // ---- 2. Y LA VENTANA SIGUE SIENDO CORTA, QUE ES LO QUE NO SE TOCA ----
+  // ---- 2. Y LA VENTANA ES LARGA A PROPÓSITO, Y EL TRASPASO NO LA ESPERA ----
   //
-  // **EL LÍMITE DE ESTE COMMIT, Y ES DELIBERADO.** Se podría haber alargado la ventana a
-  // dos minutos y el ahorro habría sido mayor, pero **eso le cobra al jugador**: después de
-  // cerrar el portátil, esperaría dos minutos para poder entrar desde el móvil, en vez de
-  // menos de uno. El ahorro de escrituras es del jugador; **la espera también es suya**.
-  // La ventana **no se toca** y el ahorro sale de no escribir de más, que es distinto.
-  check('B33: la ventana es la misma de siempre, porque la espera es del jugador',
-    VENTANA_MS >= 30_000 && VENTANA_MS <= 60_000,
-    `${VENTANA_MS}ms (sin cambios)`);
+  // **EL LÍMITE DE ESTE COMMIT, Y ES DELIBERADO.** La ventana tiene que cubrir
+  // más del doble que el bloque de guardado, porque el latido viaja de viaje
+  // en él: con una ventana más corta, el cerrojo caducaría entre bloque y
+  // bloque estando jugando. El traspaso normal no espera a la ventana —al
+  // cerrar se suelta la sesión a propósito—, así que la espera larga solo la
+  // paga quien pierde la pestaña de golpe. El ahorro de escrituras es del
+  // jugador; **la espera en el caso raro, también, y por eso tiene techo**.
+  const { RITMO_GUARDADO_MS } = await import('../src/gameLoop');
+  check('B33: la ventana cubre más del doble que el bloque (si no, caduca jugando)',
+    VENTANA_MS > 2 * RITMO_GUARDADO_MS,
+    `ventana=${VENTANA_MS} bloque=${RITMO_GUARDADO_MS}`);
+  check('B33: ...pero con techo, porque tras un cuelgue la cuenta se libera sola',
+    VENTANA_MS <= 6 * 60_000,
+    `${VENTANA_MS}ms`);
 
   // ---- 3. LO QUE SE AFIRMA DE VERDAD: LA CADENA DE ESCRITURAS ----
   //

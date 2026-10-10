@@ -28,7 +28,7 @@
 //  curso para que no se pueda mandar dos veces.
 // ==========================================================================
 
-import { auth } from '../firebase';
+import { auth, SERVIDOR_ACTUAL } from '../firebase';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -37,6 +37,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence
 } from 'firebase/auth';
+import { claveServidor, olvidarServidor } from '../data/servidores';
 import { getSavedTheme, setTheme, THEMES } from '../theme';
 import { showConfirmModal } from '../utils/modal';
 import { ic } from '../ui/icons';
@@ -76,6 +77,22 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
           <div class="flex items-center gap-2 text-[10px] font-mono text-[var(--text-muted)]">
             <span class="auth-dot w-1.5 h-1.5 rounded-full accent-bg flex-shrink-0"></span>
             <span id="auth-status">EN ESPERA DE IDENTIFICACIÓN</span>
+          </div>
+
+          <!--
+            F103 · EN QUÉ SERVIDOR SE ENTRA, Y CÓMO CAMBIARLO. La cuenta vive
+            en un servidor: entrar sin saber en cuál es pedir una llave sin
+            decir de qué puerta. La pastilla lo dice y el botón vuelve al
+            selector (olvida y recarga: la sesión recordada de este servidor
+            se conserva, que es lo que permite volver sin pedir la clave).
+          -->
+          <div class="flex items-center justify-between gap-2 rounded-xl border border-[var(--border-color)]
+                      px-3 py-2 text-[10px] font-mono text-[var(--text-muted)]">
+            <span id="auth-servidor">SERVIDOR ${SERVIDOR_ACTUAL}</span>
+            <button type="button" id="cambiar-servidor"
+                    class="accent-text underline cursor-pointer">
+              Cambiar
+            </button>
           </div>
 
           <div id="auth-error" role="alert" aria-live="assertive"
@@ -334,8 +351,14 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
 
   // Credenciales recordadas. Se rellenan sin normalizar: el juego guarda
   // exactamente lo que el usuario escribió, con sus mayúsculas.
-  const savedUsername = localStorage.getItem('cyberforge_remember_user');
-  const savedPassword = localStorage.getItem('cyberforge_remember_pass');
+  //
+  // F103 · CADA SERVIDOR TIENE SUS RECUERDOS. La misma persona puede tener
+  // cuenta en los dos con contraseñas distintas: sin sufijo, el segundo
+  // probaría la contraseña del primero.
+  const CLAVE_RECUERDO_USUARIO = claveServidor('cyberforge_remember_user', SERVIDOR_ACTUAL);
+  const CLAVE_RECUERDO_CLAVE = claveServidor('cyberforge_remember_pass', SERVIDOR_ACTUAL);
+  const savedUsername = localStorage.getItem(CLAVE_RECUERDO_USUARIO);
+  const savedPassword = localStorage.getItem(CLAVE_RECUERDO_CLAVE);
   if (usernameInput && savedUsername) usernameInput.value = savedUsername;
   if (passwordInput && savedPassword) passwordInput.value = savedPassword;
 
@@ -349,6 +372,15 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
   // instalada todavía: la pantalla se monta una vez y el listener va directo.
   $('#auth-wiki')?.addEventListener('click', () => {
     window.open('wiki.html', '_blank', 'noopener');
+  });
+
+  // F103 · Volver al selector. Olvida la elección y recarga: la sesión
+  // recordada de este servidor se conserva en su propia clave de Auth, así
+  // que volver no pide la clave de nuevo. Sin `signOut` a propósito: cerrar
+  // la sesión aquí sería castigar al que solo quería mirar el otro servidor.
+  $('#cambiar-servidor')?.addEventListener('click', () => {
+    olvidarServidor();
+    location.reload();
   });
 
   // Mostrar contraseña. Sin esto, un error de tecleo obliga a vaciar el campo.
@@ -415,11 +447,11 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
       await setPersistence(auth, persistence);
 
       if (remember) {
-        localStorage.setItem('cyberforge_remember_user', username);
-        localStorage.setItem('cyberforge_remember_pass', password);
+        localStorage.setItem(CLAVE_RECUERDO_USUARIO, username);
+        localStorage.setItem(CLAVE_RECUERDO_CLAVE, password);
       } else {
-        localStorage.removeItem('cyberforge_remember_user');
-        localStorage.removeItem('cyberforge_remember_pass');
+        localStorage.removeItem(CLAVE_RECUERDO_USUARIO);
+        localStorage.removeItem(CLAVE_RECUERDO_CLAVE);
       }
 
       if (isRegistering) {
@@ -428,7 +460,9 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
         showConfirmModal('Cuenta creada. Entras al sistema…', () => {
           // El nombre pasa por sessionStorage para sobrevivir al guardado de
           // la partida, que ocurre antes de que el perfil exista en Firestore.
-          sessionStorage.setItem('pending_username', username);
+          // Con sufijo de servidor (F103): la pestaña sobrevive a la recarga
+          // y un cambio de servidor no debe saludar con el nombre del otro.
+          sessionStorage.setItem(claveServidor('pending_username', SERVIDOR_ACTUAL), username);
           onLoginSuccess(creds.user, username);
         }, { confirmText: 'Entrar' });
       } else {

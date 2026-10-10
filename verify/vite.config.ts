@@ -96,7 +96,11 @@ export default defineConfig({
         // F97 Lote 2b · Uno por rama, cada uno con su mecánica.
         keystoneCheck: resolve(here, 'keystoneCheck.ts'),
         // F96 · El contador cuenta lo que se cobra y el semáforo dice lo que hay.
-        opsCheck: resolve(here, 'opsCheck.ts')
+        opsCheck: resolve(here, 'opsCheck.ts'),
+        // F103 · La elección de servidor se decide en un solo sitio.
+        servidorCheck: resolve(here, 'servidorCheck.ts'),
+        // F102 · El árbol en 3 columnas: topes, presupuestos y devolución.
+        equilibrioCheck: resolve(here, 'equilibrioCheck.ts')
       },
       formats: ['es']
     }

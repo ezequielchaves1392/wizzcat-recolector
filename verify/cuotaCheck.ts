@@ -66,15 +66,14 @@ async function main() {
       compra > 0, `escrituras=${compra}`);
   }
 
-  // ---- 3. Y el caso que NO se puede medir aquí: el latido y la presencia ----
-  // Los dos relojes viven en `main.ts` (el arranque) y en `sessionService`, no en el
-  // game loop, así que un banco del motor no los dispara. Y su periodo está escrito en
+  // ---- 3. Y el caso que NO se puede medir aquí: el latido ----
+  // El reloj vive en `main.ts` (el arranque) y en `sessionService`, no en el
+  // game loop, así que un banco del motor no lo dispara. Y su periodo está escrito en
   // el código, no en una tabla: por eso lo que se afirma es la RELACIÓN, que es la que
   // se puede comprobar leyendo las dos mitades, no la suma.
   //
   // `main.ts`: `setInterval(() => anotarLatido(uid, miId), Math.floor(VENTANA_MS / 2))`
-  // `sessionService`: `anotarLatido` hace un `setDoc` en `users/` y otro en `rankings/`
-  // (la presencia), cada uno con su propio ritmo.
+  // `sessionService`: `anotarLatido` hace un `setDoc` en `users/` con el latido.
   //
   // **Lo que se afirma aquí es que el motor NO escribe por su cuenta al ritmo del
   // latido**, o sea: que abrir el bucle sin jugar no genera escrituras por su cuenta.

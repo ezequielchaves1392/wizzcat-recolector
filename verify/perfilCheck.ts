@@ -8,8 +8,8 @@
 //  de comprobarla sería escribir y leer, que es un banco que depende de la red y que
 //  cuando la red falla no dice nada.
 //
-//  La parte que sí usa el stub es el servicio: que publicar no pise el contador, y que
-//  el dueño no se cuente.
+//  La parte que sí usa el stub es el servicio: que publicar no pise el contador
+//  heredado, y que mirar no escriba (F104: el contador de visitas se ha ido).
 
 import { check, resumen, boot, baseSave, collector, companion } from './kit';
 
@@ -162,134 +162,57 @@ async function main() {
 
   // =========================================================================
   // =========================================================================
-  //  5. El contador: el dueño NO se cuenta, y una persona cuenta una vez
+  //  5. El contador se ha ido: mirar no escribe (F104)
   // =========================================================================
   //
-  // Lo otro del contador —que publicar la tarjeta no lo ponga a cero— lo comprueba
-  //  `guardadoCheck`, que es donde ya está el contador de escrituras del stub y donde se
-  //  mide sin repetir el arranque. Aquí solo lo que es de esta función.
+  // Antes aquí se comprobaba `registrarVisita()`: que el dueño no se contara,
+  // que las aperturas sumaran y que la lista no se desbordara. Cada apertura
+  // costaba una escritura en el documento de otro, y con la cuota compartida
+  // mirar cien perfiles eran cien escrituras. La función se ha ido entera y
+  // abrir un perfil vuelve a ser una sola lectura: lo que se afirma ahora es
+  // que mirar no escribe nada y no inventa ningún documento.
   {
-    const { registrarVisita } = await import('../src/services/profileService');
+    const { leerTarjeta } = await import('../src/services/profileService');
     db()['perfiles/otro'] = {
       userId: 'otro', username: 'otro', visitas: 3, visitantes: ['a'],
       recolectores: [], companeros: [], nodos: [], logros: [],
       cosmetics: { title: '', frame: 'frame_none', banner: 'banner_none' }
     };
 
-    // El dueño mirando su propia tarjeta: ni una escritura.
+    // Mirar la tarjeta propia: una lectura y ni una escritura.
     db().escrituras = 0;
-    await registrarVisita('yo', 'yo');
+    db().lecturas = 0;
+    const propia = await leerTarjeta('otro');
     check(
-      'perfil: el dueño NO se cuenta a sí mismo',
-      db().escrituras === 0,
-      'escrituras=' + db().escrituras
-    );
-    await registrarVisita('', 'yo');
-    await registrarVisita('otro', '');
-    check(
-      'perfil: y sin uid no pasa nada tampoco',
-      db().escrituras === 0,
-      'escrituras=' + db().escrituras
-    );
-
-    // **LAS DOS CIFRAS CUENTAN COSAS DISTINTAS, Y ESTA ES LA PARTE QUE CAMBIÓ.**
-    //
-    // Antes un solo filtro decidía las dos: si ya estabas en la lista, no se contaba
-    // nada. Así que `visitas` y `visitantes` eran el mismo número con dos nombres, y
-    // `visitas` no contaba aperturas sino primeras visitas. Mirar el mismo perfil cuatro
-    // veces valía por una, que es justo lo que se pidió corregir.
-    await registrarVisita('otro', 'a');
-    check(
-      'perfil: volver a entrar SI suma una visita, porque son aperturas',
-      db()['perfiles/otro'].visitas === 4,
-      'visitas=' + db()['perfiles/otro'].visitas
+      'perfil: abrir una tarjeta es una lectura y cero escrituras',
+      propia.ok === true && (db().lecturas ?? 0) === 1 && (db().escrituras ?? 0) === 0,
+      `lecturas=${db().lecturas} escrituras=${db().escrituras}`
     );
     check(
-      'perfil: pero la persona no se añade dos veces a la lista',
-      db()['perfiles/otro'].visitantes.length === 1
-        && db()['perfiles/otro'].visitantes[0] === 'a',
-      'lista=' + JSON.stringify(db()['perfiles/otro'].visitantes)
-    );
-
-    await registrarVisita('otro', 'a');
-    check(
-      'perfil: y entrar otra vez sigue sumando, que es lo que se pedia',
-      db()['perfiles/otro'].visitas === 5,
-      'visitas=' + db()['perfiles/otro'].visitas
-    );
-
-    await registrarVisita('otro', 'nueva');
-    check(
-      'perfil: una persona nueva suma visita y entra en la lista',
-      db()['perfiles/otro'].visitas === 6
-        && db()['perfiles/otro'].visitantes.includes('nueva'),
-      `visitas=${db()['perfiles/otro'].visitas} lista=${JSON.stringify(db()['perfiles/otro'].visitantes)}`
-    );
-
-    // **Y LAS DOS CIFRAS TIENEN QUE PODER SER DISTINTAS.** Si volvieran a ser lo mismo,
-    // una de las dos está mintiendo: aquí visitas sube a 6 y la lista solo tiene 2.
-    check(
-      'perfil: visitas y visitantes ya no son el mismo numero',
-      db()['perfiles/otro'].visitas === 6
-        && db()['perfiles/otro'].visitantes.length === 2,
-      `visitas=${db()['perfiles/otro'].visitas} lista=${db()['perfiles/otro'].visitantes.length}`
+      'perfil: y mirar no mueve el contador heredado',
+      db()['perfiles/otro'].visitas === 3 && db()['perfiles/otro'].visitantes.length === 1,
+      `visitas=${db()['perfiles/otro'].visitas}`
     );
 
     // Una tarjeta que no existe: mirar un perfil vacío no inventa nada.
     db().escrituras = 0;
-    await registrarVisita('no_existe', 'nueva');
+    const ausente = await leerTarjeta('no_existe');
     check(
       'perfil: mirar un perfil que no existe no escribe en la nada',
-      db().escrituras === 0,
-      'escrituras=' + db().escrituras
+      ausente.ok === false && (db().escrituras ?? 0) === 0 && !db()['perfiles/no_existe'],
+      `escrituras=${db().escrituras}`
     );
   }
 
   // =========================================================================
-  //  B39 · La visita reutiliza la tarjeta ya leída, y el ranking cachea la tabla
+  //  B39 · Abrir el ranking no lo vuelve a pedir: la tabla vive dos minutos
   // =========================================================================
   //
-  // Cada apertura de un perfil ajeno costaba DOS lecturas del mismo documento: una
-  // al abrir (`leerTarjeta`) y otra al contar (`registrarVisita` lo volvía a pedir).
-  // Y cada apertura del ranking hasta 40. Las dos se pagan de la misma cuota que se
-  // agotó, así que van aquí con contador del stub, no con cálculo.
-  {
-    const { registrarVisita: anotar } = await import('../src/services/profileService');
-    db()['perfiles/otro2'] = {
-      userId: 'otro2', username: 'otro2', visitas: 10, visitantes: ['a'],
-      recolectores: [], companeros: [], nodos: [], logros: [],
-      cosmetics: { title: '', frame: 'frame_none', banner: 'banner_none' }
-    };
-    // La que la hoja acaba de pintar: ya coaccionada, como la deja `leerTarjeta`.
-    const conocida = coaccionaTarjeta(db()['perfiles/otro2'], 'otro2');
-
-    db().escrituras = 0;
-    db().lecturas = 0;
-    await anotar('otro2', 'b', conocida);
-    check(
-      'cuota: con la tarjeta ya leida no se vuelve a leer',
-      db().lecturas === 0,
-      'lecturas=' + db().lecturas
-    );
-    check(
-      'cuota: ...pero la visita cuenta igual y una sola escritura',
-      db()['perfiles/otro2'].visitas === 11
-        && db().escrituras === 1
-        && db()['perfiles/otro2'].visitantes.includes('b'),
-      `visitas=${db()['perfiles/otro2'].visitas} escrituras=${db().escrituras}`
-    );
-
-    // Y sin ella se lee como antes: el tercer parámetro es opcional y las
-    // llamadas viejas no cambian de comportamiento.
-    db().lecturas = 0;
-    await anotar('otro2', 'c');
-    check(
-      'cuota: sin tarjeta conocida se sigue leyendo una vez',
-      db().lecturas === 1 && db()['perfiles/otro2'].visitas === 12,
-      `lecturas=${db().lecturas} visitas=${db()['perfiles/otro2'].visitas}`
-    );
-  }
-
+  // Cada apertura del ranking eran hasta 40 lecturas del mismo documento, y las
+  // dos se pagan de la misma cuota que se agotó, así que van aquí con contador
+  // del stub, no con cálculo. (La mitad de este bloque era la visita, que se
+  // ha ido con F104: ya no hay segunda lectura que ahorrar.)
+  //
   // La tabla se sirve de memoria dos minutos: entrar, mirar un perfil y volver
   // no puede costar otras 40 lecturas idénticas.
   {

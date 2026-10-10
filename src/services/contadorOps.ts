@@ -28,9 +28,7 @@ export type MotivoOps =
   | 'guardado-ranking' // `setDoc` de `rankings/{uid}` en el mismo guardado
   | 'tarjeta' // `setDoc` de `perfiles/{uid}` junto al ranking
   | 'tarjeta-lectura' // `getDoc` de una tarjeta pública ajena o propia
-  | 'visita' // `setDoc` del contador de visitas de una tarjeta ajena
   | 'latido' // `setDoc` de `{ sesion }` en `users/{uid}`
-  | 'presencia' // `setDoc` de `{ latido }` en `rankings/{uid}`
   | 'soltar-sesion' // lectura + borrado del latido al cerrar
   | 'sesion-check' // `getDoc` de `users/{uid}` para ver quién tiene la cuenta
   | 'bloqueo' // `getDoc` de `bloqueos/{uid}` al arrancar o al volver
@@ -51,17 +49,17 @@ export interface OpAnotada {
 //  UMBRALES DEL SEMÁFORO, MEDIDOS Y NO INVENTADOS
 // --------------------------------------------------------------------------
 //
-//  Escrituras: el idle sano con pasivo corriendo son ~4-5/min (guardado 1 +
-//  ranking/tarjeta 1 + latidos ~2 + presencia). Verde hasta 6 es ese idle con
-//  margen; naranja es "algo escribe de más" (serie de forja, compras); rojo
-//  es ritmo de quemar cuota (12/min × 24 h ≈ 17k, al borde de los 20k con una
-//  sola pestaña colgada).
+//  Escrituras: el ritmo sano con el agrupado (F104) es ~1/min (un bloque de
+//  partida cada 2 min + fila y tarjeta cada 15). Verde hasta 2 es ese ritmo con
+//  margen; naranja es "algo escribe de más" (forzados seguidos, reintentos sin
+//  red); rojo es ritmo de quemar cuota (6/min × 24 h ≈ 8,6k con una sola
+//  pestaña colgada, casi la mitad de los 20k).
 //
 //  Lecturas: el arranque hace ~4 y abrir el ranking hasta 40 de golpe. Una
 //  ráfaga aislada de 40 es naranja (alguien mirando la tabla); repetirla es
 //  rojo.
-export const UMBRAL_W_VERDE = 6;
-export const UMBRAL_W_ROJO = 12;
+export const UMBRAL_W_VERDE = 2;
+export const UMBRAL_W_ROJO = 6;
 export const UMBRAL_R_VERDE = 10;
 export const UMBRAL_R_ROJO = 40;
 

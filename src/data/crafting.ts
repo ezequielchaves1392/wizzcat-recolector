@@ -1598,6 +1598,12 @@ interface IntentosDeForja {
   craftLuck: number;
   /** Multiplicador del consuelo en cristales, del nodo del árbol. */
   consolationBonus: number;
+  /**
+   * Puntos del árbol a la subida de potencial (nodos de Potencial de la
+   * Forja). Suman al lado del Éter, no en vez de él: el árbol acerca y el
+   * Éter empuja, y ninguno de los dos llega solo a donde llegan juntos.
+   */
+  forgePotential?: number;
   stonesUsed: number;
   /**
    * 1 si se gasta una Nanopartícula de Estabilidad en esta fusión. Ya **no** toca la
@@ -1777,14 +1783,17 @@ export function attemptForge(
   // **LA ENMIENDA, Y VA ESCRITA AQUÍ PORQUE ES LA EXCEPCIÓN.** La fusión tira
   // además por subir ese promedio UNA estrella, con `PROB_SUBE_POTENCIAL` —20 % de
   // ★1 a ★2, bajando hasta 5 % de ★4 a ★5—, y el Éter de Refinamiento suma
-  // `BONO_ETTER` puntos a esa probabilidad. La media sigue saliendo en la tirada
+  // `BONO_ETTER` puntos a esa probabilidad. F102: los nodos de Potencial del
+  // árbol (`options.forgePotential`) suman los suyos a la misma tirada, en las
+  // dos fusiones. La media sigue saliendo en la tirada
   // normal: lo que pasa es que ahora hay una tirada más, y es la única vía con la
   // que la forja pone algo por encima de lo que ya había. El ★5 no sube —no hay
   // escalón encima—, y el Éter se gasta aunque la tirada falle, igual que las piedras.
   let potential = potencialFusionado(materials.map((m) => potencialDe(m)));
   if (potential < 5) {
     const probSubida = (PROB_SUBE_POTENCIAL[potential] ?? 0)
-      + ((options.eterUsed ?? 0) > 0 ? BONO_ETTER : 0);
+      + ((options.eterUsed ?? 0) > 0 ? BONO_ETTER : 0)
+      + (options.forgePotential ?? 0);
     if (rng() < probSubida) potential += 1;
   }
   const newTier = tier + 1;
@@ -1895,7 +1904,8 @@ export function attemptForgeCompanion(
   let potential = potencialFusionado(materials.map((m) => m.potential));
   if (potential < 5) {
     const probSubida = (PROB_SUBE_POTENCIAL[potential] ?? 0)
-      + ((options.eterUsed ?? 0) > 0 ? BONO_ETTER : 0);
+      + ((options.eterUsed ?? 0) > 0 ? BONO_ETTER : 0)
+      + (options.forgePotential ?? 0);
     if (rng() < probSubida) potential += 1;
   }
 
@@ -2134,7 +2144,8 @@ export function explicacionDePotencial(): string {
     .map(st => `★${st}→★${st + 1} un ${pctDe(PROB_SUBE_POTENCIAL[st] ?? 0)} %`)
     .join(', ');
   return `La forja sube el potencial una estrella con probabilidad ${filas}; `
-    + `el Éter de Refinamiento suma ${pctDe(BONO_ETTER)} puntos a esa probabilidad.`;
+    + `el Éter de Refinamiento suma ${pctDe(BONO_ETTER)} puntos a esa probabilidad, `
+    + `y los nodos de Potencial del árbol suman los suyos a la misma tirada.`;
 }
 
 /**

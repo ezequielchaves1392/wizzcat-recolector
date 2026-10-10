@@ -84,7 +84,10 @@ const BANCOS = [
   // F97 Lote 2b · Uno por rama, cada uno con su mecánica.
   'keystoneCheck',
   // F96 · El numerito dice la verdad: el contador cuenta lo que se cobra.
-  'opsCheck'
+  'opsCheck',
+  // F102 · El árbol en 3 columnas: topes, presupuestos y devolución.
+  'equilibrioCheck',
+  'servidorCheck'
 ];
 
 // ==========================================================================

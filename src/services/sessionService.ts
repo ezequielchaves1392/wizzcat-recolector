@@ -3,7 +3,7 @@
 //
 //  Qué resuelve. Dos dispositivos (o dos pestañas) jugando a la vez contra el
 //  mismo documento se pisan: `saveToFirebase` escribe el estado COMPLETO con
-//  `setDoc(..., { merge: true })` cada 15 segundos, así que el segundo dispositivo
+//  `setDoc(..., { merge: true })` en cada bloque, así que el segundo dispositivo
 //  borra lo que produjo el primero sin error y sin aviso. Y lo grave es la
 //  Ascensión: borra las nanitas y paga con núcleos, así que dos reinicios a la
 //  vez pueden dar un reinicio por cero núcleos.
@@ -48,12 +48,19 @@ import { conTiempoLimite } from '../utils/timeout';
 /**
  * Cuánto vive un latido sin refrescar.
  *
- * 45 segundos. Es el margen entre "cerré la pestaña" y "ya puedo volver a
- * entrar": bastante para que una recarga normal o un móvil que cambia de app no
- * se cuelen, y bastante corto para que cerrar el portátil no bloquee la cuenta
- * hasta el día siguiente.
+ * 5 minutos (F104). Es el margen entre "cerré la pestaña" y "ya puedo volver a
+ * entrar". Se alargó desde 45 segundos porque el latido viaja de viaje en el
+ * guardado, que sale cada 2 minutos: con una ventana más corta que dos
+ * periodos, el cerrojo caducaría entre bloque y bloque y la cuenta quedaría
+ * libre estando jugando. La ventana manda sobre el ritmo del latido, y por
+ * eso este número vive aquí y el ritmo sale de él (`VENTANA_MS / 2`).
+ *
+ * El traspaso normal no espera a la ventana: al cerrar se suelta la sesión a
+ * propósito (`soltarSesion`), así que la espera larga solo la paga quien
+ * pierde la pestaña de golpe (cuelgue, batería). El ahorro es del orden de
+ * diez latidos sueltos por hora; la espera, solo en el caso raro.
  */
-export const VENTANA_MS = 45_000;
+export const VENTANA_MS = 300_000;
 
 /**
  * Cuánto se espera a Firestore antes de dar la comprobación por perdida.
@@ -175,26 +182,10 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
  * de la partida: si se escribiera en `users/{uid}` entero, un fallo al anotar el
  * latido podría pisar nanitas o inventario.
  *
- * ## Y ADEMÁS EN `rankings/{uid}`, PORQUE ES EL ÚNICO SITIO DONDE SE PUEDE LEER
- *
- * El latido de arriba va a `la clave `sesion` de la partida, y **otro jugador no puede
- * leerlo**: las reglas de Firestore dan a `users/{uid}` solo a su dueño y a un
- * admin, que es exactamente lo que impide que alguien se entere de que está
- * suspendido. Por eso el estado "en línea" del ranking no puede salir de ahí.
- *
- * La segunda escritura es **parcial** —solo el campo `latido`, con `merge`— y va
- * al documento que la clasificación ya escribe de continuo. Tres razones por las
- * que no es una decisión cara:
- *
- *   · **El ritmo ya existe.** Esto corre cada quince segundos porque el latido
- *     de la sesión lo necesita; piggybackear una segunda escritura parcial en el
- *     mismo tick no añade ninguna espera ni ningún temporizador nuevo.
- *   · **Es un documento pequeño.** `merge: true` con una sola clave no reescribe
- *     el resto, así que el documento de clasificación no crece.
- *   · **Que falle no rompe nada.** Va en su propio `try`: si el ranking no se
- *     puede anotar, el juego sigue jugando y la presencia sale stale. Al revés
- *     —que la sesión no se pueda anotar— sí rompería algo, porque de eso depende
- *     la ocupacion de la cuenta, y por eso cada uno lleva su `try`.
+ * F104 · Solo aquí, y solo cuando toca. Antes esta función hacía dos viajes
+ * (la sesión y la presencia del ranking); la presencia se ha ido porque el
+ * punto verde costaba una escritura periódica por pestaña sin proteger nada.
+ * El "en línea" que queda es el cerrojo, que es lo único que lo necesita.
  */
 /**
  * **CUÁNDO SE HA ESCRITO EL LATIDO POR ÚLTIMA VEZ, Y POR QUÉ ESTÁ EXPORTADO.**
@@ -210,7 +201,7 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
  * La primera versión lo ponía al devolver el campo, antes de que nadie escribiera nada.
  * Con la red en su sitio daba igual. **Con la red caída, o con un guardado que B28 decide
  * no hacer, el reloj mentía**: decía "el latido está escrito" sin que se hubiera escrito
- * nada, y el cerrojo se quedaba **sin latido durante 45 segundos** —con lo que la cuenta
+ * nada, y el cerrojo se quedaba **sin latido durante la ventana entera** —con lo que la cuenta
  * del jugador quedaba libre y otro dispositivo podía entrar—. El jugador que pierde la
  * partida es exactamente el que no tenía red, que es el que más lo necesita.
  *
@@ -222,19 +213,32 @@ export async function consultarSesion(uid: string, miId: string): Promise<Estado
 let ultimoLatidoEscrito = 0;
 
 /**
+ * F104 · DEVUELVE EL RELOJ A FRÍO. SOLO LA USAN LOS BANCOS.
+ *
+ * El reloj es de módulo y los bancos comparten proceso: un banco que confirma
+ * con el reloj simulado adelantado dejaría el latido "fresco" para el banco
+ * siguiente, que mediría un cerrojo recién batido en vez del suyo. Es la misma
+ * clase de contaminación que `limpiarCola()` y `limpiarCacheRanking()` ya
+ * resuelven en su sitio. El juego no la llama nunca.
+ */
+export function reiniciarRelojLatido(): void {
+  ultimoLatidoEscrito = 0;
+}
+
+/**
  * El campo `sesion` tal y como hay que escreverlo, o `null` si no toca.
  *
  * **ESTE ES EL ARREGLO DE B30, Y LA IDEA ES UNA SOLA: EL LATIDO NO TIENE QUE
  * ESCRIBIRSE SOLO.**
  *
  * El latido dice una sola cosa, "esta pestaña sigue viva", y la dice cada
- * `VENTANA_MS / 2`. Para decirlo hace falta **una escritura en `users/{uid}` cada 22,5
- * segundos**, y esa escritura es la que se gastaba la cuota: el comentario de arriba ya
- * lo sospechaba ("un tercio de las escrituras del juego eran solo para mantener vivo un
- * reloj que el propio jugador no ve").
+ * `VENTANA_MS / 2`. Para decirlo hacía falta **una escritura en `users/{uid}`
+ * en cada periodo**, y esa escritura es la que se gastaba la cuota: el comentario
+ * de arriba ya lo sospechaba ("un tercio de las escrituras del juego eran solo
+ * para mantener vivo un reloj que el propio jugador no ve").
  *
  * **EL PROBLEMA ES QUE ESE `setDoc` ES INÚTIL POR SEPARADO, PORQUE EL GUARDADO DE LA
- * PARTIDA ESTÁ ESCRIBIENDO EL MISMO DOCUMENTO CADA 30 SEGUNDOS.** `anotarLatido`
+ * PARTIDA ESTÁ ESCRIBIENDO EL MISMO DOCUMENTO CADA POCO.** `anotarLatido`
  * escribe `{ sesion: {...} }` con `merge: true` en `users/{uid}`, y el guardado escribe
  * la partida entera en `users/{uid}` con `merge: true`. Son **el mismo documento**: dos
  * viajes al mismo sitio con el mismo sello. Firestore cobra **una escritura por
@@ -242,20 +246,19 @@ let ultimoLatidoEscrito = 0;
  * las dos se pagan.
  *
  * **LA SOLUCIÓN, Y POR QUÉ NO ROMPE EL CERROJO.** El latido se mete **dentro** del
- * documento del guardado. Cada 30 segundos, mientras se guarda, el latido viaja de
+ * documento del guardado. En cada bloque, mientras se guarda, el latido viaja de
  * viaje y **no cuesta una escritura extra**: ya se estaba pagando esa. El cerrojo sigue
- * vivo exactamente igual de souvent, porque la frecuencia del latido la daba el
- * temporizador del latido, no la del guardado... y aquí está el punto que obliga a
- * tener cuidado: **30 segundos es MÁS que la ventana de 45 segundos dividida por dos**,
- * o sea que si el único latido fuera el del guardado, habría tramos de casi 30 segundos
- * sin refrescar dentro de una ventana de 45. Por eso el latido **sigue teniendo su
- * propio reloj**, pero **solo escribe cuando el guardado no lo ha hecho hace poco**: si
+ * vivo exactamente igual, porque la ventana (5 minutos) es más del doble que el
+ * periodo del guardado (2 minutos): entre dos bloques nunca pasa tanto como para
+ * que el latido caduque. Por eso el latido **sigue teniendo su propio reloj**,
+ * pero **solo escribe cuando el guardado no lo ha hecho hace poco**: si
  * el juego acaba de guardar, su latido es de ahora mismo y escribirlo otra vez sería
  * pagar dos veces por el mismo sello.
  *
- * **LO QUE NO SE ROMPE, Y POR QUÉ.** La ventana de 45 segundos no se toca, así que
- * cerrar el portátil sigue liberando la cuenta en menos de un minuto. El cerrojo sigue
- * bloqueando igual. Lo único que cambia es **cuántas veces se paga el sello**.
+ * **LO QUE NO SE ROMPE, Y POR QUÉ.** Al cerrar se suelta la sesión a propósito,
+ * así que el traspaso normal no espera a la ventana; la ventana larga solo la
+ * paga quien pierde la pestaña de golpe. El cerrojo sigue bloqueando igual. Lo
+ * único que cambia es **cuántas veces se paga el sello**.
  */
 export function campoLatido(uid: string, miId: string): { sesion: any } | null {
   // Solo si ha pasado el rato que se considera "fresco". `VENTANA_MS / 2` es el mismo
@@ -314,11 +317,6 @@ export async function anotarLatido(uid: string, miId: string): Promise<void> {
   } catch (e) {
     console.warn('[sesion] No se ha podido anotar el latido.', e);
   }
-  try {
-    await anotarPresencia(uid);
-  } catch (e) {
-    console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
-  }
 }
 
 /**
@@ -356,43 +354,11 @@ export async function soltarSesion(uid: string, miId: string): Promise<void> {
 }
 
 /**
- * Cada cuánto se escribe la presencia en la clasificación.
+ * F104 · LA PRESENCIA SE HA IDO, Y CON ELLA ESTE BLOQUE.
  *
- * **SESENTA SEGUNDOS, Y NO QUINCE, Y POR QUÉ.** La presencia es una pregunta de
- * "está jugando ahora", y la ventana que la lee son 45 segundos. Escribiendo cada
- * 60 segundos se sigue contestando bien y se gasta la **cuarta parte** de escrituras
- * que antes. No es una optimisation de gusto: la cuota de Firestore del proyecto es
- * diaria y compartida, y una cuarta parte de escrituras por cliente es la diferencia
- * entre que el juego cargue y que salga un "Quota exceeded" en blanco.
- *
- * El latido de la sesion sigue a quince segundos, porque de el depende el bloqueo y
- * ese necesita margen. La presencia no bloquea nada: solo paints un punto.
+ * El punto verde del ranking costaba una escritura cada cinco minutos por
+ * pestaña para pintar algo que nadie necesita para jugar. Mirar la tabla
+ * sigue siendo gratis (lecturas con caché); saber si alguien está jugando
+ * ahora mismo, no hay forma de saberlo sin pagarlo, y se decidió no pagarlo.
+ * Lo que queda del "en línea" es el cerrojo, que es lo único que lo necesita.
  */
-export const RITMO_PRESENCIA_MS = 5 * 60_000;
-
-let ultimaPresencia = 0;
-
-/**
- * Anota la presencia en la clasificación, **como mucho una vez por `RITMO_PRESENCIA_MS`**.
- *
- * El reloj es de módulo y no un temporizador: así el ritmo lo manda el dato y no el
- * llamador, y una segunda pestaña no puede saltárselo escribiendo. NUNCA lanza, por
- * lo mismo que el latido: la presencia es una mejora de la pantalla de clasificación,
- * y una mejora de pantalla no puede ser la razón de que el juego deje de funcionar.
- */
-export async function anotarPresencia(uid: string): Promise<void> {
-  const ahora = Date.now();
-  if (ahora - ultimaPresencia < RITMO_PRESENCIA_MS) return;
-  ultimaPresencia = ahora;
-  try {
-    await conTiempoLimite(
-      setDoc(doc(db, 'rankings', uid), { latido: ahora }, { merge: true }),
-      PLAZO_DE_LECTURA_MS,
-      'anotarPresencia'
-    );
-    // F96 · El punto verde del ranking también paga escritura.
-    contarOp('escritura', 'rankings', 'presencia');
-  } catch (e) {
-    console.warn('[presencia] No se ha podido anotar la presencia en la clasificación.', e);
-  }
-}

@@ -13,10 +13,12 @@ export function bonusLabel(key: keyof PassiveBonuses, value: number): string {
   const pct = (v: number) => `+${Math.round(v * 100)}%`;
   switch (key) {
     case 'clickMult': return `${pct(value)} daño de click`;
+    case 'clickPorForja': return `${Math.round(value * 100)}% de tu forja como click`;
     case 'passiveMult': return `${pct(value)} ingreso pasivo`;
     case 'costReduction': return `−${Math.round(value * 100)}% coste de tienda`;
     case 'sellMult': return `${pct(value)} precio de venta`;
     case 'craftLuck': return `${pct(value)} éxito de forja`;
+    case 'forgePotential': return `${pct(value)} subida de potencial`;
     case 'consolationBonus': return `${pct(value)} cristales por fallo`;
     case 'autoClick': return `+${value} clics/s automáticos`;
     case 'afkHours': return `+${value * 60} min de AFK`;

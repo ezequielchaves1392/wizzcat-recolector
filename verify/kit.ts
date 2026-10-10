@@ -11,7 +11,7 @@
 //  de `verify/vite.config.ts` (`lib.entry`) y de `verify/run.mjs`.
 // ==========================================================================
 
-import { createGameLoop, SAVE_VERSION } from '../src/gameLoop';
+import { createGameLoop, SAVE_VERSION, fijarCoalescenciaMs } from '../src/gameLoop';
 import { countOccupiedSlots } from '../src/data/stacking';
 import { CRATE_TYPES, CRATE_TIERS, type CrateType } from '../src/data/store';
 // El cristal ya no tiene niveles, así que la fábrica de abajo escribe un nombre y un
@@ -130,6 +130,14 @@ export async function boot(save?: any, extra?: {
   globalThis.__MEM_DB__ = {};
   if (fallaLectura) (globalThis as any).__MEM_DB__.fallarLectura = true;
   if (save) globalThis.__MEM_DB__[DB] = JSON.parse(JSON.stringify(save));
+  // F104 · Sin agrupado en los bancos: `reload()` lee el documento, y con la
+  // ventana puesta una acción seguida de recarga perdería lo que el bloque aún
+  // no ha subido. Los bancos medirían el agrupado en vez de lo suyo. La
+  // ventana vale 0 por defecto y solo producción la sube (`main.ts`); esto la
+  // devuelve a 0 por si el banco anterior la movió, porque los bancos
+  // comparten proceso y el ritmo de uno no puede colarse en el siguiente. Solo
+  // los bancos de cuota la suben a propósito, que son los que miden el agrupado.
+  fijarCoalescenciaMs(0);
   return anotarJuego(await createGameLoop(
     USER, () => {}, undefined, extra?.onAchievement,
     extra?.campoDeLatido, extra?.confirmarLatido
@@ -233,6 +241,7 @@ export async function bootNew() {
   await new Promise((r) => setTimeout(r, 0));
   limpiarCola();
   globalThis.__MEM_DB__ = {};
+  fijarCoalescenciaMs(0);
   return anotarJuego(await createGameLoop(USER, () => {}));
 }
 

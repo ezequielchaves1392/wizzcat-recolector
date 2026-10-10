@@ -318,7 +318,7 @@ async function main() {
       `cobrado=${antes - nanites(g)} esperado=${esperado} sin=${STORE_ITEMS.crateT1.cost}`);
   }
   {
-    // Con el descuento al maximo (4% x 6 + 5% x 5 = 49%) el precio no puede
+    // Con el descuento al maximo (4% x 5 + 5% x 4 = 40%) el precio no puede
     // salir negativo: si saliera, `nanites -= coste` regalaria nanitas al comprar.
     const g = await boot(baseSave([], {
       nanites: 1000,
@@ -719,7 +719,12 @@ async function main() {
       s(g).cores === antes - n1 && n1 > nodeCost(TREE_BY_ID.core_sink, 0),
       `nivel2=${n1} nivel1=${nodeCost(TREE_BY_ID.core_sink, 0)}`);
     check('arbol: y acumula el nivel', s(g).nodeLevels.core_sink === 2, 'nivel=' + s(g).nodeLevels.core_sink);
-    check('arbol: la bonificacion se suma por niveles', s(g).bonus.passiveMult > 0.15,
+    // F102 · El valor por nivel lo pone el catálogo (hoy 0,06): lo que se
+    // afirma es que dos niveles suman el doble de uno, no un número escrito
+    // aquí que se queda viejo en el próximo rebalanceo.
+    const porNivel = (TREE_BY_ID.core_sink.bonus as any).passiveMult;
+    check('arbol: la bonificacion se suma por niveles',
+      Math.abs(s(g).bonus.passiveMult - 2 * porNivel) < 1e-9 && s(g).bonus.passiveMult > porNivel,
       'passiveMult=' + s(g).bonus.passiveMult);
   }
   {
@@ -1166,16 +1171,28 @@ async function main() {
   }
   {
     // Y sin el nodo no paga nada: el bono es del nodo, no de la caja.
-    const g = await boot(baseSave([crate('c1', 1, 1)],
+    //
+    // **CON EL DADO CLAVADO, Y POR QUÉ.** Esta prueba medía "sin nodo no llega
+    // a 100" con el sorteo libre, y el botín aleatorio supera las 100 de vez en
+    // cuando: un rojo una de cada pocas corridas sin que nada esté roto
+    // (discrepancia 27, vista en 1215 y 1240 con el motor correcto). Con el dado
+    // clavado las dos aperturas sortean lo mismo, así que la diferencia entre
+    // ellas es exactamente el pago plano: 100 con el nodo, 0 sin él. Lo que se
+    // afirma es de dónde sale el bono, no el azar. El clamp va solo sobre la
+    // apertura (síncrona): el arranque lleva `await` en medio y se le escapa.
+    const gSin = await boot(baseSave([crate('c1', 1, 1)],
       { cores: 100_000 }));
-    const antes = nanites(g);
-    g.openCrateBox('c1');
-    const g2 = await reload();
-    // Sin Seguro, la apertura no suma las 100 nanitas planas (el botín puede
-    // dar nanitas, así que se mide el mínimo: sin nodo no llega a 100).
+    const antesSin = nanites(gSin);
+    await conRoll(0.5, () => gSin.openCrateBox('c1'));
+    const despuesSin = nanites(await reload());
+    const gCon = await boot(baseSave([crate('c1', 1, 1)],
+      { cores: 100_000, nodeLevels: { insurance: 1 } }));
+    const antesCon = nanites(gCon);
+    await conRoll(0.5, () => gCon.openCrateBox('c1'));
+    const despuesCon = nanites(await reload());
     check('Lote3: sin el nodo no hay pago plano',
-      nanites(g2) - antes < 100,
-      `antes=${antes} despues=${nanites(g2)}`);
+      Math.abs((despuesCon - antesCon) - (despuesSin - antesSin) - 100) < 1e-9,
+      `sin=${despuesSin - antesSin} con=${despuesCon - antesCon} (el bono es la diferencia)`);
   }
 
   resumen('compra');

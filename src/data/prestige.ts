@@ -33,10 +33,12 @@ import { TREE_BY_ID, TREE_NODES, TREE_CATEGORY_META, nodeCost } from './tree';
 
 export const EMPTY_BONUSES: PassiveBonuses = {
   clickMult: 0,
+  clickPorForja: 0,
   passiveMult: 0,
   costReduction: 0,
   sellMult: 0,
   craftLuck: 0,
+  forgePotential: 0,
   consolationBonus: 0,
   autoClick: 0,
   afkHours: 0,
@@ -66,6 +68,15 @@ export const EMPTY_BONUSES: PassiveBonuses = {
 
 /** Umbral mínimo de producción para que un reinicio tenga sentido. */
 export const PRESTIGE_MIN_NANITES = 1_000_000;
+
+/**
+ * TOPES DEL MOTOR (F102). Ningún árbol, por muchos nodos que sume, puede pasar
+ * de aquí: son la red que impide que un rebalanceo futuro reabra los exploits
+ * sin que nadie lo note. Los lee el game loop y los ata `equilibrioCheck`.
+ */
+export const TOPE_CRITICO = 0.5;
+export const TOPE_DESCUENTO = 0.5;
+export const TOPE_COMP_DESCUENTO = 0.5;
 
 /** Núcleos que se ganarían con el estado actual. */
 export function pendingCores(totalProduced: number, coreGainBonus = 0): number {

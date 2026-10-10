@@ -23,13 +23,13 @@
 //    para otra cosa: las reglas comprueban que las claves afectadas sean exactamente esas
 //    dos, así que un visitante no puede reescribir la partida de nadie aunque quiera.
 //
-//  ## EL CONTADOR CUESTA UNA ESCRITURA POR VISITA, Y ES CONSCIENTE
+//  ## EL CONTADOR COSTABA UNA ESCRITURA POR VISITA, Y SE QUITÓ (F104)
 //
-//  Contar visits es escribir en el documento de otro, y Firestore cobra eso igual que
-//  cualquier otra escritura. Con la cuota del plan gratuito, mirar cien perfiles cuesta
-//  cien escrituras. Es el precio de lo que se pidió y se puede quitar en una línea
-//  (quitando la llamada a `registrarVisita`), así que está aislado en su propia función
-//  y no aparece en ninguna otra.
+ //  Contar visitas era escribir en el documento de otro, y Firestore cobra eso
+//  igual que cualquier otra escritura: mirar cien perfiles eran cien
+//  escrituras de la cuota compartida. Se quitó la función entera
+//  (`registrarVisita`) y la llamada, así que abrir un perfil vuelve a ser una
+//  sola lectura.
 
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -143,88 +143,14 @@ export async function publicarTarjeta(state: any, uid: string, username: string)
 }
 
 /**
- * Anota que `visitanteUid` ha mirado la tarjeta de `perfilUid`.
+ * F104 · EL CONTADOR DE VISITAS SE HA IDO, Y CON ÉL ESTA FUNCIÓN.
  *
- * ## LO QUE PIDE EL JUGADOR Y LO QUE HACE ESTA FUNCIÓN
- *
- * *"Un contador de la gente que entra a ver el perfil, que no sea yo mismo."* El dueño
- * nunca se cuenta, ni al abrir su propio perfil ni al recargar la página, porque para
- * eso ya tiene su pantalla.
- *
- * Y las dos cifras que se publican cuentan cosas distintas, que es lo que se tardó en
- * entender: **`visitas` suma aperturas** —cada vez que alguien entra, aunque sea la
- * segunda vez que—, y **`visitantes` son personas distintas**, que es una lista con tope
- * para que el documento no crezca sin límite. Durante un tiempo las dos eran el mismo
- * número con dos nombres, porque un solo filtro decidía las dos: si ya estabas en la
- * lista, no se contaba nada. Abrir el mismo perfil cuatro veces valía por una, y una
- * cifra que dice "aperturas" no puede hacer eso.
- *
- * ## POR QUÉ LEEMOS Y ESCRIBIMOS EN VEZ DE USAR `increment()`
- *
- * Porque `arrayUnion()` no tiene tope, y la lista de visitantes crecería sin límite: un
- * documento que crece con cada mirada es un documento que algún día no cabe y que
- * encarece cada lectura. Como la tarjeta **ya está leída** cuando se pinta —el que
- * mira la está viendo en pantalla—, el coste de volver a leerlo para no perder nada es
- * cero. Con dos personas mirando a la vez se pierde una de las dos sumas, y eso se
- * acepta: un contador exacto de visitas concurrentes no vale una regla más.
- *
- * ## NUNCA LANZA, Y NUNCA ESCRIBE DOS VECES
- *
- * La tarjeta del propio dueño se salta antes de nada, y el mismo `visitanteUid` dos
- * veces tampoco cuenta dos veces. Escriben una tarjeta propia con estas reglas.
+ * Cada apertura de un perfil ajeno costaba una escritura en el documento de
+ * otro, y con la cuota compartida mirar cien perfiles son cien escrituras.
+ * Mirar vuelve a ser gratis: solo la lectura de la tarjeta, que ya estaba.
+ * Las cifras `visitas`/`visitantes` siguen en el documento como dato
+ * heredado (lo publicado no se reescribe), pero ya nadie las mueve.
  */
-export async function registrarVisita(perfilUid: string, visitanteUid: string, conocida?: TarjetaPublica): Promise<void> {
-  // **EL DUEÑO NO SE CUENTA, Y EL PRIMER FILTRO ES ESTE.** Ni una escritura, ni un
-  // día que refuse: abrir tu propio perfil no es una visita de nadie.
-  if (!perfilUid || !visitanteUid || perfilUid === visitanteUid) return;
-
-  // B39 · SI QUIEN LLAMA YA TIENE LA TARJETA, NO SE VUELVE A LEER.
-  //
-  // Abrir un perfil ya costó una lectura (`leerTarjeta`), y esta función volvía a
-  // pedir el mismo documento para contar: dos lecturas cobradas por una apertura.
-  // La hoja (`tarjetaAjena`) pasa la que acaba de pintar, que es el mismo
-  // documento; sin ella se lee como antes, así que los bancos y las llamadas
-  // viejas no cambian de comportamiento.
-  let tarjeta: TarjetaPublica | null = conocida ?? null;
-  if (!tarjeta) {
-    // La tarjeta **ya está leída** cuando se pinta, que es quien llama, así que volver a
-    // leerla para no perder la cuenta no cuesta una red de más.
-    const lectura = await leerTarjeta(perfilUid);
-    // **SI NO HAY TARJETA NO SE ESCRIBE NADA.** Escribir crearía un documento con solo el
-    // contador, que es lo peor que puede hacer esta función: un perfil vacío con visitas
-    // contadas que parece un perfil de verdad. Mirar a alguien que no publica tarjeta no es
-    // una visita a su perfil, porque su perfil no existe.
-    if (!lectura.ok) return;
-    tarjeta = lectura.tarjeta;
-  }
-
-  // **LAS DOS CIFRAS CUENTAN COSAS DISTINTAS, Y AHORA CADA UNA CUENTA LO SUYO.**
-  //
-  // Antes había un solo filtro: si ya estabas en la lista, no se contaba nada. Con eso
-  // `visitas` y `visitantes` eran **el mismo número con dos nombres**, y el nombre
-  // mentía: abrir el mismo perfil cuatro veces valía por una. Es lo que se pidió corregir:
-  // `visitas` son aperturas, así que suman cada vez; `visitantes` son personas distintas,
-  // así que la lista sigue creciendo solo con gente nueva.
-  //
-  // **Y POR QUÉ LA LISTA NO SE TOCA EN CADA VISITA.** Es lo que evita que el documento
-  // crezca sin límite: una persona que vuelve veinte veces no añade veinte líneas, solo
-  // una vez. Por eso las dos cifras salen de aquí y no hay dos funciones.
-  const yaVisto = tarjeta.visitantes.includes(visitanteUid);
-  const visitantes = yaVisto
-    ? tarjeta.visitantes
-    : [...tarjeta.visitantes, visitanteUid].slice(-TOPE_VISITANTES);
-
-  try {
-    await setDoc(refDeTarjeta(perfilUid), {
-      visitas: tarjeta.visitas + 1,
-      visitantes
-    }, { merge: true });
-    // F96 · Cada visita ajena es una escritura: mirar perfiles caros sale caro.
-    contarOp('escritura', 'perfiles', 'visita');
-  } catch (e) {
-    console.warn('[perfil] No se ha podido anotar la visita.', e);
-  }
-}
 
 /** La tarjeta vacía, para cuando hay que pintar algo aunque no haya datos. */
 export const TARJETA_SIN_DATOS = TARJETA_VACIA;

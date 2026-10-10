@@ -1,27 +1,42 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { initializeFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  CLAVE_SERVIDOR,
+  leerParametroServidor,
+  resolverServidor,
+  type ServidorId
+} from './data/servidores';
 
 // ==========================================================================
 //  DOS SERVIDORES, UNA SOLA APP
 //
 //  El juego corre en dos proyectos de Firebase distintos, con jugadores
 //  distintos en cada uno: `chronos-tap` (servidor 1, el de siempre) y
-//  `pet-project-aef10` (servidor 2, jugadores nuevos). Cada build apunta a uno
-//  solo, y se elige con `VITE_FIREBASE_SERVIDOR=2`; sin la variable (o con
-//  cualquier otro valor) es el 1.
+//  `pet-project-aef10` (servidor 2, jugadores nuevos). Cada CARGA apunta a uno
+//  solo, y lo elige el jugador en la primera pantalla, ANTES del acceso.
 //
-//  POR QUÉ EN BUILD Y NO CON UN SELECTOR EN EL JUEGO. `auth` y `db` son los
-//  singletons que importa todo el proyecto: un cambio de servidor en caliente
+//  POR QUÉ EN LA CARGA Y NO CON UN SELECTOR EN CALIENTE. `auth` y `db` son los
+//  singletons que importa todo el proyecto: un cambio de servidor sin recargar
 //  obligaría a dos sesiones vivas a la vez (dos auth, dos escrituras, dos
-//  rankings) y a decidir en cada servicio cuál manda. Un build por servidor no
-//  tiene ese problema: cada build tiene un solo backend, como hasta ahora.
+//  rankings) y a decidir en cada servicio cuál manda. Elegir y recargar no
+//  tiene ese problema: cada carga tiene un solo backend, como hasta ahora, y
+//  la recarga solo ocurre al elegir o al cambiar, nunca jugando.
 //
-//  POR QUÉ OPT-IN EXPLÍCITO Y NO AL REVÉS. Un build de producción tiene que
-//  apuntar al servidor correcto sin que nadie se acuerde: el valor por defecto
-//  es el 1, y el 2 solo existe si se pide a mano (mismo criterio que
-//  `VITE_EMULADOR` en B31).
+//  POR QUÉ SE GUARDA LA ELECCIÓN. Para no preguntarla en cada visita: lo
+//  elegido ayer vale hoy, y el acceso lo dice con una pastilla y un botón de
+//  cambiar. Un enlace con `?servidor=2` manda sobre lo guardado, porque es
+//  una decisión de ahora mismo.
 //
+//  POR QUÉ EL BUILD SIGUE TENIENDO VALOR POR DEFECTO. Un despliegue viejo con
+//  `VITE_FIREBASE_SERVIDOR=2` y un jugador con sesión recordada pero sin
+//  elección guardada tienen que seguir entrando donde estaban: la serie es
+//  no haber decidido nunca, y solo decide cuando nada más lo hace (mismo
+//  criterio opt-in que `VITE_EMULADOR` en B31).
+//
+//  LA REGLA DE QUÉ VALE VIVE EN `data/servidores.ts`, no aquí: este fichero
+//  solo lee el navegador y le pasa lo leído. Dos sitios decidiendo lo mismo
+//  acaban diciendo cosas distintas, y eso aquí es perder la partida de vista.
 //  LO QUE UN PROYECTO NUEVO NECESITA ANTES DEL PRIMER JUGADOR (no viene solo):
 //    1. Auth con el proveedor de correo y contraseña activado.
 //    2. Una base de datos Firestore creada.
@@ -59,27 +74,56 @@ const CONFIG_SERVIDOR_2 = {
        measurementId: "G-BDWWK5K0R4"
      };
 
-const firebaseConfig = import.meta.env.VITE_FIREBASE_SERVIDOR === '2'
-  ? CONFIG_SERVIDOR_2
-  : CONFIG_SERVIDOR_1;
+const CONFIG_POR_SERVIDOR = {
+  '1': CONFIG_SERVIDOR_1,
+  '2': CONFIG_SERVIDOR_2
+} as const;
 
 /**
- * F101 · QUIÉN SOY Y DÓNDE ESTÁ EL OTRO, Y POR QUÉ DOS CONSTANTES Y NO UNA FUNCIÓN.
+ * F103 · EL SERVIDOR DE ESTA CARGA, Y POR QUÉ SE LEE AQUÍ.
  *
- * `SERVIDOR_ACTUAL` sale de la misma variable que elige la config, así que no hay
- * dos sitios que puedan decir servidores distintos. `URL_OTRO_SERVIDOR` es la URL
- * del otro despliegue (el otro Vercel, no Firebase): cada despliegue la pone
- * apuntando al otro, y sin ella no hay botón.
+ * El enlace manda sobre lo guardado y lo guardado sobre la serie del build:
+ * la decisión en sí (`resolverServidor`) vive en `data/servidores.ts` y aquí
+ * solo se lee el navegador. Si el enlace trae un servidor, se guarda, para
+ * que las recargas de esta visita no vuelvan a preguntar.
  *
- * POR QUÉ OPT-IN COMO `VITE_EMULADOR`. Un build sin la variable es el juego de
- * siempre, sin rastro del otro servidor: el cartel no promete una salida que no
- * existe. Y la URL no es un secreto (es la dirección pública del otro despliegue),
- * así que puede viajar en el bundle sin drama.
+ * Todo va en `try/catch` porque esto corre al evaluar el módulo: un
+ * `localStorage` bloqueado (modo privado) no puede impedir que el juego
+ * arranque, solo que recuerde.
  */
-export const SERVIDOR_ACTUAL: '1' | '2' = import.meta.env.VITE_FIREBASE_SERVIDOR === '2' ? '2' : '1';
+function servidorDeEsteArranque(): ServidorId {
+  let param: ServidorId | null = null;
+  try {
+    param = leerParametroServidor(location.search);
+  } catch { /* sin URL legible no hay enlace que obedecer */ }
+  let guardado: unknown = null;
+  try {
+    guardado = localStorage.getItem(CLAVE_SERVIDOR);
+  } catch { /* modo privado: sin recuerdo, como recién llegado */ }
+  const porDefecto: ServidorId =
+    import.meta.env.VITE_FIREBASE_SERVIDOR === '2' ? '2' : '1';
+  const elegido = resolverServidor(param, guardado, porDefecto);
+  if (param !== null) {
+    try {
+      localStorage.setItem(CLAVE_SERVIDOR, param);
+    } catch { /* el enlace ya decidió esta carga aunque no se guarde */ }
+  }
+  return elegido;
+}
 
-/** URL del otro despliegue, o '' si este build no conoce ninguno (F101). */
-export const URL_OTRO_SERVIDOR: string = import.meta.env.VITE_URL_OTRO_SERVIDOR ?? '';
+const SERVIDOR_DE_ARRANQUE = servidorDeEsteArranque();
+
+const firebaseConfig = CONFIG_POR_SERVIDOR[SERVIDOR_DE_ARRANQUE];
+
+/**
+ * F103 · QUÉ SERVIDOR ES ESTA CARGA, Y POR QUÉ UNA CONSTANTE Y NO UNA FUNCIÓN.
+ *
+ * Sale del mismo sitio que elige la config de arriba, así que no hay dos
+ * sitios que puedan decir servidores distintos: lo que se cobra y lo que se
+ * enseña en la pastilla del acceso son el mismo. La elección del jugador
+ * vive en `data/servidores.ts`; esto solo dice el resultado para esta carga.
+ */
+export const SERVIDOR_ACTUAL: ServidorId = SERVIDOR_DE_ARRANQUE;
 
 
 const app = initializeApp(firebaseConfig);

@@ -1284,9 +1284,10 @@ const falloCon = async () => {
   // --- B43 · LA SERIE GUARDA UNA VEZ, NO UNA POR PAREJA ------------------
   // **ESTA ES LA PRUEBA DEL PICO DE LA MAÑANA.** `autoForge()` llamaba a la
   // forja de a una por tirada y cada una guardaba y repintaba, más el guardado
-  // final: N parejas eran N+1 guardados, y cada guardado escribe partida +
-  // ranking. Forjar compañeros en serie quemó la cuota con el mismo documento
-  // escrito decenas de veces seguidas.
+  // final: N parejas eran N+1 guardados. Forjar compañeros en serie quemó la
+  // cuota con el mismo documento escrito decenas de veces seguidas. (F104 lo
+  // deja en un solo bloque de un solo documento: la fila ya no sale con cada
+  // guardado.)
   //
   // **SE MIDE CON EL CONTADOR DEL STUB, NO CON UNA CUENTA.** `db.escrituras`
   // es la partida y `db.filas` la fila del ranking: lo que Firestore cobra. El
@@ -1327,16 +1328,17 @@ const falloCon = async () => {
     check('autoforge: la serie de dos parejas forja las dos',
       r.hechos === 2 && r.resultados.length === 2,
       `hechos=${r.hechos} resultados=${r.resultados.length}`);
-    // **3 SON UNA PARTIDA + UNA FILA + UNA TARJETA: UN SOLO GUARDADO.** Cada
-    // `saveToFirebase()` escribe esos tres documentos cuando algo cambió; dos
-    // parejas con el código viejo eran hasta siete (una por tirada más la
-    // final). Lo que se ata es que la serie cuesta un guardado, haya una o
+    // **1 ES SOLO LA PARTIDA: UN SOLO GUARDADO.** Cada `saveToFirebase()` escribe
+    // la partida cuando algo cambió; dos parejas con el código viejo eran hasta
+    // siete escrituras (una por tirada más la final). F104: la fila y la tarjeta
+    // van a su propio ritmo de quince minutos, así que la serie ya no las
+    // arrastra. Lo que se ata es que la serie cuesta un guardado, haya una o
     // cincuenta parejas.
     check('autoforge: y la serie cuesta un solo guardado, no uno por pareja',
-      db.escrituras === 3,
+      db.escrituras === 1,
       `escrituras=${db.escrituras}`);
-    check('autoforge: y la fila del ranking también, una sola vez',
-      db.filas === 1,
+    check('autoforge: y la fila del ranking no sale con la serie (va a su ritmo)',
+      db.filas === 0,
       `filas=${db.filas}`);
     check('autoforge: y la serie no estrena logros a mitad, que guardarían de más',
       JSON.stringify(s(g).unlockedAchievements ?? []) === JSON.stringify(logrosAntes),

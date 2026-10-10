@@ -71,7 +71,65 @@
 // ==========================================================================
 
 const CLAVE = 'cyberforge_nanitas_pendientes';
-const VERSION = 1;
+const VERSION = 2;
+
+/**
+ * F104 · LA PIMIENTA DE LA FIRMA, Y POR QUÉ ESTO NO ES SEGURIDAD.
+ *
+ * Cada anotación lleva un hash de sus campos. Si alguien edita el saldo a mano
+ * en DevTools, el hash no cuadra y la cola se descarta: el juego tira del
+ * servidor en vez de adoptar un número tocado.
+ *
+ * **Y ESO FRENA AL CURIOSO, NO AL TRAMPOSO.** La función y la pimienta viven
+ * en el JS que el navegador se descarga, así que quien sabe refirmar refirma.
+ * Y quien escribe directo en Firestore ni pasa por aquí. Un antibloqueo de
+ * verdad necesita servidor (una Function que valide el delta contra el
+ * tiempo), que este proyecto no tiene a propósito. Esto es un disuasorio
+ * barato con cero escrituras, no un anticheat.
+ */
+const PIMIENTA = 'forja-firma-local-v2';
+
+/**
+ * Huella síncrona de la anotación (cyrb53). Síncrona a propósito: la cola se
+ * anota en caliente y un `await` abriría la ventana en la que un cierre deja
+ * la operación a medias, que es justo lo que la cola existe para evitar.
+ */
+function huellaLocal(canonical: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < canonical.length; i++) {
+    const ch = canonical.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+function firmaDeRegistro(r: {
+  uid: string; nanites: number; producidas: number; clics: number;
+  nucleos: number; totalNucleos: number; reinicios: number; ts: number;
+}): string {
+  return huellaLocal(
+    [r.uid, r.nanites, r.producidas, r.clics, r.nucleos, r.totalNucleos, r.reinicios, r.ts, PIMIENTA].join('|')
+  );
+}
+
+/**
+ * F104 · LA ÚLTIMA ANOMALÍA VISTA, PARA AVISAR Y NO PARA BLOQUEAR.
+ *
+ * Si la firma no cuadra, `leerCola()` descarta el registro y deja aquí el
+ * motivo. El juego lo enseña (el disco local no es de fiar, se tira del
+ * servidor) y sigue: un autobloqueo desde el cliente lo quita quien lo pone
+ * borrando la llamada, y un falso positivo dejaría a un honesto fuera.
+ */
+let anomaliaCola = '';
+
+/** El motivo del último descarte por firma, o cadena vacía si no hubo. */
+export function detalleAnomaliaCola(): string {
+  return anomaliaCola;
+}
 
 /**
  * Lo que se guarda en `localStorage`.
@@ -109,6 +167,13 @@ interface Registro {
    * puede usar para farmear núcleos sin conexión.
    */
   ts: number;
+  /**
+   * F104 · La firma de los campos de arriba (v2). Los registros v1 no la
+   * traen y se aceptan igual: invalidarlos todos en la actualización sería
+   * tirar el progreso sin subir de quien tenía cola pendiente, que es justo
+   * lo que la cola existe para evitar.
+   */
+  h?: string;
 }
 
 /** Lo que se devuelve al juego. `existe` distingue "cola vacía" de "sin cola". */
@@ -145,12 +210,16 @@ const NADA: EstadoCola = {
  * han visto. Inventarse una fecha sería apostar por un saldo que nadie ha visto.
  */
 export function leerCola(uid: string): EstadoCola {
+  // F104 · El flag se recalcula en cada lectura: una vez descartado lo tocado
+  // y anotado lo válido, la siguiente lectura ya no ve anomalía y no se avisa
+  // dos veces por lo mismo.
+  anomaliaCola = '';
   try {
     const crudo = localStorage.getItem(CLAVE);
     if (!crudo) return NADA;
 
     const r = JSON.parse(crudo) as Registro;
-    if (!r || r.v !== VERSION) return NADA;
+    if (!r || (r.v !== VERSION && r.v !== VERSION - 1)) return NADA;
     // La cola es de una cuenta concreta. Si el mismo navegador entra con otra,
     // lo guardado no le pertenece y aplicarlo sería regalar o quitar dinero.
     if (r.uid !== uid) return NADA;
@@ -158,6 +227,19 @@ export function leerCola(uid: string): EstadoCola {
     if (![r.nanites, r.producidas, r.clics, r.nucleos, r.totalNucleos, r.reinicios]
       .every((n) => typeof n === 'number' && isFinite(n))) {
       return NADA;
+    }
+    // F104 · La firma solo se exige a los registros que dicen traerla (v2).
+    // Un v2 sin firma o con firma rota es un disco tocado a mano: se descarta
+    // y se deja el motivo para avisar, y el juego tira del servidor.
+    if (r.v === VERSION) {
+      const esperada = firmaDeRegistro(r as {
+        uid: string; nanites: number; producidas: number; clics: number;
+        nucleos: number; totalNucleos: number; reinicios: number; ts: number;
+      });
+      if (typeof r.h !== 'string' || r.h !== esperada) {
+        anomaliaCola = 'firma';
+        return NADA;
+      }
     }
 
     return {
@@ -199,8 +281,8 @@ export function anotarPendiente(
   reinicios: number
 ): number {
   try {
-    const registro: Registro = {
-      v: VERSION,
+    const ts = Date.now();
+    const base = {
       uid,
       nanites: Math.floor(nanites),
       producidas: Math.floor(producidas),
@@ -208,8 +290,9 @@ export function anotarPendiente(
       nucleos: Math.floor(nucleos),
       totalNucleos: Math.floor(totalNucleos),
       reinicios: Math.floor(reinicios),
-      ts: Date.now()
+      ts
     };
+    const registro: Registro = { v: VERSION, ...base, h: firmaDeRegistro(base) };
     localStorage.setItem(CLAVE, JSON.stringify(registro));
     return registro.ts;
   } catch {

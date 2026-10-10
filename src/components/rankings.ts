@@ -28,7 +28,7 @@ import {
   getTopRankings, sortByBoard, boardValue,
   BOARDS,
   type LeaderboardEntry, type BoardKind
-, estaOnline, textoUltimaConexion } from '../services/rankingService';
+} from '../services/rankingService';
 import { formatNumber } from '../utils/format';
 import { miniIdentity, rellenoDeBanner } from '../ui/identity';
 import { COSMETICS_BY_ID } from '../data/cosmetics';
@@ -83,7 +83,16 @@ export function renderRankings(
    * pantalla donde se nota más, porque es la única que se abre para mirar y no para
    * gastar.
    */
-  state?: any
+  state?: any,
+  /**
+   * El juego vivo, para la fila propia (B38). La fila propia no pinta la foto
+   * del documento sino el daño recalculado en el momento con `getStatFilas()`:
+   * es la misma cadena de la ficha, cuesta cero lecturas y nunca llega vieja.
+   * Las demás filas siguen siendo fotos —recalcular cuarenta tarjetas ajenas
+   * costaría cuarenta lecturas por vista—. Sin juego no hay recálculo y la
+   * fila sale como viene (previews y bancos).
+   */
+  game?: any
 ) {
   const meId = currentUser?.uid ?? currentUser?.userId;
 
@@ -137,7 +146,7 @@ export function renderRankings(
         <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed px-1 mb-1">
           ${def.hint}
         </p>
-        ${lista.map((r, i) => fila(r, i, meId, tableroActivo)).join('')}
+        ${lista.map((r, i) => fila(r.uid === meId ? filaPropiaViva(r, game, state) : r, i, meId, tableroActivo)).join('')}
         ${nota(tableroActivo)}
       `;
       // Las filas se cablean **una vez por carga**, no en cada pintado: el manejador busca
@@ -186,8 +195,8 @@ function pestanas(): string {
  *
  * **TU PROPIA FILA TAMBIÉN SE ABRE, Y ES LA MISMA TARJETA.** No lleva atajo a tu pantalla
  * de perfil porque esa ya la tienes abierta, y abrir una hoja encima para enseñarte lo
- * mismo sería un rodeo. Lo que **no** hace es contarse a ti mismo como visita: eso está
- * dentro de `registrarVisita()`.
+ * mismo sería un rodeo. Abrirla no cuenta nada (F104): el contador de visitas se quitó
+ * y mirar es gratis.
  */
 function cablearFilas(body: HTMLElement): void {
   body.addEventListener('click', (e) => {
@@ -207,6 +216,33 @@ function cablearPestanas(body: HTMLElement, repintar: () => void) {
       repintar();
     });
   });
+}
+
+/**
+ * La fila propia con el daño recalculado en el momento (B38).
+ *
+ * La foto del documento llega con hasta minutos de retraso (ritmo de
+ * publicación + caché de lectura) y la ficha de al lado es en vivo: comparar
+ * las dos era comparar dos momentos distintos. Para la fila propia no hace
+ * falta la foto —el juego está aquí— así que se recalcula con
+ * `getStatFilas()` sobre el arma equipada, que es la misma cadena de la
+ * ficha y cuesta cero lecturas. Sin juego, sin equipado o sin número, la fila
+ * sale como viene: un recálculo que no puede fallar no existe, y lo que no se
+ * puede calcular no se inventa (R4).
+ */
+export function filaPropiaViva(
+  r: LeaderboardEntry, game: any, state: any
+): LeaderboardEntry {
+  try {
+    const eqId = state?.equippedCollectorId;
+    const f = eqId && typeof game?.getStatFilas === 'function'
+      ? game.getStatFilas(eqId)
+      : null;
+    if (!f || typeof f.total !== 'number' || typeof f.delArma !== 'number') return r;
+    return { ...r, danoFinal: f.total, danoArma: f.delArma };
+  } catch {
+    return r;
+  }
 }
 
 function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = 'definitivo'): string {
@@ -282,7 +318,6 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
       <div class="min-w-0">
         <div class="flex items-center gap-1.5 flex-wrap mt-1">
           ${isMe ? `<span class="medal accent-text flex-shrink-0">TÚ</span>` : ''}
-          ${puntoDePresencia(r.latido)}
           ${r.achievements ? `<span class="medal text-amber-400">${ic('achievement', 'w-3 h-3')} ${r.achievements}</span>` : ''}
           ${r.secretAchievements ? `<span class="medal text-fuchsia-300" title="Logros secretos">${ic('lock', 'w-3 h-3')} ${r.secretAchievements}</span>` : ''}
           ${r.forgedCount ? `<span class="medal text-cyan-300" title="Recolectores forjados">${ic('anvil', 'w-3 h-3')} ${r.forgedCount}</span>` : ''}
@@ -303,43 +338,13 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
 }
 
 /**
- * EL PUNTO DE PRESENCIA, Y POR QUÉ ES UN PUNTO Y NO UNA ETIQUETA SOLA.
+ * F104 · EL PUNTO DE PRESENCIA SE HA IDO, Y CON ÉL ESTA FUNCIÓN.
  *
- * El encargo era "online con un circulito verde, offline en rojo", y las dos mitades
- * hacen falta: el color se lee de reojo en una tabla de cuarenta filas y la palabra
- * dice lo mismo sin depender de que el jugador distinga verde de rojo —que no es una
- * suposición pequeña, y en una tabla de clasificaciones el color es el único dato que
- * se lee de verdad—. Con solo el punto, el 8 % de los jugadores con deuteranopía leería
- * una lista de estados idénticos.
- *
- * **Y LA PALABRA NO ES UN ADORNO, ES EL DATO.** El punto es decorations; lo que dice si
- * alguien está jugando ahora es el texto. Por eso va `aria-hidden` en el punto y la
- * palabra sin ocultarla: un lector de pantalla lee "en línea" y no lee un círculo.
- *
- * **LA FRASE ES "EN LÍNEA" Y NO "ONLINE".** Todo el juego está en español y una palabra
- * inglesa suelta en la única fila que se lee entera sería la excepción. Con dos puntos se
- * escribe `en línea` y se dice `en línea`.
- *
- * **Y EL OFFLINE DICE HACE CUÁNTO.** Donde antes decía "offline" a secas, ahora dice
- * "hace 3 h" con el latido que ya trae la fila (`textoUltimaConexion()`): saber si
- * alguien se fue hace cinco minutos o hace un mes es lo que hace útil el punto rojo.
- * Sin latido se queda el "offline" de siempre, porque sin dato no hay frase.
+ * Decía "en línea" con un latido que ya nadie escribe: sin escritora, todas
+ * las filas salían "offline" para siempre y el punto era un adorno que mentía
+ * por omisión. La fila enseña lo jugado (producción, clics, logros, núcleos),
+ * que es lo que el ranking sí sabe.
  */
-export function puntoDePresencia(latido: number | null | undefined, ahora: number = Date.now()): string {
-  const online = estaOnline(latido, ahora);
-  const color = online ? '#34d399' : '#f87171';
-  const halo = online ? 'rgba(52,211,153,.35)' : 'rgba(248,113,113,.30)';
-  const ultimo = online ? null : textoUltimaConexion(latido, ahora);
-  const texto = online ? 'en línea' : (ultimo ?? 'offline');
-  return `
-    <span class="flex items-center gap-1 flex-shrink-0" title="${online ? 'En línea' : `Offline${ultimo ? ` · última conexión ${ultimo}` : ''}`}">
-      <span aria-hidden="true" class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            style="background:${color}; box-shadow: 0 0 6px ${halo}"></span>
-      <span class="text-[9px] font-mono ${online ? 'text-emerald-400' : 'text-rose-400'}">
-        ${texto}
-      </span>
-    </span>`;
-}
 
 /** Qué se mide en la tabla activa, para ponerlo bajo el número. */
 function unidadesDe(kind: BoardKind): string {

@@ -8,19 +8,20 @@
 //  jugando**, que es cuando el saldo se mueve, la firma cambia y el guardado escribe.
 //
 //  Y aquí está el dato que no sale de multiplicar intervalos: **cada acción del jugador
-//  llama a `saveToFirebase()`, y hay 43 llamadas en el motor**. Un minuto de juego real
-//  —comprar, subir, abrir, usar una tarjeta— no son cuatro escrituras: son **una por
-//  acción**, porque cada acción cambia el documento. Con el intervalo de 30 segundos
-//  puesto, el jugador que clica sin parar hace escrituras a su propio ritmo, y ese
-//  ritmo no lo controla ningún temporizador del juego.
+//  llamaba a `saveToFirebase()`, y hay más de cuarenta llamadas en el motor**. Un minuto
+//  de juego real —comprar, subir, abrir, usar una tarjeta— no eran cuatro escrituras:
+//  eran **una por acción**, porque cada acción cambia el documento. El jugador que
+//  clica sin parar hacía escrituras a su propio ritmo, y ese ritmo no lo controlaba
+//  ningún temporizador del juego.
 //
 //  **LO QUE AFIRMA, Y ES LO IMPORTANTE.** Que el coste de un minuto de juego **no lo
 //  fija el juego: lo fija el jugador**. Y por tanto **subir el intervalo del guardado no
-//  tocaría ese coste**, porque el guardado automático solo añade una escritura cada 30
-//  segundos: si el jugador genera diez escrituras por minuto, el temporizador no es el
+//  tocaba ese coste**, porque el guardado automático solo añadía una escritura cada
+//  periodo: si el jugador genera diez escrituras por minuto, el temporizador no es el
 //  que se lleva el presupuesto. Ese es el error de razonamiento que hizo falta medir
 //  para no repetir: **la cuenta de "20.000 escrituras" no se arregla bajando un número,
-//  se arregla decidiendo dónde se llama al guardado.**
+//  se arregla decidiendo dónde se llama al guardado.** (F104 lo arregla agrupando: la
+//  red sale una vez por bloque y las acciones solo anotan la cola local.)
 //
 //  **LA REGLA QUE SE PROPONE Y SU COSTE.** `saveToFirebase()` es una escritura de red y
 //  además **escribe en la cola local**, que es síncrona y es lo que garantiza que el saldo
@@ -55,7 +56,7 @@ async function main() {
     await g.flush();
     await asentar();
     ((globalThis as any).__MEM_DB__).escrituras = 0;
-    // 120 guardados = una hora con el temporizador de 30 segundos.
+    // 120 guardados seguidos: con el ritmo que sea, en reposo no sale nada.
     for (let n = 0; n < 120; n++) await g.flush();
     const reposo = escritas();
     check('B29: el reloj en reposo ya no gasta nada (esto lo arreglo B28)',
@@ -108,7 +109,7 @@ async function main() {
     // mentía:** el número no crece con los clics, porque **los clics no guardan**. El
     // motor acumula el saldo y lo que escribe es el guardado, una vez. Sesenta clics y
     // seiscientos dan **lo mismo**, y no es un ahorro: es que el pasivo y los clics se
-    // agrupan en el guardado de 30 segundos, que es justo lo que este mecanismo quiere.
+    // agrupan en el bloque, que es justo lo que este mecanismo quiere.
     //
     // **LO QUE SE AFIRMA ES EL TECHO, Y ES LA CIFRA QUE IMPORTA:** diez minutos de juego
     // intenso no cuestan más que el guardado automático. Ese es el techo, y un jugador
@@ -129,21 +130,16 @@ async function main() {
 
   // ---- 4. LA PALANCA REAL: EL LATIDO DE VIAJE ----
   //
-  // **EL GUARDADO LLEVA EL LATIDO, Y POR ESO EL LATIDO NO ESCRIBE SOLO.** Se pasa una
-  // función que devuelve el campo, como hace `main.ts`, y se cuenta cuántas escrituras
-  // hacen falta para mantener vivo el cerrojo durante una hora. **Lo que se compara es el
-  // antes y el después**, porque un número suelto no dice si es mucho o poco: lo que dice
-  // es si el arreglo ha quitado escrituras de verdad.
-  //
-  // **EL NÚMERO DE REFERENCIA, Y DE DÓNDE SALE.** Una hora son 3.600 segundos. El latido
-  // iba cada `VENTANA_MS / 2` = 22,5 s, o sea **160 escrituras por hora**. Con el campo
-  // de viaje, el juego que se guarda cada 30 s lleva el latido **gratis** 120 veces por
-  // hora, y el resto de veces lo escribe su propio reloj. **El resultado no es cero, y no
-  // debe serlo**: si lo fuera, el cerrojo no se mantendría vivo y el jugador encontraría su
-  // cuenta libre desde el móvil.
+  // **EL GUARDADO LLEVA EL LATIDO, Y POR ESO EL LATIDO CASI NO ESCRIBE SOLO.**
+  // Se pasa una función que devuelve el campo, como hace `main.ts`, y se
+  // cuenta cuántas escrituras hacen falta para mantener vivo el cerrojo.
+  // **Lo que se compara es el antes y el después**, porque un número suelto no
+  // dice si es mucho o poco: lo que dice es si el arreglo ha quitado
+  // escrituras de verdad. Los números de hoy (ventana 5 min, bloque 2 min)
+  // están en el bloque: cuatro ciclos son ocho escrituras como mucho.
   {
     // El latido de verdad, con su reloj de verdad.
-    const { campoLatido, confirmarLatido, anotarLatido } = await import('../src/services/sessionService');
+    const { campoLatido, confirmarLatido, anotarLatido, VENTANA_MS } = await import('../src/services/sessionService');
 
     // **LA FORMA DEL CAMPO, AFIRMADA AQUÍ PORQUE AQUÍ EL RELOJ ESTÁ FRÍO.**
     //
@@ -160,21 +156,11 @@ async function main() {
         && typeof sesion?.latido === 'number' && sesion.latido > 0,
       `sesion=${JSON.stringify(sesion)}`);
 
-    // **Y POR QUÉ AQUÍ NO SE CONFIRMA, QUE ERA LO QUE ROMPÍA LA CUENTA DE ARRIBA.**
-    //
-    // La primera versión de este banco llamaba a `confirmarLatido()` aquí para "dejar el
-    // reloj como lo deja el juego", y **eso hace la medición de la hora imposible**: el
-    // latido queda fresco y **no vuelve a escribirse nunca**, porque el reloj solo avanza
-    // tiempo real y el bucle corre en milisegundos. El resultado era `ahora=0
-    // escrituras`, que parecía un ahorro enorme y era **un banco que no había
-    // comprobado nada**.
-    //
-    // **LO QUE SE HACE EN VEZ DE ESO: EL RELOJ DE VERDAD.** En vez de mover el reloj a
-    // mano, se **espera** lo que tiene que pasar entre un latido y el siguiente: `VENTANA_MS
-    // / 2`, que es 22,5 segundos. El banco tarda medio minuto más, y a cambio **mide el
-    // comportamiento real** con el reloj real en vez de uno movido a dedo.
-    const ENFRIAR = Math.floor(45_000 / 2) + 50;
-    await new Promise((r) => setTimeout(r, ENFRIAR));
+    // **Y AQUÍ NO SE CONFIRMA ANTES DE MEDIR.** Confirmar dejaría el latido
+    // fresco y el bucle de abajo no escribiría nunca: el reloj solo avanza
+    // tiempo simulado y el bucle corre en milisegundos. El resultado sería
+    // `0 escrituras`, que parecería un ahorro enorme y sería **un banco que no
+    // ha comprobado nada**.
 
     // **EL MOTOR CON EL LATIDO CONECTADO, COMO EN `main.ts`.** Sin esto el motor arranca sin
     // cerrojo y la cuenta mediría un juego que no existe.
@@ -186,102 +172,107 @@ async function main() {
     await g.flush();
     await asentar();
 
+    // **EL RELOJ SIMULADO, Y POR QUÉ.** La regla del latido es "fresco o no
+    // fresco", y con el reloj de verdad habría que esperar 2,5 minutos entre
+    // vuelta y vuelta para ejercerla: este bloque tardaría diez minutos. Se
+    // adelanta `Date.now` a mano y se devuelve en `finally`: todo lo que decide
+    // por tiempo (`campoLatido`, el periodo del ranking) lee ese reloj, y los
+    // `setTimeout` siguen siendo los de verdad, así que nada se cuelga.
+    // Reloj frío a la fuerza: se avanza una ventana entera para que el primer
+    // latido esté caducado venga de donde venga el reloj de módulo (los bancos
+    // comparten proceso y otro banco pudo confirmar hace un momento).
+    const ahoraReal = Date.now;
+    let t = ahoraReal();
+    Date.now = () => t;
+    t += VENTANA_MS;
+    try {
+
     // **LO QUE HACÍA LA PRIMERA VERSIÓN Y MEDÍA MAL.** Contaba si `campoLatido()`
     // devolvía algo, pero el latido **no lo escribe quien lo pide**: lo escribe el
     // guardado, en un `setDoc` que el banco ya cuenta. O sea que medía "cuántas veces
     // pidió el motor un campo", que no es ninguna cifra comparable con nada. **Ahora se
     // cuenta `db.escrituras`, que es lo que cobra Firestore.**
     //
-    // **LO QUE SE RECORRE:** una hora del reloj del latido —160 latidos, uno cada 22,5
-    // segundos, el ritmo real leído de `VENTANA_MS`— y en cada uno el guardado de la
-    // partida llevando el campo de viaje.
-    //
-    // **EL PORQUÉ DE QUE EL RESULTADO NO SEA CERO, Y ES LO IMPORTANTE.** Si el campo de
-    // viaje se escribiera sin parar, el cerrojo se quedaría sin latido: la ventana son
-    // 45 segundos y el reloj del latido 22,5. El campo se pide **al ritmo del latido**,
-    // no al del guardado, y quien lo pide decide si toca. La cuenta sale de la regla de
-    // `campoLatido()`, no de un número puesto a mano.
-    //
-    // **Y AQUÍ SE ESPERA EL TIEMPO REAL ENTRE LATIDOS, QUE ES LO QUE HACE QUE ESTA
-    // COMPROBACIÓN VALGA.** El bucle pide el campo, lo escribe con el guardado y
-    // **confirma**, y luego **espera 22,5 segundos de reloj** antes del siguiente, que es
-    // lo que tardaría de verdad. Con eso el reloj de `campoLatido()` avanza solo y la regla
-    // "fresco o no fresco" se ejerce **de verdad**, en vez de estar movida a dedo.
-    //
-    // **LO QUE CUENTA ES `db.escrituras`, QUE ES LO QUE COBRA FIRESTORE.** Cada vuelta
-    // pide el campo una vez por el reloj del latido y otra por el guardado —**las dos
-    // llamadas existen en el juego real**: `mantenerLatido()` pregunta, y el guardado
-    // pregunta—; solo una de las dos lo consigue, y la que lo consigue no cuesta nada
-    // porque el viaje lo paga el guardado.
-    //
-    // **Y AQUÍ SE ESPERA EL TIEMPO REAL ENTRE LATIDOS.** El bucle escribe por la vía real —
-    // `anotarLatido()`, que es lo que llama `mantenerLatido()`— y **espera 22,5 segundos de
-    // reloj** antes del siguiente, que es lo que tardaría de verdad. Con eso el reloj de
-    // `campoLatido()` avanza solo y la regla "fresco o no fresco" se ejerce **de verdad**,
-    // en vez de estar movida a dedo.
+    // **LO QUE SE RECORRE:** cuatro ciclos al ritmo real —latido suelto y bloque
+    // con progreso— y en cada uno el guardado llevando el campo de viaje cuando
+    // toca. Cada ciclo son DOS escrituras contadas (una del latido suelto, una
+    // del bloque que escribe porque el saldo se movió); la fila no sale
+    // (quince minutos) y la tarjeta tampoco.
     //
     // **LO QUE CUENTA ES `db.escrituras`, QUE ES LO QUE COBRA FIRESTORE**, y por eso el
     // latido se escribe llamando a `anotarLatido()` y no a mano: **la función que decide es
     // la del juego**, y el contador es el que cobra.
-    let viajesPagados = 0;
+    let latidosSueltos = 0;
     db.escrituras = 0;
-    const pasoReal = Math.floor(45_000 / 2);
+    const pasoReal = Math.floor(VENTANA_MS / 2);
     for (let n = 0; n < 4; n++) {
       // 1. El reloj del latido, por su cuenta. Esto es `mantenerLatido()`.
       const antesDelLatido = db.escrituras ?? 0;
       await anotarLatido('test', 'dispositivo');
-      if ((db.escrituras ?? 0) > antesDelLatido) viajesPagados++;
+      if ((db.escrituras ?? 0) > antesDelLatido) latidosSueltos++;
       await asentar();
 
-      // 2. Y ahora el guardado, que **también** pide el campo y se lo lleva de viaje si el
+      // 2. Y ahora el bloque, que **también** pide el campo y se lo lleva de viaje si el
       //    reloj se lo da. Se le pone progreso de verdad, o B28 lo salta —y entonces no
       //    habría viaje que medir, que es lo mismo que no medir nada—.
-      const antesDelGuardado = db.escrituras ?? 0;
       g.getState().nanites += 1;
       await g.flush();
       await asentar();
-      if ((db.escrituras ?? 0) > antesDelGuardado) viajesPagados++;
 
-      // El tiempo real entre latidos. Cuatro vueltas son cuatro minutos de reloj: lo
-      // justo para ver el ritmo, no para medir un día entero.
-      if (n < 3) await new Promise((r) => setTimeout(r, pasoReal));
+      // El reloj simulado avanza el tiempo real entre latidos: la regla "fresco
+      // o no fresco" se ejerce **de verdad**, en vez de estar movida a dedo.
+      t += pasoReal;
     }
     const conViaje = db.escrituras ?? 0;
     await g.cleanup?.();
 
-    // **EL ANTES, CON LA MISMA ARITMÉTICA.** 160 latidos = 160 `setDoc` propios, uno
-    // cada 22,5 segundos, sin excepción: eso era exactamente lo que hacía el código de
-    // antes, y es el número que se puede decir en voz alta.
-    check('B29: el latido de viaje quita escrituras de verdad (y no las quita todas)',
-      conViaje > 0 && conViaje < 160,
-      `antes=160 por hora, ahora=${conViaje} en 4 minutos con el guardado de fondo`);
-    check('B29: y el latido se sigue escribiendo por su cuenta, no depende solo del guardado',
-      viajesPagados > 0,
-      `el reloj dio el campo ${viajesPagados} veces de 8 que se pidieron`);
+    check('B29: el cerrojo se mantiene vivo en su propio reloj (4 de 4)',
+      latidosSueltos === 4,
+      `latidos sueltos=${latidosSueltos} de 4`);
+    check('B29: y cuatro ciclos cuestan cuatro bloques + cuatro latidos, nada más',
+      conViaje === 8,
+      `escrituras=${conViaje} en 4 ciclos`);
+    } finally {
+      Date.now = ahoraReal;
+    }
   }
 
   // ---- 5. Y LO QUE NO SE PUEDE ROMPER: EL CERROJO SIGUE VIVO ----
   // **SI ESTA COMPROBACIÓN FALLA, EL AHORRO ES UN JUEGO DE MANIPULACIÓN.** El campo se
   // devuelve `null` cuando el reloj dice que aún no toca, y si ese reloj se atascara
   // correctamente, `campoLatido()` no devolvería NUNCA un campo nuevo: el cerrojo se
-  // quedaría sin latido, la ventana de 45 segundos caducaría y **la cuenta del jugador se
+  // quedaría sin latido, la ventana caducaría y **la cuenta del jugador se
   // quedaría libre para cualquiera**. El ahorro solo vale si el cerrojo sigue vivito.
   //
   // **LO QUE SE AFIRMA ES LA REGLA, NO EL GASTO:** dos llamadas seguidas no pagan dos
   // viajes, y la primera pasada después de un rato **sí** vuelve a pagar.
   {
-    const { campoLatido } = await import('../src/services/sessionService');
+    const { campoLatido, confirmarLatido, reiniciarRelojLatido } = await import('../src/services/sessionService');
 
-    // **POR QUÉ ESTA PRUEBA NO AFIRMA LA FORMA DEL CAMPO.** El reloj de `campoLatido` es de
-    // módulo y la prueba de arriba acaba de confirmar un latido, así que desde aquí **la
-    // función devuelve `null` siempre**. Afirmar aquí "el campo lleva el dispositivo" sería
-    // verdad **por el reloj de otra prueba**, no por el código, que es exactamente como una
-    // comprobación pasa en verde sin comprobar nada. **La forma se afirma arriba**, con el
-    // reloj frío; aquí solo se afirma la regla de frescura, que es la que decide si se paga.
-    const recienEscrito = campoLatido('test', 'd1');
-    check('B30: un latido recién escrito no se vuelve a pagar',
-      recienEscrito === null,
-      `inmediatamente después=${recienEscrito === null ? 'nulo (correcto)' : 'escrito otra vez'}`);
+    // **RELOJ FRÍO A LA FUERZA, EN LAS DOS DIRECCIONES.** El reloj es de módulo y
+    // los bancos comparten proceso: el bloque de arriba confirma con el reloj
+    // simulado adelantado, y sin este reset el banco siguiente mediría un
+    // cerrojo recién batido en vez del suyo. Se enfría antes para medir lo
+    // propio, y se devuelve frío después para no ensuciar al siguiente.
+    reiniciarRelojLatido();
+    try {
+      // **LA FORMA DEL CAMPO, CON EL RELOJ FRÍO.** Frío, la primera llamada
+      // recibe un campo de verdad; a partir de ahí devuelve `null` porque el
+      // latido está fresco.
+      const primerCampo: any = campoLatido('test', 'dispositivo-de-prueba');
+      const sesion = primerCampo?.sesion;
+      check('B30: el campo lleva el dispositivo y la hora, que es lo que mira el cerrojo',
+        sesion?.dispositivo === 'dispositivo-de-prueba'
+          && typeof sesion?.latido === 'number' && sesion.latido > 0,
+        `sesion=${JSON.stringify(sesion)}`);
+      confirmarLatido();
+      const recienEscrito = campoLatido('test', 'd1');
+      check('B30: un latido recién escrito no se vuelve a pagar',
+        recienEscrito === null,
+        `inmediatamente después=${recienEscrito === null ? 'nulo (correcto)' : 'escrito otra vez'}`);
+    } finally {
+      reiniciarRelojLatido();
+    }
   }
 
   resumen('B29: lo que cuesta jugar, medido acción por acción');

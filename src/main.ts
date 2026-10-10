@@ -6,18 +6,23 @@ import { cambiaDePestana } from './ui/fichas';
 import { formatNumber } from './utils/format';
 import './style.css';
 import './style.modules.css';
-import { auth, db } from './firebase';
+import { auth, db, SERVIDOR_ACTUAL } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { renderAuth } from './components/auth';
+import { renderServerSelect } from './components/serverSelect';
+import {
+  claveServidor,
+  guardarServidor,
+  hayServidorElegido
+} from './data/servidores';
 import { renderBloqueado, renderSesionOcupada, renderErrorDeCarga } from './components/blocked';
-import { ponMiUid } from './ui/tarjetaAjena';
 import { conTiempoLimite } from './utils/timeout';
 import {
   anotarLatido, campoLatido, confirmarLatido, consultarSesion, idDeSesion, soltarSesion,
   REINTENTO_MS, VENTANA_MS
 } from './services/sessionService';
 import { consultarBloqueo } from './services/bloqueoService';
-import { createGameLoop } from './gameLoop';
+import { createGameLoop, fijarCoalescenciaMs, RITMO_GUARDADO_MS } from './gameLoop';
 import { nanitesToNextCore } from './data/prestige';
 import type { BuffKey } from './data/buffs';
 import { showToast, syncToastOffset } from './utils/toast';
@@ -200,12 +205,22 @@ installAudioUnlock();
  */
 const ANON = 'Operativo';
 
+/**
+ * F103 · EL NOMBRE DE LA SESIÓN, SEPARADO POR SERVIDOR.
+ *
+ * La pestaña sobrevive a la recarga (`sessionStorage` no se borra), y cambiar
+ * de servidor recarga: sin sufijo, el nombre del operativo del 1 saludaría en
+ * el acceso del 2. Cada servidor recuerda su propio nombre.
+ */
+const CLAVE_USUARIO_SESION = claveServidor('cyberforge_username', SERVIDOR_ACTUAL);
+const CLAVE_NOMBRE_PENDIENTE = claveServidor('pending_username', SERVIDOR_ACTUAL);
+
 /** Nombre resuelto de la sesión actual, o null si aún no se ha obtenido. */
 let resolvedUsername: string | null = null;
 
 function resolveUsername(user: any, justRegistered?: string): string {
   const guardado = (() => {
-    try { return sessionStorage.getItem('cyberforge_username'); } catch { return null; }
+    try { return sessionStorage.getItem(CLAVE_USUARIO_SESION); } catch { return null; }
   })();
 
   const candidatos = [
@@ -221,7 +236,7 @@ function resolveUsername(user: any, justRegistered?: string): string {
   // Se cachea solo si no es el valor de reserva: guardar "Operativo" haría
   // que el error se auto-perpetuase.
   if (nombre !== ANON) {
-    try { sessionStorage.setItem('cyberforge_username', nombre); } catch { /* modo privado */ }
+    try { sessionStorage.setItem(CLAVE_USUARIO_SESION, nombre); } catch { /* modo privado */ }
   }
 
   if (nombre === ANON) {
@@ -263,12 +278,23 @@ async function returnToLogin(motivo?: string) {
   activeGameInstance = null;
   activeUser = null;
   resolvedUsername = null;
-  try { sessionStorage.removeItem('cyberforge_username'); } catch { /* modo privado */ }
+  try { sessionStorage.removeItem(CLAVE_USUARIO_SESION); } catch { /* modo privado */ }
 
   // Un pequeño retardo evita el parpadeo de "juego → acceso → juego" cuando
   // el token se renueva, que dispara `onAuthStateChanged` más de una vez.
   setTimeout(() => {
     returningToLogin = false;
+    // F103 · SIN SERVIDOR ELEGIDO NO HAY ACCESO: la cuenta vive en un
+    // servidor, y pedir el nombre antes de saber en cuál es pedir una llave
+    // sin decir de qué puerta. Elegir guarda y recarga, que es lo que crea
+    // el backend de verdad (los singletons ya están creados en esta carga).
+    if (!hayServidorElegido()) {
+      renderServerSelect(app, (servidor) => {
+        guardarServidor(servidor);
+        location.reload();
+      });
+      return;
+    }
     renderAuth(app, (loggedInUser, username) => {
       initGame(loggedInUser, username);
       // F49 · LAS NOTAS DE PARCHE, AL ENTRAR Y NO EN CADA NAVEGACIÓN.
@@ -349,7 +375,7 @@ async function comprobarBloqueo(uid: string, nombre: string): Promise<boolean> {
   activeGameInstance = null;
   activeUser = null;
   resolvedUsername = null;
-  try { sessionStorage.removeItem('cyberforge_username'); } catch { /* modo privado */ }
+  try { sessionStorage.removeItem(CLAVE_USUARIO_SESION); } catch { /* modo privado */ }
 
   // La sesión se cierra para que no quede una sesión viva detrás de la
   // pantalla. Si el jugador recarga, `onAuthStateChanged` lo encontrará
@@ -514,15 +540,18 @@ function limpiarPantallaOcupada() {
 /**
  * Cada cuánto se refresca el latido mientras se está jugando.
  *
- * **LA MITAD DE LA VENTANA, Y NO UN TERCIO.** Con la ventana en 45 s, refrescar cada
- * 15 s eran tres refrescos por ventana; 22 s son dos, y es el mínimo que sigue
+ * **LA MITAD DE LA VENTANA, Y NO UN TERCIO.** Con la ventana en 5 min (F104),
+ * refrescar cada 2,5 min son dos refrescos por ventana, y es el mínimo que sigue
  * distinguiendo "esta pestaña viva" de "la otra se ha ido" sin quedarse sin margen. La
  * comprobación que importa es la del **arranque** —"¿hay otra sesión con un latido
  * reciente?"—, y para eso basta con que el latido propio no envejezca más que la ventana.
+ * El ritmo sale de `VENTANA_MS` y no está escrito aquí, así que si la ventana
+ * cambia, este intervalo la sigue.
  *
  * Y es una escritura de las que cuentan para la cuota, que es compartida por todo el
  * proyecto: un tercio de las escrituras del juego eran solo para mantener vivo un
- * reloj que el propio jugador no ve.
+ * reloj que el propio jugador no ve. Por eso el latido viaja de viaje en el
+ * guardado siempre que puede (B30) y este intervalo solo escribe cuando toca.
  */
 /**
  * B33 · EL LATIDO SOLO CUANDO HAY ALGUIEN MIRANDO, Y LO QUE HACE FALTA AL VOLVER.
@@ -535,10 +564,10 @@ function limpiarPantallaOcupada() {
  * peor sitio posible para gastar.
  *
  * **LA IDEA, Y POR QUÉ NO ES "BAJAR EL RITMO".** Con la pestaña oculta, el latido **se
- * para**. No se escribe menos a menudo: **no se escribe**. La ventana del cerrojo sigue
- * siendo de 45 segundos, así que al dejar de batirla el cerrojo **caduca**, y con él se
- * libera la cuenta. Eso es **justo lo que se quiere**: una pestaña dormida no debería
- * reservar la cuenta, y menos todavía cuando el jugador está en el móvil.
+ * para**. No se escribe menos a menudo: **no se escribe**. La ventana del cerrojo (5 min
+ * desde F104) **caduca**, y con él se libera la cuenta. Eso es **justo lo que se
+ * quiere**: una pestaña dormida no debería reservar la cuenta, y menos todavía
+ * cuando el jugador está en el móvil.
  *
  * **LO QUE NO SE PUEDE HACER, Y ES LA MITAD IMPORTANTE: SOLO PARAR.**
  *
@@ -560,7 +589,7 @@ function limpiarPantallaOcupada() {
  * la construcción durante el sueño, que no es un amenaza. Ahora protects contra lo único
  * que es real —dos sesiones **activas** a la vez— y ese hueco es el que se cierra.
  *
- * **LO QUE NO SE ROMPE, Y POR QUÉ.** La ventana de 45 segundos **no se toca**, así que una
+ * **LO QUE NO SE ROMPE, Y POR QUÉ.** La ventana **solo se alargó** (F104), así que una
  * recarga normal o un móvil que cambia de aplicación no se cuelan. El bloqueo **sigue
  * dando el aviso de "abierto en otro sitio"**. Y **el latido del motor** —el que viaja en el
  * documento de la partida— **sigue escribiéndose igual**, porque ese va dentro del guardado y
@@ -650,8 +679,8 @@ onAuthStateChanged(auth, async (user) => {
   // la carga desde cero.
   if (activeGameInstance && activeUser?.uid === user.uid) return;
 
-  const justRegistered = sessionStorage.getItem('pending_username');
-  if (justRegistered) sessionStorage.removeItem('pending_username');
+  const justRegistered = sessionStorage.getItem(CLAVE_NOMBRE_PENDIENTE);
+  if (justRegistered) sessionStorage.removeItem(CLAVE_NOMBRE_PENDIENTE);
 
   const nombre = resolveUsername(user, justRegistered ?? undefined);
 
@@ -739,19 +768,19 @@ function cuotaAgotadaComoError(): unknown {
 const PLAZO_DE_ARRANQUE_MS = 25_000;
 
 async function initGame(user: any, username?: string) {
-  // **EL UID DE QUIÉN ESTÁ MIRANDO, Y POR QUÉ SE PONE AQUÍ Y NO EN EL RANKING.**
-  // El contador de visitas es lo único que necesita saber quién eres, y la regla de
-  // "no te cuentes a ti mismo" está en `registrarVisita()`. Que el uid esté en un solo
-  // sitio de módulo significa que **no puede quedarse viejo en dos*: si lo leyera el
-  // ranking de otra manera, un día una de las dos se quedaría sin poner y
-  // acabarías contándote a ti mismo sin que nadie lo notara.
-  ponMiUid(user?.uid ?? '');
+  // F104 · Sin contador de visitas ya no hace falta saber quién mira: se quitó
+  // `ponMiUid()` con `registrarVisita()`, y abrir un perfil ajeno no escribe.
   activeUser = user;
   activeGameInstance = await createGameLoop(user, (state: any, isAfk?: boolean) => {
     updateUI(state, isAfk ?? false);
   }, username, (achievement: any) => {
     showAchievementPopup(achievement);
   }, () => campoLatido(user?.uid ?? '', idDeSesion()), confirmarLatido);
+  // F104 · Solo producción agrupa: a partir de aquí las acciones anotan la
+  // cola local y la red sale una vez por bloque. La ventana vale 0 por
+  // defecto para que los bancos (y las pantallas de prueba) sigan guardando
+  // en el acto como siempre.
+  fijarCoalescenciaMs(RITMO_GUARDADO_MS);
 
   /**
    * B35 · LA CARGA VIENE A MEDIAS: NO SE MONTA EL JUEGO, QUE ES LO QUE FALTA.
@@ -1119,7 +1148,7 @@ function renderRoute(route: Route) {
     case 'ranking':
       // El estado va aparte: `activeUser` es el usuario de Firebase y no lleva la partida.
   // La firma lo dice y el comentario de `renderRankings` explica por qué.
-  renderRankings(app, activeUser, go, activeGameInstance?.getState?.());
+  renderRankings(app, activeUser, go, activeGameInstance?.getState?.(), activeGameInstance);
       break;
     case 'prestigio':
       renderPrestigePage(app, activeGameInstance, go);
@@ -1812,4 +1841,20 @@ function stopCompanionClicks() {
     clearInterval(avisoIngresoInterval);
     avisoIngresoInterval = null;
   }
+}
+
+// ==========================================================================
+//  F103 · LA PRIMERA PANTALLA, ANTES DE QUE FIREBASE CONTESTE.
+//
+//  Sin servidor elegido no hay a dónde acceder, así que no se espera al
+//  `onAuthStateChanged`: el selector se pinta ya, en la primera pasada. Si
+//  Firebase contesta "sin sesión" después, `returnToLogin` vuelve a pintar
+//  lo mismo (idempotente); si contesta con sesión recordada de un despliegue
+//  viejo sin elección guardada, la serie del build decide, como hasta ahora.
+// ==========================================================================
+if (!hayServidorElegido()) {
+  renderServerSelect(app, (servidor) => {
+    guardarServidor(servidor);
+    location.reload();
+  });
 }

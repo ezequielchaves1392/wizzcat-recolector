@@ -82,17 +82,18 @@ async function main() {
   }
 
   // ---- 4. EL SEMÁFORO, CON LOS NÚMEROS MEDIDOS ----
-  // Verde hasta 6 (el idle sano son ~4-5), naranja hasta 12, rojo más allá.
+  // Verde hasta 2 (el ritmo sano con el agrupado es ~1/min: un bloque cada 2
+  // min + fila y tarjeta cada 15), naranja hasta 6, rojo más allá.
   // Si alguien mueve un umbral en `contadorOps.ts`, es aquí donde canta.
   {
-    check('F96: el idle sano (4W) es verde',
-      colorDeRitmo(4, 0) === 'verde', colorDeRitmo(4, 0));
-    check('F96: el tope verde (6W) sigue siendo verde',
-      colorDeRitmo(6, 0) === 'verde', colorDeRitmo(6, 0));
-    check('F96: siete escrituras ya son naranja',
-      colorDeRitmo(7, 0) === 'naranja', colorDeRitmo(7, 0));
-    check('F96: trece escrituras son rojo',
-      colorDeRitmo(13, 0) === 'rojo', colorDeRitmo(13, 0));
+    check('F96: el ritmo sano (1W) es verde',
+      colorDeRitmo(1, 0) === 'verde', colorDeRitmo(1, 0));
+    check('F96: el tope verde (2W) sigue siendo verde',
+      colorDeRitmo(2, 0) === 'verde', colorDeRitmo(2, 0));
+    check('F96: tres escrituras ya son naranja',
+      colorDeRitmo(3, 0) === 'naranja', colorDeRitmo(3, 0));
+    check('F96: siete escrituras son rojo',
+      colorDeRitmo(7, 0) === 'rojo', colorDeRitmo(7, 0));
     check('F96: abrir el ranking (40R de golpe) es naranja, no rojo',
       colorDeRitmo(0, 40) === 'naranja', colorDeRitmo(0, 40));
     check('F96: repetir la ráfaga (41R) sí es rojo',

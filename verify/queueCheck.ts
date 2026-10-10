@@ -370,6 +370,46 @@ async function main() {
   }
 
   // =========================================================================
+  //  7b. Un registro TOCADO A MANO se descarta, y el viejo sin firma vale (F104)
+  // =========================================================================
+  //
+  // La firma es disuasoria, no seguridad: lo que se comprueba es que un disco
+  // tocado no se adopta (se tira del servidor) y que el motivo queda para
+  // avisar. Y que los registros v1 de antes de la firma se siguen aceptando:
+  // invalidarlos todos en la actualización sería tirar el progreso sin subir
+  // de quien tenía cola pendiente, que es justo lo que la cola evita.
+  {
+    const { detalleAnomaliaCola } = await import('../src/services/naniteQueue');
+    await boot(baseSave([collector('r1', 3)]));
+    // Anotación válida y más nueva que el documento...
+    anotarPendiente('test', 7777, 0, 0, 0, 0, 0);
+    // ...tocada a mano sin refirmar.
+    const tocado = JSON.parse(cola());
+    tocado.nanites = 999999999;
+    (globalThis as any).localStorage._datos.set(CLAVE, JSON.stringify(tocado));
+    const g = await reload();
+    check('firma: un saldo tocado a mano NO se adopta',
+      nanites(g) === 1000, 'nanites=' + nanites(g));
+    check('firma: ...y queda el motivo para avisar en vez de bloquear',
+      detalleAnomaliaCola() === 'firma', 'motivo=' + detalleAnomaliaCola());
+    if (g) await g.cleanup();
+
+    // Y el v1 heredado, sin firma, se acepta como antes. La marca va un minuto
+    // al futuro para que no dependa del milisegundo: lo que se mide es la
+    // aceptación, no la comparación por fecha, que ya la cubren las pruebas 4-5.
+    (globalThis as any).localStorage._datos.set(CLAVE, JSON.stringify({
+      v: 1, uid: 'test', nanites: 4321, producidas: 0, clics: 0,
+      nucleos: 0, totalNucleos: 0, reinicios: 0, ts: Date.now() + 60_000
+    }));
+    const g2 = await reload();
+    check('firma: un registro v1 sin firma se sigue aceptando',
+      nanites(g2) === 4321, 'nanites=' + nanites(g2));
+    check('firma: ...y no deja anomalía',
+      detalleAnomaliaCola() === '', 'motivo=' + detalleAnomaliaCola());
+    if (g2) await g2.cleanup();
+  }
+
+  // =========================================================================
   //  8. Nada de esto estropea el guardado normal
   // =========================================================================
   {

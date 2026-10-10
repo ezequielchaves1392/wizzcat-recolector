@@ -31,7 +31,6 @@
 import { db } from '../firebase';
 import { collection, doc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { contarOp } from './contadorOps';
-import { VENTANA_MS } from './sessionService';
 
 /** Peso de cada logro público en la puntuación global. */
 export const ACHIEVEMENT_WEIGHT = 50_000;
@@ -74,70 +73,6 @@ export interface LeaderboardEntry {
   banner?: string;
   cosmetics?: { title: string; frame: string; banner: string };
   updatedAt: number;
-  /**
-   * Cuándo se vio el latido de este jugador. **Solo lo escribe quien juega**, así que
-   * que esté o no es lo que dice `estaOnline()` y no lo que dice que el campo exista.
-   */
-  latido?: number;
-}
-/**
- * CUÁNDO SE CONSIDERA QUE ALGUIEN ESTÁ ONLINE.
- *
- * **ES LA MISMA VENTANA QUE LA SESIÓN OCUPADA, Y TIENE QUE SERLA.** `VENTANA_MS` no se
- * reescribe aquí: se importa de `sessionService`. Un jugador no puede estar "en línea" en
- * el ranking y a la vez tener la cuenta libre para entrar desde otro sitio, y si cada
- * sitio tuviera su propia ventana —aunque se escribieran el número el mismo día—
- * habría un momento en que las dos cosas dijeran cosas distintas. Una ventana, dos
- * preguntas.
- *
- * ## Y POR QUÉ EL LATIDO NO VIENE DE `users/{uid}/sesion`
- *
- * El latido de la sesión ya se escribe, cada quince segundos, en
- * `users/{uid}/sesion`. Y **no se puede leer desde el ranking**, porque las reglas dan a
- * `users/{uid}` solo a su dueño y a un admin: es la misma regla que impide que un jugador
- * sepa que está suspendido. Copiar el latido al documento de la clasificación es, por
- * tanto, la única forma honesta de enseñarlo —y no una chapuza: el documento de la
- * clasificación es público por definición y su dueño lo puede escribir, que es
- * exactamente lo que hace falta—.
- *
- * ## Y POR QUÉ UN DOCUMENTO QUE NO TIENE LATIDO ES OFFLINE
- *
- * Sin campo, sin jugador: es el caso de las filas de ejemplo, de los documentos
- * antiguos y de cualquier cuenta que no haya jugado desde que esto existe. Tratarlo como
- * online por defecto sería una mentira en la fila de arriba, y una mentira verde es la
- * peor de las dos.
- */
-export function estaOnline(latido: number | null | undefined, ahora: number = Date.now()): boolean {
-  if (typeof latido !== 'number' || !isFinite(latido) || latido <= 0) return false;
-  // Un reloj que va hacia atrás —un cambio de hora, un dispositivo con la hora mal— daría
-  // una diferencia negativa, y `negativo <= ventana` es `true`: un latido del futuro
-  // marcaría online para siempre. Se compara con las dos condiciones.
-  return ahora - latido < VENTANA_MS && ahora >= latido - VENTANA_MS;
-}
-
-/**
- * HACE CUÁNTO SE VIO A ALGUIEN, EN MINUTOS, HORAS O DÍAS.
- *
- * Es lo que lee la fila del ranking donde antes solo decía "offline": el
- * latido ya viaja en la fila, así que decir "hace 3 h" no cuesta una lectura
- * más. Y **los tramos tienen techo**: minutos hasta 59, horas hasta 23, días
- * hasta 29 y después "más de un mes". Sin techo, un latido viejo de meses
- * saldría como minutos de seis cifras, que no dice nada y parece un bug.
- *
- * Devuelve `null` cuando no hay latido que medir, y la fila se queda con el
- * "offline" de siempre: sin dato no hay frase, y una frase inventada sería la
- * mentira contraria.
- */
-export function textoUltimaConexion(latido: number | null | undefined, ahora: number = Date.now()): string | null {
-  if (typeof latido !== 'number' || !isFinite(latido) || latido <= 0) return null;
-  const min = Math.floor(Math.max(0, ahora - latido) / 60_000);
-  if (min < 1) return 'hace un momento';
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return d === 1 ? 'hace 1 día' : `hace ${d} días`;
-  return 'hace más de un mes';
 }
 
 
@@ -316,14 +251,12 @@ export async function savePlayerScore(
  * no existe. Y por eso se exportan y hay una prueba que mira que sigan existiendo: es
  * justo el fallo que no se ve, un id que nadie encuentra y una fila a medio pintar.
  */
-// Las dos primeras llevan `latido` a propósito: **una en línea y una con el latido viejo**,
-// porque un estado que no se puede ver en `preview.html` es un estado que no se ha
-// revisado. Las dos siguientes no llevan ninguno, que es el caso de un documento
-// escrito antes de que esto existiera, y también tiene que verse bien.
+// F104 · Sin `latido`: ya nadie escribe presencia, y un ejemplo con un campo
+// que el juego no escribe enseña un estado que no se puede revisar.
 
 export const FILAS_DE_EJEMPLO: LeaderboardEntry[] = [
-  { uid: 'mock_1', username: 'QuantumApex', score: 1450200, nanites: 1450200, totalClicks: 8420, achievements: 12, secretAchievements: 1, forgedCount: 8, cores: 14, updatedAt: Date.now(), latido: Date.now() - 4_000, title: 'title_champion', frame: 'frame_gold', banner: 'banner_crown' },
-  { uid: 'mock_2', username: 'NexusGrid', score: 12100, nanites: 12100, totalClicks: 312, achievements: 4, secretAchievements: 0, forgedCount: 0, cores: 0, updatedAt: Date.now(), latido: Date.now() - 600_000, title: 'title_recruited', frame: 'frame_steel', banner: 'banner_grid' },
+  { uid: 'mock_1', username: 'QuantumApex', score: 1450200, nanites: 1450200, totalClicks: 8420, achievements: 12, secretAchievements: 1, forgedCount: 8, cores: 14, updatedAt: Date.now(), title: 'title_champion', frame: 'frame_gold', banner: 'banner_crown' },
+  { uid: 'mock_2', username: 'NexusGrid', score: 12100, nanites: 12100, totalClicks: 312, achievements: 4, secretAchievements: 0, forgedCount: 0, cores: 0, updatedAt: Date.now(), title: 'title_recruited', frame: 'frame_steel', banner: 'banner_grid' },
   { uid: 'mock_3', username: 'AgujaCero', score: 41500, nanites: 41500, totalClicks: 2105, achievements: 3, secretAchievements: 0, forgedCount: 1, cores: 5, updatedAt: Date.now(), title: 'title_smith', frame: 'frame_ember', banner: 'banner_sunset' },
   { uid: 'mock_4', username: 'ByteSmith', score: 9800, nanites: 9800, totalClicks: 640, achievements: 7, secretAchievements: 1, forgedCount: 3, cores: 2, updatedAt: Date.now(), title: 'title_ghost', frame: 'frame_matrix', banner: 'banner_datastorm' }
 ];

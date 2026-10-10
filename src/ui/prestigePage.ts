@@ -19,7 +19,7 @@
 
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip } from './pageShell';
-import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META } from '../data/tree';
+import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META, COLUMNA_META } from '../data/tree';
 import { canBuyNode, nextCores, coreProgress, nanitesToNextCore, treeCompletion, puntosEnRama, UMBRAL_PUNTOS_RAMA } from '../data/prestige';
 import { formatNumber } from '../utils/format';
 import { bonusLabel } from './bonusLabels';
@@ -293,9 +293,19 @@ export function renderPrestigePage(
           <div class="label-caps mt-2 mb-1.5 ${puntos < (UMBRAL_PUNTOS_RAMA[tier] ?? 0) ? 'opacity-50' : ''}">
             T${tier}${puntos < (UMBRAL_PUNTOS_RAMA[tier] ?? 0) ? ` · pide ${UMBRAL_PUNTOS_RAMA[tier]}` : ''}
           </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-            ${(porTier[tier] || []).map(node => nodeCell(node)).join('')}
-          </div>
+          ${(['izq', 'centro', 'der'] as const).map(col => {
+            // F102 · Cada fila se parte en sus tres columnas: los dos lados a
+            // elegir y el centro común. Sin cabecera, tres grupos de nodos son
+            // tres grupos que el jugador tiene que bautizar solo. El nombre
+            // sale de `COLUMNA_META`, al lado del dato, no escrito a mano (R2).
+            const grupo = (porTier[tier] || []).filter(n => (n.columna || 'centro') === col);
+            if (grupo.length === 0) return '';
+            return `
+            <div class="text-[10px] font-mono text-[var(--text-muted)] mt-1 mb-1">${COLUMNA_META[ui.tab]?.[col] || col}</div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-1">
+              ${grupo.map(node => nodeCell(node)).join('')}
+            </div>`;
+          }).join('')}
         `).join('')}`;
       })()}
 

@@ -47,6 +47,11 @@ async function main() {
   //     Se equipa marco y banner por la API del motor (la única que puede
   //     mutar el estado, R1) y se mira lo guardado, no la memoria: lo que
   //     solo vive en memoria es un bug (R13/R28).
+  //
+  //     F104 · La fila sale como mucho una vez cada quince minutos, así que
+  //     equipar no la republica en el acto: se adelanta el reloj al siguiente
+  //     periodo y se fuerza el bloque, igual que haría el temporizador. Sin
+  //     reboot en medio no hay comparación de fechas que romper.
   // -----------------------------------------------------------------------
   {
     const g = await boot(baseSave([], {
@@ -63,11 +68,17 @@ async function main() {
     check('equipar banner por la API funciona',
       g.equipCosmetic('banner', 'banner_abyss') === true,
       `banner=${g.getState().cosmetics.banner}`);
-    // El guardado va sin await: tres turnos para que los dos `setDoc`
-    // (juego + ranking) terminen antes de mirar.
-    await new Promise((r) => setTimeout(r, 0));
-    await new Promise((r) => setTimeout(r, 0));
-    await new Promise((r) => setTimeout(r, 0));
+    const ahoraReal = Date.now;
+    let t = ahoraReal();
+    Date.now = () => t;
+    try {
+      t += 16 * 60_000;
+      await g.flush();
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+    } finally {
+      Date.now = ahoraReal;
+    }
     const doc = (globalThis as any).__MEM_DB__?.[RANK_DOC] ?? {};
     check('el marco equipado llega al documento del ranking',
       doc.frame === 'frame_neon',
@@ -809,6 +820,49 @@ async function main() {
     check('dano ajeno: sin arma equipada el recalculado es cero',
       d0.total === 0 && d0.intrinseco === 0 && d0.partida === 0,
       `total=${d0.total}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  B38 · LA FILA PROPIA YA NO PINTA LA FOTO
+  // -------------------------------------------------------------------------
+  //
+  //  La foto del documento llega con minutos de retraso (ritmo de publicación
+  //  + caché de lectura) y la ficha de al lado es en vivo: comparar las dos
+  //  era comparar dos momentos. El barrido de 1800 casos ató que la cuenta es
+  //  la misma en todos lados, así que lo que fallaba era el MOMENTO, no la
+  //  cuenta. Para la fila propia no hace falta la foto —el juego está aquí—:
+  //  se recalcula al pintar con la misma cadena de la ficha y cuesta cero
+  //  lecturas. Las ajenas siguen siendo fotos, porque no hay de dónde
+  //  recalcularlas sin leer cuarenta tarjetas.
+  {
+    const g = await boot(baseSave([
+      collector('r9', 5, { potential: 3, damage: danioDeRango(5, 3), level: 4, affixes: ['aff_bulwark'] })
+    ], {
+      equippedCollectorId: 'r9',
+      nodeLevels: { core_edge: 2 },
+      unlockedAchievements: ['first_click'],
+      activeCompanions: ['mp'],
+      companions: [{ id: 'mp', name: 'Multi', type: 'multiplier', power: 0.5, tier: 1 }]
+    }));
+    const { filaPropiaViva } = await import('../src/components/rankings');
+    const viva = g.getStatFilas('r9');
+    // Una foto vieja de verdad: publicada antes de la última mejora.
+    const fotoVieja: any = {
+      uid: 'test', username: 'T', score: 1, danoFinal: 1, danoArma: 1, updatedAt: 0
+    };
+    const propia = filaPropiaViva(fotoVieja, g, s(g));
+    check('B38: la fila propia recalcula el daño en vivo, no pinta la foto',
+      propia.danoFinal === viva.total && propia.danoArma === viva.delArma,
+      `fila=${propia.danoFinal} ficha=${viva.total}`);
+    check('B38: y lo demás de la fila no se toca',
+      propia.uid === 'test' && propia.username === 'T' && propia.score === 1,
+      'intacta');
+    check('B38: sin juego la fila sale como viene',
+      filaPropiaViva(fotoVieja, null, null).danoFinal === 1,
+      'passthrough');
+    check('B38: sin equipado no se inventa nada',
+      filaPropiaViva(fotoVieja, g, {}).danoFinal === 1,
+      'passthrough');
   }
 
   // -------------------------------------------------------------------------

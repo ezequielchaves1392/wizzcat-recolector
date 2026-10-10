@@ -161,12 +161,15 @@ discute:
 
 ## 5. Guardado y su red de seguridad
 
-`saveToFirebase()` es un protocolo de tres pasos (`gameLoop.ts:1510-1607`):
+`saveToFirebase()` es un protocolo de tres pasos, en bloque cada dos minutos
+(F104: las acciones solo anotan la cola local y la red sale una vez por bloque):
 
-1. **`localStorage` primero, síncrono.** El saldo queda en disco antes de tocar
-   la red. Esto es lo que hace que un fallo de red cueste cero.
-2. **`setDoc(users/{uid})` + `setDoc(rankings/{uid})`**, con `merge: true`.
-3. **Solo si ambos confirman, se vacía la cola.**
+1. **`localStorage` primero, síncrono** (en cada acción y cada diez segundos con
+   pasivo corriendo). El saldo queda en disco antes de tocar la red. Esto es lo
+   que hace que un fallo de red cueste cero y que un F5 pierda segundos.
+2. **`setDoc(users/{uid})`**, con `merge: true`. La fila de `rankings/{uid}` y la
+   tarjeta de `perfiles/{uid}` salen como mucho una vez cada cuarto de hora.
+3. **Solo si confirman, se vacía la cola.**
 
 La cola guarda un **snapshot absoluto con marca de tiempo**, no un incremento.
 Por eso un reinicio de prestigio no se deshace al recargar sin red, y por eso un
@@ -317,9 +320,11 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 
 14. **Dos guardados a la vez se llevaban por delante la red de seguridad.**
     **ARREGLADO.** `saveToFirebase` no se espera en ninguno de los treinta sitios
-    que la llaman, más un intervalo de 15 s y un `beforeunload`. Dos guardados
+    que la llaman, más el bloque cada dos minutos y un `beforeunload`. Dos guardados
     solapados eran la norma, no el caso raro: el jugador compra mientras el
-    guardado anterior sigue en el aire.
+    guardado anterior sigue en el aire. (F104 añadió un caso medido: dos
+    solapados veían el envío de la fila pendiente a la vez y la escribían los
+    dos; ahora hay un flag en vuelo.)
 
     El guardado A confirmaba su operación y vaciaba la cola **a pelo**, así que
     se llevaba la anotación de un guardado más nuevo que había fallado. El

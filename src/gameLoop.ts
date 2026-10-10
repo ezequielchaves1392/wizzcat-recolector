@@ -4,7 +4,7 @@ import { formatNumber } from './utils/format';
 import { db } from './firebase';
 import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { contarOp } from './services/contadorOps';
-import { anotarPendiente, hayPendientes, leerCola, confirmarCola } from './services/naniteQueue';
+import { anotarPendiente, hayPendientes, leerCola, confirmarCola, detalleAnomaliaCola } from './services/naniteQueue';
 import { rollCrateReward } from './components/crateLoot';
 import { esCuotaAgotada, renderCuotaAgotada } from './components/blocked';
 import { publicarTarjeta } from './services/profileService';
@@ -17,7 +17,7 @@ import { SECRET_ACHIEVEMENTS } from './data/achievements';
 // valoración. Se re-exportan aquí para no romper los imports existentes.
 export { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
-import { aggregateBonuses, canBuyNode, pendingCores, nextCores, fotoInicial } from './data/prestige';
+import { aggregateBonuses, canBuyNode, pendingCores, nextCores, fotoInicial, TOPE_CRITICO, TOPE_DESCUENTO, TOPE_COMP_DESCUENTO } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
 import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraAfijosDeCompaneros, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, efectoDeAfijosDeCompanero, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
@@ -183,7 +183,7 @@ import {
  * una cantidad que ya justifica una pulsación y no un cálculo.
  */
 export const MAX_INTENTOS_AUTOMATICOS = 400;
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /**
  * B40 · LA LLAVE DEL MODO PRUEBAS, Y POR QUÉ ESTÁ EXPORTADA.
@@ -199,6 +199,43 @@ export const SAVE_VERSION = 11;
  * un día no coincide y un modo que no se apaga. Ver `modoPruebas()`.
  */
 export const CLAVE_MODO_PRUEBAS = 'cyberforge_modo_pruebas';
+
+/**
+ * F104 · CADA CUÁNTO ESCRIBE LA PARTIDA A LA RED: DOS MINUTOS, Y EN BLOQUE.
+ *
+ * La cuota de Firestore (20.000 escrituras al día, de todo el proyecto) se
+ * agotaba con picos de 150 escrituras por minuto: cada acción del jugador
+ * llamaba a `saveToFirebase()` y cada llamada escribía hasta tres documentos
+ * (partida + ranking + tarjeta). El guardado automático no era el problema;
+ * el problema era que **no había guardado automático que valga**, porque cada
+ * acción escribía a su propio ritmo.
+ *
+ * Ahora la red se toca como mucho una vez por periodo: las llamadas intermedias
+ * anotan la cola local (gratis, síncrona) y vuelven. La cola es la que hace que
+ * esto no pierda nada: un F5 entre dos bloques recupera desde el disco.
+ */
+export const RITMO_GUARDADO_MS = 120_000;
+
+/**
+ * F104 · LA VENTANA DE AGRUPADO, Y POR QUÉ SE PUEDE MOVER PARA LOS BANCOS.
+ *
+ * Vale 0 salvo que alguien la suba: con 0, cada llamada guarda en el acto,
+ * que es lo que hacen los bancos (miden reglas, no ritmos) y lo que hacían
+ * todas las llamadas antes de este cambio. El juego la sube a
+ * `RITMO_GUARDADO_MS` al arrancar (`main.ts`): solo producción agrupa, y lo
+ * dice en un sitio. Los bancos de cuota la suben a propósito, que son los que
+ * miden el agrupado.
+ */
+let coalescenciaMs = 0;
+
+/**
+ * Fija la ventana de agrupado. Solo la usan los bancos: el juego no la toca
+ * nunca, y un juego que se cambiara su propio ritmo según quién lo mire sería
+ * un juego que miente en las pruebas y gasta en producción.
+ */
+export function fijarCoalescenciaMs(ms: number): void {
+  coalescenciaMs = Math.max(0, Math.floor(ms));
+}
 
 /**
  * B40 · SI HAY QUE SALTARSE LA TABLA EN ESTE GUARDADO.
@@ -506,6 +543,49 @@ export async function createGameLoop(
   let ultimaFirma = '';
 
   /**
+   * F104 · CUÁNDO TOCÓ LA RED POR ÚLTIMA VEZ, PARA EL AGRUPADO.
+   *
+   * Vive aquí y no en el módulo por el mismo motivo que `ultimaFirma`: el
+   * estado del guardado pertenece a la partida que se está guardando. Una
+   * partida nueva empieza con el reloj a cero, que significa "hace mucho",
+   * así que el primer guardado siempre viaja.
+   */
+  let ultimoEnvioRed = 0;
+
+  /**
+   * F104 · CUÁNDO SE PUBLICÓ LA FILA POR ÚLTIMA VEZ, Y POR QUÉ VIVE AQUÍ.
+   *
+   * Estaba en el módulo y cada arranque en el mismo proceso la heredaba del
+   * anterior: una partida nueva dejaba de publicar su fila porque otra ya lo
+   * había hecho, y un banco medía lo que había hecho el banco anterior. Como
+   * `ultimaFirma`, el estado del guardado pertenece a la partida que se está
+   * guardando. Se declara antes de la carga por el mismo motivo que
+   * `ultimaFirma`: el primer guardado ocurre durante la carga.
+   */
+  let rankingUltimoEnvio = 0;
+
+  /**
+   * F104 · LA FILA QUE NO LLEGÓ, Y POR QUÉ NO ESPERA AL PERIODO.
+   *
+   * Se pone en el `catch` del ranking y se quita al escribir. Sin esto, un fallo
+   * dejaría la fila congelada hasta que pasara el periodo entero: el siguiente
+   * bloque la vería pendiente y la reintentaría.
+   */
+  let rankingFalloPendiente = false;
+
+  /**
+   * F104 · HAY UN ENVÍO DE LA FILA EN EL AIRE, Y POR QUÉ NO SE PISA.
+   *
+   * Dos guardados se solapan de forma normal (una acción mientras el bloque
+   * anterior sigue en el aire, o dos al arrancar), y los dos ven el envío
+   * pendiente antes de que ninguno marque: sin este flag, los dos escriben la
+   * fila y Firestore cobra las dos. El segundo no pierde nada esperando: la
+   * partida ya viaja en su propio documento, y la fila sale en el siguiente
+   * periodo con datos más nuevos.
+   */
+  let rankingEnVuelo = false;
+
+  /**
    * ¿Venía cola de la sesión anterior?
    *
    * Se pregunta **aquí**, antes de cargar, y no junto al `setTimeout` que la
@@ -662,7 +742,8 @@ export async function createGameLoop(
     // --- Bonificaciones agregadas del arbol (se recalculan al cargar) ---
     bonus: {
       clickMult: 0, passiveMult: 0, costReduction: 0, sellMult: 0,
-      craftLuck: 0, consolationBonus: 0, autoClick: 0, afkHours: 0,
+      clickPorForja: 0,
+      craftLuck: 0, forgePotential: 0, consolationBonus: 0, autoClick: 0, afkHours: 0,
       offlineClicks: 0, crateLuck: 0, coreGain: 0, storageSlots: 0, companionSlots: 0,
       sobrecargaCada: 0, sobrecargaMult: 0, colmenaPorComp: 0, jackpotChance: 0, obraMaestra: 0,
       licenciaT2: 0, licenciaT3: 0, ecoDoble: 0,
@@ -931,7 +1012,10 @@ function unidadesVendibles(item: any, pedidas?: number): number {
 function precioUnitarioTienda(itemKey: string): number {
   const item = (STORE_ITEMS as Record<string, { cost: number }>)[itemKey];
   if (!item) return 0;
-  return Math.floor(item.cost * (1 - state.bonus.costReduction));
+  // F102 · El descuento topa en el motor, no en el árbol: por muchos nodos que
+  // sumen, el precio nunca baja de la mitad ni sale negativo (que regalaría
+  // nanitas al comprar, el bug que este suelo evita por construcción).
+  return Math.floor(item.cost * (1 - Math.min(TOPE_DESCUENTO, state.bonus.costReduction)));
 }
 
 /**
@@ -1539,37 +1623,33 @@ const AFK_THRESHOLD_MS = 60000;
 /**
  * Cada cuánto se escribe el documento de la clasificación.
  *
- * **DIEZ MINUTOS, Y AQUÍ ESTÁ EL AHORRO DE VERDAD.** Antes de este cambio el guardado
- * escribía DOS documentos cada quince segundos, y el segundo era el ranking: la tabla
- * de posiciones no es una cosa que necesite saber que subes un entero por segundo. Con
- * el juego guardado cada sesenta segundos, el ranking se escribía cuatro veces más de lo que
- * ninguna clasificación ha necesitado nunca, y era **la mitad de todas las escrituras
- * del juego**.
+ * **QUINCE MINUTOS, Y SOLO POR TIEMPO. AQUÍ ESTÁ EL AHORRO DE VERDAD.** Antes de
+ * este cambio el guardado escribía DOS documentos cada poco, y el segundo era
+ * el ranking: la tabla de posiciones no es una cosa que necesite saber que
+ * subes un entero por segundo. Y además **solo se escribía si el marcador
+ * había cambiado**: con el pasivo corriendo, el marcador cambia cada segundo,
+ * así que en la práctica se escribía en cada guardado que tocara la red —que
+ * con una acción por medio eran todos—.
  *
- * Y además **solo se escribe si el marcador ha cambiado**: si nadie ha producido nada
- * nuevo ni ha desbloqueado nada, la fila sería idéntica byte a byte y Firestore la
- * cobra igual. Un jugador con el juego abierto sin hacer nada deja de escribir en el
- * ranking por completo, que es el caso que más cuota quemaba.
+ * Ahora la fila sale como mucho una vez por periodo, haya cambiado lo que haya
+ * cambiado. Quince minutos de retraso en una clasificación no mienten a nadie,
+ * y cuarenta escrituras por revisita sí cuestan.
+ *
+ * **Y SI FALLA, REINTENTA EN EL SIGUIENTE BLOQUE.** El envío solo se marca
+ * después de escribir (B38): con la escritura fallida, el siguiente guardado
+ * la ve pendiente y no espera al periodo entero. Sin esto, un fallo dejaría
+ * la fila congelada un cuarto de hora.
  */
-const RITMO_RANKING_MS = 10 * 60_000;
+const RITMO_RANKING_MS = 15 * 60_000;
 
   const rankingRef = doc(db, 'rankings', user.uid);
 
 /**
- * Lo último que se escribió en la fila de la clasificación, y cuándo.
- *
- * **ESTÁN AQUÍ Y NO EN EL SITIO DEL TEMPORIZADOR POR UNA RAZÓN CONCRETA.** El primer
- * guardado ocurre durante la carga —el de la migración del almacén—, y ese va antes en
- * el fichero que el `setInterval` que crea el bucle. Declarados allí, el primer guardado
- * los encontraba antes de inicializarse y el arranque moría con un
- * "Cannot access before initialization" dentro de un `catch` que solo escribe en la
- * consola: partida no guardada y ni un aviso.
- *
- * Sirven para no reescribir una fila idéntica, que es la mitad de las escrituras del
- * juego. La firma se compara con lo que la fila **enseña**, no con el estado entero.
+ * F104 · El estado de la fila (último envío, fallo pendiente) vive en el
+ * closure, junto a `ultimaFirma`: en el módulo, cada arranque en el mismo
+ * proceso heredaba el envío del anterior y una partida nueva dejaba de
+ * publicar su fila porque otra ya lo había hecho.
  */
-let rankingUltimaFirma = '';
-let rankingUltimoEnvio = 0;
 
   /**
    * El último guardado falló.
@@ -2205,6 +2285,44 @@ function sePuedeGuardar(): boolean {
         state.nodeLevels = {};
         state.unlockedNodes = [];
       }
+      // F102 · DEVOLUCIÓN DE TECHOS RECORTADOS, Y POR QUÉ NO ES LA DE F97.
+      //
+      // F97 devolvía TODO el árbol porque lo reescribía entero. Aquí solo bajan
+      // algunos techos (el rebalanceo de columnas): lo comprado sigue valiendo,
+      // salvo los niveles que quedan por encima del techo nuevo. Esos se recortan
+      // al máximo y se devuelven a la cartera con la MISMA función que cobra
+      // (`nodeCost`, nivel a nivel), que es exacta porque los costes no cambian.
+      //
+      // **VA CON `if (savedVersion < 12)` POR R11**, igual que la de F97: una
+      // partida nueva nace en 12 y no devuelve nada, y una vieja devuelve una
+      // sola vez porque al guardar sale con 12. Y toca `totalCores` tan poco como
+      // la de F97 (nada): es histórico de lo ganado (F70), no cartera.
+      if (savedVersion < 12) {
+        // **SE LEE `state.nodeLevels` Y NO `data.nodeLevels`, Y ES LA MITAD DEL
+        // ARREGLO.** Con versión < 11 el bloque de F97 de arriba ya vació los
+        // niveles y devolvió todo: leer el save crudo devolvería dos veces y
+        // restauraría niveles que F97 acababa de quitar. Sobre el estado, una
+        // partida pre-F97 llega vacía (no-op) y una en 11 llega con sus niveles.
+        let devuelto = 0;
+        let recortado = false;
+        const niveles: Record<string, number> = { ...(state.nodeLevels ?? {}) };
+        for (const [id, nivelBruto] of Object.entries(niveles)) {
+          const nodo = TREE_BY_ID[id];
+          const nivel = Math.floor(Number(nivelBruto) || 0);
+          if (!nodo || nivel <= nodo.maxLevel) continue;
+          for (let i = nodo.maxLevel; i < nivel; i++) devuelto += nodeCost(nodo, i);
+          niveles[id] = nodo.maxLevel;
+          recortado = true;
+        }
+        if (devuelto > 0) {
+          state.cores += devuelto;
+        }
+        if (recortado) {
+          warehouseNeedsMigration = true;
+        }
+        state.nodeLevels = niveles;
+        state.unlockedNodes = Object.keys(niveles).filter(id => (niveles[id] || 0) > 0);
+      }
       state.forgedCount = data.forgedCount ?? 0;
       state.sobrecargaCuenta = Math.max(0, Math.floor(Number(data.sobrecargaCuenta) || 0));
       // F97 · Contadores de jackpot y eco: cuántas veces saltó cada uno. Son
@@ -2321,6 +2439,17 @@ function sePuedeGuardar(): boolean {
        *     que ninguna de las dos sesiones vio nunca.
        */
       const cola = leerCola(user.uid);
+      // F104 · Si el disco venía tocado, la lectura ya lo descartó y dejó el
+      // motivo: se tira del servidor (que es lo que hay en `state` a estas
+      // alturas) y se dice, sin bloquear nada. Un disco tocado no es una
+      // partida rota: es una anotación que no es de fiar.
+      if (!cola.existe && detalleAnomaliaCola() === 'firma') {
+        console.warn('[cola] Progreso local descartado: la firma no cuadra.');
+        showToast(
+          'El progreso sin guardar de este dispositivo no era de fiar y no se ha aplicado. Tu partida del servidor está intacta.',
+          'info'
+        );
+      }
       if (cola.existe) {
         if (cola.ts > aMilis(data.updatedAt)) {
           const diferencia = cola.nanites - state.nanites;
@@ -3288,8 +3417,26 @@ function sePuedeGuardar(): boolean {
         return { critico: true, mult: state.bonus.sobrecargaMult || MULTIPLICADOR_CRITICO };
       }
     }
-    const critico = Math.random() < (equippedAffixEffect().critChance + (state.bonus.critChance || 0));
+    // F102 · El crítico topa en el motor: sin esto, el árbol entero al máximo
+    // suma más del 100 % y todo critica siempre, y el dado deja de existir.
+    const probCrit = Math.min(TOPE_CRITICO,
+      equippedAffixEffect().critChance + (state.bonus.critChance || 0));
+    const critico = Math.random() < probCrit;
     return { critico, mult: critico ? MULTIPLICADOR_CRITICO : 1 };
+  }
+
+  /**
+   * EL MULTIPLICADOR DE CLICK DEL ÁRBOL, CON LA PARTE FORJADA (F102).
+   *
+   * Suma dos ejes: el `clickMult` de siempre y lo que los nodos cruzados
+   * convierten de tu forja (`clickPorForja × craftLuck`). Va en función y no
+   * en línea porque lo leen cuatro sitios —la cuenta, el suelo y las dos
+   * mitades del desglose— y cuatro copias de una suma con dos términos son
+   * cuatro ocasiones de que una olvide el segundo (R2, y el desglose lo ata).
+   */
+  function multClickDeArbol(): number {
+    return 1 + state.bonus.clickMult
+      + (state.bonus.clickPorForja || 0) * (state.bonus.craftLuck || 0);
   }
 
   /**
@@ -3346,7 +3493,7 @@ function sePuedeGuardar(): boolean {
       1 + affixes.clickMult,
       calculateCompanionMultiplier(),
       1 + achievementState.clickBonus,
-      1 + state.bonus.clickMult
+      multClickDeArbol()
     );
     return { total, base, conNivel };
   }
@@ -3371,7 +3518,7 @@ function sePuedeGuardar(): boolean {
     const total = Math.floor(base
       * calculateCompanionMultiplier()
       * (1 + achievementState.clickBonus)
-      * (1 + state.bonus.clickMult)
+      * multClickDeArbol()
       * (1 + equippedAffixEffect().clickMult));
     return { total, base, conNivel: base };
   }
@@ -3505,7 +3652,7 @@ function sePuedeGuardar(): boolean {
     // --- LO QUE ES DE LA PARTIDA ------------------------------------------------
     anota("Compañeros", "de la partida", calculateCompanionMultiplier(), "partida");
     anota("Logros", "de la partida", 1 + achievementState.clickBonus, "partida");
-    anota("Árbol de pasivas", "de la partida", 1 + state.bonus.clickMult, "partida");
+    anota("Árbol de pasivas", "de la partida", multClickDeArbol(), "partida");
     anota("Buff de click", "temporal", calculateMultiplier(), "partida");
 
     const total = Math.floor(acum);
@@ -3574,7 +3721,7 @@ function sePuedeGuardar(): boolean {
     anota('Afijos', 'del item', 1 + efectoDeAfijos(w.affixes, nivel, w.tier).clickMult, 'item');
     anota('Compañeros', 'de la partida', calculateCompanionMultiplier(), 'partida');
     anota('Logros', 'de la partida', 1 + achievementState.clickBonus, 'partida');
-    anota('Árbol de pasivas', 'de la partida', 1 + state.bonus.clickMult, 'partida');
+    anota('Árbol de pasivas', 'de la partida', multClickDeArbol(), 'partida');
 
     // **EL PARTIDO YA SUMADO (F83).** La ficha, el perfil y el ranking parten lo
     // mismo —cuánto es del arma y cuánto de la partida— y si cada vista sumara
@@ -3636,7 +3783,7 @@ function sePuedeGuardar(): boolean {
    * compara el documento **tal y como se iba a escribir, menos la marca de tiempo**.
    */
 
-  async function saveToFirebase(forzar = false) {
+  async function saveToFirebase(forzar = false, directo = false) {
     // **PRIMERO DE TODO, Y POR ENCIMA DE LA COLA.** La cola local es buena idea y aqui
     // seria un error: apuntar "lo que hay que subir" de una partida que no se ha leido
     // es apuntar una partida en blanco. Con el flag puesto no se anota nada, no se
@@ -3661,6 +3808,23 @@ function sePuedeGuardar(): boolean {
       state.totalCores,
       state.resets
     );
+
+    /**
+     * F104 · EL AGRUPADO: LA COLA YA ESTÁ A SALVO, LA RED PUEDE ESPERAR.
+     *
+     * Cada acción del jugador llama a esta función, y antes cada llamada era
+     * un viaje a la red: 50 acciones en un minuto eran 50 escrituras (más sus
+     * derivadas), y ese era el pico que agotaba la cuota. Ahora las llamadas
+     * que llegan antes de que pase la ventana vuelven aquí: el saldo ya está
+     * en el disco por la anotación de arriba, y el siguiente bloque —el
+     * intervalo o un `flush()`— lo subirá.
+     *
+     * `forzar` (cierre de pestaña, primer guardado) y `directo` (`flush()`,
+     * que es "guardar ahora") se saltan la ventana. La pregunta de "¿ha
+     * cambiado algo?" (B28) sigue después, así que un bloque sin cambios
+     * sigue sin costar nada aunque le toque viajar.
+     */
+    if (!forzar && !directo && Date.now() - ultimoEnvioRed < coalescenciaMs) return;
 
     try {
       const gameData = {
@@ -3798,6 +3962,10 @@ function sePuedeGuardar(): boolean {
       if (!forzar && firmaPartida === ultimaFirma) return;
 
       await setDoc(userRef, gameData, { merge: true });
+      // F104 · Tocó la red: el reloj del agrupado se mueve aquí y no antes.
+      // Si el `setDoc` lanza, el reloj no se mueve y la siguiente llamada lo
+      // vuelve a intentar, que es lo mismo que B28 hace con la firma.
+      ultimoEnvioRed = Date.now();
       // F96 · Se cuenta DESPUÉS del `setDoc`, como la firma: contar antes
       // sería afirmar una escritura que quizá no ocurrió.
       contarOp('escritura', 'users', 'guardado-users');
@@ -3864,34 +4032,30 @@ function sePuedeGuardar(): boolean {
       const filasPub = armaPub && armaPub.type === 'collector' ? filasDeRecolector(armaPub) : null;
       const danoFinalPub = filasPub ? filasPub.total : 0;
       const danoArmaPub = filasPub ? filasPub.delArma : 0;
-      const firma = [
-        state.totalNanitesProduced,
-        state.totalClicks,
-        state.unlockedAchievements.length,
-        state.forgedCount,
-        state.totalCores,
-        state.cosmetics.title,
-        state.cosmetics.frame ?? '',
-        state.cosmetics.banner ?? '',
-        danoFinalPub,
-        danoArmaPub
-      ].join('|');
       const ahora = Date.now();
-      // Y solo una vez por periodo: la fila no necesita nivel de frames.
+      // F104 · Y solo una vez por periodo, haya cambiado lo que haya cambiado:
+      // la fila no necesita nivel de frames, y el marcador moviéndose cada
+      // segundo convertía "si cambió, se escribe" en "se escribe siempre".
+      // El reintento tras un fallo no espera al periodo (ver
+      // `rankingFalloPendiente`).
       const hayQueEscribirElRanking = rankingUltimoEnvio === 0
         || ahora - rankingUltimoEnvio >= RITMO_RANKING_MS
-        || firma !== rankingUltimaFirma;
+        || rankingFalloPendiente;
 
         try {
         // B40 · EN MODO PRUEBAS LA TABLA Y LA TARJETA ESPERAN. La partida ya está
         // guardada tres líneas más arriba, que es lo que no se puede perder; lo que
         // se salta aquí son los dos documentos derivados, que es justo lo que un
-        // testeo intensivo mueve sin necesitarlo. La firma y el envío NO se tocan al
+        // testeo intensivo mueve sin necesitarlo. El envío NO se toca al
         // saltar, así que al quitar el flag lo pendiente se publica en el siguiente
         // guardado en vez de esperar al periodo entero.
-        if (hayQueEscribirElRanking && !modoPruebas()) {
-          rankingUltimoEnvio = ahora;
-          rankingUltimaFirma = firma;
+        if (hayQueEscribirElRanking && !modoPruebas() && !rankingEnVuelo) {
+        // F104 · El flag se levanta antes del `await` y se baja después: dos
+        // guardados solapados ven el envío pendiente a la vez, y sin esto los
+        // dos escriben la fila y Firestore cobra las dos. Se baja en los dos
+        // caminos (al escribir y al fallar), o el siguiente periodo no saldría.
+        rankingEnVuelo = true;
+        try {
         await setDoc(rankingRef, {
           userId: user.uid,
           username: displayName || 'Operativo',
@@ -3926,8 +4090,16 @@ function sePuedeGuardar(): boolean {
           },
           updatedAt: new Date()
         }, { merge: true });
-        // F96 · La fila del ranking es la escritura que más se repite en AFK,
-        // porque su firma se mueve con lo producido.
+        // B38 · EL ENVÍO SE MARCA DESPUÉS DE ESCRIBIR, NO ANTES.
+        // Es la misma regla que B28 con la partida: marcar antes es afirmar
+        // que la fila está en el servidor cuando quizá ni viajó. Con la marca
+        // puesta y la escritura fallida, el siguiente guardado no reintentaba
+        // y la fila quedaba congelada. Ahora un fallo reintenta en el
+        // siguiente bloque (ver `rankingFalloPendiente`).
+        rankingUltimoEnvio = ahora;
+        rankingFalloPendiente = false;
+        // F96 · La fila del ranking ya no se mueve con lo producido: sale como
+        // mucho una vez por periodo (F104).
         contarOp('escritura', 'rankings', 'guardado-ranking');
 
         // **Y LA TARJETA PÚBLICA, EN EL MISMO `if` PORQUE ES LA MISMA PREGUNTA.**
@@ -3936,8 +4108,8 @@ function sePuedeGuardar(): boolean {
         // escritura por guardado**: fuera de este `if` se publicaría en cada guardado y
         // volvería a ser media partida de las escrituras del juego. El banco mide eso.
         //
-        // Las dos se preguntan cada cinco minutos, y por eso van juntas: si fueran dos
-        // rhythms distintos habría dos temporizadores y dos sitios donde decidir "toca
+        // Las dos se preguntan cada quince minutos, y por eso van juntas: si fueran dos
+        // ritmos distintos habría dos temporizadores y dos sitios donde decidir "toca
         // escribir esto", que es exactamente la forma de que uno se quede viejo.
         //
         // **NO SE COMPARA SU FIRMA CON LA DEL RANKING A PROPÓSITO.** La tarjeta enseña
@@ -3957,6 +4129,12 @@ function sePuedeGuardar(): boolean {
         } catch (perfilError) {
           console.warn('No se ha podido publicar la tarjeta pública:', perfilError);
         }
+        } finally {
+          // F104 · Se baja en los dos caminos: con la escritura bien, el
+          // siguiente ya lo frena el periodo; con fallo, el `catch` de fuera
+          // deja el reintento pendiente.
+          rankingEnVuelo = false;
+        }
         }
       } catch (rankingError) {
         // Se avisa por consola y con un aviso propio, y NO se toca el indicador
@@ -3967,6 +4145,9 @@ function sePuedeGuardar(): boolean {
         // la forma de decirlo sin reescribir el bloque.
         console.error("Error al guardar en el ranking:", rankingError);
         rankingFallando = true;
+        // F104 · La fila no llegó: el siguiente bloque la reintenta sin
+        // esperar al periodo entero.
+        rankingFalloPendiente = true;
       }
       // `rankingSeAviso` es "ya le he dicho al jugador que el ranking falla", para
       // no repetir el mismo aviso cada quince segundos igual que hace el grande.
@@ -4302,23 +4483,16 @@ function sePuedeGuardar(): boolean {
  * Cada cuánto se guarda la partida en la nube, que es lo único que no depende de una
  * acción del jugador.
  *
- * **SESENTA SEGUNDOS, Y LA RAZÓN ES LA CUOTA.** Firestore da 20.000 escrituras al día
- * en el plan gratuito y **son de todo el proyecto**, no de cada jugador: con la tabla
- * de hace un rato, una pestaña abierta cuatro horas se gastaba la cuota del día entero,
- * y con cuatro personas probando a la vez se agotaba en minutos. Y ese es un
- * presupuesto que se puede gastar donde **sí** aporta: una compra, una forja, una
- * ascensión o subir de nivel guardan en el acto, porque esas no se repiten solas; lo
- * único que este temporizador hace es la red de seguridad de lo que se produce solo.
+ * **DOS MINUTOS, Y LA RAZÓN ES LA CUOTA.** Firestore da 20.000 escrituras al día
+ * en el plan gratuito y **son de todo el proyecto**, no de cada jugador. Las
+ * acciones ya no escriben a la red (F104: se agrupan), así que este temporizador
+ * es el que sube lo agrupado: una compra, una forja o una subida llegan aquí
+ * como mucho dos minutos después, y la cola local es la que cubre el hueco si
+ * la pestaña se cierra antes.
  *
- * Y para ese caso está la cola local: `anotarPendiente()` escribe en `localStorage` de
- * forma síncrona en CADA guardado, así que perder hasta sesenta segundos de ingreso
- * pasivo no cuesta nada porque el saldo se recupera al recargar. Con treinta no se
- * ganaba nada que alguien notara.
+ * El número vive en `RITMO_GUARDADO_MS`, en el ámbito del módulo, porque los
+ * bancos lo leen para medir con el ritmo de verdad en vez de con una copia.
  */
-const RITMO_GUARDADO_MS = 60_000;
-
-
-
   const saveInterval = setInterval(saveToFirebase, RITMO_GUARDADO_MS);
   // `forzar` porque **este es el último guardado que va a haber**: si se cerrara la
   // pestaña con progreso sin escribir y la pregunta lo saltara por "no ha cambiado"...
@@ -4453,6 +4627,18 @@ const RITMO_GUARDADO_MS = 60_000;
    */
   let msParaCobroPasivo = 0;
 
+  /**
+   * F104 · CUÁNDO SE ANOTÓ LA COLA LOCAL POR ÚLTIMA VEZ, Y POR QUÉ CADA POCO.
+   *
+   * Las acciones anotan al actuar (vía `saveToFirebase()`, que anota siempre
+   * antes de decidir si toca red), pero el pasivo entra solo: un jugador con
+   * ingreso y sin tocar nada no llamaría a nadie hasta el siguiente bloque, y
+   * un F5 en medio perdería hasta dos minutos. Anotar en local es gratis
+   * (disco, no red), así que el tick anota cada poco y el F5 pierde segundos.
+   */
+  let ultimoAnotadoLocal = 0;
+  const RITMO_ANOTADO_LOCAL_MS = 10_000;
+
   // Variables para intervalos (pueden detenerse y reiniciarse)
   let gameInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -4572,6 +4758,23 @@ const RITMO_GUARDADO_MS = 60_000;
           state.nanites += state.passiveIncome;
           state.totalNanitesProduced += state.passiveIncome;
         }
+      }
+
+      // F104 · El pasivo que acaba de entrar se anota en local cada poco, para
+      // que un F5 lo recupere. Es disco, no red: no cuesta cuota y por eso no
+      // pasa por la ventana de agrupado. Sin esto, el jugador que solo mira
+      // perdería hasta un bloque entero al recargar.
+      if (user && Date.now() - ultimoAnotadoLocal >= RITMO_ANOTADO_LOCAL_MS) {
+        ultimoAnotadoLocal = Date.now();
+        anotarPendiente(
+          user.uid,
+          state.nanites,
+          state.totalNanitesProduced,
+          state.totalClicks,
+          state.cores,
+          state.totalCores,
+          state.resets
+        );
       }
 
       // Clics automáticos del árbol de pasivas. Se acumulan como resto entre
@@ -5850,8 +6053,10 @@ const RITMO_GUARDADO_MS = 60_000;
       // en la curva porque es un descuento, no un precio: la curva sigue
       // diciendo lo que vale el nivel y el nodo lo que perdona. Con suelo en 1
       // para que un descuento no regale niveles en los tiers baratos.
+      // F102 · El descuento topa en el motor, como el de la tienda: tres nodos
+      // lo suman y sin tope la mejora saldría a mitad de precio o gratis.
       const crystalCost = Math.max(1, Math.floor(
-        costeDeNivelDeCompanio(tierItem, level) * (1 - (state.bonus.compDescuento || 0))));
+        costeDeNivelDeCompanio(tierItem, level) * (1 - Math.min(TOPE_COMP_DESCUENTO, (state.bonus.compDescuento || 0)))));
       const units = state.crystals;
       if (units < crystalCost) {
         return {
@@ -7169,6 +7374,7 @@ const RITMO_GUARDADO_MS = 60_000;
       const author = user.displayName || username || 'Anónimo';
       const result = attemptForge(mat.materials, mat.tier!, author, {
         craftLuck: state.bonus.craftLuck,
+        forgePotential: state.bonus.forgePotential,
         consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
         nanoUsed: pago.nano,
@@ -7272,6 +7478,7 @@ const RITMO_GUARDADO_MS = 60_000;
 
       const result = attemptForgeCompanion(mat.materials, mat.tier!, {
         craftLuck: state.bonus.craftLuck,
+        forgePotential: state.bonus.forgePotential,
         consolationBonus: state.bonus.consolationBonus,
         stonesUsed: pago.stones!,
         eterUsed: pago.eter,
@@ -7652,7 +7859,9 @@ canBuyStoreItem: (itemKey: string): boolean => {
 
 
     flush: () => {
-      void saveToFirebase();
+      // F104 · `directo` se salta la ventana de agrupado pero NO la pregunta
+      // de B28: "guardar ahora" no es "escribir aunque no haya nada".
+      void saveToFirebase(false, true);
     }
   };
 

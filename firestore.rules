@@ -53,9 +53,9 @@ rules_version = '2';
 //                        primer puesto.
 //  · `perfiles/{uid}`  — la tarjeta pública de un jugador: su colección, sus
 //                        números y sus logros. Cualquiera autenticado la lee y
-//                        solo su dueño la escribe. Una excepción muy estrecha
-//                        permite que cualquiera suba `visitas` y `visitantes` de
-//                        una tarjeta que no es suya, y nada más.
+//                        solo su dueño la escribe. Sin excepciones: el contador
+//                        de visitas se quitó (F104) porque cada apertura costaba
+//                        una escritura en el documento de otro.
 //  · `admins/{uid}`    — quién puede usar la terminal. Solo un admin escribe
 //                        aquí, y solo un admin lo lee. Nadie más sabe ni
 //                        existe.
@@ -105,7 +105,19 @@ service cloud.firestore {
       // de la derecha ya lo impide, pero dejarlo explícito documenta la
       // intención.
       allow create: if request.auth != null && request.auth.uid == uid;
-      allow update: if request.auth != null && request.auth.uid == uid;
+      // F104 · Los contadores que la cola restaura tienen que ser números, y el
+      // almacén una lista, cuando vienen en la escritura. Es una red barata
+      // contra el documento tocado a mano por fuera del juego: la carga ya
+      // coacciona lo que lee, y esto impide que lo absurdo entre por escrito.
+      // Con `merge` los campos pueden no venir, y por eso cada condición
+      // perdona la ausencia: lo que no está no se juzga.
+      allow update: if request.auth != null && request.auth.uid == uid
+        && (!('nanites' in request.resource.data) || request.resource.data.nanites is number)
+        && (!('totalNanitesProduced' in request.resource.data) || request.resource.data.totalNanitesProduced is number)
+        && (!('totalClicks' in request.resource.data) || request.resource.data.totalClicks is number)
+        && (!('cores' in request.resource.data) || request.resource.data.cores is number)
+        && (!('totalCores' in request.resource.data) || request.resource.data.totalCores is number)
+        && (!('warehouse' in request.resource.data) || request.resource.data.warehouse is list);
       allow delete: if esAdmin(request.auth.uid);
     }
 
@@ -136,26 +148,9 @@ service cloud.firestore {
       //  sesión no, porque la lista de jugadores no es un recurso de un sitio abierto.
       allow get, list: if request.auth != null;
 
-      //  El dueño publica su tarjeta entera. Se escribe con `merge: true` y sin el
-      //  contador de visitas, así que publicar nunca pisa lo que escribieron los
-      //  visitantes.
+      //  El dueño publica su tarjeta entera. Se escribe con `merge: true`.
       allow create, update: if request.auth != null && request.auth.uid == uid;
       allow delete: if esAdmin(request.auth.uid);
-
-      //  **Y CUALQUIERA PUEDE TOCAR SOLO EL CONTADOR, Y NUNCA EL SUYO.**
-      //
-      //  Es la línea que hace que "cuánta gente ha mirado tu perfil" no se convierta en
-      //  "cualquiera puede escribir en la tarjeta de cualquiera". `affectedKeys()` dice
-      //  qué claves cambian: si no son exactamente esas dos, la escritura se rechaza.
-      //
-      //  O sea que un visitante puede subir el contador y nada más. No puede tocar la
-      //  colección de recolectores, ni los logros, ni el nombre, ni borrarla. Y el
-      //  `request.auth.uid != uid` de en medio es lo que hace que mirar tu propio perfil
-      //  no te cuente a ti mismo, que es lo que se pidió.
-      allow update: if request.auth != null
-                    && request.auth.uid != uid
-                    && request.resource.data.diff(resource.data).affectedKeys()
-                       .hasOnly(['visitas', 'visitantes']);
     }
 
     // --------------------- Administradores ---------------------------

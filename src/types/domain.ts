@@ -139,6 +139,12 @@ export type WarehouseItem = CollectorItem | CompanionItem | StackableItem;
 export interface PassiveBonuses {
   /** Multiplicador de daño de click. 0.5 = +50%. */
   clickMult: number;
+  /**
+   * Fracción de tu `craftLuck` que se vuelve daño de click (nodos cruzados
+   * F102). 1.0 = tu forja suma su 100 % como click. Vive al lado de
+   * `clickMult` pero es otro eje: premia tener las dos ramas, no una.
+   */
+  clickPorForja: number;
   /** Multiplicador de ingreso pasivo. */
   passiveMult: number;
   /** Reducción de coste. 0.25 = -25% (se aplica como ×0.75). */
@@ -147,6 +153,12 @@ export interface PassiveBonuses {
   sellMult: number;
   /** Bonificación a la probabilidad de crafteo (fracción). */
   craftLuck: number;
+  /**
+   * Puntos de probabilidad de SUBIDA de potencial en la forja (fracción).
+   * Vive al lado de `craftLuck` pero es otro eje: la suerte decide SI sale y
+   * esto cuánto de bueno sale. Lo suman los nodos de Potencial de la Forja.
+   */
+  forgePotential: number;
   /** Cristales extra por fallo de forja, como fracción. */
   consolationBonus: number;
   /** Clics automáticos por segundo. */
@@ -219,6 +231,12 @@ export interface TreeNode {
   maxLevel: number;
   /** Bonificación por nivel. */
   bonus: Partial<PassiveBonuses>;
+  /**
+   * Columna dentro de la rama: el lado a elegir (`izq` / `der`) o el centro
+   * común. La pestaña agrupa por tier y por columna para que el jugador vea
+   * los dos caminos y el fondo compartido sin leer quince nodos sueltos.
+   */
+  columna?: 'izq' | 'centro' | 'der';
   /**
    * Una frase de sabor sobre QUE ES ESTA PASIVA Y POR QUE EXISTE.
    *

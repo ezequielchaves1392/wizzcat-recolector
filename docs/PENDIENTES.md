@@ -2026,6 +2026,50 @@ viva solo en una conversación.*
       agente guardando `prestige.ts`/`gameLoop.ts` a mitad del build, no el cambio
       —en solitario 332/332 y en las repeticiones, cero.
 
+### Lote O · SELECTOR DE SERVIDOR (encargo del 10 de octubre)
+
+*Lo pedido, con tus palabras: "la pagina inicial debe preguntar en que servidor
+jugar y de ahi llevar a la pagina de login en el servidor elegido". **Supersede
+F100/F101**: ya no hay dos despliegues que se enlazan, hay un despliegue que
+pregunta.*
+
+- [x] **F103 · La primera pantalla pregunta el servidor y el acceso va después.**
+      Hecho en v1.15.40. Sin elección guardada no hay acceso: el selector va
+      primero porque la cuenta vive en un servidor. Elegir guarda y recarga, que
+      es lo que crea el backend de verdad (`auth`/`db` son singletons y ya están
+      creados en esa carga: cambiar sin recargar sería tener dos sesiones vivas).
+      El acceso enseña su servidor con botón de cambiar, y los carteles de
+      mantenimiento/cuota cambian de servidor en local (olvidar y recargar),
+      así que la salida funciona con la cuota agotada, que es cuando más se
+      mira. Los recuerdos (nombre, clave, usuario de sesión) llevan sufijo por
+      servidor, porque la misma persona puede tener contraseñas distintas. La
+      regla de qué vale (`?servidor=` sobre lo guardado sobre la serie del
+      build) vive en `data/servidores.ts` y la ata `servidorCheck` (15).
+      **Lo que no cubre ningún banco**: el pintado (A5/B15: el stub lo daría
+      verde sin comprobar nada); se mira en `auth-preview.html` y en el juego
+      con el recuerdo borrado.
+      **Ops**: un solo despliegue sirve a los dos; en cada proyecto Firebase
+      hay que autorizar su dominio en Auth, con sus reglas y su `admins/{uid}`.
+
+### Lote N · REBALANCEO DEL ÁRBOL (encargo del 10 de octubre)
+
+*Lo pedido, con tus palabras. Se escribe aquí antes de programarlo, para que no
+viva solo en una conversación.*
+- [ ] **F102 · Ramas en 3 columnas, topes y nodos cruzados.**
+      > "en forja se puede llegar a 250% de forja siendo siempre el tope"
+      > "hay muchos nodos que hacen lo mismo, y hay que tener en cuenta que los nodos mayores deben dar cosas mejores"
+      > "me gustaría que las ramas sean 3 columnas, para poder elegir un lado u otro"
+      > "en la de fortuna ir por el lado de cajas o ir por el lado de comercio, en la forja ir por el lado de forja o ir por el lado de mejor potencial"
+      > "incluir cosas que sirvan a las otras builds dentro de las mismas para poder combinar"
+      > "aumento de daño de click por probabilidad de forja, la reduccion de los precios aplica a la recoleccion de compañeros, o cosas asi"
+      Trece nodos daban solo `craftLuck` y sumaban 264%: el árbol solo llegaba
+      al tope del 95% sin piedras ni nanopartícula. El crítico sumaba 115% sin
+      tope en el motor. Cada rama se reordena en 3 columnas (dos lados + centro)
+      con caminos a elegir, los duplicados se reconvierten en nodos cruzados
+      entre builds, y el motor topea crítico, descuento de tienda y descuento
+      de compañero. Los techos que bajan devuelven sus núcleos al cargar
+      (migración con versión). Banco nuevo `equilibrioCheck`.
+
 ### Lote K · ENCARGO DEL 9 DE OCTUBRE (ideas nocturnas del jugador)
 
 *Lo pedido, con tus palabras. Sin tocar todavía: se escribe aquí antes de
@@ -2891,7 +2935,7 @@ midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **49 bancos, 2719**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **50 bancos, 2789**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -3572,6 +3616,40 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **49 bancos, 
 - [x] **La ruleta del sintonizador, y la de las cajas partida en tres ficheros**
       (`ce3a346`). `rouletteSpin.ts` no importa nada, y esa es la razón de que exista: son
       números puros, que es lo que los hace comprobables en Node.
+
+### La cuota: guardar en bloque (F104, encargo del 10 de octubre)
+
+- [x] **F104 · El juego guarda en bloque en vez de con cada acción.** El gráfico que
+      agotó la cuota no era el reloj: eran ráfagas de hasta 150 escrituras por minuto,
+      una por acción (más sus derivadas), porque cada acción llamaba al guardado y cada
+      llamada escribía hasta tres documentos. Ahora las llamadas intermedias anotan la
+      cola local (gratis, síncrona) y vuelven; la red se toca una vez por bloque de dos
+      minutos y en un solo documento. Un F5 entre bloques recupera desde el disco, con
+      el pasivo anotado cada diez segundos.
+      - **La fila sale cada cuarto de hora y solo por tiempo.** Antes salía también
+        cuando el marcador cambiaba, y con el pasivo corriendo eso era siempre: en la
+        práctica salía en cada guardado. La tarjeta va piggyback en el mismo momento.
+        Si la fila falla, el siguiente periodo la reintenta sin esperar al entero.
+      - **Fuera el contador de visitas y el punto verde.** Mirar un perfil ajeno costaba
+        una escritura en el documento de otro, y la presencia otra periódica por pestaña.
+        Mirar vuelve a ser gratis y la tabla enseña lo jugado, no quién está en línea.
+      - **El cerrojo vive cinco minutos y viaja de viaje.** Con el bloque cada dos, el
+        latido casi nunca paga viaje propio; al cerrar se suelta a propósito, así que el
+        traspaso no espera a la ventana y la espera larga solo la paga un cuelgue.
+      - **La cola local va firmada, y no bloquea.** Un disco tocado a mano se descarta y
+        se tira del servidor, con aviso y sin autobloqueo (desde el cliente se quita
+        borrando la llamada). Las reglas exigen números y lista donde la cola restaura.
+      - **Dos cosas que salieron midiendo.** Dos guardados solapados veían el envío
+        pendiente a la vez y escribían la fila dos veces: ahora hay un flag en vuelo. Y
+        el estado de la fila vivía en el módulo, así que cada arranque en el mismo
+        proceso heredaba el envío del anterior: ahora vive en el closure, como la firma.
+      - **Bancos.** `guardadoCheck` mide el agrupado (veinte acciones, una escritura) y
+        el reintento por periodo; `costeJuegoCheck` usa reloj simulado en vez de esperar
+        diez minutos; `sessionCheck` y `cerrojoCheck` leen la ventana del juego en vez de
+        copiarla; `perfilCheck` pierde las visitas; `opsCheck` baja el semáforo a 2/6;
+        `queueCheck` cubre la firma v2 (y el v1 heredado se sigue aceptando).
+      - **La cuenta.** Unas 315 escrituras por ocho horas activas y jugador, contra varios
+        miles antes: veinte jugadores caben en la cuota con margen de sobra.
 
 ---
 
