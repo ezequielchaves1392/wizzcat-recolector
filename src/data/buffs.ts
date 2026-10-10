@@ -62,16 +62,17 @@ export type BuffKey = keyof typeof BUFF_FIELDS | 'afk';
  * dos se quedara atras para que el sintoma fuera un boton que no hace nada -- que es
  * peor que no tenerlo, porque el jugador no tiene forma de saber por que.
  *
- * **Y POR QUE EL AFK NO.** Cancelar es razonable en una mejora temporal: se deja de
- * usar y el tiempo se pierde. El AFK no es una mejora, es **lo que permite jugar sin
- * mirar la ventana**, y su tiempo se acumula -- tres tarjetas son media hora --, asi que
- * la cruce era un boton de veinte pixeles para tirar media hora y la tarjeta que la
- * compro. Ademas el efecto no se ve en el boton: al cancelarlo el HUD lo esconde y no
- * hay ningun sitio donde volver a ponerlo sin gastar otra tarjeta, o sea que la cruce
- * podia dejar la partida en un estado del que no se sale.
+ * **Y EL AFK, QUE ESTABA EN `false` Y YA NO (Q3).** Se negó durante un año con dos
+ * motivos, y los dos siguen siendo verdad: la cruce era un boton de veinte pixeles para
+ * tirar media hora acumulada de tarjetas, y al cancelarlo el HUD lo esconde. Pero los dos
+ * ya los cubre lo que habia alrededor, asi que no hacen falta para prohibirlo: el dialogo
+ * de confirmacion dice lo que se pierde ("Se pierde el tiempo restante de X. El item ya
+ * esta gastado."), que es exactamente el mismo aviso que reciben los demas buffs, y volver
+ * a ponerlo es usar otra tarjeta, igual que para cualquiera de ellos. Sin la cruce el
+ * jugador no tenia NINGUNA forma de apagar el AFK una vez comprado, y la pidió (Q3).
  *
  * El valor por defecto de un buff nuevo es **que se puede cancelar**, porque es lo
- * esperable; negar es lo que hay que escribir a proposito.
+ * esperable; negar es lo que hay que escribir a proposito, y hoy ya no hay ninguno.
  */
 export const BUFF_CANCELABLE: Record<BuffKey, boolean> = {
   clickBoost: true,
@@ -81,7 +82,7 @@ export const BUFF_CANCELABLE: Record<BuffKey, boolean> = {
   compPassiveBoost: true,
   compClickBoost: true,
   compGlobalBoost: true,
-  afk: false
+  afk: true
 };
 
 /** Si este buff ofrece su boton de cancelar. La funcion es la que usan los dos. */

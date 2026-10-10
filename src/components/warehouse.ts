@@ -36,6 +36,7 @@ import { showSintonizacion } from './sintonizacion';
 import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
 import { marcoDeBrillo } from '../ui/brillo';
+import { puntosDeAfijos } from '../ui/fichas';
 import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import { CRISTAL_NOMBRE } from '../data/items';
@@ -80,7 +81,7 @@ import { MAX_STACK, isStackable, countOccupiedSlots, stackUnits, textoDeCantidad
 import { lorePara } from '../data/tiers';
 import {
   AUTO_VENTA_POR_DEFECTO, TIPOS_DE_VENTA_AUTO, TOPES_TIER, TOPES_POTENCIAL,
-  descripcionDeAutoVenta, type TipoDeVentaAuto
+  descripcionDeAutoVenta, MAX_TIER_ITEM, type TipoDeVentaAuto
 } from '../data/autoventa';
 
 /**
@@ -171,6 +172,16 @@ const ui = {
    *   y un buscador que te corrige el texto mientras escribes es un buscador con voz.
    */
   buscar: '',
+  /**
+   * FILTRO DE TIER, ESCRITO A MANO (Q8).
+   *
+   * Guarda el **texto crudo**, como hace `buscar`, por el mismo motivo: la rejilla se
+   * repinta con cada tecla y si el valor no volviera al campo, el jugador escribiría un
+   * número y lo perdería. La cifra que se filtra no es este string sino `tierDe()`,
+   * que lo normaliza al filtrar —vacío o fuera de rango es "sin filtro"—, así que el
+   * campo puede mostrar exactamente lo que se escribió sin que eso cambie lo que se ve.
+   */
+  tierTexto: '',
   sheetOpen: false,
   /**
    * SELECCIÓN MÚLTIPLE, Y POR QUÉ ES ESTADO Y NO UN `{...}` de cada celda.
@@ -229,6 +240,29 @@ function draw(
   // un sitio distinto del que el jugador veía.
   const celdas = visibleStacks(game, state);
 
+  // --- Lo que dice la rejilla cuando sale vacía (Q8) -----------------------
+  // **LOS MOTIVOS SE ESCRIBEN UNA VEZ Y LOS DOS LOS LEEN**, no uno en el mensaje y
+  // otro dentro del botón: si estuvieran escritos en los dos sitios, cambiar uno sin
+  // cambiar el otro dejaría un botón que quita una cosa mientras el texto echa la
+  // culpa a otra. Y con el tier hay tres motivos posibles —lo escrito, el tier y los
+  // dos—, que es exactamente el caso donde una copia se descuelga.
+  //
+  // `tierDe()` es quien normaliza: vacío o no numérico no es un motivo, así que un
+  // campo con letras sueltas no pone "No tienes nada de tier" en pantalla.
+  const textoBuscado = ui.buscar.trim();
+  const tierFiltrado = tierDe(ui.tierTexto);
+  const hayQueQuitarAlgo = textoBuscado !== '' || tierFiltrado > 0;
+  const motivoVacio = textoBuscado && tierFiltrado
+    ? `Nada con "${textoBuscado}" ni de tier ${tierFiltrado} en el almacén.`
+    : textoBuscado
+      ? `Nada con "${textoBuscado}". Puede que no haya nada así en el almacén.`
+      : tierFiltrado
+        ? `No tienes nada de tier ${tierFiltrado}.`
+        : `No tienes nada de ${FILTROS.find(f => f.id === ui.filter)?.label.toLowerCase() ?? 'este tipo'}.`;
+  const rotuloDeSalida = textoBuscado && tierFiltrado ? 'Quitar búsqueda y tier'
+    : textoBuscado ? 'Quitar la búsqueda'
+      : 'Quitar el tier';
+
   // La selección sobrevive al re-render, pero se invalida si el item desaparece
   if (ui.selectedId && !warehouse.some((w: any) => w.id === ui.selectedId)) {
     ui.selectedId = null;
@@ -268,13 +302,37 @@ function draw(
     // selección, y recortarlo ahí ya fue un bug.
     const tope = MAX_STACK[w.type] ?? 20;
     const texto = count > 0 ? textoDeCantidad(count, tope) : '';
+    // Q6 · LO QUE LA CELDA AHORA SABE Y ANTES NO: EL NIVEL Y LOS AFIJOS.
+    //
+    // **EL NIVEL VA EN LA LÍNEA DE TIER, NO EN UNA LÍNEA NUEVA.** La celda es un
+    // cuadrado de 74 px con `aspect-ratio: 1` y ya lleva icono, nombre a dos líneas y
+    // tier; una fila más la desborda, y `.inv-cell` no recorta: se sale de su hueco.
+    // `N7` cabe en la misma línea que `T3 ★★★`, y esa línea es la que el jugador ya
+    // mira al comparar dos celdas.
+    //
+    // Y solo si el nivel no es cero: un compañero recién salido de una caja no tiene
+    // nivel, y "N0" sería un dato que el item no tiene —la misma regla que en la celda
+    // de la forja, escrita allí por el mismo motivo—.
+    const nivelCelda = (w.type === 'collector' || w.type === 'companion')
+      ? Math.max(0, Math.floor(Number(w.level) || 0)) : 0;
+    // Los afijos van como puntos de color arriba a la izquierda, que es la única
+    // esquina libre: el stat está arriba a la derecha, el contador de pila también, el
+    // "EQ" abajo a la izquierda y la marca de venta abajo a la derecha. **LOS NOMBRES
+    // NO CABEN**, y es exactamente lo que no cabe: una fila de etiquetas en un cuadrado
+    // de 74 px se sale. Los nombres siguen en el title de la celda y en la ficha
+    // entera, que es donde se abren los detalles.
+    const nombresDeAfijos = (w.affixes || [])
+      .map((id: string) => AFFIX_BY_ID[id]?.name).filter(Boolean);
+    const tituloCelda = nombresDeAfijos.length
+      ? `${w.name} · Afijos: ${nombresDeAfijos.join(' · ')}`
+      : w.name;
     return `
       <button class="inv-cell ${isSel ? 'is-selected' : ''} ${isMarcada ? 'is-picked' : ''} ${count > 0 ? 'is-stackable' : ''}"
               data-cell="${i}" data-id="${w.id}" data-count="${count}"
               data-picked="${isMarcada ? '1' : '0'}"
               aria-pressed="${ui.multisel ? String(isMarcada) : 'false'}"
               style="${isEquipped ? 'border-color:#fbbf24; box-shadow: inset 0 0 0 1px #fbbf24;' : ''}"
-              aria-label="${w.name}">
+              aria-label="${tituloCelda}" title="${tituloCelda}">
         <!--
           EL BRILLO, Y POR QUÉ VA EN UN MARCO Y NO EN LA CELDA.
 
@@ -294,15 +352,16 @@ function draw(
                        ${rarityClass(w.rarity)} [&>span>svg]:w-4 [&>span>svg]:h-4">
             ${ic(TYPE_ICON[w.type] ?? 'crate')}
           </span>`, 'rarity-' + raritySlug(w.rarity))}
+        ${puntosDeAfijos(w.affixes)}
         <!--
           LA MARCA DE "VA A VENDERSE", Y POR QUÉ ES UNA ESQUINA Y NO UN CAMBIO DE COLOR.
 
           Un cambio de color de fondo haría imposible distinguir "marcado para vender" de
           "marcado como ficha abierta", que es justo lo que hay que distinguir. La marca
-          es un signo deticado en la esquina **inferior derecha**, que es donde no hay
+          es un signo deticado en la esquina **inferior derecha**, que es donde no había
           nada: el stat va en la superior derecha, el contador de pila también arriba a la
-          derecha y el "EQ" abajo a la izquierda. Con cuatro Mogollete encima de la celda,
-          cada uno en su esquina, y sin solaparse con ninguno.
+          derecha y el "EQ" abajo a la izquierda. Con los puntos de afijos arriba a la
+          izquierda ya son cinco los que enciman la celda, y cada uno en su esquina.
         -->
         ${isMarcada ? `<span class="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-md accent-bg text-slate-950
                               grid place-items-center pointer-events-none
@@ -323,6 +382,7 @@ function draw(
           ${(w.type === 'collector' || w.type === 'companion') && w.potential
             ? ` ${estrellasDe(w.potential)}`
             : ''}
+          ${nivelCelda ? ` N${nivelCelda}` : ''}
         </span>
         ${texto ? `<span class="absolute top-0.5 right-0.5 text-[9px] font-mono text-[var(--text-muted)] bg-[var(--bg-app)] rounded px-0.5">${texto}</span>` : ''}
         ${statCelda(w, game)}
@@ -485,6 +545,37 @@ function draw(
                 <span>${ic('close')}</span>
               </button>` : ''}
           </label>
+          <!--
+            EL FILTRO DE TIER, Y POR QUÉ NO BASTA CON ESCRIBIRLO EN EL BUSCADOR (Q8).
+
+            El buscador ya sabe leer tier: "3" y "t3" son términos numéricos y casan con
+            el tier exacto. **PERO TAMBIÉN CAEN EN EL OTRO LADO** —un término numérico se
+            busca además dentro del nombre y del detalle—, así que "3" devuelve el T3 y el
+            Ak-7 y todo lo que lleve un 3 escrito, que no es "ver el tier 3" sino "ver lo
+            que suena a 3". Y además no se puede adivinar: hay que saber que existe la
+            "t" delante del número.
+
+            Un campo propio hace una sola pregunta, visible en la barra, y se compone con
+            la búsqueda —tier 3 Y nombre— en vez de meterse en ella.
+
+            Es type=number con min, max y step para que el teclado del móvil abra el
+            de números —el jugador escribe un dígito, no una palabra—, y las flechas del
+            navegador se esconden porque en un campo de 64 px se comen el hueco del texto.
+            El techo no está escrito aquí: sale de MAX_TIER_ITEM, el mismo que usan los
+            desplegables de la autoventa, así que si algún día hay once tiers este campo
+            llega a once sin tocarlo.
+          -->
+          <label class="relative w-16 flex-shrink-0" for="wh-tier">
+            <span class="sr-only">Filtrar por tier</span>
+            <input id="wh-tier" type="number" data-wh-tier
+                   min="1" max="${MAX_TIER_ITEM}" step="1" inputmode="numeric" autocomplete="off"
+                   placeholder="Tier" title="Ver solo los items de ese tier (1 a ${MAX_TIER_ITEM})"
+                   value="${ui.tierTexto}"
+                   class="h-10 w-full px-2 rounded-lg btn-ghost text-[11px] font-mono text-center
+                          placeholder:text-[var(--text-muted)] placeholder:opacity-70
+                          focus:outline-none focus:ring-1 focus:ring-[var(--accent)]
+                          [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+          </label>
           <select id="wh-sort" aria-label="Ordenar"
             class="ml-auto h-10 px-2 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer">
             <!--
@@ -591,17 +682,19 @@ function draw(
         ${ui.multisel ? multiSelBar(game) : ''}
 
         <!--
-          LA REJILLA VACÍA, Y POR QUÉ DICE LAS DOS COSAS QUE PUEDEN ESTAR PASANDO.
+          LA REJILLA VACÍA, Y POR QUÉ DICE LAS COSAS QUE PUEDEN ESTAR PASANDO.
 
           Sin búsqueda esto solo podía ser "no tienes nada de este tipo", pero en cuanto
-          existe un campo de texto **hay dos motivos distintos** y se parecen tanto en la
+          existen campos que filtran **hay motivos distintos** y se parecen tanto en la
           pantalla que el jugador no puede saber cuál es: puede no haber nada de ese tipo,
-          o puede haberlo y no estar buscando lo que cree. Una rejilla en blanco sin
+          puede haberlo y no estar buscando lo que cree, o puede haberlo y estar mirando
+          otro tier. Una rejilla en blanco sin
           explicación es indistinguible de un buscador roto, y el jugador no va a
   reescribir la búsqueda: va a abrir el inventario otra vez y a dejarlo.
 
           Así que el texto lleva el motivo **y la salida**: lo que se escribió y el botón
-          de quitarlo. Y sale de ui.buscar, que es el texto crudo, no de los términos
+          de quitarlo —cuyo rótulo ya dice si quita lo escrito, el tier o los dos—. Y
+          sale de ui.buscar, que es el texto crudo, no de los términos
           normalizados: enseñarle "ak7" cuando el jugador ha escrito "AK 7" sería una
           segunda cosa que no cuadra.
 
@@ -616,13 +709,11 @@ function draw(
           ${celdas.length === 0 ? `
             <div class="col-span-full flex flex-col items-center gap-2 py-8 text-center">
               <span class="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                ${ui.buscar.trim()
-                  ? `Nada con "${ui.buscar.trim()}". Puede que no haya nada así en el almacén.`
-                  : `No tienes nada de ${FILTROS.find(f => f.id === ui.filter)?.label.toLowerCase() ?? 'este tipo'}.`}
+                ${motivoVacio}
               </span>
-              ${ui.buscar.trim() ? `
+              ${hayQueQuitarAlgo ? `
                 <button class="px-3 h-9 rounded-lg btn-ghost text-[10px] font-mono cursor-pointer"
-                        data-act="limpiar-busqueda">Quitar la búsqueda</button>` : ''}
+                        data-act="limpiar-filtros">${rotuloDeSalida}</button>` : ''}
             </div>`
           : cells.join('')}
         </div>
@@ -684,7 +775,7 @@ function draw(
 function multiSelBar(game: any): string {
   const state = game.getState();
   const plan = game.planSellMany(ui.elegidos);
-  const celdas = visibleStacksFor(game, state, ui.filter, ui.sort, ui.buscar);
+  const celdas = visibleStacksFor(game, state, ui.filter, ui.sort, ui.buscar, tierDe(ui.tierTexto));
   const visibles = celdas.map((c: any) => c.item.id);
   const hayTodos = visibles.length > 0 && visibles.every((id: string) => ui.elegidos.includes(id));
   /** El nombre del item, para poder decir "el Dron Explorador está equipado". */
@@ -1296,6 +1387,36 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
     }
   });
 
+  /**
+   * EL FILTRO DE TIER, CON LA MISMA LÓGICA QUE EL BUSCADOR (Q8): texto crudo en
+   * `ui.tierTexto`, `input` para que se filtre al teclear y el foco devuelto desde el
+   * contenedor, porque `redraw()` sustituye el nodo y sin eso se pierde al segundo
+   * dígito.
+   *
+   * **Y SIN CLAMPAR LO QUE SE ESCRIBE.** Si el jugador teclea 42 el campo enseña 42 y
+   * el filtro se acota en `tierDe()` —que es quien sabe hasta dónde hay tiers—: un
+   * campo que te corrige el texto mientras escribes es un campo discutidor. Solo se
+   * reescribe al salir del campo, con `change`, que es cuando normalizar no interrumpe.
+   */
+  root.querySelector<HTMLInputElement>('#wh-tier')?.addEventListener('input', (e) => {
+    ui.tierTexto = (e.target as HTMLInputElement).value;
+    redraw();
+    const campo = container.querySelector<HTMLInputElement>('#wh-tier');
+    if (campo) {
+      campo.focus();
+      const fin = campo.value.length;
+      campo.setSelectionRange(fin, fin);
+    }
+  });
+  // Al perder el foco, el número escrito se reduce a lo que el filtro entiende: si
+  // escribiste 42, al salir queda 10, y el campo y la rejilla vuelven a decir lo mismo.
+  root.querySelector<HTMLInputElement>('#wh-tier')?.addEventListener('change', (e) => {
+    const escrito = (e.target as HTMLInputElement).value;
+    const n = tierDe(escrito);
+    ui.tierTexto = n > 0 ? String(n) : '';
+    redraw();
+  });
+
   // --- Selección múltiple ------------------------------------------------
   // Van en el delegado de abajo y no aquí, porque los botones de la barra se pintan y
   // se borran en cada repintado: un listener por nodo habría que volver a ligar veinte
@@ -1389,6 +1510,22 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
       case 'limpiar-busqueda':
         sfx.nav();
         ui.buscar = '';
+        redraw();
+        break;
+      /**
+       * LA SALIDA DEL REJILLA VACÍA, Y POR QUÉ NO ES EL MISMO CASO QUE LA CRUZ.
+       *
+       * La cruz está dentro del buscador y vacía el buscador: es lo que el jugador ha
+       * escrito en ESE campo. Este botón aparece cuando no se ve nada y puede que la
+       * culpa la tenga el tier, o los dos a la vez, así que quita lo que se haya escrito
+       * en los dos —con solo uno, la rejilla seguiría en blanco y el botón parecería
+       * roto, que es el síntoma exacto de Q11—. El rótulo de él solito ya dice cuál de
+       * los dos o de los dos aplica.
+       */
+      case 'limpiar-filtros':
+        sfx.nav();
+        ui.buscar = '';
+        ui.tierTexto = '';
         redraw();
         break;
       case 'close':
@@ -1530,7 +1667,7 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
         // lo que hay en pantalla. Marcar lo que no se ve para venderlo sería dejar al
         // jugador vendiendo cosas sin verlas, que es la forma más rápida de que un
         // jugador no se fie de ese boton, y con razon.
-        const celdas = visibleStacksFor(game, game.getState(), ui.filter, ui.sort, ui.buscar);
+        const celdas = visibleStacksFor(game, game.getState(), ui.filter, ui.sort, ui.buscar, tierDe(ui.tierTexto));
         const ids = celdas.map((c: any) => c.item.id);
         ui.elegidos = ids;
         // Los que no se pueden vender no se marcan, y el motivo lo pone el motor: el
@@ -1615,7 +1752,7 @@ function wire(root: HTMLElement, game: any, onStateChange?: () => void, go?: (r:
  * pila completa y no uno de los items que hay dentro.
  */
 function visibleStacks(game: any, state: any): Array<{ item: any; ids: string[]; count: number }> {
-  return visibleStacksFor(game, state, ui.filter, ui.sort, ui.buscar);
+  return visibleStacksFor(game, state, ui.filter, ui.sort, ui.buscar, tierDe(ui.tierTexto));
 }
 
   /**
@@ -1689,13 +1826,14 @@ export function visibleStacksFor(
   state: any,
   filtro: string,
   sort: string,
-  buscar = ''
+  buscar = '',
+  tier = 0
 ): Array<{ item: any; ids: string[]; count: number }> {
   const wh = (state.warehouse || []) as any[];
-  // **EL FILTRO COMPLETO, EN UN SITIO.** Tipo y búsqueda juntos, y no aplicados en la
-  // vista: una rejilla que busca y un arrastre que solo filtra cuentan celdas distintas,
-  // y el jugador señala un número de celda que no es el sitio que ve.
-  let items = wh.filter((w: any) => pasaElFiltro(w, filtro, terminosDeBusqueda(buscar)));
+  // **EL FILTRO COMPLETO, EN UN SITIO.** Tipo, búsqueda y tier juntos, y no aplicados en
+  // la vista: una rejilla que busca y un arrastre que solo filtra cuentan celdas
+  // distintas, y el jugador señala un número de celda que no es el sitio que ve.
+  let items = wh.filter((w: any) => pasaElFiltro(w, filtro, terminosDeBusqueda(buscar), tier));
 
   if (sort === 'name') items = [...items].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   else if (sort === 'rarity') items = [...items].sort((a, b) => (RARITY_RANK[b.rarity] ?? 0) - (RARITY_RANK[a.rarity] ?? 0));
@@ -2039,14 +2177,48 @@ export function matchesFilter(w: any, filtro: string): boolean {
 }
 
 /**
- * El filtro completo: tipo **y** búsqueda.
+ * El tier que pide el campo escrito, en número, y **0 cuando no pide ninguno** (Q8).
+ *
+ * El `0` es "sin filtro", la misma convención que `TOPES_TIER`, así que quien llama
+ * puede combinarlo sin comprobar nada antes.
+ *
+ * **Y SALE DEL NÚMERO, NO DEL TEXTO, NI DEL NOMBRE DEL ITEM.** `tier` es el campo del
+ * item (los vienen de las cajas y de la forja), y con el texto suelto el filtro
+ * acabaría comparando "3" con el nombre de una caja. Vacío, letras o un número por
+ * debajo de 1 no filtran —un campo que no entiendes no debería vaciarte la rejilla—,
+ * y por encima del techo se acota en el techo, que es `MAX_TIER_ITEM`, el mismo que
+ * usan los desplegables: si hay diez tiers, el campo llega a diez y no a una cifra
+ * escrita en dos sitios.
+ */
+export function tierDe(texto: string): number {
+  const n = Number.parseInt(String(texto ?? '').trim(), 10);
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return Math.min(n, MAX_TIER_ITEM);
+}
+
+/**
+ * El filtro completo: tipo **y** búsqueda **y** tier.
  *
  * Con la búsqueda añadida, aplicar las dos mitades en la vista era justo el sitio donde
  * podían separarse: una rejilla que busca y otro sitio que solo filtra, y un arrastre
  * que cuenta celdas distintas de las que se ven. Ahora hay un solo sitio, y es el mismo
- * que usan la rejilla, el arrastre y el banco de pruebas.
+ * que usan la rejilla, el arrastre y el banco de pruebas. El tier entra por el mismo
+ * motivo: un filtro de tier aplicado en la rejilla y no en el arrastre movería un item
+ * a una celda que no se ve.
  */
-export function pasaElFiltro(w: any, filtro: string, terminos: string[] = []): boolean {
+export function pasaElFiltro(w: any, filtro: string, terminos: string[] = [], tier = 0): boolean {
+  // **LOS ITEMS SIN TIER NO PASAN, Y ES LO QUE QUIERE DECIR "VER EL TIER N".** Una
+  // llave o un consumible no tiene tier: con el filtro puesto no aparecen, que es
+  // exactamente lo que pidió el jugador —ver los ítems de ese tier—, y no una excepción
+  // que haya que recordar.
+  //
+  // **Y TAMPOCO LAS CAJAS, QUE ES EL CASO QUE SE PARECE MÁS A UN BUG.** Una caja se
+  // llama "Caja T3" pero en la celda no enseña "T3" sino su rareza, y su `tier` es 0:
+  // el juego decide que una caja no tiene tier, y la celda y la búsqueda por número
+  // ("3" encuentra lo que pone T3) ya lo tratan así. El filtro
+  // sigue la MISMA regla que las otras tres cosas —lo que se ve en la celda—, porque
+  // cambiar solo esta sería un filtro que muestra algo que el buscador no encuentra.
+  if (tier > 0 && (Number(w?.tier) || 0) !== tier) return false;
   return matchesFilter(w, filtro) && matchesSearch(w, terminos);
 }
 

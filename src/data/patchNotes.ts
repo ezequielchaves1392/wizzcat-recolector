@@ -57,6 +57,19 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.46',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Lote Q: vocabulario, afiches y filtros',
+    lineas: [
+      'Se unificó el vocabulario del jugador: click, recolección por click y recolección por segundo.',
+      'Se añadió el título Singularidad, desbloqueable desde el nodo del árbol.',
+      'La tarjeta AFK ahora se puede cancelar con una (x).',
+      'La versión del juego es visible en la cabecera y en la pantalla de acceso.',
+      'El banner del cosmetico ahora pinta el fondo del navegador principal.',
+      'Los afijos y el nivel aparecen visibles en ficha, almacén y forja.'
+    ]
+  },
+  {
     version: '1.15.45',
     fecha: '10 de octubre de 2026',
     titulo: 'Un solo nombre para cada cosa, en todo el juego',

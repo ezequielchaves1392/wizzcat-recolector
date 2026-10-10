@@ -291,7 +291,11 @@ export function pageShell(opts: PageShellOptions, body: string): string {
         title: opts.title,
         icon: opts.icon as any,
         resources: opts.state ?? false,
-        actions: opts.actions
+        actions: opts.actions,
+        // El banner equipado, para que el nav siga pintado al cambiar de pantalla (Q5).
+        // Sin esto el banner se vería en el menú principal y se perdería al entrar en
+        // una página, que es la mitad de un cambio de pantalla y se lee como un bug.
+        banner: opts.state?.cosmetics?.banner
       })}
 
       <main class="relative z-10 flex-grow min-h-0 w-full max-w-[68rem] mx-auto

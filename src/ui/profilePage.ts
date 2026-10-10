@@ -18,6 +18,7 @@ import { COSMETICS_BY_ID, COSMETICS_BY_TYPE, cosmeticStyle } from '../data/cosme
 import { titleStyleFor, avatarStack } from './identity';
 import { SECRET_ACHIEVEMENTS } from '../data/achievements';
 import { ACHIEVEMENTS } from '../achievements';
+import { TREE_BY_ID } from '../data/tree';
 import { estrellasDe } from '../data/crafting';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -46,6 +47,16 @@ export function unlockHint(cos: Cosmetic): string {
   switch (u.kind) {
     case 'default': return 'Disponible desde el principio';
     case 'cores': return `Compra con ${u.value} núcleos en la Ascensión`;
+    // **LA PISTA TIENE QUE SER UNA ACCIÓN, Y LA QUE DICE SU PROPIA DESCRIPCIÓN.** El
+    // título Singularidad salía aquí como "Compra con 0 núcleos en la Ascensión",
+    // que es una instrucción sin sentido y además imposible de cumplir: su vía no
+    // eran los núcleos, era el nodo del árbol. Se nombra el nodo, que es lo que el
+    // jugador tiene que hacer.
+    case 'node': {
+      const nodo = TREE_BY_ID[String(u.value)];
+      return nodo ? `Se compra con el nodo «${nodo.name}» del árbol`
+        : 'Se compra con un nodo del árbol';
+    }
     case 'achievement': {
       const nombre = nombreDeLogro(u.value as string);
       return nombre

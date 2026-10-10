@@ -37,6 +37,7 @@ import { showConfirmModal, htmlToNode } from '../utils/modal';
 import { showToast } from '../utils/toast';
 import { rarityClass, raritySlug } from '../components/crateLoot';
 import { esEquipado, statCelda, visibleStacksFor } from '../components/warehouse';
+import { puntosDeAfijos } from './fichas';
 
 /** Estado de la pantalla. Vive aquí para sobrevivir a los re-renders. */
 interface ForgeUIState {
@@ -378,14 +379,23 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
         </button>`;
     }
     return `
-      <button class="forge-slot is-filled" data-act="clear" data-slot="${i}"
+      <button class="forge-slot is-filled relative" data-act="clear" data-slot="${i}"
               style="border-color: color-mix(in srgb, var(--accent) 55%, transparent)"
               aria-label="Quitar ${w.name}">
         <span class="flex flex-col items-center gap-0.5 min-w-0 w-full">
           <span class="${rarityClass(w.rarity)} [&>span>svg]:w-5 [&>span>svg]:h-5">${ic(N.icono)}</span>
-          <span class="text-[9px] font-mono text-center leading-tight line-clamp-2">T${w.tier}</span>
+          <!--
+            EL NIVEL VA AQUÍ TAMBIÉN (Q6), Y EN LA MISMA LÍNEA QUE EL TIER POR LO MISMO
+            QUE EN LA CELDA DE LA MATERIA: el hueco es un cuadrado y una línea más lo
+            desborda. Es el número que decide cuánto rinde la fusión, y hasta ahora
+            desaparecía en cuanto el item pasaba del listado al hueco.
+          -->
+          <span class="text-[9px] font-mono text-center leading-tight">
+            T${w.tier}${nivelDe(w) !== 0 ? ` · N${nivelDe(w)}` : ''}
+          </span>
           ${`<span class="text-[9px] text-amber-400 leading-none">${estrellasDe(w.potential)}</span>`}
         </span>
+        ${puntosDeAfijos(w.affixes)}
       </button>`;
   };
 
@@ -403,6 +413,11 @@ function nivelDe(w: any): number {
 
   const matCell = (w: any) => {
     const isSel = ui.selected.includes(w.id);
+    // Q6 · Los afijos, igual que en el almacén: puntos de color arriba a la izquierda
+    // —la celda es un cuadrado y no admite una fila más— y los nombres en el title. La
+    // celda ya enseñaba el nivel, que fue el otro hueco que se corrigió aquí.
+    const afijos = (w.affixes || [])
+      .map((id: string) => AFFIX_BY_ID[id]?.name).filter(Boolean);
     // **SIN ESTADO DE EQUIPADO, PORQUE AQUÍ NO HAY NINGUNO.** La celda lo llevaba
     // para ponerla a media opacidad y marcarla con EQ, y el filtro de
     // materialesDeForja() hace que eso no tenga a quien marcar: los equipados no
@@ -411,7 +426,7 @@ function nivelDe(w: any): number {
     return `
       <button class="inv-cell ${isSel ? 'is-selected' : ''}"
               data-act="pick" data-id="${w.id}"
-              title="${w.name}">
+              title="${w.name}${afijos.length ? ` · Afijos: ${afijos.join(' · ')}` : ''}">
         <span class="ring-${raritySlug(w.rarity)} w-9 h-9 rounded-lg grid place-items-center
                      [&>span>svg]:w-4 [&>span>svg]:h-4 ${rarityClass(w.rarity)}">${ic(N.icono)}</span>
         <span class="text-[9px] font-mono text-[var(--text-main)] text-center leading-tight line-clamp-2 w-full">
@@ -432,6 +447,7 @@ function nivelDe(w: any): number {
         <span class="text-[9px] font-mono text-[var(--text-muted)]">
           T${w.tier} · ${estrellasDe(w.potential)}${nivelDe(w) !== 0 ? ` · N${nivelDe(w)}` : ''}
         </span>
+        ${puntosDeAfijos(w.affixes)}
         <!-- **LA ESQUINA CON EL STAT FINAL, Y ES LA MISMA FUNCIÓN QUE LA DEL ALMACÉN.**
              La celda enseña el tier y las estrellas, y con eso se ordenaba por la base:
              el nivel no aparecía por ninguna parte. Ahora la rejilla se ordena por el

@@ -310,7 +310,7 @@ function fila(r: LeaderboardEntry, i: number, meId?: string, kind: BoardKind = '
     <div class="rank-row ${isMe ? `is-me` : ``} ${r.uid ? `cursor-pointer hover:bg-white/5 transition` : `opacity-80`}"
          data-ver="${esc(r.uid ?? '')}" title="Ver la tarjeta de ${esc(r.username ?? 'Operativo')}">
       ${banner && banner.id !== 'banner_none' ? `
-        <span class="rank-banner" aria-hidden="true" style="${rellenoDeBanner(banner)}"></span>` : ''}
+        <span class="banner-capa" aria-hidden="true" style="${rellenoDeBanner(banner)}"></span>` : ''}
       <div class="rank-pos" data-tier="${i + 1 <= 3 ? i + 1 : ''}">${i + 1}</div>
 
       ${miniIdentity(r.username, { title: r.title, frame: frameId, banner: bannerId })}

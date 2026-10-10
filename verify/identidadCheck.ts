@@ -31,7 +31,7 @@ import { COSMETICS, cosmeticsAlcanzables, viasSinResolver, cosmeticStyle } from 
 import {
   BOARD_KINDS, BOARDS, boardValue, computeScore, CORE_WEIGHT, FILAS_DE_EJEMPLO
 } from '../src/services/rankingService';
-import { coresGastadosEnArbol } from '../src/data/tree';
+import { coresGastadosEnArbol, TREE_BY_ID } from '../src/data/tree';
 import { danioDeRango } from '../src/data/crafting';
 import { tarjetaDesdeEstado, danoFinalDeTarjeta } from '../src/data/profile';
 import { techoDeExpansor, EXPANSOR_TIERS } from '../src/data/store';
@@ -410,12 +410,28 @@ async function main() {
       alcanzables({ totalCores: 20 }).some((c: any) => c.id === 'banner_sunset') &&
       !alcanzables({ totalCores: 19 }).some((c: any) => c.id === 'banner_sunset'),
       '19=' + alcanzables({ totalCores: 19 }).map((c: any) => c.id).join(','));
-    // **Y EL `value: 0` NO ES "GRATIS".** El Singularidad lo declara con cero porque su
-    // vía era "comprar el nodo", que esta función no puede preguntar. Con `0` el filtro lo
-    // daría a todo el mundo al cargar, y es un título Divino.
-    check('cosmeticos: un tope de nucleos 0 no abre nada',
+    // **Y EL TÍTULO SINGULARIDAD YA NO ES "COMPRA CON 0 NÚCLEOS".** Estaba declarado
+    // como `cores: 0` porque su vía de verdad era "comprar el nodo", que esta función
+    // no podía preguntar: con `0` la pregunta "¿has ganado al menos cero?" la ganaría
+    // todo el mundo al cargar, así que el tope se puso a cero **para que no lo diera**
+    // —y con eso quedó sin poder conseguirse, enseñando en el perfil la frase imposible
+    // que reportó el jugador. Ahora su vía es `node` y se resuelve con los niveles del
+    // árbol, que es lo que dice su propia descripción.
+    check('cosmeticos: el singularidad no se gana con nucleos, por mucha suma que tengan',
       !alcanzables({ totalCores: 99999 }).some((c: any) => c.id === 'title_singularity'),
       alcanzables({ totalCores: 99999 }).map((c: any) => c.id).join(','));
+    check('cosmeticos: y se gana al comprar su nodo',
+      alcanzables({ totalCores: 0, nodeLevels: { singularity: 1 } })
+        .some((c: any) => c.id === 'title_singularity'),
+      alcanzables({ totalCores: 0, nodeLevels: { singularity: 1 } }).map((c: any) => c.id).join(','));
+    // El nodo comprado tiene nivel > 0; el 0 es "está en el árbol sin tocar".
+    check('cosmeticos: un nodo en nivel 0 no abre nada',
+      !alcanzables({ nodeLevels: { singularity: 0 } }).some((c: any) => c.id === 'title_singularity'),
+      alcanzables({ nodeLevels: { singularity: 0 } }).map((c: any) => c.id).join(','));
+    check('cosmeticos: otro nodo del arbol no abre el singularidad',
+      !alcanzables({ totalCores: 99999, nodeLevels: { core_sink: 7 } })
+        .some((c: any) => c.id === 'title_singularity'),
+      alcanzables({ totalCores: 99999, nodeLevels: { core_sink: 7 } }).map((c: any) => c.id).join(','));
 
     // **LA VÍA SECRETA ES LA VÍA DEL LOGRO.** Los dos ids `secret` del catálogo son
     // ids de logro, y por eso la misma pregunta los abre.
@@ -471,7 +487,7 @@ async function main() {
     check('cosmeticos: cargar NO abre nada de la vía del ranking',
       !tiene.includes('banner_crown') && !tiene.includes('frame_gold') && !tiene.includes('title_champion'),
       tiene.join(','));
-    check('cosmeticos: el de singularidad sigue bloqueado, porque su vía no es núcleos',
+    check('cosmeticos: el de singularidad sigue bloqueado sin el nodo comprado',
       !tiene.includes('title_singularity'), tiene.join(','));
 
     // Y que **no se rompa al volver a cargar**: la reconciliación es idempotente porque
@@ -481,6 +497,19 @@ async function main() {
     check('cosmeticos: recargar no duplica la lista de desbloqueados',
       (s(g2).cosmetics.unlocked as string[]).length === antes,
       `antes=${antes} despues=${(s(g2).cosmetics.unlocked as string[]).length}`);
+
+    // **Y LA VÍA NUEVA FUNCIONA EN EL MOTOR Y NO SOLO EN EL CATÁLOGO.** Otra partida,
+    // misma carga, con el nodo puesto: sin esto un `node` declarado y olvidado pasaría
+    // igual que pasaba el `cores: 0`. Va DESPUÉS de la recarga de arriba porque `reload()`
+    // recarga la última partida montada, y esta es otra.
+    const gNodo = await boot(baseSave([collector('r1')], {
+      nodeLevels: { singularity: 1 },
+      unlockedAchievements: [],
+      totalCores: 0
+    }));
+    const tieneNodo = s(gNodo).cosmetics.unlocked as string[];
+    check('cosmeticos: cargar con el nodo comprado abre el singularidad',
+      tieneNodo.includes('title_singularity'), tieneNodo.join(','));
   }
 
 {
@@ -654,6 +683,16 @@ async function main() {
     unlockHint({ ...deLogro[0], id: 'x', unlock: { kind: 'achievement', value: 'no_existe' } } as any)
       === 'Se desbloquea con un logro',
     unlockHint({ ...deLogro[0], id: 'x', unlock: { kind: 'achievement', value: 'no_existe' } } as any));
+
+  // **Y LA PISTA DEL SINGULARIDAD ERA UNA FRASE SIN SENTIDO.** Salía como "Compra con
+  // 0 núcleos en la Ascensión": una instrucción que no se puede seguir y que además no
+  // apuntaba a nada, porque su vía real es el nodo del árbol. La pista tiene que decir
+  // la acción que se hace, con el nombre del nodo tal y como lo pone el árbol.
+  const singularidad = COSMETICS.find(c => c.id === 'title_singularity')!;
+  const pista = unlockHint(singularidad);
+  check('F53: el singularidad dice el nodo que hay que comprar',
+    pista.includes(`nodo «${TREE_BY_ID.singularity.name}» del árbol`) && !pista.includes('núcleos'),
+    pista);
 
 // ---------------------------------------------------------------------------
   //  3 · LOS DOCE DIFÍCILES: QUE SE PUEDAN HACER, Y QUE NO TOQUEN LA ECONOMÍA

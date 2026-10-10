@@ -132,7 +132,17 @@ export function resolveIcon(name: unknown): IconName {
 
 /** Igual que `icon()`, pero acepta nombres venidos de datos y nunca falla. */
 export function icon(name: IconName, className = 'w-4 h-4'): string {
-  return `<span class="inline-flex ${className}">${ICONS[name]}</span>`;
+  // **EL CENTRADO VA AQUÍ, Y ES LO QUE ARREGLA "ALGUNOS ICONOS NO ESTÁN CENTRADOS".**
+  // Este span es una caja fija (16 px por defecto) y el SVG de dentro lo redimensiona
+  // quien llama, con `[&>span>svg]:w-9` o `w-3.5`: un icono de 36 px dentro de una caja
+  // de 16 se salía **pegado a la esquina superior izquierda** —flex por defecto arranca
+  // el eje principal en start— y uno de 14 px se quedaba pegado arriba a la izquierda.
+  // Por eso había iconos descuadrados y otros no: dependía de si la medida que traía
+  // coincidía con la de la caja. Centrando el eje la salida es igual en los dos casos y,
+  // sobre todo, **la caja no cambia de tamaño**: lo único que se mueve es el dibujo
+  // dentro de su propia caja, así que ningún hueco, ninguna separación y ningún botón
+  // de ancho fijo (la wiki mide 36 px porque mide 36 px) se altera.
+  return `<span class="inline-flex items-center justify-center ${className}">${ICONS[name]}</span>`;
 }
 
 /** Atajo para usar dentro de plantillas: `html`${ic('bolt')}`` */

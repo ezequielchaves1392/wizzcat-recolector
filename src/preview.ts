@@ -152,7 +152,12 @@ const MOCK: any = {
     collector(6, { id: 'd', name: 'Pulso Nebula', level: 6, damage: 35 }),
     collector(5, { id: 'e', name: 'Cincel Orbital', level: 20, damage: 28, maxLevel: 20 }),
     collector(4, { id: 'f', name: 'Bastón de Chispas', level: 8, damage: 20 }),
-    { id: 'c1', name: 'Avatar del Vacío', type: 'companion', potential: 3, details: 'Recolección por segundo: +65/s', rarity: 'Divino', tier: 10, power: 65 },
+    // Q6 · NIVEL Y AFIJOS EN LA FICHA DEL COMPAÑERO, Y POR QUÉ SE LE PONEN AQUÍ.
+    // Los companions del mock no traían ni nivel ni afijos, y esa casilla es el único
+    // sitio donde se ve la mitad del cambio: sin dato que enseñar, el preview aprueba
+    // una casilla que no enseña nada. `level` y `affixes` son los campos reales que
+    // escribe el motor al crear la ficha (ver `generateCompanionByTier`).
+    { id: 'c1', name: 'Avatar del Vacío', type: 'companion', potential: 3, details: 'Recolección por segundo: +65/s', rarity: 'Divino', tier: 10, power: 65, level: 7, affixes: ['aff_prime', 'aff_void'] },
     { id: 'c2', name: 'Oráculo Tribal', type: 'companion', potential: 3, details: 'Multiplicador global +75%', rarity: 'Legendario', tier: 8, power: 0.75 },
     { id: 'c3', name: 'Titán de Acero', type: 'companion', potential: 3, details: 'Recolección por segundo: +68/s', rarity: 'Legendario', tier: 9, power: 68 },
     { id: 'c4', name: 'Dron Explorador', type: 'companion', potential: 3, details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6 },
@@ -752,7 +757,15 @@ switch (vista) {
     app.innerHTML = renderLayoutHTML(MOCK, 'cyber-dark', 'base', {
       onNavigate: noop, onLogout: noop,
       onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
-    }, undefined, MOCK);
+      // **LA IDENTIDAD, QUE ANTES NO LLEGABA A LA CABECERA DEL PREVIEW.** Sin ella ese
+      // sector salía vacío y también el banner que pinta el fondo del nav (Q5), que es
+      // lo único que hay que revisar de ese bloque: un preview que enseña la cabecera
+      // a medias aprueba una cabecera rota. Es el mismo parámetro que monta el juego
+      // con `activeGameInstance`, y aquí lo da el propio MOCK.
+    }, {
+      name: MOCK.displayName ?? 'Operativo',
+      cosmetics: MOCK.cosmetics
+    }, MOCK);
     // La barra se pinta aqui porque el preview no llama a updateUI(): tiene su propio
     // render. Sin esto la barra sale vacia en el preview y no hay forma de revisarla.
     pintarBarraDeConsumibles(fakeGame, noop);
@@ -768,7 +781,15 @@ switch (vista) {
     app.innerHTML = renderLayoutHTML(MOCK, 'cyber-dark', 'base', {
       onNavigate: noop, onLogout: noop,
       onToggleMute: noop, onToggleMusic: noop, onThemeChange: noop
-    }, undefined, MOCK);
+      // **LA IDENTIDAD, QUE ANTES NO LLEGABA A LA CABECERA DEL PREVIEW.** Sin ella ese
+      // sector salía vacío y también el banner que pinta el fondo del nav (Q5), que es
+      // lo único que hay que revisar de ese bloque: un preview que enseña la cabecera
+      // a medias aprueba una cabecera rota. Es el mismo parámetro que monta el juego
+      // con `activeGameInstance`, y aquí lo da el propio MOCK.
+    }, {
+      name: MOCK.displayName ?? 'Operativo',
+      cosmetics: MOCK.cosmetics
+    }, MOCK);
     // La barra se pinta aqui porque el preview no llama a updateUI(): tiene su propio
     // render. Sin esto la barra sale vacia en el preview y no hay forma de revisarla.
     pintarBarraDeConsumibles(fakeGame, noop);

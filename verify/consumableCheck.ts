@@ -652,25 +652,36 @@ async function main() {
     const antes = s(g).afkExpiresAt;
     const etiqueta = g.cancelBuff('afk');
 
-    // **EL AFK NO SE PUEDE CANCELAR, Y SE COMPRUEBA EN EL MOTOR Y NO EN EL BOTON.**
-    // Ocultar la cruce en la tarjeta habria hecho pasar la mitad de esta comprobacion:
-    // el boton ya no estaria, pero `cancelBuff()` seguiria tirando media hora de tiempo
-    // acumulado con una sola llamada. Por eso la prueba va contra el motor.
-    check('cancelar: el AFK NO se puede cancelar', etiqueta === false, String(etiqueta));
+    // **EL AFK TAMBIÉN SE PUEDE CANCELAR DESDE Q3, Y LO DICE EL MOTOR Y NO EL BOTÓN.**
+    // Ocultar la cruce en la tarjeta habría hecho pasar esta mitad sin probar nada: el
+    // botón desaparecería mientras `cancelBuff()` siguiera negando. La regla es
+    // `sePuedeCancelar('afk')`, que leen el HUD y el motor, y aquí se comprueba contra el
+    // motor porque es él quien tiene que dejar de negar.
+    check('cancelar: el AFK se puede cancelar (Q3)',
+      etiqueta === BUFF_LABELS.afk && antes > 0, String(etiqueta));
     check(
-      'cancelar: y sigue puesto, con el mismo tiempo',
-      s(g).afkExpiresAt === antes && antes > 0,
+      'cancelar: y su buff se apaga, con el total a cero',
+      s(g).afkExpiresAt === 0 && (s(g).afkTotalMs as number) === 0 && antes > 0,
       'expira=' + s(g).afkExpiresAt + ' antes=' + antes
     );
-    check(
-      'cancelar: y el tiempo concedido no se toca',
-      (s(g).afkTotalMs as number) > 0,
-      'afkTotalMs=' + String(s(g).afkTotalMs)
-    );
+    // Y la regla de este bloque entera: cancelar no devuelve el item.
+    check('cancelar: la tarjeta cancelada no vuelve al almacen', wh(g).length === 1, ids(g).join(','));
     check(
       'cancelar: y el item sigue gastado igual',
       wh(g).length === 1 && s(g).afkCards === 1,
       wh(g).length + ' tarjetas=' + s(g).afkCards
+    );
+    // **Y VOLVER A PONERLO ES USAR OTRA TARJETA, QUE ERA LA MITAD DE LA OBJECIÓN VIEJA**
+    // ("no había ningún sitio donde volver a ponerlo sin gastar otra tarjeta"). Es
+    // cierto, y es exactamente lo que se hace con el resto de buffs: aquí queda una en
+    // el almacén y el buff vuelve, con su total nuevo y no con el del cancelado, que es
+    // lo que la barra mide.
+    const otra = wh(g).find((w: any) => w.buffId === 'afk');
+    const r2 = otra ? g.useConsumable(otra.id) : { ok: false, msg: 'no queda tarjeta' };
+    check(
+      'cancelar: y se puede volver a poner con la tarjeta que queda',
+      !!r2.ok && s(g).afkExpiresAt > 0 && (s(g).afkTotalMs as number) > 0,
+      `${r2.msg ?? ''} expira=${s(g).afkExpiresAt} total=${s(g).afkTotalMs}`
     );
   }
   {
@@ -923,18 +934,20 @@ async function main() {
           && s(g).buffs.clickX2TotalMs === 0 && s(g).buffs.clickX2ExpiresAt === 0;
       })(),
       `total=${s(g).buffs.clickX2TotalMs} expira=${s(g).buffs.clickX2ExpiresAt}`);
-    // **Y EL AFK NO: SU BARRA NO SE PUEDE PONER A CERO POR LA VIA DE CANCELAR.**
-    // El total concedido del AFK se limpia al expirar, no al cancelar, porque cancelar
-    // no es una operacion que exista para el. Si se limpiara aqui, la siguiente barra
-    // arrancaria con el ancho de un buff que sigue vivo.
+    // **Y EL AFK, QUE DESDE Q3 TAMBIÉN SE CANCELA, Y SU TOTAL SE BORRA COMO EL OTRO.**
+    // Mismo motivo que el click: el denominador de la barra es lo que se concedió, y si
+    // cancelar dejara el total escrito, la próxima tarjeta de AFK arrancaría con el ancho
+    // de un buff que ya no existe. El caso no se comprobaba antes porque cancelar no
+    // existía para el; ahora la regla es la de todos, así que se comprueba igual.
     check(
-      'b13: el AFK no se puede cancelar y su total no se toca',
+      'b13: cancelar el AFK apaga su buff y borra su total',
       (() => {
         const antes = s(g2).afkTotalMs as number;
         const a = g2.cancelBuff('afk');
-        return a === false && s(g2).afkTotalMs === antes && (antes as number) > 0;
+        return a === BUFF_LABELS.afk && s(g2).afkTotalMs === 0
+          && s(g2).afkExpiresAt === 0 && antes > 0;
       })(),
-      'vuelve=' + String(s(g2).afkExpiresAt > 0) + ' total=' + String(s(g2).afkTotalMs));
+      'expira=' + String(s(g2).afkExpiresAt) + ' total=' + String(s(g2).afkTotalMs));
   }
   {
     // **UNA PARTIDA VIEJA NO TIENE EL CAMPO, Y ESO NO PUEDE SER UN NaN.**

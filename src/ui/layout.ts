@@ -36,6 +36,7 @@ import { routeTitle, type Route } from './router';
 import { navMobileHTML } from './navBars';
 import { appHeaderHTML } from './appHeader';
 import { miniIdentity, type IdentityCosmetics } from './identity';
+import { VERSION } from '../data/patchNotes';
 
 export interface LayoutCallbacks {
   onNavigate: (route: Route) => void;
@@ -112,6 +113,10 @@ export function renderLayoutHTML(
           hideDefaultTitle: true,
           nameClass: 'font-[\'Orbitron\'] font-bold text-[13px] md:text-sm accent-text truncate leading-tight'
         }),
+        // El banner equipado, para que pinte el fondo del nav (Q5). El mismo id que
+        // acaba de usar miniIdentity para el avatar: no es una segunda fuente, es el
+        // mismo `identity.cosmetics` leyéndose dos veces en la misma llamada.
+        banner: identity?.cosmetics?.banner,
         // El HUD de buffs vive en el grupo de la izquierda porque se puede desplazar y
         // encogerse; en actions, que no encoge, aplastaría al nav.
         buffsHudId: 'active-buffs-hud',
@@ -390,6 +395,28 @@ export function renderLayoutHTML(
           </div>
         </section>
       </main>
+
+      <!--
+        LA VERSIÓN, CHIQUITA, EN UNA ESQUINA DE ABAJO (Q4).
+
+        Va aquí y no dentro de la zona principal: esa es la de scroll de cada
+        pantalla, así que lo que se pone dentro se va con el contenido y sólo se
+        ve cuando se llega al final —que en una pantalla con scroll es casi
+        nunca. Esta es una fila de la columna fija: se ve siempre en el borde de
+        abajo, encima de la barra de navegación en móvil, y no le quita altura a
+        nadie porque es una línea de 9 px.
+
+        Sale de VERSION, que lee el package.json, y es la misma cifra que la del
+        acceso y la que abre las notas de parche: una sola fuente para las tres,
+        que era lo que impedía que la de aquí dijera una cosa y la de allá otra.
+      -->
+      <div class="flex-shrink-0 w-full max-w-[68rem] mx-auto px-3 md:px-4 h-4
+                  flex items-center justify-end
+                  text-[9px] font-mono tracking-[0.15em] text-[var(--text-muted)]
+                  select-none pointer-events-none"
+           aria-hidden="true">
+        <span>v${VERSION}</span>
+      </div>
 
       <!-- ===================== NAVEGACIÓN INFERIOR (MÓVIL) ===================== -->
       ${navMobileHTML(activeRoute)}

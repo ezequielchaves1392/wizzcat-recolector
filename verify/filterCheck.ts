@@ -21,11 +21,12 @@
 // ==========================================================================
 
 import {
-  visibleStacksFor, matchesFilter, matchesSearch, pasaElFiltro,
+  visibleStacksFor, matchesFilter, matchesSearch, pasaElFiltro, tierDe,
   terminosDeBusqueda, normalizaBusqueda, ordenesParaFiltro, ordenValidoParaFiltro
 } from '../src/components/warehouse';
 import { materialesDeForja } from '../src/ui/forgePage';
 import { bandaDeProbabilidad, CORTE_PROBABILIDAD_ALTA, CORTE_PROBABILIDAD_MEDIA } from '../src/data/items';
+import { MAX_TIER_ITEM } from '../src/data/autoventa';
 import { textoDeCantidad, MAX_STACK } from '../src/data/stacking';
 import { poderDeCompanero, danioDeRango } from '../src/data/crafting';
 import { basePorId } from '../src/data/bases';
@@ -803,6 +804,73 @@ async function main() {
       porTipo.join(',') === 'm1,m2,r1,r2,r3,c1,u1', porTipo.join(','));
     check('orden tipo: no se pierde ningún item al agrupar',
       porTipo.length === 7, porTipo.join(','));
+  }
+
+
+  // =========================================================================
+  //  Q8 · EL FILTRO DE TIER, Y LO QUE NO DEBE ARRASTRAR CONSIGO
+  // =========================================================================
+  //
+  //  Lo pedido: "un filtro de Tier (n)... filtraría todos los ítems del tier".
+  //  Que filtre se ve mirando la rejilla; lo que no se ve son las DOS cosas que
+  //  pueden descuelgarse:
+  //
+  //  · **Se compone con lo demás y no lo pisa.** Tier 3 dentro de "Recolectores"
+  //    es tier 3 Y recolectores: si el número sustituyera el filtro de tipo, un
+  //    jugador que pusiera un tier perdería sin aviso el filtro que ya traía.
+  //  · **Va en `visibleStacksFor`, que es lo que usan la rejilla, el arrastre y
+  //    el "todos" de la selección múltiple.** Un tier aplicado en la vista y no
+  //    en esa función marcaría celdas que no se ven, que es la clase de bug que
+  //    solo se cuenta vendiendo algo por error.
+  //
+  //  Y lo que NO filtra: las cajas. Su `tier` es 0 —la celda enseña su rareza y
+  //  no "T3"—, y el filtro sigue la misma regla que la celda y la búsqueda.
+  {
+    const g = await boot(baseSave([
+      collector('r3', 3), collector('r3b', 3),
+      collector('r1', 1),
+      companion('m5', 5),
+      crate('c1', 1)
+    ]));
+    const porTier = (filtro: string, tier: number, buscar = '') =>
+      visibleStacksFor(g, s(g), filtro, 'default', '', tier)
+        .map((c: any) => c.item.id);
+
+    check('tier: solo los items de ese tier',
+      porTier('all', 3).join(',') === 'r3,r3b', porTier('all', 3).join(','));
+    check('tier: y el de otro tier no se cuela',
+      !porTier('all', 3).join(',').includes('m5') && !porTier('all', 3).join(',').includes('r1'),
+      porTier('all', 3).join(','));
+    check('tier: se compone con el filtro de tipo, no lo pisa',
+      porTier('collector', 3).join(',') === 'r3,r3b' && porTier('companion', 3).join(',') === '',
+      `${porTier('collector', 3).join(',')} / ${porTier('companion', 3).join(',')}`);
+    check('tier: y con la búsqueda escrita a la vez',
+      porTier('all', 1, 'recolector').join(',') === 'r1',
+      porTier('all', 1, 'recolector').join(','));
+    check('tier: sin tier escrito no filtra nada',
+      visibleStacksFor(g, s(g), 'all', 'default', '', 0).length === 5,
+      String(visibleStacksFor(g, s(g), 'all', 'default', '', 0).length));
+    check('tier: las cajas no tienen tier, igual que en la celda',
+      porTier('all', 1).join(',') === 'r1' && !porTier('all', 1).join(',').includes('c1'),
+      porTier('all', 1).join(','));
+
+    // El texto del campo, que es lo que se escribe, y el número que se filtra.
+    check('tierDe: el número escrito es el tier, y lo que no es número no filtra',
+      tierDe('4') === 4 && tierDe('2') === 2
+        && tierDe('') === 0 && tierDe('  ') === 0
+        && tierDe('abc') === 0 && tierDe('0') === 0 && tierDe('-3') === 0,
+      `${tierDe('4')}/${tierDe('abc')}/${tierDe('0')}`);
+    check('tierDe: por encima del techo se acota en el techo del juego',
+      tierDe('99') === MAX_TIER_ITEM && tierDe(String(MAX_TIER_ITEM)) === MAX_TIER_ITEM,
+      `${tierDe('99')} frente a ${MAX_TIER_ITEM}`);
+    // **Y EL FILTRO DEBAJO ES EL MISMO QUE USA LA REJILLA, NO UNA COPIA.** El campo
+    // escribe `ui.tierTexto` y quien lo normaliza es `tierDe`; si la rejilla llamara a
+    // otra cuenta, el campo enseñaría una cosa y la rejilla haría otra.
+    check('tier: pasaElFiltro es la regla de la rejilla, y el 0 no filtra',
+      pasaElFiltro(collector('x', 5), 'all', [], 5)
+        && !pasaElFiltro(collector('x', 5), 'all', [], 4)
+        && pasaElFiltro(collector('x', 5), 'all', [], 0),
+      'regla del filtro de tier');
   }
 
 

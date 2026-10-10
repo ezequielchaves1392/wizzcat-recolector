@@ -58,6 +58,8 @@ import { navDesktopHTML } from './navBars';
 import { isMusicEnabled, isSfxEnabled } from '../utils/audio';
 import { THEMES, getSavedTheme } from '../theme';
 import { formatNumber } from '../utils/format';
+import { COSMETICS_BY_ID } from '../data/cosmetics';
+import { rellenoDeBanner } from './identity';
 
 // --------------------------------------------------------------------------
 //  EL TAMAÑO DE LOS ICONOS DE LA CABECERA
@@ -184,6 +186,21 @@ export interface AppHeaderOptions {
   icon?: IconName;
   /** Nombre y avatar del jugador. **Solo la base**: es el sector de la identidad. */
   identityHTML?: string;
+  /**
+   * El id del banner equipado, para pintarlo como fondo de esta cabecera (Q5).
+   *
+   * **ES UNA CAPA ATRÁS DEL CONTENIDO, NO EL FONDO DEL NODO**: el `<header>` ya tiene
+   * su `card-glass` —que es translúcido y se apoya en el fondo de la app— y meter el
+   * banner como `background` lo borraría, que es la misma razón por la que el ranking
+   * lo pinta suelto. La capa es `.banner-capa`, la MISMA clase y la MISMA opacidad que
+   * en la fila del ranking: el cosmético va entero sobre un avatar de 32 px y no puede
+   * ir entero detrás de una tira de texto con nav, saldos y título dentro.
+   *
+   * **SE PASA EL ID Y NO EL COSMÉTICO**, igual que hace `miniIdentity`: el catálogo se
+   * lee aquí, en un sitio, y un id que no esté —o `banner_none`— no pinta nada sin
+   * que nadie tenga que acordarse de comprobarlo.
+   */
+  banner?: string;
   /**
    * Botón `‹` de vuelta.
    *
@@ -426,7 +443,7 @@ export function settingsSheetHTML(): string {
         -->
         <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
           <input type="checkbox" data-setting="patch-notes"
-                 class="w-5 h-5 flex-shrink-0 accent-[var(--accent)]"
+                 class="cf-check w-5 h-5"
                  ${getPatchNotes() ? 'checked' : ''}
                  aria-describedby="patch-notes-hint">
           <span class="min-w-0">
@@ -525,11 +542,32 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
   // lee como un encabezado sin nombre—, así que no se pinta.
   const titulo = (opts.title ?? routeTitle(opts.route)).trim();
 
+  // **EL BANNER EQUIPADO, COMO FONDO DEL NAV (Q5).** El jugador pide que el banner
+  // "pinte el background del nav del menú principal", y el nav es este mismo bloque en
+  // las siete pantallas: sale de `appHeaderHTML()`, así que si la pintura viviera solo
+  // en la base, el banner aparecería al volver al menú y desaparecería al entrar en el
+  // almacén, que es peor que no ponerlo. Quien pasa el id es quien tiene el estado —
+  // `layout.ts` con su `identity`, `pageShell.ts` con su `state`—, y aquí solo se lee
+  // el catálogo.
+  //
+  // Un id que no exista da `undefined` y no pinta nada: una cabecera sin banner es el
+  // caso normal, no un error que haya que frenar.
+  const bannerId = (opts.banner ?? '').trim();
+  const banner = bannerId && bannerId !== 'banner_none' ? COSMETICS_BY_ID[bannerId] : undefined;
+
   return `
     <header class="relative z-20 card-glass flex-shrink-0 px-3 md:px-5 py-2.5 md:py-3
                     border-x-0 border-t-0 md:mx-4 md:mt-2 md:rounded-2xl md:border"
             style="padding-top: max(0.625rem, env(safe-area-inset-top))">
-      <div class="flex items-center gap-2 md:gap-3 min-h-[3.5rem]">
+      ${banner ? `<span class="banner-capa" aria-hidden="true" style="${rellenoDeBanner(banner)}"></span>` : ''}
+      <!--
+        EL CONTENIDO LLEVA relative z-10 A SACO, EN LOS DOS BLOQUES DE DENTRO.
+        No por estética: un elemento absolute pinta ENCIMA de los que no están
+        posicionados aunque su z-index sea 0, así que la capa del banner taparía el
+        nav y los saldos con solo existir. Lo mismo que ya hace .rank-row en el
+        ranking, escrito aquí como utilidad en vez de selector.
+      -->
+      <div class="relative z-10 flex items-center gap-2 md:gap-3 min-h-[3.5rem]">
 
         <div class="flex items-center gap-2 min-w-0 flex-1">
           ${opts.identityHTML ? `<div id="nav-identity" class="flex-shrink-0 hidden sm:flex items-center">${opts.identityHTML}</div>` : ''}
@@ -628,11 +666,20 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
           arriba). Y abre wiki.html en otra pestaña en vez de navegar dentro
           del juego, así leerla no para el tick ni toca la partida —la pestaña
           del juego queda oculta y el juego se pausa solo por presencia—.
+
+          Y lleva su rótulo chiquito debajo (Q10): era la única entrada del nav
+          que era un icono sin nombre —una hoja enrollada, que no dice wiki a
+          primera vista— mientras las otras cinco llevan su texto. **EL RÓTULO
+          NO TOCA EL ANCHO**: sigue midiendo w-9 y el nav sigue donde estaba,
+          que es la condición de todo este bloque; el icono baja de 18 a 15 px
+          para que la línea quepa dentro sin crecer.
         -->
         <button data-wiki-externo
-                class="w-9 h-9 rounded-lg btn-ghost flex items-center justify-center cursor-pointer flex-shrink-0"
+                class="w-9 h-9 rounded-lg btn-ghost flex flex-col items-center justify-center gap-0.5
+                       leading-none cursor-pointer flex-shrink-0"
                 aria-label="Wiki" title="Wiki (se abre en otra pestaña)">
-          <span class="[&>span>svg]:w-[18px] [&>span>svg]:h-[18px]">${ic('scroll')}</span>
+          <span class="[&>span>svg]:w-[15px] [&>span>svg]:h-[15px]">${ic('scroll')}</span>
+          <span class="text-[7px] font-mono font-bold uppercase tracking-[0.06em] opacity-75">wiki</span>
         </button>
 
         ${headerSettingsButton()}
@@ -640,7 +687,7 @@ export function appHeaderHTML(opts: AppHeaderOptions): string {
 
       ${opts.mobileBuffsId ? `
         <div id="${opts.mobileBuffsId}"
-             class="xl:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>` : ''}
+             class="relative z-10 xl:hidden flex gap-1.5 overflow-x-auto mt-2 pb-0.5 empty:hidden -mx-1 px-1"></div>` : ''}
 
       </header>
     ${settingsSheetHTML()}`;

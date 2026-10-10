@@ -31,6 +31,59 @@ export function slug(rarity: string): string {
   return rarity.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+/**
+ * LOS AFIJOS COMO ETIQUETAS CON NOMBRE (Q6), Y POR QUÉ SON UNA FUNCIÓN Y NO ESTABAN
+ * ESCRITAS A MANO EN CADA SITIO.
+ *
+ * Los afijos se enseñan en anchos distintos —la ficha del recolector, que es ancha, y la
+ * casilla del compañero, que no lo es— y la marca estaba escrita dentro de la ficha solo,
+ * así que la segunda no podía enseñarlos sin copiarla entera. Con la marca en una función,
+ * las dos comparten lo que importa: **el nombre sale del catálogo, el color es el de la
+ * rareza del afijo y el `title` explica qué hace**, que es lo único que convierte un
+ * color en información cuando el nombre no cabe.
+ *
+ * Un id que no esté en el catálogo no pinta nada en vez de romper la ficha entera: los ids
+ * viejos existen en guardados antiguos y ya no tienen nombre que enseñar.
+ */
+export function etiquetasDeAfijos(
+  affixes: string[] | undefined,
+  clase = 'text-[8px] font-mono px-1 rounded border whitespace-nowrap'
+): string {
+  const etiquetas = (affixes || [])
+    .map(id => {
+      const a = AFFIX_BY_ID[id];
+      if (!a) return '';
+      return `<span class="${clase} rarity-${slug(a.rarity)}"
+                    style="border-color: currentColor"
+                    title="${a.name} — ${a.description}">${a.name}</span>`;
+    })
+    .filter(Boolean);
+  if (!etiquetas.length) return '';
+  return `<span class="flex flex-wrap gap-1 justify-center mt-1 w-full">${etiquetas.join('')}</span>`;
+}
+
+/**
+ * LOS AFIJOS COMO PUNTOS DE COLOR, PARA DONDE NO HUECO PARA ETIQUETAS (Q6).
+ *
+ * La celda del almacén y la de la forja son **cuadrados de 74 px con `aspect-ratio: 1`**,
+ * y ya llevan el icono de 32, el nombre a dos líneas y la línea de tier. Una fila de
+ * etiquetas con nombre la desbordaría, y la celda no la recorta: la celda solo se sale de
+ * su hueco. Aquí cada afijo es un punto del color de su rareza, y eso cabe siempre —seis
+ * puntos miden veinte píxeles—.
+ *
+ * **NO SUSTITUYE LA INFORMACIÓN, LA COMPRIME**: los nombres están en el `title` de la
+ * celda y en la ficha del item, que es donde se abren los detalles. Lo que da el punto es
+ * de un vistazo, en la rejilla entera, cuántos afijos y de qué calidad lleva cada cosa,
+ * que era lo que no se veía sin abrir una a una.
+ */
+export function puntosDeAfijos(affixes: string[] | undefined): string {
+  const afijos = (affixes || []).map(id => AFFIX_BY_ID[id]).filter(Boolean);
+  if (!afijos.length) return '';
+  return `<span class="absolute top-0.5 left-0.5 flex items-center gap-[2px] pointer-events-none">
+    ${afijos.map(a => `<span class="w-[4px] h-[4px] rounded-full rarity-${slug(a.rarity)}" style="background: currentColor"></span>`).join('')}
+  </span>`;
+}
+
 /** Lo que se puede enseñar de un recolector. Es un `any` a propósito: aquí llegan dos cosas distintas. */
 export interface RecolectorPintable {
   id: string;
@@ -200,17 +253,7 @@ export function fichaDeRecolector(
           recolector trae una descripción que no sea un número, vuelve a salir, porque
           entonces la línea estará diciendo algo.
         -->
-        ${affixes.length ? `
-          <div class="flex items-center gap-1 flex-wrap mt-1">
-            ${affixes.map(id => {
-              const a = AFFIX_BY_ID[id];
-              return a
-                ? `<span class="text-[9px] font-mono px-1 py-[1px] rounded border rarity-${slug(a.rarity)}"
-                          style="border-color: currentColor" title="${a.description}">${a.name}</span>`
-                : '';
-            }).join('')}
-          </div>
-        ` : ''}
+        ${etiquetasDeAfijos(affixes, 'text-[9px] font-mono px-1 py-[1px] rounded border')}
         ${w.forgedBy ? `
           <div class="text-[9px] font-mono text-[var(--text-muted)] mt-1 truncate">
             Forjada por <span class="accent-text">${w.forgedBy}</span>
@@ -261,6 +304,15 @@ export interface CompaneroPintable {
   level?: number;
   maxLevel?: number;
   potential?: number;
+  /**
+   * Los afijos del compañero (Q6).
+   *
+   * Viajan en la ficha del almacén y el motor los pone al crearla, así que quien pinta
+   * la casilla los tiene: la casilla enseñaba el ingreso y la rareza, y un compañero con
+   * tres afijos se veía igual que uno con ninguno, que era la mitad de la diferencia
+   * entre dos compañeros del mismo tier.
+   */
+  affixes?: string[];
 }
 
 /**
@@ -285,6 +337,20 @@ export function casillaDeCompanero(c: CompaneroPintable, aporta?: number): strin
   // item. Sin esto, el brillo lo calcularía con el techo de nivel equivocado y el
   // escalón 4 le tocaría a un compañero que no lo tiene.
   const paraBrillo = { ...c, type: 'companion' };
+  const nivel = Math.max(0, Math.floor(Number(c.level) || 0));
+  // **AFIJOS Y NIVEL, LO QUE FALTABA EN ESTA CASILLA (Q6).** La casilla enseñaba
+  // ingreso, rareza y nombre, y dos compañeros del mismo tier con afijos distintos
+  // se veían idénticos hasta tocarlos. Los afijos van como etiquetas con nombre —
+  // aquí hay hueco, que es justo lo que no hay en la celda cuadrada del almacén—
+  // y el nivel va solo si no es cero, por la misma razón que en la celda de la
+  // forja: "Nivel 0" es un dato que el item no tiene, y en una casilla de cuatro
+  // renglones el ruido se paga caro.
+  //
+  // **Y SIN EL TECHO, SOLO EL NIVEL.** El techo de un compañero sale de
+  // `nivelMaximoDeCompanio`, que necesita el potencial y el tier: aquí solo hay
+  // nivel, y escribir "7/20" con el techo del recolector sería un número inventado
+  // al lado de uno verdadero. El "Nv 7" no promete nada y dice lo que falta decir.
+  const hayAfijos = (c.affixes || []).length > 0;
 
   return `
     <div class="rounded-xl p-2.5 text-center border relative overflow-hidden
@@ -298,6 +364,9 @@ export function casillaDeCompanero(c: CompaneroPintable, aporta?: number): strin
       <div class="text-[10px] font-mono text-[var(--text-main)] truncate leading-tight
                   font-semibold">${c.name}</div>
       <div class="text-[9px] font-mono rarity-${slug(rarity)} mt-0.5 truncate">${rarity}</div>
+      ${hayAfijos ? etiquetasDeAfijos(c.affixes) : ''}
+      ${nivel > 0 ? `
+        <div class="text-[8px] font-mono text-[var(--text-muted)] mt-1 leading-none">Nv ${nivel}</div>` : ''}
       <div class="mt-1.5 pt-1.5 border-t"
            style="border-color: color-mix(in srgb, var(--accent) 20%, transparent)">
         <div class="label-caps" style="font-size:8px">${label}</div>

@@ -255,7 +255,7 @@ export interface TreeNode {
 
 export type CosmeticType = 'title' | 'frame' | 'banner';
 
-export type UnlockKind = 'cores' | 'achievement' | 'ranking' | 'crate' | 'secret' | 'default';
+export type UnlockKind = 'cores' | 'achievement' | 'ranking' | 'crate' | 'secret' | 'default' | 'node';
 
 export interface Cosmetic {
   id: string;
@@ -265,7 +265,7 @@ export interface Cosmetic {
   rarity: Rarity;
   unlock: {
     kind: UnlockKind;
-    /** cores | id de logro | posición en el ranking | rareza de caja */
+    /** cores | id de logro | posición en el ranking | rareza de caja | id de nodo del árbol */
     value: number | string;
     /** Pista para los desbloqueos secretos. */
     hint?: string;

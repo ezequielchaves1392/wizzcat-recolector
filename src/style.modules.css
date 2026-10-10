@@ -574,11 +574,18 @@
   min-width: 0;
 }
 
-/* El banner de la fila. La opacidad es la del cosmético en el avatar (0,8) partida por
-   cuatro y algo: en el avatar el halo solo ocupa 32 px y puede ir fuerte; en una tira de
-   700 px, al 80 % no se leen ni los números de la derecha. 0,26 es lo más que aguanta
-   el texto de la fila sin apagarlo. */
-.rank-banner {
+/* LA CAPA DEL BANNER COMO FONDO DETRÁS DE TEXTO (Q5), Y POR QUÉ ES UNA CLASE Y NO DOS.
+   La pinta la fila del ranking y la cabecera del menú principal, y las dos por la MISMA
+   razón: el cosmético manda el 100 % sobre un avatar de 32 px y no puede ir entero
+   detrás de una tira de texto. Con una clase por sitio, tocar la opacidad tocaría una y
+   la otra seguiría donde estaba, y "el fondo del banner" dejaría de ser una regla
+   escrita dos veces.
+
+   La opacidad es la del cosmético en el avatar (0,8) partida por cuatro y algo: en el
+   avatar el halo solo ocupa 32 px y puede ir fuerte; en una tira de 700 px, al 80 % no
+   se leen ni los números de la derecha. 0,26 es lo más que aguanta
+   el texto sin apagarlo. */
+.banner-capa {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -589,7 +596,7 @@
 /* Y el contenido por delante, explícitamente. Sin esto no basta con lo anterior: un
    elemento posicionado pinta ENCIMA de los que no lo están, así que la capa —que es
    `absolute`— taparía el texto aunque su `z-index` fuese 0. */
-.rank-row > *:not(.rank-banner) {
+.rank-row > *:not(.banner-capa) {
   position: relative;
   z-index: 1;
 }

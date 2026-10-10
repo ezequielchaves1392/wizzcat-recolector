@@ -39,6 +39,7 @@ import {
 } from 'firebase/auth';
 import { claveServidor, olvidarServidor } from '../data/servidores';
 import { getSavedTheme, setTheme, THEMES } from '../theme';
+import { VERSION } from '../data/patchNotes';
 import { showConfirmModal } from '../utils/modal';
 import { ic } from '../ui/icons';
 
@@ -65,8 +66,15 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
         <h1 class="font-['Orbitron'] font-black text-xl sm:text-2xl accent-text tracking-[0.2em] leading-none">
           CYBER-FORGE
         </h1>
+        <!--
+          LA VERSIÓN SALE DEL PACKAGE.JSON, IGUAL QUE LA DE LA PORTADA.
+          Iba escrita a mano como v1.0 y se quedó ahí desde el primer día: el
+          subtítulo del acceso decía una versión que ya no era la del juego, que
+          es la mitad de la razón por la que se pide abajo. Un solo sitio lee
+          VERSION para cada cifra.
+        -->
         <p class="text-[10px] text-[var(--text-muted)] font-mono mt-2 tracking-[0.15em]">
-          TERMINAL DE EXTRACCIÓN · v1.0
+          TERMINAL DE EXTRACCIÓN · v${VERSION}
         </p>
       </div>
 
@@ -142,7 +150,7 @@ export function renderAuth(container: HTMLElement, onLoginSuccess: (user: any, u
 
             <div class="flex items-center justify-between gap-2">
               <label class="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" id="remember-me" checked class="accent-bg rounded cursor-pointer w-3.5 h-3.5">
+                <input type="checkbox" id="remember-me" checked class="cf-check cursor-pointer w-3.5 h-3.5">
                 <span class="text-[10px] font-mono text-[var(--text-muted)]">Recordar</span>
               </label>
               <select id="theme-select" aria-label="Tema visual"

@@ -2892,7 +2892,10 @@ function sePuedeGuardar(): boolean {
     const nuevos: string[] = [];
     for (const cos of cosmeticsAlcanzables({
       unlockedAchievements: state.unlockedAchievements,
-      totalCores: state.totalCores
+      totalCores: state.totalCores,
+      // La vía `node` se resuelve con esto: es la foto de lo comprado del árbol, y
+      // se pasa entera porque es la única fuente que sabe qué nodo se compró.
+      nodeLevels: state.nodeLevels
     })) {
       if (desbloquearCosmetico(cos.id)) nuevos.push(cos.id);
     }
@@ -7077,6 +7080,12 @@ function sePuedeGuardar(): boolean {
       }
       recomputeBonuses();
       recalculatePassiveIncome();
+      // **UN COSMÉTICO QUE SE GANA AQUÍ TIENE QUE SALIR AQUÍ.** La reconciliación
+      // corre al cargar y tras cada logro, y este nodo no abre ninguno: sin esta
+      // llamada el título Singularidad esperaría a la siguiente recarga. Devuelve
+      // la lista y aquí no se avisa, igual que en el resto de reconciliaciones (la
+      // lista del Perfil es donde se ve), pero no hace falta esperar a ella.
+      reconciliaCosmeticos();
       onUpdate(state, isAfk);
       saveToFirebase();
       return { success: true, msg: `${node.name} → nivel ${level + 1}` };

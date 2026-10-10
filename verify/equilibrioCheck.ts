@@ -16,7 +16,7 @@
 //  bonus, el presupuesto se mueve solo y el banco sigue midiendo lo mismo.
 // ==========================================================================
 
-import { boot, check, resumen, s, baseSave, collector, ficha, conSec, recargar } from './kit';
+import { boot, check, resumen, s, baseSave, collector, ficha, conSec, conRoll, recargar } from './kit';
 import { TREE_NODES, TREE_BY_ID, nodeCost, coresGastadosEnArbol, COLUMNA_META } from '../src/data/tree';
 import {
   aggregateBonuses,
@@ -137,7 +137,14 @@ async function main() {
     const base = costeDeNivelDeCompanio(3, 0);
     const esperado = Math.max(1, Math.floor(base * 0.5));
     const antes = s(g).crystals;
-    const r: any = g.upgradeCompanion('c1');
+    // **EL DADO ESTÁ CLAVADO, Y SIN ESTO ESTE BANCO TIRA LA PELOTA.** La sintonización
+    // de compañero sale del dado (`roll <= chanceDeSintonizacion(level)`), y aquí lo que
+    // se mide es el PRECIO y su techo: el acierto no entra en la cuenta, pero la prueba
+    // lo exige, así que de cada veinte ejecuciones una salía roja con el cobro
+    // correcto, el esperado y el cobrado iguales. Es el mismo fallo que ya se corrigió
+    // en sellCheck —un banco que depende de un dado no es un banco que pasa, es un banco
+    // que pasa a veces—, y el patrón es el de todos los demás: `conRoll(0, ...)`.
+    const r: any = conRoll(0, () => g.upgradeCompanion('c1'));
     check('topes: con 74 % de descuento la mejora cobra el 50 %, no el 26 %',
       r.success === true && antes - s(g).crystals === esperado,
       `cobrado=${antes - s(g).crystals} esperado=${esperado} base=${base}`);
