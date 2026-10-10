@@ -17,6 +17,8 @@ import { boot, check, resumen, baseSave } from './kit';
 import {
   contarOp,
   colorDeRitmo,
+  etiquetaMotivo,
+  ETIQUETA_MOTIVOS,
   ritmoUltimoMinuto,
   evaluarPico,
   ultimosPicos,
@@ -147,6 +149,24 @@ async function main() {
       db().consultas === 1 && filas.length === 27 && motivo?.n === 1,
       `consultas=${db().consultas} filas=${filas.length} motivo=${motivo?.n ?? 0}`);
     delete db().__rankingDocs;
+  }
+
+  // ---- 7. CADA MOTIVO TIENE SU NOMBRE EN CRISTIANO, SIN CÓDIGOS ----
+  // La sección "Uso de red" de Ajustes enseña etiquetas, no motivos: un motivo
+  // sin etiqueta saldría crudo delante del jugador, y una etiqueta con un
+  // código interno (F96) o jerga de API (setDoc) es el mismo fallo que la
+  // píldora con su `(F96)` en el title.
+  {
+    const motivos = Object.keys(ETIQUETA_MOTIVOS);
+    check('Uso de red: los diez motivos tienen etiqueta',
+      motivos.length === 10 && motivos.every((m) => etiquetaMotivo(m as any) !== m),
+      `etiquetas=${motivos.length}`);
+    const feas = motivos.filter((m) => {
+      const e = ETIQUETA_MOTIVOS[m as keyof typeof ETIQUETA_MOTIVOS];
+      return !e || /F\d+/i.test(e) || /setDoc|getDoc|getDocs|Firestore|uid/i.test(e);
+    });
+    check('Uso de red: ninguna etiqueta trae códigos internos ni jerga',
+      feas.length === 0, feas.length === 0 ? 'limpias' : `feas=${feas.join(',')}`);
   }
 
   resumen('F96: el contador cuenta lo que se cobra y el semáforo dice lo que hay');

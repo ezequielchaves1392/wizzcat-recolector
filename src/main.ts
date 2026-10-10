@@ -42,7 +42,7 @@ import {
 } from './utils/audio';
 import { renderLayoutHTML } from './ui/layout';
 import { updateResourceBar } from './ui/appHeader';
-import { montarOpsOverlay } from './ui/opsOverlay';
+import { montarOpsOverlay, montarRefrescoUsoRed, pintarUsoRed } from './ui/opsOverlay';
 import { resumenOps } from './services/contadorOps';
 import { miniIdentity } from './ui/identity';
 import { ic, icSafe } from './ui/icons';
@@ -824,8 +824,10 @@ async function initGame(user: any, username?: string) {
   // F96 · El registro de operaciones vive en memoria y se lee desde la
   // consola con `__ops()`, con o sin overlay. Solo lectura: no toca nada.
   (window as any).__ops = () => resumenOps();
-  // El numerito estilo FPS sale solo con `?ops=1` en la URL.
+  // El numerito estilo FPS sale solo con `?ops=1` en la URL. La sección de
+  // Ajustes se refresca siempre: es la que ve el jugador en la beta.
   montarOpsOverlay();
+  montarRefrescoUsoRed();
 
   // Handle de depuración solo en dev: permite inspeccionar y probar el estado
   // desde la consola. Se elimina del build de producción.
@@ -1021,6 +1023,9 @@ function instalaDelegacionDeAjustes() {
       e.preventDefault();
       sfx.nav();
       document.querySelector('[data-ajustes]')?.classList.remove('hidden');
+      // La hoja se reconstruye en cada vista: al abrirla se pinta el uso de
+      // red en el acto, sin esperar al siguiente tic del intervalo.
+      pintarUsoRed();
       return;
     }
 

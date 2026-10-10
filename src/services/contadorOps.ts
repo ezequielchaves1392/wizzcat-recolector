@@ -36,6 +36,32 @@ export type MotivoOps =
 
 export type TipoOp = 'lectura' | 'escritura';
 
+/**
+ * CÓMO SE LE LLAMA A CADA MOTIVO DELANTE DEL JUGADOR.
+ *
+ * La sección "Uso de red" de Ajustes enseña estos nombres, no los motivos:
+ * `guardado-users` no le dice nada a nadie y `setDoc` menos. Vive aquí y no
+ * en la vista (R2): es la única fuente, y el banco ata que todo motivo tenga
+ * su etiqueta y que ninguna traiga códigos internos (F96) ni jerga de API.
+ */
+export const ETIQUETA_MOTIVOS: Record<MotivoOps, string> = {
+  'carga': 'Carga inicial',
+  'guardado-users': 'Guardado de la partida',
+  'guardado-ranking': 'Tu puesto en el ranking',
+  'tarjeta': 'Tu tarjeta pública',
+  'tarjeta-lectura': 'Perfiles que miras',
+  'latido': 'Latido de sesión',
+  'soltar-sesion': 'Cierre de sesión',
+  'sesion-check': 'Comprobación de sesión',
+  'bloqueo': 'Comprobación de bloqueo',
+  'ranking-tabla': 'Tabla del ranking',
+};
+
+/** La etiqueta de un motivo, o el motivo tal cual si es de una versión vieja. */
+export function etiquetaMotivo(motivo: MotivoOps): string {
+  return ETIQUETA_MOTIVOS[motivo] ?? String(motivo);
+}
+
 export interface OpAnotada {
   t: number;
   op: TipoOp;

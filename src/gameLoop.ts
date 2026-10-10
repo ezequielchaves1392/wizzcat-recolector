@@ -1782,7 +1782,26 @@ function sePuedeGuardar(): boolean {
     // F96 · La carga también es una lectura de cuota, y sin anotarla el
     // numerito diría que arrancar es gratis.
     contarOp('lectura', 'users', 'carga');
-    if (docSnap.exists()) {
+    // F105 · UN DOCUMENTO CON SOLO EL LATIDO NO ES UNA PARTIDA A MEDIAS, Y VA
+    // POR LA RAMA DE CREAR.
+    //
+    // Al reclamar la cuenta, el latido se escribe ANTES de cargar la partida,
+    // con un `setDoc` de solo `{ sesion }` y `merge`. En una cuenta nueva eso
+    // CREA el documento con solo el latido dentro; la guarda de B35 lo veía
+    // "incompleto" y enseñaba mantenimiento para no pisar nada. Pero aquí no
+    // hay nada que pisar: una partida de verdad trae `saveVersion`, `nanites`
+    // o `warehouse`, y este documento no trae ninguno.
+    //
+    // Solo entra por aquí el documento cuya ÚNICA clave es `sesion`. Un
+    // documento a medias de verdad (campos de juego pero sin almacén o saldo)
+    // sigue yendo a B35, y un documento vacío también: ante la duda no se
+    // sobrescribe nada.
+    const traeSoloSesion = (d: any): boolean => {
+      if (!d || typeof d !== 'object') return false;
+      const claves = Object.keys(d);
+      return claves.length > 0 && claves.every((k) => k === 'sesion');
+    };
+    if (docSnap.exists() && !traeSoloSesion(docSnap.data())) {
       const data = docSnap.data();
       // La versión que TRAJO el documento, no la que va a salir de aquí. Es lo
       // único que distingue "partida vieja" de "partida ya migrada", y evita que
@@ -2518,7 +2537,11 @@ function sePuedeGuardar(): boolean {
 
       recalculatePassiveIncome();
     } else {
-      // Crear documento del usuario
+      // Crear documento del usuario. Con `merge: true` a propósito: si el
+      // documento trae solo el latido (F105, cuenta nueva reclamada antes de
+      // cargar), el `sesion` sobrevive y el cerrojo no queda libre hasta el
+      // siguiente latido. Sin `merge`, la creación lo borraría y otra pestaña
+      // vería la cuenta libre en ese hueco.
       await setDoc(userRef, {
         saveVersion: SAVE_VERSION,
         userId: user.uid,
@@ -2555,7 +2578,7 @@ function sePuedeGuardar(): boolean {
         cosmetics: state.cosmetics,
         autoVenta: state.autoVenta,
         updatedAt: new Date()
-      });
+      }, { merge: true });
       // Crear documento de ranking
       await setDoc(rankingRef, {
         userId: user.uid,

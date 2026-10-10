@@ -57,6 +57,26 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.15.43',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Uso de red visible en Ajustes',
+    lineas: [
+      'En Ajustes hay una sección nueva que enseña cuántas operaciones con el servidor hiciste en el último minuto y en total.',
+      'Dice qué lo movió con nombres normales y avisa si hubo un pico: en beta nos ayuda a cazarlos.',
+      'Abrir el ranking trae muchas lecturas de golpe y es normal: ese salto no es un pico.'
+    ]
+  },
+  {
+    version: '1.15.42',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Entrar nuevo en el otro servidor ya funciona',
+    lineas: [
+      'Entrar por primera vez en el otro servidor ya no te deja en mantenimiento.',
+      'El problema era que la cuenta se reservaba antes de crear tu partida y la lectura la veía a medias.',
+      'Si te pasó, vuelve a entrar y empiezas de cero como toca.'
+    ]
+  },
+  {
     version: '1.15.41',
     fecha: '10 de octubre de 2026',
     titulo: 'Guardado en bloque para cuidar la cuota',

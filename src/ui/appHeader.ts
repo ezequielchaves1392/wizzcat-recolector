@@ -51,6 +51,7 @@
 // ==========================================================================
 
 import { ic, type IconName } from './icons';
+import { seccionUsoRedHTML } from './opsOverlay';
 import { getPatchNotes } from '../patchNotesPrefs';
 import { routeTitle, type Route } from './router';
 import { navDesktopHTML } from './navBars';
@@ -412,6 +413,8 @@ export function settingsSheetHTML(): string {
               </button>`).join('')}
           </div>
         </div>
+
+        ${seccionUsoRedHTML()}
 
         <button data-logout
           class="h-11 rounded-lg btn-ghost text-[11px] font-mono cursor-pointer

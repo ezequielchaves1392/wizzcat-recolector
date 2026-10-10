@@ -91,6 +91,39 @@ async function main() {
       'que es la que dice "tu partida esta intacta y se repone solo"');
   }
 
+  // ---- 4. UN DOCUMENTO CON SOLO EL LATIDO NO ES UNA CARGA A MEDIAS (F105) ----
+  //
+  // **EL CASO VISTO EN EL SERVIDOR 2.** Al reclamar la cuenta, el latido se
+  // escribe antes de cargar la partida y en una cuenta nueva CREA el documento
+  // con solo `sesion` dentro. La guarda de B35 lo veía incompleto y enseñaba
+  // mantenimiento, y ninguna cuenta nueva podía empezar.
+  //
+  // **POR QUÉ AQUÍ SÍ SE PUEDE CREAR ENCIMA.** Una partida de verdad trae
+  // `saveVersion`, `nanites` o `warehouse`; este documento no trae ninguno, y
+  // por eso no hay nada que pisar. Un documento a medias de verdad (el bloque
+  // 2) sigue negándose a montar: la diferencia es lo que hay dentro, no que
+  // exista.
+  {
+    const soloSesion: any = { sesion: { dispositivo: 'otro', latido: Date.now(), v: 1 } };
+    const g: any = await boot(soloSesion);
+    check('F105: un documento con solo el latido monta el juego, no enseña mantenimiento',
+      g.cargaFallida?.() === false,
+      `cargaFallida=${g.cargaFallida?.()}`);
+    // El arranque ya guardó la partida entera encima (el guardado de carga es
+    // forzado): el documento tiene almacén y saldo, y el latido sigue donde
+    // estaba porque la creación va con `merge`. Sin él, la cuenta quedaría
+    // libre hasta el siguiente latido y otra pestaña entraría en el hueco.
+    const db: any = (globalThis as any).__MEM_DB__;
+    const doc = db['users/test'] ?? {};
+    check('F105: y el documento ya trae almacén y saldo de verdad',
+      Array.isArray(doc.warehouse) && typeof doc.nanites === 'number',
+      `claves=${Object.keys(doc).join(',')}`);
+    check('F105: ...y el latido sobrevive a la creación, que es el cerrojo',
+      doc.sesion?.dispositivo === 'otro',
+      `sesion=${JSON.stringify(doc.sesion)}`);
+    await g.cleanup?.();
+  }
+
   resumen('B35: una carga a medias no monta el juego');
 }
 

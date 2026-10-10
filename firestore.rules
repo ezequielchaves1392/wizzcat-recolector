@@ -104,7 +104,11 @@ service cloud.firestore {
       // puede añadirse `isAdmin` ni tocar nada que no sea suyo: la condición
       // de la derecha ya lo impide, pero dejarlo explícito documenta la
       // intención.
-      allow create: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        // F105 · Una partida nace con `saveVersion`: el latido de sesión ya no
+        // puede crear un documento con solo `sesion` dentro, que es lo que
+        // dejaba a las cuentas nuevas en mantenimiento.
+        && 'saveVersion' in request.resource.data;
       // F104 · Los contadores que la cola restaura tienen que ser números, y el
       // almacén una lista, cuando vienen en la escritura. Es una red barata
       // contra el documento tocado a mano por fuera del juego: la carga ya

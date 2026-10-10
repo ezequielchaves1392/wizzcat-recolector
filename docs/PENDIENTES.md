@@ -2931,11 +2931,29 @@ valor que pongas aquí sigue teniendo una prueba detrás.
 otra partida para medir el ritmo. Se queda escrito que la duración real nunca se
 midió: la cifra de "hasta dónde se llega" no existe y nadie la inventa.
 
+### Lote P · USO DE RED EN AJUSTES (encargo del 10 de octubre)
+
+- [x] **F106 · El jugador ve el uso de red en Ajustes, en cristiano y con detalle.**
+      > "agregar una herramienta en settings que mida en tiempo real alguna estadistica...
+      > y poner alguna marca de la operacion que se hizo" + "quiero que el jugador la
+      > pueda ver, porque estamos en beta y me puede ayudar a encontrar picos" +
+      > "solo tengo un hover que dice F96 q no se q es"
+      **La mitad ya existía y no se veía:** `contadorOps` anotaba cada operación con
+      su motivo y la píldora `W·R` lo enseñaba, pero solo con `?ops=1` y con un
+      `title` que decía `(F96)`, un código interno delante del jugador. Ahora
+      Ajustes trae la sección "Uso de red", siempre visible: ritmo del último
+      minuto con palabra (Bien/Alto/Muy alto), totales de la sesión, qué lo
+      movió con nombres normales (`ETIQUETA_MOTIVOS`, junto al motivo por R2) y
+      el último pico con su hora. Solo lee memoria: ni una operación más (R1), y
+      el refresco no escribe con la hoja cerrada (R7). El `(F96)` se va también
+      del `title` de la píldora. `opsCheck` (+2: los diez motivos tienen etiqueta
+      y ninguna trae códigos ni jerga).
+
 ---
 
 ## Hecho
 
-_Lo terminado, una línea y el commit. La cifra viva del proyecto: **50 bancos, 2789**, todas en verde._
+_Lo terminado, una línea y el commit. La cifra viva del proyecto: **50 bancos, 2794**, todas en verde._
 
 ### El sistema que se ha quitado entero
 
@@ -3618,7 +3636,6 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **50 bancos, 
       números puros, que es lo que los hace comprobables en Node.
 
 ### La cuota: guardar en bloque (F104, encargo del 10 de octubre)
-
 - [x] **F104 · El juego guarda en bloque en vez de con cada acción.** El gráfico que
       agotó la cuota no era el reloj: eran ráfagas de hasta 150 escrituras por minuto,
       una por acción (más sus derivadas), porque cada acción llamaba al guardado y cada
@@ -3650,6 +3667,18 @@ _Lo terminado, una línea y el commit. La cifra viva del proyecto: **50 bancos, 
         `queueCheck` cubre la firma v2 (y el v1 heredado se sigue aceptando).
       - **La cuenta.** Unas 315 escrituras por ocho horas activas y jugador, contra varios
         miles antes: veinte jugadores caben en la cuota con margen de sobra.
+
+### Entrar nueva en el otro servidor (F105, 10 de octubre, reportado con captura)
+
+- [x] **F105 · Una cuenta nueva ya no nace en mantenimiento.** Al reclamar la cuenta, el
+      latido se escribía antes de cargar la partida y en una cuenta nueva CREABA el
+      documento con solo `sesion` dentro; la carga lo veía incompleto y enseñaba
+      mantenimiento para no pisar nada, y ninguna cuenta nueva podía empezar en el
+      servidor dos (en el uno no se veía porque las cuentas ya tenían documento).
+      Ahora un documento cuya única clave es `sesion` entra por la rama de crear
+      partida, y las reglas exigen `saveVersion` al crear para que el latido no pueda
+      volver a crear uno. Un documento a medias de verdad sigue yendo a mantenimiento:
+      la diferencia es lo que hay dentro, no que exista. `cargaCortaCheck` (+3: monta, crea almacén y saldo, y el latido sobrevive).
 
 ---
 

@@ -26,6 +26,8 @@ import {
   ritmoUltimoMinuto,
   colorDeRitmo,
   evaluarPico,
+  etiquetaMotivo,
+  resumenOps,
   topMotivos,
   ultimosPicos,
   totales,
@@ -108,7 +110,7 @@ export function montarOpsOverlay(): void {
 
   const raiz = document.createElement('div');
   raiz.dataset.ops = 'pildora';
-  raiz.title = 'Ops Firestore del último minuto (F96). Toca para el detalle.';
+  raiz.title = 'Uso de red del último minuto. Toca para el detalle.';
   raiz.style.cssText = [
     'position:fixed', 'right:8px', 'bottom:8px', 'z-index:9999',
     'font:11px/1.4 monospace', 'padding:3px 8px', 'border:1px solid #22c55e',
@@ -129,4 +131,127 @@ export function montarOpsOverlay(): void {
   ui.detalle = detalle;
   pintar();
   window.setInterval(pintar, 1000);
+}
+
+// ==========================================================================
+//  LA SECCIÓN "USO DE RED" DE AJUSTES, VISIBLE PARA EL JUGADOR EN LA BETA
+// ==========================================================================
+//
+//  **QUÉ ES.** Lo mismo que la píldora, pero en cristiano y con detalle: ritmo
+//  del último minuto, totales de la sesión, qué lo movió y el último pico. La
+//  píldora sigue detrás de `?ops=1`; esta sección sale siempre, porque en beta
+//  el jugador es quien mejor caza los picos.
+//
+//  **SOLO LEE.** `resumenOps()` es memoria local: pintar no toca la red ni el
+//  estado (R1). El refresco es un único intervalo de módulo que solo escribe
+//  cuando la hoja está abierta; cerrada, no escribe nada (R7). La hoja se
+//  reconstruye en cada vista, así que los nodos se buscan en cada pintado y no
+//  se guardan.
+
+/** La palabra del semáforo delante del jugador: colores no se explican solos. */
+function palabraDeColor(color: ColorOps): string {
+  return color === 'verde' ? 'Bien' : color === 'naranja' ? 'Alto' : 'Muy alto';
+}
+
+/**
+ * El marcado de la sección, con ganchos `data-ops-*` que rellena el pintor.
+ * Los valores iniciales son "…" a propósito: si el intervalo no corriera, se
+ * vería que falta el número en vez de un cero que miente.
+ */
+export function seccionUsoRedHTML(): string {
+  return `
+        <div data-ops-seccion>
+          <div class="label-caps mb-2">Uso de red <span data-ops-estado class="font-mono"></span></div>
+          <div class="rounded-lg btn-ghost px-3 py-2.5 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-2 text-[11px] font-mono">
+              <span class="text-[var(--text-muted)]">Último minuto</span>
+              <span data-ops-minuto class="text-[var(--text-main)]">…</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[11px] font-mono">
+              <span class="text-[var(--text-muted)]">Desde que abriste</span>
+              <span data-ops-total class="text-[var(--text-main)]">…</span>
+            </div>
+            <div class="text-[11px] font-mono">
+              <div class="text-[var(--text-muted)] mb-1">Qué lo movió</div>
+              <div data-ops-top class="flex flex-col gap-1 text-[var(--text-main)]">…</div>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[11px] font-mono">
+              <span class="text-[var(--text-muted)]">Último pico</span>
+              <span data-ops-pico class="text-[var(--text-main)] text-right">…</span>
+            </div>
+            <p class="text-[10px] font-mono text-[var(--text-muted)] leading-relaxed">
+              Beta: nos ayuda a cazar picos. Abrir el ranking trae hasta 40
+              lecturas de golpe: ese salto es normal. Se borra al recargar y no
+              sale de tu pestaña.
+            </p>
+          </div>
+        </div>`;
+}
+
+/** Pinta todas las secciones visibles con el resumen actual. No lanza nunca. */
+export function pintarUsoRed(): void {
+  try {
+    const secciones = document.querySelectorAll('[data-ops-seccion]');
+    if (secciones.length === 0) return;
+    const r = resumenOps();
+    const color = r.minuto.color;
+    const colorCss = color === 'verde' ? '#22c55e' : color === 'naranja' ? '#f59e0b' : '#ef4444';
+    for (const sec of Array.from(secciones)) {
+      const hoja = sec.closest('[data-ajustes]');
+      // Cerrada no se pinta: escribir en un nodo oculto es trabajo gratis.
+      if (hoja && hoja.classList.contains('hidden')) continue;
+      const estado = sec.querySelector('[data-ops-estado]');
+      if (estado) {
+        estado.textContent = `· ${palabraDeColor(color)}`;
+        (estado as HTMLElement).style.color = colorCss;
+      }
+      const minuto = sec.querySelector('[data-ops-minuto]');
+      if (minuto) minuto.textContent = `${r.minuto.escrituras} escrituras · ${r.minuto.lecturas} lecturas`;
+      const total = sec.querySelector('[data-ops-total]');
+      if (total) total.textContent = `${r.total.escrituras} escrituras · ${r.total.lecturas} lecturas`;
+      const top = sec.querySelector('[data-ops-top]');
+      if (top) {
+        top.textContent = '';
+        if (r.top.length === 0) {
+          top.textContent = 'Nada todavía.';
+        } else {
+          for (const t of r.top.slice(0, 5)) {
+            const fila = document.createElement('div');
+            fila.className = 'flex items-center justify-between gap-2';
+            const nombre = document.createElement('span');
+            nombre.textContent = etiquetaMotivo(t.motivo);
+            const veces = document.createElement('span');
+            veces.className = 'text-[var(--text-muted)]';
+            veces.textContent = `×${t.n}`;
+            fila.appendChild(nombre);
+            fila.appendChild(veces);
+            top.appendChild(fila);
+          }
+        }
+      }
+      const pico = sec.querySelector('[data-ops-pico]');
+      if (pico) {
+        const ultimo = r.picos.at(-1);
+        pico.textContent = !ultimo
+          ? 'Sin picos.'
+          : `${hora(ultimo.inicio)} · ${ultimo.maxW} escrituras${ultimo.fin ? '' : ' (abierto)'}`;
+      }
+    }
+  } catch {
+    // Pintar no puede tumbar la hoja de ajustes: se traga y sigue.
+  }
+}
+
+let refrescoUsoRed: number | null = null;
+
+/**
+ * Arranca el refresco de la sección, una sola vez por pestaña. El intervalo
+ * vive aunque la hoja esté cerrada, pero entonces `pintarUsoRed()` vuelve sin
+ * escribir: el coste es una búsqueda en el DOM cada dos segundos.
+ */
+export function montarRefrescoUsoRed(): void {
+  if (refrescoUsoRed !== null) return;
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  pintarUsoRed();
+  refrescoUsoRed = window.setInterval(pintarUsoRed, 2000);
 }
