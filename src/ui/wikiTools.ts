@@ -380,7 +380,10 @@ export function fichaSimulada(sel: SelBaseSim): FichaSimulada {
   const base = cruda && cruda.tier === tier && (tabla[tier] ?? []).some(b => b.id === cruda.id)
     ? cruda
     : null;
-  const techo = techoDeNivel(pot, base?.posicion ?? 6);
+  // F105 · El techo lleva el tier: el simulador tiene que enseñar el mismo número
+  // que el motor le pondría a ese item, o el wiki estaría enseñando un techo que no
+  // existe en el juego.
+  const techo = techoDeNivel(pot, base?.posicion ?? 6, tier);
   const nivel = Math.min(techo, Math.max(0, Math.floor(Number(sel.nivel) || 0)));
   const pool = sel.lado === 'com' ? POOL_AFIJOS_COMPANERO : AFFIXES;
   const afijos = (Array.isArray(sel.afijos) ? sel.afijos : [])

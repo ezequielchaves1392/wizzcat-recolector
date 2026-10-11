@@ -48,12 +48,24 @@
 import { check, resumen } from './kit';
 import { STORE_ITEMS } from '../src/gameLoop';
 import { costeDeCaja } from '../src/data/store';
-import { TIER_SYSTEM } from '../src/data/tiers';
+import { TIER_SYSTEM, rangoDePoder } from '../src/data/tiers';
+import { techoDeNivel, danioDeRango, multiplicadorDeNivel } from '../src/data/crafting';
 
-/** El poder medio del tier, que es el punto medio de su rango. */
+/**
+ * El poder medio del tier, que es el punto medio de su rango.
+ *
+ * **F105 · LEE `rangoDePoder()`, NO LA TABLA.** Antes era
+ * `TIER_SYSTEM.ranges[tier][0..1]`, y esa tabla tiene claves 1..10: en el T11 salía
+ * `undefined` y el banco reventaba con un error de lectura en vez de decir qué
+ * estaba mal. `rangoDePoder()` es la misma tabla más la rama de T11 en adelante que
+ * usa el juego, así que el banco mide **el poder que el motor realmente aplica**.
+ * Un banco que lee el poder de una copia de la tabla en vez de la función está
+ * midiendo un número que el juego no usa, que es la forma más difícil de tener un
+ * banco en verde sobre un juego roto.
+ */
 function poderMedio(tier: number): number {
-  const r = TIER_SYSTEM.ranges[tier];
-  return (r[0] + r[1]) / 2;
+  const [a, b] = rangoDePoder(tier);
+  return (a + b) / 2;
 }
 
 /**
@@ -91,7 +103,7 @@ function porPunto(tipo: 'companion' | 'collector', tier: number): number {
   return precio(tipo, tier) / poderMedio(tier);
 }
 
-const TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const TIERS = Array.from({ length: 20 }, (_, i) => i + 1);
 
 async function main() {
   // -----------------------------------------------------------------------
@@ -113,9 +125,21 @@ async function main() {
     // la caja y bajar el tope de la banda sería relajar el banco, y eso es
     // justamente lo que este banco existe para que no pase: por eso los dos
     // números salen de la misma cuenta y no de un redondeo.
+    // **LA BANDA SE ESTIRA A VEINTE TIERS, Y EL NÚMERO DE ARRIBA VIENE DE LA
+    // CURVA, NO DE UN REDONDEO.** Antes el tope eran 315 y el T10 estaba en 312,
+    // o sea que el banco llevaba diez tiers al borde. El sobreprecio del 12 % por
+    // tier se acumula: del T10 al T20 son diez saltos de ×1,81, y el coste por punto
+    // llega a 969. Estirar la banda **no afloja la regla**: sigue siendo "el peor
+    // tier no pasa del tope mientras el mejor está en el suelo", y el suelo y el
+    // tope han salido los dos de la misma cuenta.
+    //
+    // Lo que NO se toca es que el sobreprecio siga creciendo: por eso el banco
+    // sigue exigiendo que el coste por punto **nunca baje** al subir de tier. Con
+    // veinte tiers, aflojar el tope sin esa regla sería permitir que el T12 saliese
+    // mejor negocio que el T11, y eso sí sería relajar el banco de verdad.
     const banda: Record<'companion' | 'collector', [number, number]> = {
-      companion: [112, 315],
-      collector: [112, 315]
+      companion: [112, 1000],
+      collector: [112, 1000]
     };
 
     for (const tipo of ['companion', 'collector'] as const) {
@@ -123,7 +147,7 @@ async function main() {
       const fuera = ratios.filter(r => r < banda[tipo][0] || r > banda[tipo][1]);
 
       check(
-        `${tipo}: los diez tiers caen en la banda de 112 a 315 por punto`,
+        `${tipo}: los veinte tiers caen en la banda de 112 a 1000 por punto`,
         fuera.length === 0,
         `por punto = ${ratios.map(r => Math.round(r)).join(', ')}`
       );
@@ -134,6 +158,62 @@ async function main() {
       check(`${tipo}: y el coste por punto NUNCA baja al subir de tier`, todos,
         ratios.map(r => Math.round(r)).join(', '));
     }
+
+    // **Y QUE EL T20 NO CUESTE LO MISMO QUE EL T10.** Es el fallo que estaba
+    // dormido: `costeDeCaja` recortaba con `min(longitud, tier)`, así que todo lo
+    // que pasara del T10 costaba lo del T10. No se notaba porque no había cajas de
+    // T11, pero con veinte tiers es el bug más caro del juego: el mejor objeto por
+    // el precio del primero. Esta es la línea que lo deja escrito.
+    const climb = [10, 15, 20].every((t, i, arr) => i === 0 || costeDeCaja(t) > costeDeCaja(arr[i - 1]));
+    check('el precio de la caja sigue subiendo de verdad del T10 al T20',
+      climb && costeDeCaja(20) > costeDeCaja(10) * 10,
+      `T10=${costeDeCaja(10)} T15=${costeDeCaja(15)} T20=${costeDeCaja(20)}`);
+  }
+
+  // -----------------------------------------------------------------------
+  //  1b. EL TECHO DE NIVEL SUBE CON EL TIER, Y SOLO DESDE EL T11 (F105)
+  //
+  //  Este bloque no mide precio: mide que **la segunda mitad del stat del juego
+  //  siga valiendo algo en la mitad final de la progresión**.
+  //
+  //  Antes de F105 el techo era el mismo en todos los tiers (29 con potencial 3 y
+  //  base neutra), y `baseDeTier` crece ×1,75: el daño del T20 es mil veces el del
+  //  T1 con el mismo ×4,9 de niveles. Invertir en niveles a partir del T11 no
+  // rendía nada, y el jugador pagaba un cristal por un +10 % sobre una cifra que
+  // ya era enorme. Con veinte tiers eso no es un detalle: es la mitad del juego
+  // morte en su tramo final.
+  // -----------------------------------------------------------------------
+  {
+    // **Y LO MÁS IMPORTANTE: LOS DIEZ TIERS VIEJOS NO CAMBIAN.** El techo está
+    // guardado en cada item, así que subir el del T1 al T10 les daría a los items
+    // ya forjados un stat que no tenían sin que nadie lo pidiera. Esta línea es la
+    // que deja esa decisión escrita.
+    const intactos = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].every(t => techoDeNivel(3, 6, t) === 29);
+    check('el techo de nivel no cambia en los diez tiers que ya existían',
+      intactos,
+      [1, 5, 10].map(t => `T${t}=${techoDeNivel(3, 6, t)}`).join(' '));
+
+    // Y que suba de verdad, tres por tier, desde el T11.
+    const sube = techoDeNivel(3, 6, 11) === 32 && techoDeNivel(3, 6, 20) === 59;
+    check('y a partir del T11 sube tres niveles por tier',
+      sube,
+      `T11=${techoDeNivel(3, 6, 11)} T15=${techoDeNivel(3, 6, 15)} T20=${techoDeNivel(3, 6, 20)}`);
+
+    // **Y QUE LOS NIVELES IMPORTEN DE VERDAD AL FINAL.** Este es el invariante, no
+    // el detalle: con el techo nuevo, un T20 desarrollado tiene que pegarle
+    // claramente más que un T20 recién forjado. Si esto no se cumple, el término
+    // del tier no sirve de nada y es mejor no tenerlo.
+    const conNiveles = danioDeRango(20, 3, 1.0) * multiplicadorDeNivel(techoDeNivel(3, 6, 20));
+    const recienForjado = danioDeRango(20, 3, 1.0) * multiplicadorDeNivel(0);
+    check('un T20 con niveles pega más que un T20 recién forjado',
+      conNiveles / recienForjado > 5,
+      `${Math.round(recienForjado)} -> ${Math.round(conNiveles)} (x${(conNiveles / recienForjado).toFixed(1)})`);
+
+    // Y que el recorrido sea MAYOR que en el T10, que es lo que le prometimos al
+    // jugador: no es que los niveles den más, es que hay más de ellos.
+    check('el T20 tiene más recorrido de niveles que el T10',
+      techoDeNivel(3, 6, 20) - techoDeNivel(3, 6, 10) === 30,
+      `T10=${techoDeNivel(3, 6, 10)} T20=${techoDeNivel(3, 6, 20)}`);
   }
 
   // -----------------------------------------------------------------------
@@ -141,7 +221,7 @@ async function main() {
   // -----------------------------------------------------------------------
   {
     for (const tipo of ['companion', 'collector'] as const) {
-      for (let t = 2; t <= 10; t++) {
+      for (let t = 2; t <= 20; t++) {
         const actual = porPunto(tipo, t);
         const anterior = porPunto(tipo, t - 1);
         check(
@@ -159,7 +239,7 @@ async function main() {
   {
     const distintos = TIERS.filter(t => precio('companion', t) !== precio('collector', t));
     check(
-      'compañero y recolector cuestan lo mismo en los diez tiers',
+      'compañero y recolector cuestan lo mismo en los veinte tiers',
       distintos.length === 0,
       distintos.length ? `difieren en T${distintos.join(', T')}` : ''
     );
@@ -175,23 +255,36 @@ async function main() {
   //  4. LA PARTIDA ESTIRA. Que el final no sea gratis.
   // -----------------------------------------------------------------------
   {
+    // F105 · **LOS "DOS ÚLTIMOS" SON AHORA EL T19 Y EL T20, NO EL T9 Y EL T10.**
+    // Estas aserciones dicen "llegar al final cuesta": el último tier es una parte
+    // grande del total y los dos últimos se llevan más de la mitad. Con veinte
+    // tiers, "los dos últimos" son el penúltimo y el último de la lista, o sea el
+    // T19 y el T20. Antes se escribían a mano como índices 8 y 9 —el T9 y el T10— y
+    // con el contenido nuevo esa pareja es el *principio* de la curva: se lleva el
+    // 0 % del total, y la aserción pasaba a medir lo contrario de lo que dice
+    // ("el final es gratis"). Es el mismo fallo de las tablas por índice: el número
+    // correcto en el sitio fijo, y cuando la lista crece mide otra cosa sin que
+    // nadie lo note.
+    //
+    // Se leen por índice **relativo al final** para que sigan siendo "los dos
+    // últimos" si algún día se sube a treinta tiers.
     const precios = TIERS.map(t => precio('collector', t));
     const total = precios.reduce((a, b) => a + b, 0);
     const ultimo = precios[precios.length - 1];
-    const dosUltimos = precios[8] + precios[9];
+    const dosUltimos = precios[precios.length - 2] + precios[precios.length - 1];
 
     check(
-      'el T10 solo es una parte grande del total: llegar al final cuesta',
+      `el T${TIERS[TIERS.length - 1]} solo es una parte grande del total: llegar al final cuesta`,
       ultimo / total > 0.35,
-      `T10 = ${ultimo} de ${total} (${Math.round(ultimo / total * 100)}%)`
+      `último = ${ultimo} de ${total} (${Math.round(ultimo / total * 100)}%)`
     );
     check(
       'y los dos últimos tiers se llevan más de la mitad',
       dosUltimos / total > 0.5,
-      `T9+T10 = ${dosUltimos} de ${total} (${Math.round(dosUltimos / total * 100)}%)`
+      `T${TIERS[TIERS.length - 2]}+T${TIERS[TIERS.length - 1]} = ${dosUltimos} de ${total} (${Math.round(dosUltimos / total * 100)}%)`
     );
     check(
-      'el juego se estira: de T1 a T10 el precio total se multiplica por más de 8',
+      `el juego se estira: de T1 a T${TIERS[TIERS.length - 1]} el precio total se multiplica por más de 8`,
       total / precios[0] > 8,
       `${precios[0]} -> ${total} = x${(total / precios[0]).toFixed(1)}`
     );

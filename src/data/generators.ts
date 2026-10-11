@@ -92,6 +92,6 @@ export function generateCollectorByTier(
     potential,
     affixes: afijosParaRareza(rarity, rng),
     baseId: base?.id,
-    maxLevel: techoDeNivel(potential, base?.posicion ?? 6)
+    maxLevel: techoDeNivel(potential, base?.posicion ?? 6, tier)
   };
 }

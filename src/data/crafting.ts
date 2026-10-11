@@ -281,22 +281,75 @@ export function collectorMaxLevel(maxLevel?: number | null): number {
 }
 
 /**
- * EL TECHO DE NIVEL MIRA POTENCIAL Y BASE (F74, DECISIÓN 1).
+ * EL TECHO DE NIVEL MIRA POTENCIAL, BASE Y TIER (F74 decisión 1 · F105 el tier).
  *
- * `20 + potencial × 2 + posición × 0,5`, hacia abajo. Baja el peso del potencial
- * de ×3 a ×2 a propósito: la base es el eje nuevo y si el techo no la mirara,
- * invertir en una base buena no rendiría nada. El ×0,5 es suave porque la base
- * solo mueve ±10%: si contara igual que el potencial, una base buena en un ★1
- * superaría a una floja en un ★5. Sin posición (item que no la trae) cuenta 6,
- * la neutra de ×1,00 —igual que `posicionFusionada()`—.
+ * `20 + potencial × 2 + posición × 0,5`, hacia abajo, **más lo que aporta el
+ * tier**. Baja el peso del potencial de ×3 a ×2 a propósito: la base es el eje
+ * nuevo y si el techo no la mirara, invertir en una base buena no rendiría nada.
+ * El ×0,5 es suave porque la base solo mueve ±10%: si contara igual que el
+ * potencial, una base buena en un ★1 superaría a una floja en un ★5. Sin posición
+ * (item que no la trae) cuenta 6, la neutra de ×1,00 —igual que
+ * `posicionFusionada()`—.
+ *
+ * ## POR QUÉ EL TECHO SUBE CON EL TIER, Y NO ES COSA ESTÉTICA
+ *
+ * **ESTO NO EXISTÍA HASTA QUE HUBO MÁS DE DIEZ TIERS.** El techo era el mismo
+ * para todos: un ★5 con la mejor base llegaba a 30, en el T1 y en el T20. Medido
+ * con `baseDeTier()`, que crece ×1,75 por tier, el daño del T20 es **mil veces** el
+ * del T1 mientras el multiplicador de nivel se queda clavado en ×4,0.
+ *
+ * O sea que a partir del T11 **los niveles dejaban de importar**: media parte del
+ * stat del juego se volvía decorativa justo en la mitad final, y el jugador
+ * Pagan 75 millones por un cristal que le daba un +10 % sobre una cifra que ya
+ * era enorme. Invertir en niveles no rendía, que es exactamente lo contrario de
+ * lo que el juego promete entre el T1 y el T10.
+ *
+ * **LA REGLA ES QUE CADA TIER ABRA UN POCO MÁS DE RECORRIDO**, no que el techo
+ * crezca sin límite: `+3` por tier, que es lo que hace el techo medio del T10
+ * (29) equivalente al del T20 en términos de **número de niveles disponibles**, que
+ * es lo que el jugador ve y lo que decide cuánto recorrido queda. El multiplicador
+ * por nivel sigue siendo ×0,10 en todos los tiers: lo que cambia es cuántos
+ * niveles hay, no cuánto da cada uno.
+ *
+ * **Y POR QUÉ NO SE TOCA HASTA EL T10.** Para los diez tiers que ya existían el
+ * techo era una Meseta plana, y subirlo les da a los items viejos un stat que no
+ * tenían sin que el jugador lo pidiera. Los items ya forjados conservan su
+ * `maxLevel` guardado —la migración no lo toca, por el motivo que ya está escrito
+ * en `migraPotenciales()`—; el suelo nuevo solo aplica a lo que nazca a partir de
+ * ahora, y a un T10 que se resetee. Por eso la función **no** aplica el término de
+ * tier a los items guardados: no es que no pueda, es que no debe.
  *
  * Vive aquí y se aplica donde nace el item (generación, forja, migración); el
  * getter `collectorMaxLevel()`/`nivelMaximoDeCompanio()` solo lee lo guardado.
  */
-export function techoDeNivel(potencial: number | undefined | null, posBase: number | undefined | null): number {
+export function techoDeNivel(
+  potencial: number | undefined | null,
+  posBase: number | undefined | null,
+  tier = 1
+): number {
   const p = potencialNormalizado(potencial ?? undefined);
   const b = Math.min(10, Math.max(1, Math.floor(Number(posBase) || 6)));
-  return Math.floor(BASE_COLLECTOR_MAX_LEVEL + p * 2 + b * 0.5);
+  return Math.floor(BASE_COLLECTOR_MAX_LEVEL + p * 2 + b * 0.5 + extraDeTecho(tier));
+}
+
+/**
+ * Lo que el tier le añade al techo de nivel: **cero hasta el T11**, y `+3` por
+ * tier de ahí en adelante.
+ *
+ * **POR QUÉ CORTE EN EL T10 Y NO UNA FORMULA DESDE EL UNO.** Aplicarlo desde el
+ * T1 cambiaría el techo de los diez tiers que ya se jugaron, y el juego guarda ese
+ * número en cada item. El corte hace que la regla sea **una sola** y que los
+ * números viejos sigan siendo verdad: los items del T1 al T10 tienen el techo de
+ * siempre, y los del T11 en adelante tienen el suyo, más recorrido.
+ *
+ * Se escribe como un número y no con `rangoDePoder` a propósito: el término tiene
+ * que ser **predecible** para quien lee el techo —tres niveles más por tier— y no
+ * una cuenta que se tenga que hacer. Si algún día cambia, se cambia este número y
+ * el comentario con él.
+ */
+function extraDeTecho(tier: number): number {
+  const t = Math.max(1, Math.floor(Number(tier) || 1));
+  return t <= 10 ? 0 : (t - 10) * 3;
 }
 
 /**
@@ -690,7 +743,7 @@ export function migraPotenciales(items: any[], rng: () => number = Math.random):
     const base = baseValida ?? baseAleatoriaSegura(tier, 'recolector', rng);
     const baseId = base?.id;
     const damage = danioDeRango(tier, potential, base);
-    const maxLevel = techoDeNivel(potential, base?.posicion ?? 6);
+    const maxLevel = techoDeNivel(potential, base?.posicion ?? 6, tier);
 
     // F74 · EL NOMBRE PASA A SER EL DE LA BASE, Y AQUÍ SE ARREGLA EL QUE YA TIENES.
     //
@@ -796,9 +849,13 @@ export function migraNivelesDeCompaneros(
     if (!c || typeof c !== 'object') return c;
     const nivel = nivelDe(c);
     // F74 · El techo mira potencial y base. Si ya trae techo se respeta.
+    // F105 · Y también el tier, pero **solo cuando no trae techo**: un item que ya
+    // lo tiene guardado es un item que ya se está jugando, y darle un techo nuevo
+    // sería cambiarle el stat por la espalda. Lo que no trae techo es un item viejo
+    // al que la migración le está fijando uno por primera vez.
     const techo = typeof c.maxLevel === 'number' && c.maxLevel > 0
       ? c.maxLevel
-      : techoDeNivel(c.potential, posicionDeBase(c.baseId));
+      : techoDeNivel(c.potential, posicionDeBase(c.baseId), c.tier);
     if (c.level === nivel && c.maxLevel === techo) return c;
     changed = true;
     return { ...c, level: nivel, maxLevel: techo };
@@ -813,10 +870,11 @@ export function migraNivelesDeCompaneros(
   const nuevasFichas = (fichas ?? []).map((f) => {
     if (f?.type !== 'companion') return f;
     const nivel = porId.has(f.id) ? porId.get(f.id)! : nivelDe(f);
-    // F74 · El techo mira potencial y base. Si ya trae techo se respeta.
+    // F74 · El techo mira potencial y base. Si ya trae techo se respeta. F105 · Y
+    // el tier, con la misma regla que arriba: solo si no trae techo.
     const techo = typeof f.maxLevel === 'number' && f.maxLevel > 0
       ? f.maxLevel
-      : techoDeNivel(f.potential, posicionDeBase(f.baseId));
+      : techoDeNivel(f.potential, posicionDeBase(f.baseId), f.tier);
     if (f.level === nivel && f.maxLevel === techo) return f;
     changed = true;
     return { ...f, level: nivel, maxLevel: techo };
@@ -865,7 +923,7 @@ export function migraPotencialesDeCompaneros(
     const potential = tiene ? c.potential : 3;
     const { baseId, pos } = basePara(c);
     const power = poderDeCompanero(tier, potential, baseId ? basePorId(baseId) ?? null : null);
-    const maxLevel = techoDeNivel(potential, pos);
+    const maxLevel = techoDeNivel(potential, pos, tier);
     // F74 · EL NOMBRE PASA A SER EL DE LA BASE, Y AQUÍ SE ARREGLA EL QUE YA TIENES.
     // Mismo caso que el recolector: el `baseId` venía bien desde F74 y el nombre
     // venía de otra lista, así que sin esto tus T1 se seguirían llamando "Dron
@@ -903,7 +961,7 @@ export function migraPotencialesDeCompaneros(
       baseId = basePara(f).baseId;
     }
     const posF = baseId ? (basePorId(baseId)?.posicion ?? 6) : 6;
-    const maxLevel = techoDeNivel(potential, posF);
+    const maxLevel = techoDeNivel(potential, posF, tierF);
     // El nombre del compañero se renombra en el recorrido de arriba, no aquí: la
     // ficha y el compañero son el mismo objeto, y renombrarlo en los dos sitios
     // abriría la puerta a que uno se renombre y el otro no. Aquí solo se trae la
@@ -1426,7 +1484,7 @@ export function crearCompanioDeTier(
     // No lo tenía: **los de caja bien y los de forja con el potencial por techo**, que
     // es el peor sitio para un fallo porque las dos mitades del juego parecian lo mismo.
     // F74 · El techo mira potencial y base, igual que el recolector.
-    maxLevel: techoDeNivel(p, posFinal)
+    maxLevel: techoDeNivel(p, posFinal, tier)
   };
 }
 
@@ -2320,7 +2378,7 @@ export function attemptForge(
     // El techo mira potencial y base (F74): 20 + 2 por estrella y medio punto por
     // posición de base. La misma regla que lee todo el mundo, para que el techo
     // que se crea y el que se comprueba no puedan separarse.
-    maxLevel: techoDeNivel(potential, posNueva),
+    maxLevel: techoDeNivel(potential, posNueva, newTier),
     potential,
     damage,
     baseId: baseNueva?.id,

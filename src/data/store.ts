@@ -210,9 +210,53 @@ export const COSTE_POR_TIER: readonly number[] = [
   900, 1_700, 3_000, 5_500, 9_900, 18_000, 32_550, 59_050, 106_950, 193_850
 ];
 
-/** El precio de la caja de un tier. Índice 0 = T1. */
+/**
+ * EL COSTE DE UN TIER, Y POR QUÉ MÁS ALLÁ DEL T10 ES UNA FÓRMULA Y NO UN NÚMERO.
+ *
+ * `COSTE_POR_TIER` tiene los diez valores medidos del contenido y **se queda así**:
+ * son los que se jugaron y los que el banco de balance conoce de memoria. El
+ * T11 en adelante sale de la misma regla que los describe —el poder crece ×1,62 y
+ * el sobreprecio del 12 % por tier se multiplica—, o sea ×1,81 por tier desde el
+ * T10. Es la misma cuenta que produce los diez primeros; no es una regla nueva.
+ *
+ * **POR QUÉ NO ES "VEINTE NÚMEROS ESCRITOS A MANO".** Porque el precio de un tier
+ * nuevo es el precio de su poder × el sobreprecio, y si el poder se mueve (que se
+ * mueve: hay un banco que lo vigila) el precio tiene que moverse con él. Con
+ * veinte números escritos, cambiar la curva del poder deja veinte precios viejos
+ * y el banco no dice nada: es exactamente el fallo que la tabla del power ya
+ * documenta. Con la fórmula no hay tabla que se pueda quedar vieja, y el T20 no
+ * puede costar lo que el T11 por un redondeo.
+ *
+ * Y esto también arregla un fallo que existía antes de haber contenido: `costeDeCaja`
+ * y todo lo que lee esta tabla hacían `min(longitud, tier)`, así que **un T11
+ * costaba exactamente lo que un T10**. No se notaba porque no había cajas de T11,
+ * pero en cuanto las hubiera, el T20 salía por el precio del T10.
+ */
+export function costeDeTier(tier: number): number {
+  const t = Math.max(1, Math.floor(Number(tier) || 1));
+  if (t <= COSTE_POR_TIER.length) return COSTE_POR_TIER[t - 1];
+  const RAZON = 1.62 * 1.12; // poder × sobreprecio, o sea ×1,81 por tier
+  return Math.round(COSTE_POR_TIER[COSTE_POR_TIER.length - 1] * Math.pow(RAZON, t - COSTE_POR_TIER.length));
+}
+
+/**
+ * El precio de la caja de un tier. Índice 0 = T1.
+ *
+ * **T11 EN ADELANTE USA LA FÓRMULA, NO EL `min` DE ANTES.** Antes recortaba con
+ * `min(CRATE_COSTS.length, tier)`, así que todo lo que pasara del T10 costaba
+ * exactamente lo mismo que el T10. No se notaba porque no había cajas de T11, pero
+ * en cuanto las hubiera el T20 salía por el precio del T10: el mejor objeto del
+ * juego al alcance del primero que se compra.
+ *
+ * `CRATE_COSTS` está declarado más abajo en este mismo fichero, pero eso no es un
+ * problema: es `const` de módulo y solo se lee cuando se llama a esta función, que
+ * nunca pasa durante la carga del módulo.
+ */
 export function costeDeCaja(tier: number): number {
-  return CRATE_COSTS[Math.min(CRATE_COSTS.length, Math.max(1, Math.floor(tier))) - 1];
+  const t = Math.max(1, Math.floor(Number(tier) || 1));
+  return t <= COSTE_POR_TIER.length
+    ? Math.round(COSTE_POR_TIER[t - 1] * 3 / 4)
+    : Math.round(costeDeTier(t) * 3 / 4);
 }
 
 // ==========================================================================

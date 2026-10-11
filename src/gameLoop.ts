@@ -633,7 +633,7 @@ export async function createGameLoop(
     tier: 1,
     potential: POTENCIAL_BASE,
     baseId: baseInicialComp?.id,
-    maxLevel: techoDeNivel(POTENCIAL_BASE, baseInicialComp?.posicion ?? 6)
+    maxLevel: techoDeNivel(POTENCIAL_BASE, baseInicialComp?.posicion ?? 6, 1)
   };
 
   /**
@@ -683,7 +683,7 @@ export async function createGameLoop(
       level: 0,
       potential: POTENCIAL_BASE,
       baseId: baseRec?.id,
-      maxLevel: techoDeNivel(POTENCIAL_BASE, baseRec?.posicion ?? 6),
+      maxLevel: techoDeNivel(POTENCIAL_BASE, baseRec?.posicion ?? 6, 1),
       sellPrice: 250
     };
   };

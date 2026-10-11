@@ -814,7 +814,7 @@ export function makeCrateCompanion(
       // F97 Lote 2d · Afijos innatos por rareza, como en la entrada normal:
       // el salto también es un compañero de caja con tier.
       affixes: afijosParaCompanero((TIER_SYSTEM.rarityByTier as Record<number, string>)[tier], rng),
-      maxLevel: techoDeNivel(potential, baseSalto?.posicion ?? 6),
+      maxLevel: techoDeNivel(potential, baseSalto?.posicion ?? 6, tier),
       sellPrice: Math.floor(p * 62), sellPriceTope: tope
     }
   };
@@ -1117,7 +1117,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
           // F97 Lote 2d · Afijos innatos por rareza: el compañero de caja cobra
           // sus afijos como el recolector los suyos, cada uno en su tipo.
           affixes: afijosParaCompanero(rareza),
-          baseId: baseCaja?.id, maxLevel: techoDeNivel(potential, baseCaja?.posicion ?? 6),
+          baseId: baseCaja?.id, maxLevel: techoDeNivel(potential, baseCaja?.posicion ?? 6, tier),
           sellPrice: Math.floor(p * 62), sellPriceTope: tope
         }
       };

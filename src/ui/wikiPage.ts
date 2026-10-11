@@ -201,7 +201,9 @@ function seccionMecanicas(): string {
       T1 cuesta ${formatNumber(costeDeNivel(1, 0))} cristales y el de un T10,
       ${formatNumber(costeDeNivel(10, 0))}. El techo de nivel es 20, más dos por estrella
       de potencial y medio punto por posición de base: un ★1 con la peor base topa en
-      ${techoDeNivel(1, 1)} y un ★5 con la mejor en ${techoDeNivel(5, 10)}.</p>
+      ${techoDeNivel(1, 1, 1)} y un ★5 con la mejor en ${techoDeNivel(5, 10, 1)}.
+      A partir del T11 el techo sube tres niveles por tier, así que un objeto muy alto
+      tiene más recorrido: un ★5 con la mejor base del T20 llega a ${techoDeNivel(5, 10, 20)}.</p>
     `, ANCLA.mecanicaSinto)}
     ${bloqueWiki('La Ascensión', 'recycle', `
       <p class="wiki-p">Al producir ${formatNumber(PRESTIGE_MIN_NANITES)} nanitas en total puedes
