@@ -41,6 +41,7 @@ const BANCOS = [
   'filterCheck',
   'stackCheck',
   'potencialCheck',
+  'afijoValorCheck',
   'brilloCheck',
   'companionCheck',
   'loteCheck',

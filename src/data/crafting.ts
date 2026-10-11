@@ -80,22 +80,36 @@ import { multiplicadorDeBase, basePorId, basePorPosicion, posicionFusionada, pos
 //  así que subir de nivel sigue valiendo pero nunca se sale del item.
 // ==========================================================================
 
+// **POR QUÉ CADA AFIJO TIENE ADEMÁS SU `PROSA`.** El número que paga un afijo
+// **depende del item**: escala por tier (`potenciaDeAfijoPorTier`) y por el valor
+// que le tocó en el sorteo. O sea que `description` —"+35 % a la recolección por
+// click"— es la magnitud de catálogo, y ponerla en la ficha de un T2 con un
+// Baluarte de 0,8 es decir un número que el item no cobra.
+//
+// La primera forma de arreglarlo fue partir `description` buscando el primer
+// número y sustituirlo. Es la forma más corta de que un cambio de redacción rompa
+// la pantalla en silencio: el texto pasa a tener dos fuentes de verdad y el día
+// que alguien escribe "+35% al click" con otro espacio, el entero sale en otro
+// sitio. Así que el número sale de `effect` y la frase de `prosa`, y `description`
+// es las dos cosas juntas, para el sitio que quiere el valor de catálogo entero.
+//
+// `prosa` es lo que va **detrás** del número: "a la recolección por click".
 export const AFFIXES: Affix[] = [
-  { id: 'aff_sharp', name: 'Afilado', description: '+18% a la recolección por click.', rarity: 'Raro',
+  { id: 'aff_sharp', name: 'Afilado', description: '+18% a la recolección por click.', prosa: 'a la recolección por click', rarity: 'Raro',
     effect: { clickMult: 0.18 } },
-  { id: 'aff_rapid', name: 'Cadencia', description: '+12% a la recolección por click.', rarity: 'Raro',
+  { id: 'aff_rapid', name: 'Cadencia', description: '+12% a la recolección por click.', prosa: 'a la recolección por click', rarity: 'Raro',
     effect: { clickMult: 0.12 } },
-  { id: 'aff_yield', name: 'Rendimiento', description: '+20% a la recolección por segundo.', rarity: 'Raro',
+  { id: 'aff_yield', name: 'Rendimiento', description: '+20% a la recolección por segundo.', prosa: 'a la recolección por segundo', rarity: 'Raro',
     effect: { passiveMult: 0.20 } },
-  { id: 'aff_flow', name: 'Flujo', description: '+14% a la recolección por segundo.', rarity: 'Raro',
+  { id: 'aff_flow', name: 'Flujo', description: '+14% a la recolección por segundo.', prosa: 'a la recolección por segundo', rarity: 'Raro',
     effect: { passiveMult: 0.14 } },
-  { id: 'aff_bulwark', name: 'Baluarte', description: '+35% a la recolección por click.', rarity: 'Épico',
+  { id: 'aff_bulwark', name: 'Baluarte', description: '+35% a la recolección por click.', prosa: 'a la recolección por click', rarity: 'Épico',
     effect: { clickMult: 0.35 } },
-  { id: 'aff_core', name: 'Núcleo', description: '+25% a la recolección por segundo.', rarity: 'Épico',
+  { id: 'aff_core', name: 'Núcleo', description: '+25% a la recolección por segundo.', prosa: 'a la recolección por segundo', rarity: 'Épico',
     effect: { passiveMult: 0.25 } },
-  { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 a la recolección por click).', rarity: 'Épico',
+  { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 a la recolección por click).', prosa: 'de probabilidad de crítico (×2 a la recolección por click)', rarity: 'Épico',
     effect: { critChance: 0.08 } },
-  { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', rarity: 'Legendario',
+  { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', prosa: 'de probabilidad de crítico', rarity: 'Legendario',
     effect: { critChance: 0.14 } },
   // **`aff_luck` YA NO ESTÁ, Y EL PORQUÉ QUEDA ESCRITO.** Era "Suerte de Forja:
   // +10 % a la probabilidad de crafteo", y ese +10 % no lo leía ningún cálculo:
@@ -106,15 +120,15 @@ export const AFFIXES: Affix[] = [
   // partida —la misma clase que `crateLuck` antes de B18—, con el agravante de
   // que invitaba al swap (ponerlo solo para tirar). La migración lo quita de los
   // items guardados; lo que ya filtraba ids desconocidos lo ignora igual.
-  { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', rarity: 'Legendario',
+  { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', prosa: 'a ambos multiplicadores', rarity: 'Legendario',
     effect: { clickMult: 0.35, passiveMult: 0.35 } },
-  { id: 'aff_eternal', name: 'Eterno', description: '+2% a la recolección por click por cada nivel del recolector.', rarity: 'Mítico',
+  { id: 'aff_eternal', name: 'Eterno', description: '+2% a la recolección por click por cada nivel del recolector.', prosa: 'a la recolección por click por cada nivel del recolector', rarity: 'Mítico',
     effect: { clickMultPorNivel: 0.02 } },
-  { id: 'aff_absorb', name: 'Absorción', description: '+5% a la recolección por segundo por cada 5 niveles.', rarity: 'Mítico',
+  { id: 'aff_absorb', name: 'Absorción', description: '+5% a la recolección por segundo por cada 5 niveles.', prosa: 'a la recolección por segundo por cada 5 niveles', rarity: 'Mítico',
     effect: { passiveMultPorNiveles: 0.05 } },
-  { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', rarity: 'Mítico',
+  { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', prosa: 'a todos los multiplicadores del recolector', rarity: 'Mítico',
     effect: { clickMult: 0.55, passiveMult: 0.55 } },
-  { id: 'aff_void', name: 'Vacío Devorador', description: '+25% a la recolección por click y por segundo, +10% crítico.', rarity: 'Divino',
+  { id: 'aff_void', name: 'Vacío Devorador', description: '+25% a la recolección por click y por segundo, +10% crítico.', prosa: 'a la recolección por click y por segundo, +10% crítico', rarity: 'Divino',
     effect: { clickMult: 0.25, passiveMult: 0.25, critChance: 0.10 } }
 ];
 
@@ -960,6 +974,111 @@ const RARITY_WEIGHT: Record<Rarity, number> = {
   'Común': 0, 'Raro': 0.5, 'Épico': 1, 'Legendario': 1.6, 'Mítico': 2.4, 'Divino': 3.2
 };
 
+/**
+ * LOS PESOS DEL SORTEO DE AFIJOS, Y POR QUÉ SON UNA TABLA APARTE (F98).
+ *
+ * `RARITY_WEIGHT` de arriba la usan DOS cosas: el potencial de la forja y el
+ * sorteo de afijos. Endurecer la rareza de un afijo **no** tiene por qué
+ * endurecer el potencial de un item, y cuando se tocaron las dos juntas
+ * (`RARITY_WEIGHT` al cuadrado) la forja pasó a tirar casi siempre ★5: el
+ * potencial se decide con esos mismos números, con un umbral de redondeo que
+ * no se tocó. Endurecer una cosa movió la otra de golpe, y eso no se ve en
+ * ningún banco porque cada uno mide solo su mitad.
+ *
+ * Así que son dos tablas, cada una con su regla:
+ *
+ * - `RARITY_WEIGHT` — la del **potencial**. No se toca: es la que tenía el
+ *   juego antes de que existiera el sorteo de afijos y ya está medida.
+ * - `PESO_AFIJO` — la del **sorteo de afijos**, de este bloque. Es la que
+ *   decide que un afijo Divino sea mucho más difícil de sacar que un Raro.
+ *
+ * Y la curva de esta segunda es más cerrada a propósito: los raros pesan
+ * 1,00 y el Divino 0,06, o sea que un Divijo sale **más de 15 veces** más
+ * raro que un Raro. Con la tabla del potencial ese mismo Divino sale 3,6
+ * veces más raro, que es tan poco que el jugador lo lee como "todos igual"
+ * —que es exactamente lo que se lerizzlyó en el encargo.
+ */
+const PESO_AFIJO: Record<Rarity, number> = {
+  'Común': 0, 'Raro': 0.5, 'Épico': 1.5, 'Legendario': 4.5, 'Mítico': 10, 'Divino': 19.5
+};
+
+/**
+ * El peso de un afijo en el sorteo. `1 / (base + peso)` con `base` en 0,05:
+ * el suelo existe para que un peso de 0 (Común, que no tiene afijos) no
+ * divida por cero, y para que la diferencia entre el primer escalón y el
+ * segundo no sea de un factor infinito.
+ */
+export function pesoDeAfijo(rarity: string): number {
+  const p = PESO_AFIJO[rarity as Rarity];
+  return 1 / (0.5 + (typeof p === 'number' ? p : 1));
+}
+
+/**
+ * EL VALOR SORTEADO DE CADA AFIJO, Y POR QUÉ EL 1,0 ESTÁ EN EL MEDIO.
+ *
+ * Un afijo no es "un Baluarte" sino **un Baluarte con una magnitud**: la misma
+ * palabra vale distinto en dos items del mismo tier. El factor va de 0,7 a 1,3
+ * y **el 1,0 es el valor de catálogo**: o sea, la mitad de las veces el afijo
+ * paga exactamente lo que decía su descripción, y las otras mitad un 30 % más
+ * o un 30 % menos.
+ *
+ * **POR QUÉ EL CENTRO ES 1 Y NO EL MÁXIMO.** El 1,0 es lo que paga un afijo
+ * recién creado, y es lo que pagan **todos los items que ya existían** cuando
+ * esta regla entra: su valor guardado es 1, o sea el punto medio. Poner el
+ * mínimo en 1 significaría que cargar la partida **rebajaría** el almacen de
+ * todo el mundo una vez, que es la clase de cambio que hace que un jugador
+ * vuelva, mire su almacén y cierre el juego.
+ *
+ * **Y POR QUÉ UN RANGO Y NO VARIAS RAREZAS.** El rango es lo que hace que dos
+ * Baluartes del mismo tier no valgan lo mismo, y eso es lo que le da algo que
+ * buscar a la forja: no solo *qué* afijo heredas, sino con qué magnitud. Es la
+ * respuesta a "un T2 con Baluarte es lo mismo que un T5 con Baluarte": no, y
+ * además entre dos T5 uno tiene mejor Baluarte que el otro.
+ *
+ * Los números viven aquí y en ningún otro sitio. Quien los escriba en el
+ * sorteo, en la wiki y en la ficha tiene garantizado que un día uno de los
+ * tres se queda viejo.
+ */
+export const VALOR_AFIJO_MIN = 0.7;
+export const VALOR_AFIJO_MAX = 1.3;
+
+/** Un valor de afijo nuevo: uniforme en el rango, y es el 1,0 el centro. */
+export function valorDeAfijo(rng: () => number = Math.random): number {
+  return VALOR_AFIJO_MIN + rng() * (VALOR_AFIJO_MAX - VALOR_AFIJO_MIN);
+}
+
+/**
+ * Un valor de afijo suelto, ya validado: 1 si no es un número dentro del rango.
+ *
+ * `valorGuardadoDeAfijo()` de abajo es el que recibe el mapa y llama a este. Está
+ * aparte porque hay quien tiene **un solo número** y no un mapa —`textoDeAfijo()`
+ * trabajando sobre el afijo que está componiendo— y antes esa comprobación le
+ * pasaba un número donde esperaba un mapa: `numero?.[id]` sobre un número da
+ * `undefined` y el afijo salía **siempre a 1**, o sea que la ficha seguía
+ * enseñando la magnitud de catálogo y el rango no salía nunca. El banco lo cazó.
+ */
+export function valorNumeroDeAfijo(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 1;
+  return Math.min(VALOR_AFIJO_MAX, Math.max(VALOR_AFIJO_MIN, v));
+}
+
+/**
+ * El valor guardado de un afijo, o 1 si no hay ninguno.
+ *
+ * **CUALQUIER NÚMERO QUE NO SEA UNO FINITO DENTRO DEL RANGO ES DATO CORRUPTO Y
+ * VALE 1.** Un guardado editado a mano, un `undefined` que llegó como `null`,
+ * un factor que se coló de otra versión: todos caen al valor de catálogo en vez
+ * de multiplicar el daño por `NaN` —que es lo que haría un `?? 1` puesto en el
+ * sitio equivocado, y el `Math.floor(NaN)` del daño final se lleva por delante
+ * el número entero de la partida sin avisar—.
+ */
+export function valorGuardadoDeAfijo(
+  vals: Record<string, number> | undefined | null,
+  id: string
+): number {
+  return valorNumeroDeAfijo(vals?.[id]);
+}
+
 // --------------------------------------------------------------------------
 // Nombres de recolectores crafteadas
 // --------------------------------------------------------------------------
@@ -1268,7 +1387,11 @@ export function potenciaDeAfijoPorTier(tier: number | undefined | null): number 
 export function efectoDeAfijos(
   affixIds: Array<string> | undefined | null,
   nivel: number | undefined | null,
-  tier: number | undefined | null = null
+  tier: number | undefined | null = null,
+  // El VALOR SORTEADO de cada afijo (`affixVals`). Sin él, cada afijo paga su
+  // magnitud de catálogo; con él, la que le tocó en su item. Pasa por
+  // `valorGuardadoDeAffijo()`, que decae a 1 lo corrupto en vez de propagar NaN.
+  affixVals?: Record<string, number>
 ): { clickMult: number; passiveMult: number; critChance: number } {
   const out = { clickMult: 0, passiveMult: 0, critChance: 0 };
   const ids = Array.isArray(affixIds) ? affixIds : [];
@@ -1278,16 +1401,189 @@ export function efectoDeAfijos(
   for (const affixId of ids) {
     const affix = AFFIX_BY_ID[affixId];
     if (!affix) continue;
-    out.clickMult += (affix.effect.clickMult || 0) * potencia;
-    out.passiveMult += (affix.effect.passiveMult || 0) * potencia;
-    out.critChance += affix.effect.critChance || 0;
+    const val = valorGuardadoDeAfijo(affixVals, affixId);
+    out.clickMult += (affix.effect.clickMult || 0) * potencia * val;
+    out.passiveMult += (affix.effect.passiveMult || 0) * potencia * val;
+    out.critChance += (affix.effect.critChance || 0) * val;
     // Los que dependen del nivel suman un PORCENTAJE por nivel, no un número
     // plano: es lo que hace que subir de nivel siga valiendo sin que un
     // "+8 por nivel" convierta un T1 en un T10. Ver el comentario de AFFIXES.
-    out.clickMult += (affix.effect.clickMultPorNivel || 0) * nv * potencia;
-    out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nv / 5) * potencia;
+    out.clickMult += (affix.effect.clickMultPorNivel || 0) * nv * potencia * val;
+    out.passiveMult += (affix.effect.passiveMultPorNiveles || 0) * (nv / 5) * potencia * val;
   }
   return out;
+}
+
+/**
+ * EL TEXTO DE UN AFIJO CONCRETO: LA MAGNITUD QUE PAGA Y EL RANGO DONDE CAE.
+ *
+ * Esto es lo que la ficha del almacén enseña en lugar de `description`. Es la
+ * diferencia entre "Baluarte +35 %" —el valor de catálogo, el mismo en un T2 y en
+ * un T10— y **"Baluarte +28 % · rango 21 %–36 %"**, que es lo que ese item cobra
+ * de verdad: la magnitud del catálogo escalada por el tier y multiplicada por el
+ * valor que le tocó en el sorteo.
+ *
+ * **POR QUÉ EL RANGO SE ENSEÑA ESCALADO Y NO EL DE CATÁLOGO.** El jugador tiene
+ * que poder juzgar "me salió un 28 de un máximo de 36" con la misma regla que el
+ * número grande, sin hacer la cuenta del tier en la cabeza. Un rango de catálogo
+ * al lado de una magnitud ya escalada obliga a dividir, y lo que se divide no se
+ * lee: es la cifra que hace que la gente no mire el hover.
+ *
+ * **Y SI EL AFIXO NO TIENE RANGO, NO HAY HOVER.** Un afijo al 1 exacto paga
+ * siempre lo mismo y un rango de un solo número no informa de nada: sale vacío y
+ * la vista no inventa un detalle que no tiene.
+ *
+ * Los tres números salen de `efectoDeAfijos()` y de los extremos del rango, que es
+ * la misma función que cobra el daño. Si mañana cambia la regla de tier, aquí
+ * cambia sola: por eso el número de la ficha no puede ser una cuenta aparte.
+ */
+export interface TextoDeAfijo {
+  /** El número con su signo, ya redondeado para pantalla: "+28 %". */
+  magnitud: string;
+  /** El rango del mismo afijo en ESTE item, o '' si el afijo está al 1. */
+  rango: string;
+  /** La prosa del afijo, sin el número: "a la recolección por click". */
+  prosa: string;
+}
+
+/** El porcentaje de un efecto, ya con el tier y el valor del afijo aplicados. */
+function magnitudDeEfecto(
+  efecto: number | undefined,
+  valor: number,
+  potencia: number,
+  porNivel = false,
+  nivel = 0
+): number {
+  const base = (efecto || 0) * potencia * valor;
+  return porNivel ? base * nivel : base;
+}
+
+/** Un número con su `+`, y con un decimal solo cuando el decimal cuenta. */
+function pct(valor: number): string {
+  const v = valor * 100;
+  const txt = Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+  return `+${txt} %`;
+}
+
+export function textoDeAfijo(
+  affixId: string,
+  opts: { valor?: number | null; tier?: number | null; nivel?: number | null } = {}
+): TextoDeAfijo | null {
+  const affix = AFFIX_BY_ID[affixId];
+  if (!affix) return null;
+
+  // **UN NÚMERO, NO UN MAPA.** `opts.valor` es el valor de *este* afijo, no el
+  // mapa entero, así que se valida con `valorNumeroDeAfijo()`. Pasarle aquí el
+  // mapa —que es lo que hacía la primera versión— leía `numero?.[id]` sobre un
+  // número, daba `undefined`, y el afijo salía siempre a 1: la ficha seguía
+  // enseñando la magnitud de catálogo y el rango no salía nunca. El banco
+  // `afijoValorCheck` lo cazó con la fila "con un valor alto dice más que el
+  // catálogo", que fallaba diciendo "+35 %" donde tenía que decir "+45,5 %".
+  const valor = valorNumeroDeAfijo(opts.valor);
+  const tier = opts.tier ?? null;
+  const nivel = Math.max(0, Math.floor(Number(opts.nivel) || 0));
+  const potencia = tier === null || tier === undefined ? 1 : potenciaDeAfijoPorTier(tier);
+
+  // **QUÉ NÚMERO SE ENSEÑA, Y POR QUÉ EN ESTE ORDEN.** Un afijo puede traer varios
+  // efectos a la vez —Primo y Vacío tocan click y pasivo, Crítico trae la
+  // probabilidad—, y enseñar el primero que se encuentre sería arbitrario. Se
+  // enseñan **todos**, en el orden del `effect`, que es el orden en que el jugador
+  // los lee en la wiki. La prosa es la del catálogo y ya lleva el resto.
+  const e = affix.effect as any;
+  const partes: string[] = [];
+  if (e.clickMult) partes.push(pct(magnitudDeEfecto(e.clickMult, valor, potencia)));
+  if (e.passiveMult) partes.push(pct(magnitudDeEfecto(e.passiveMult, valor, potencia)));
+  if (e.critChance) partes.push(pct(magnitudDeEfecto(e.critChance, valor, 1)));
+  if (e.clickMultPorNivel) {
+    partes.push(`${pct(magnitudDeEfecto(e.clickMultPorNivel, valor, potencia, true, nivel))} / nivel`);
+  }
+  if (e.passiveMultPorNiveles) {
+    partes.push(`${pct(magnitudDeEfecto(e.passiveMultPorNiveles, valor, potencia, false, nivel / 5))} / 5 niveles`);
+  }
+
+  const magnitud = partes.join(', ');
+  const prosa = (affix as any).prosa ?? '';
+
+  // **EL RANGO, Y POR QUÉ SOLO SALE SI EL AFIXO TIENE VARIACIÓN.** Con el valor al
+  // 1 exacto el afijo paga lo mismo en cualquier item: un "rango 28 %–28 %" es
+  // ruido que ocupa la línea y no informa. Si se salió del 1, se enseñan los dos
+  // extremos con el mismo criterio con el que se enseña el número.
+  let rango = '';
+  if (Math.abs(valor - 1) > 1e-9) {
+    const bajo = magnitudDeEfecto(e.clickMult || e.passiveMult || e.critChance || 0,
+      VALOR_AFIJO_MIN, potencia) * 100;
+    const alto = magnitudDeEfecto(e.clickMult || e.passiveMult || e.critChance || 0,
+      VALOR_AFIJO_MAX, potencia) * 100;
+    rango = `rango ${Math.round(bajo * 10) / 10} %–${Math.round(alto * 10) / 10} %`;
+  }
+
+  return { magnitud, rango, prosa };
+}
+
+/**
+ * EL VALOR QUE SE INHERITA, Y POR QUÉ ES LA MEDIA Y NO EL MEJOR.
+ *
+ * Cuando un afijo viene de los dos padres, el hijo recibe **la media de los dos
+ * valores, con el empate subiendo**. Es exactamente la misma regla que ya usa
+ * `potencialFusionado()` para las estrellas, y por la misma razón: forjar es
+ * consolidar, y consolidar **da calidad**. Un hijo nunca sale peor que la media de
+ * sus materiales, así que forjar dos buenos nunca es una pérdida —que es lo que
+ * hace que buscar buenos padres tenga premio y no solo riesgo—.
+ *
+ * **Y POR QUÉ NO SE COPIA EL MEJOR.** Si el hijo heredara el mejor de los dos, la
+ * segunda forja de un par bueno subiría su valor cada vez: con tres parent's
+ * llegarías a un afijo de 1,3 sin esfuerzo. La media lo frena —el valor sube
+ * hacia el techo, nunca lo salta— y deja el techo como algo que se busca.
+ *
+ * **TRES CASOS, Y EL TERCERO ES EL QUE SE OLVIDA.**
+ *
+ * 1. Los dos padres lo tienen: media, con el empate subiendo.
+ * 2. Solo uno lo tiene: **se hereda tal cual**, sin promediar contra un 1
+ *    imaginario. Promediar contra 1 bajaría el afijo de un material bueno cada vez
+ *    que se combina con uno que no lo trae, que es castigar haber encontrado algo
+ *    bueno.
+ * 3. **Ninguno lo tiene: es un afijo nuevo de catálogo, y se sortea.** Un afijo
+ *    que entra por el relleno no tiene padre del que heredar valor, así que
+ *    `valorGuardadoDeAfijo(undefined)` leería 1 —el valor de catálogo— y **todos
+ *    los afijos heredados valdrían más que los de relleno, para siempre**. Eso es
+ *    un sesgo silencioso que conviene no tener: se sortea su valor como el de
+ *    cualquier otro.
+ *
+ * **Y LA MEDIA NO USA EL VALOR PARA DECIDIR QUIÉN LO TRAÍA.** Que lo traigan los
+ * dos se decide por los **ids** del padre, no por si su valor sale 1: un padre de
+ * una partida vieja no trae `affixVals`, sus afijos valen 1, y cuenta como
+ * material que lo trae igual. Si se mirara el valor, el afijo de un padre recién
+ * cargado se trataría como si el padre no lo tuviera, y la primera forja de una
+ * partida vieja tiraría la mitad de los valores.
+ */
+export function heredaValoresDeAfijo(
+  materials: Array<{ affixes?: string[]; affixVals?: Record<string, number> }>,
+  afijos: string[],
+  rng: () => number = Math.random
+): Record<string, number> {
+  const salida: Record<string, number> = {};
+  for (const id of afijos) {
+    const de = materials
+      .map(m => valorGuardadoDeAfijo(m.affixVals, id))
+      .filter(v => typeof v === 'number');
+
+    // Que lo traigan los dos se decide por los **ids**, no por el valor: un padre
+    // sin `affixVals` sí trae el afijo, vale 1, y cuenta como material que lo trae.
+    const loTraen = materials.filter(m => (m.affixes ?? []).includes(id));
+
+    if (loTraen.length === 0) {
+      // Caso 3: afijo nuevo de catálogo, valor nuevo.
+      salida[id] = valorDeAfijo(rng);
+    } else if (loTraen.length === 1) {
+      // Caso 2: se hereda tal cual.
+      salida[id] = valorGuardadoDeAfijo(loTraen[0].affixVals, id);
+    } else {
+      // Caso 1: media de los dos, con el empate subiendo —como el potencial.
+      const medio = de.reduce((a, b) => a + b, 0) / de.length;
+      salida[id] = Math.min(VALOR_AFIJO_MAX, Math.max(VALOR_AFIJO_MIN, medio));
+    }
+  }
+  return salida;
 }
 
 /**
@@ -1831,6 +2127,12 @@ export function attemptForge(
     rarity = subirRareza(rarity);
   }
   const affixes = pickAffixes(materials, rarity, rng);
+  // **EL VALOR DE CADA AFIJO SE INHERITA, Y ANTES NO SE INHERITABA NADA.** Con
+  // `affixVals: {}` más abajo, todo afijo forjado valía 1: el mismo catálogo, la
+  // misma palabra y la misma magnitud en cualquier item. Eso borraba justo lo que
+  // la forja hacía —elegir dos materiales buenos— y dejaba el rango de la fase
+  // anterior sin efecto en la única vía del juego donde se puede elegir algo.
+  const affixVals = heredaValoresDeAfijo(materials, affixes, rng);
 
   const collector: CollectorItem = {
     id: `forged_${Date.now()}_${rng().toString(36).substring(2, 8)}`,
@@ -1848,6 +2150,7 @@ export function attemptForge(
     damage,
     baseId: baseNueva?.id,
     affixes,
+    affixVals,
     forgedBy: authorName,
     forgedAt: Date.now(),
     lineage: materials.map(m => m.rarity),
@@ -1929,6 +2232,13 @@ export function attemptForgeCompanion(
   // caja nace con los de su rareza y el forjado —que cuesta dos items y una
   // tirada— salía sin ninguno.
   forjado.affixes = pickAffixesDeCompanero(materials, forjado.rarity, rng);
+  // **Y EL VALOR, CON LA MISMA REGLA QUE EL RECOLECTOR.** El compañero hereda
+  // afijos desde F97, así que heredar el valor no es un extra: sin esto, un
+  // compañero forjado con dos materiales de 1,3 salía con todos sus afijos a 1 y
+  // la calidad que el jugador eligió se perdía justo al consolidar. La función es
+  // la misma y no distingue de qué lado viene: un afijo que llega a un compañero
+  // por herencia vale lo mismo que si hubiera llegado a un recolector.
+  forjado.affixVals = heredaValoresDeAfijo(materials, forjado.affixes, rng);
   // La obra también se firma aquí, con la misma regla y el mismo sufijo: un
   // compañero perfecto de padres perfectos es tan obra como un recolector.
   if (esObraMaestra(materials, potential, (options.obraMaestra ?? 0) > 0)) {
@@ -2241,9 +2551,18 @@ function pickAffixes(
   // 2 · Relleno del catálogo, con los afijos raros pesando menos. El catálogo
   // es el pool que se haya pedido: el entero para el recolector, el de
   // compañero para el compañero forjado.
+  //
+  // **EL PESO SALE DE `pesoDeAfijo()`, Y ANTES NO SALÍA.** Estas dos líneas
+  // tenían la aritmética escrita a mano contra `RARITY_WEIGHT` —la tabla del
+  // **potencial**—, o sea que el endurecimiento de los pesos de afijo se
+  // escribía, se documentaba y se probaba, y **no cambiaba un solo sorteo**. La
+  // función `pesoDeAfijo()` no la llamaba nadie. Es el mismo fallo por tercera
+  // vez —código que existe, función que existe, prueba que mide la función— y
+  // por eso el banco tiene que mirar **la distribución real que sale**, no el
+  // peso de la función.
   const restantes = pool.filter(a => !usados.has(a.id));
   while (picked.length < objetivo && restantes.length > 0) {
-    const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
+    const weights = restantes.map(a => pesoDeAfijo(a.rarity));
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = rng() * total;
     let idx = 0;
@@ -2274,7 +2593,11 @@ function sorteaAfijos(
   const restantes = pool.filter(a => !excluidos.includes(a.id));
   const picked: string[] = [];
   while (picked.length < cantidad && restantes.length > 0) {
-    const weights = restantes.map(a => 1 / (0.5 + (RARITY_WEIGHT[a.rarity] ?? 1)));
+    // **MISMO PESO, MISMO MOTIVO QUE ARRIBA:** esta aritmética contra
+    // `RARITY_WEIGHT` —la del potencial— era la que no dejaba endurecer los
+    // afijos. Las dos copias escribidas a mano eran dos sitios donde cambiar la
+    // rareza de un afijo no tocaba ningún sorteo.
+    const weights = restantes.map(a => pesoDeAfijo(a.rarity));
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = rng() * total;
     let idx = 0;
@@ -2352,16 +2675,66 @@ export function migraAfijosPorRareza(
     } else if (lista.length > tope) {
       lista = lista.slice(0, tope);
     }
+
+    /**
+     * EL VALOR DE CADA AFIJO, Y POR QUÉ SE CALCULA ANTES DE CUALQUIER `return`.
+     *
+     * Cada afijo tiene además un **valor sorteado** —`affixVals`—, que multiplica
+     * su magnitud: el mismo Baluarte paga distinto en dos items del mismo tier. Es
+     * lo que convierte "un afijo" en "un afijo concreto".
+     *
+     * **ESTO ESTABA EN EL LUGAR EQUIVOCADO Y NO SE EJECUTABA NUNCA.** El bloque
+     * que sortea los valores estaba **después** de un `return w` que cortaba en
+     * cuanto la lista de afijos ya coincidía con la rareza —que es el caso de
+     * todo item que ya existía—. O sea: la migración que debía asignar el valor
+     * a los items viejos era exactamente la que no llegaba a ellos. No fallaba de
+     * forma ruidosa: devolvía `changed: false`, el banco la daba por buena y los
+     * items seguían sin valor.
+     *
+     * **AHÍ SE CALCULA Y SE COMPARA CON LO QUE HABÍA.** Un `return` temprano solo
+     * es legítimo si el item queda **igual**, y ahora "igual" son dos cosas: la
+     * lista de ids **y** el mapa de valores. Si falta un valor —o sobra uno de
+     * un afijo que ya no está— hay que escribir, aunque los ids no hayan cambiado
+     * ni uno.
+     *
+     * **Y ES IDEMPOTENTE POR CADA AFIJO, NO POR ITEM.** El valor de un afijo que
+     * ya tiene se respeta; solo se sortean los que faltan. Un item con medio mapa
+     * se completa sin que se mueva lo que ya estaba, que es lo que evita que la
+     * partida cambie de números en cada recarga.
+     */
+    const previos = (w.affixVals && typeof w.affixVals === 'object') ? w.affixVals as Record<string, unknown> : null;
+    const vals: Record<string, number> = {};
+    let valsCambian = previos === null;
+    for (const id of lista) {
+      const previo = previos?.[id];
+      if (typeof previo === 'number' && Number.isFinite(previo)) {
+        vals[id] = previo;
+      } else {
+        vals[id] = valorDeAfijo(rng);
+        valsCambian = true;
+      }
+    }
+    // Un valor guardado de un afijo que ya no está es basura: se cae.
+    if (!valsCambian && previos !== null && Object.keys(previos).length !== Object.keys(vals).length) {
+      valsCambian = true;
+    }
+
     const antes = Array.isArray(w.affixes) ? (w.affixes as any[]) : null;
-    if (antes !== null && antes.length === lista.length && antes.every((id, i) => id === lista[i])) return w;
+    const idsIguales = antes !== null
+      && antes.length === lista.length
+      && antes.every((id, i) => id === lista[i]);
+
+    // **AQUÍ SÍ: los ids unchanged Y los valores unchanged.** Antes esta línea
+    // solo miraba los ids, y por eso los items viejos nunca llegaban al valor.
+    if (idsIguales && !valsCambian) return w;
+
+    changed = true;
     if (antes === null && lista.length === 0) {
       // Sin campo y con tabla en 0 (Común): se escribe el [] para que la
       // invariante "todo recolector trae su lista" valga en todo el almacén.
-      changed = true;
       return { ...w, affixes: [] };
     }
-    changed = true;
-    return { ...w, affixes: lista };
+    return { ...w, affixes: lista, affixVals: lista.length ? vals : undefined };
   });
   if (!changed) return { items, changed: false };
   return { items: salida, changed: true };

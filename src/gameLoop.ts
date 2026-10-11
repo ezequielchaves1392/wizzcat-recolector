@@ -3345,8 +3345,30 @@ function sePuedeGuardar(): boolean {
       base *= 2;
     }
 
+    // Los afijos de pasivo del RECOLECTOR equipado. Es la **discrepancia 8**
+    // cerrada: hasta aquí el `passiveMult` de los afijos no lo leía nadie, así
+    // que Rendimiento, Flujo, Núcleo, Efenéreo, Absorción, Primo y Vacío
+    // prometingan "+X % al ingreso por segundo" y no pagaban nada. Se cobraba
+    // en la valoración y no hacía nada en la partida —la misma clase que
+    // `aff_luck` antes de que lo quitaran—.
+    //
+    // Va con `affixVals` por la misma razón que el click: el afijo que rinde es
+    // el de SU valor, no el de catálogo. Y va DESPUÉS de la suma de compañeros y
+    // ANTES de los multiplicadores globales, que es donde el resto de la cadena
+    // está: al total, no por compañero, porque el reparto de abajo reparte
+    // enteros y un multiplicador por compañero descuadraría el reparto exacto.
+    let multAfijosPassivo = 1;
+    if (state.equippedCollectorId) {
+      const item: any = state.warehouse.find((w: any) => w.id === state.equippedCollectorId);
+      if (item?.affixes?.length) {
+        const nivel = Math.max(0, Math.floor(Number(item.level) || 0));
+        multAfijosPassivo = 1 + efectoDeAfijos(
+          item.affixes, nivel, item.tier ?? 1, item.affixVals).passiveMult;
+      }
+    }
+
     state.passiveMultiplier = calculateCompanionMultiplier();
-    const withAchievements = base * state.passiveMultiplier
+    const withAchievements = base * multAfijosPassivo * state.passiveMultiplier
       * (1 + achievementState.passiveBonus)
       * (1 + state.bonus.passiveMult);
     // **MENTE COLMENA: CADA ACTIVO DA +4 % A LOS DEMÁS (F97 Lote 2b).** Con N
@@ -3426,7 +3448,7 @@ function sePuedeGuardar(): boolean {
     // **LA CUENTA VIVE EN `data/crafting` (F83).** La ficha de un arma no equipada,
     // la tarjeta de perfil y el recálculo ajeno necesitan el efecto de UNOS afijos
     // con UN nivel, no el del equipado. Esta función es ese caso con el equipado.
-    return efectoDeAfijos(item.affixes, item.level, item.tier);
+    return efectoDeAfijos(item.affixes, item.level, item.tier, item.affixVals ?? {});
   }
 
   /**
@@ -3753,7 +3775,24 @@ function sePuedeGuardar(): boolean {
     // un item neutro queda igual que antes—.
     //
     // La regla que queda, y que un banco comprueba: **las filas suman el total**.
-    anota('Afijos', 'del item', 1 + efectoDeAfijos(w.affixes, nivel, w.tier).clickMult, 'item');
+    // **ESTE ES EL NÚMERO DE CLICK Y SOLO EL DE CLICK.** Una versión de esta línea
+    // sumaba también `passiveMult` al multifactor —`1 + click + pasivo + click×pasivo`—,
+    // y rompía siete pruebas a la vez (`stateCheck`, `identidadCheck`) con el mismo
+    // síntoma: el stat de la ficha salía **más alto** que el daño que cobra el clic.
+    //
+    // El motivo es que esta lista explica el **daño por click** y nada más. Los
+    // afijos de pasivo —Rendimiento, Núcleo, Primo, Absorción— no suman al click:
+    // suman al ingreso por segundo, que es otra magnitud, en otra pantalla, con
+    // otro número. Meterlos aquí hacía que la ficha prometiese un click que el
+    // juego no daba, que es exactamente la clase de mentira que este hover
+    // existe para no contar. Su sitio es el ingreso, y se cobra en
+    // `recalculatePassiveIncome()`.
+    //
+    // El desglose queda en `1 + clickMult` a secas, igual que antes, con una
+    // diferencia: el factor ya viene escalado por tier y por el valor sorteado
+    // del afijo (`potenciaDeAfijoPorTier` y `affixVals` leen de `efectoDeAfijos`).
+    const efectoAfijo = efectoDeAfijos(w.affixes, nivel, w.tier, w.affixVals);
+    anota('Afijos', 'del item', 1 + efectoAfijo.clickMult, 'item');
     anota('Compañeros', 'de la partida', calculateCompanionMultiplier(), 'partida');
     anota('Logros', 'de la partida', 1 + achievementState.clickBonus, 'partida');
     anota('Árbol de pasivas', 'de la partida', multClickDeArbol(), 'partida');

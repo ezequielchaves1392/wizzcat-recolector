@@ -57,6 +57,20 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.16.0',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Cada afijo tiene su propia magnitud',
+    lineas: [
+      'Un afijo ya no es una palabra fija: cada uno tiene su valor, y dos Baluartes del mismo tier ya no pagan lo mismo.',
+      'La ficha enseña el número real de cada afijo, y al pasar el cursor el rango entre el que puede caer.',
+      'Un afijo mejor vale más: dos recolectores del mismo tier con el mismo afijo ya no se venden por lo mismo.',
+      'Los afijos de recolección por segundo ahora cumplen lo que dicen: antes prometían el bonus y no lo daban.',
+      'En la forja, el valor de cada afijo se hereda de los materiales, así que elegir cuáles fusionas empieza a importar.',
+      'Los afijos raros son mucho más difíciles de salir: los mejores ya no caen en cualquier item.',
+      'Los recolectores que ya tenías reciben un valor al cargar la partida. No pierdes nada por ello.'
+    ]
+  },
+  {
     version: '1.15.47',
     fecha: '10 de octubre de 2026',
     titulo: 'Los compañeros forjados ya tienen afijos',

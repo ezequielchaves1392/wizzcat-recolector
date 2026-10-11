@@ -48,7 +48,8 @@ import { BASES_RECOLECTOR, BASES_COMPANERO } from '../data/bases';
 import {
   AFFIXES, baseSuccessChance,
   baseDeTier, techoDeNivel, costeDeNivel,
-  explicacionDeAfijos
+  explicacionDeAfijos,
+  VALOR_AFIJO_MIN, VALOR_AFIJO_MAX
 } from '../data/crafting';
 import {
   PIEDRA_PUNTOS, PROB_NANO_SUBE_RAREZA, PROB_SUBE_POTENCIAL,
@@ -488,8 +489,18 @@ function seccionItems(): string {
     `, ANCLA.itemsExpansores)}
     ${bloqueWiki('Afijos: los pone la rareza', 'sparkle', `
       <p class="wiki-p">${explicacionDeAfijos()}</p>
+      <p class="wiki-p">Cada afijo tiene además <strong>su propio valor</strong>, entre
+      ${formatNumber(VALOR_AFIJO_MIN * 100)} % y ${formatNumber(VALOR_AFIJO_MAX * 100)} % de lo
+      que dice su descripción. Por eso dos Baluartes del mismo tier no pagan lo mismo: el de la
+      ficha muestra el que trae y, al pasar el cursor, el rango entero. Ese valor se
+      <strong>hereda en la forja</strong> —la media de los dos materiales, con el empate
+      subiendo—, así que elegir <em>qué</em> fusionas también decide <em>con qué calidad</em>.</p>
+      <p class="wiki-p">Y el valor también se nota en el precio: dos recolectores del mismo tier
+      con el mismo afijo no valen lo mismo.</p>
       <p class="wiki-p">Son ${AFFIXES.length} en total, todos en porcentaje para no romper
-      los tiers bajos. Qué hace cada uno:</p>
+      los tiers bajos. La lista de abajo es <strong>el valor de catálogo</strong>, el que paga un
+      afijo justo en la mitad de su rango y sin escala de tier; cada item enseña el suyo.
+      Qué hace cada uno:</p>
       <div class="wiki-box">${afijos}</div>
     `, ANCLA.itemsAfijos)}
   `;

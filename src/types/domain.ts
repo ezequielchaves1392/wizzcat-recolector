@@ -29,6 +29,16 @@ export interface Affix {
   id: string;
   name: string;
   description: string;
+  /**
+   * La frase que va DETRÁS del número, sin el número: "a la recolección por click".
+   *
+   * Existe porque el número que paga un afijo **depende del item** —escala por tier
+   * y por el valor que le tocó en el sorteo—, y `description` es la magnitud de
+   * catálogo. Componer el texto desde las dos mitades es lo que evita tener que
+   * partir `description` buscando un número dentro, que es la forma más corta de
+   * que un cambio de redacción rompa la pantalla en silencio.
+   */
+  prosa?: string;
   rarity: Rarity;
   /** Efecto numérico que se aplica al calcular el valor y el daño. */
   effect: {
@@ -68,6 +78,9 @@ export interface CollectorItem {
   potential?: number;
   /** Atributos heredados. Solo en recolectores crafteadas. */
   affixes?: string[];
+  /** Factor multiplicativo de cada afijo (0.7 a 1.3). Sorteado al nacer el item.
+   *  Ausente en items viejos: factor 1.0. La forja promedia los dos padres. */
+  affixVals?: Record<string, number>;
   /** Usuario que la forjó. La torna única e irrepetible. */
   forgedBy?: string;
   /** Fecha de forja, para mostrar antigüedad en el mercado. */

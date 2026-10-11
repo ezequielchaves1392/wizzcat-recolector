@@ -49,6 +49,7 @@ export default defineConfig({
         filterCheck: resolve(here, 'filterCheck.ts'),
         stackCheck: resolve(here, 'stackCheck.ts'),
         potencialCheck: resolve(here, 'potencialCheck.ts'),
+        afijoValorCheck: resolve(here, 'afijoValorCheck.ts'),
         brilloCheck: resolve(here, 'brilloCheck.ts'),
         companionCheck: resolve(here, 'companionCheck.ts'),
         loteCheck: resolve(here, 'loteCheck.ts'),

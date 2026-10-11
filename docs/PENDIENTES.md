@@ -4559,3 +4559,104 @@ de núcleos va en el parche grande y es una sola vez.*
   veis el pie de este fichero diciendo "2825 pruebas" o "v1.15.45" como versión viva,
   era mentira de esa transcripción; la cifra buena está arriba, en **Hecho**.
 
+### Afijos: un afijo es un afijo CON magnitud (a medias, y con tres cosas sin hacer)
+
+> Encargo, textual: *"los afijos podremos agregar mas? y me pasa que todos tienen la misma
+> chance de salir no? no deberian ser mas dificil sacar los mejores? ... como no escalan con
+> nada puede salir un T2 con baluarte y es lo mismo tener un T2 con baluarte q un T5 con el
+> mismo ...elets afijos vayan de un valor a otro? ejemplo baluarte de 10% a 20% ... tambien me
+> suena a que los recolectores deben tener afijos distintos a los compañeros"*.
+
+**Lo que quedó hecho y con banco** (`afijoValorCheck`, 35 pruebas):
+
+- [x] **Cada afijo tiene un valor sorteado** de 0,7 a 1,3, guardado en `affixVals`, y ese
+  valor multiplica los tres efectos. Dos Baluartes del mismo tier ya no son lo mismo, que era
+  la pregunta. El 1,0 es el centro **a propósito**: es lo que pagan todos los items que ya
+  existían, así que cargar la partida no le quita nada a nadie.
+- [x] **La ficha enseña lo que el item cobra.** `textoDeAfijo()` compone el número desde
+  `efectoDeAfijos()` —la misma función que cuenta el daño—, y el `title` enseña el rango
+  escalado al tier. Antes la línea pintaba `description`, que es la magnitud de catálogo:
+  un Baluarte de T2 con valor 0,8 pintaba "+35 %" y cobraba +22 %.
+- [x] **Los afijos de pasivo cobran** (discrepancia 8, cerrada la mitad que quedaba).
+  `recalculatePassiveIncome()` multiplica por el `passiveMult` del recolector equipado.
+- [x] **Los pesos del sorteo están endurecidos**, y en tabla **aparte**: `PESO_AFIJO` para los
+  afijos, `RARITY_WEIGHT` intacta para el potencial. **Y están enchufados de verdad**: los dos
+  sorteos llaman a `pesoDeAfijo()`. Medido sobre el sorteo real de un item Legendario, un
+  afijo Divino pasó de **~9,5 % a 3,2 %** de las veces, y algún Raro aparece en el 96,6 % de los
+  sorteos.
+  - **La primera versión de esto no cambiaba nada, y por eso queda anotado así.** Se escribió
+    la tabla nueva, se escribió la función y se probó **la función** —que pasaba— mientras los
+    dos sorteos seguían usando la aritmética contra `RARITY_WEIGHT` a mano. El endurecimiento
+    estaba en el código, en las pruebas y en la nota de parche, y **no había tocado un solo
+    sorteo**. Es el tercer caso del mismo fallo del lote y el que más caro salió: era la mitad
+    del encargo.
+  - Lo que lo caza son las dos filas de `afijoValorCheck` que **sortean de verdad** y cuentan la
+    distribución. No miden el peso de una función: miden lo que sale.
+
+- [x] **La forja hereda el valor, con la media y el empate subiendo** — lo pidió el
+  jugador textualmente y es lo que hace que la forja sea una decisión. Un afijo que
+  traen los dos padres sale con **la media de sus valores**; si solo lo trae uno, **se
+  hereda tal cual** sin promediar contra un 1 imaginario (promediar contra 1 castiga
+  haber encontrado algo bueno); y si no lo trae ninguno, es afijo nuevo de catálogo y
+  **se sortea su valor**, porque dejarlo en 1 haría que todos los afijos heredados
+  valieran más que los de relleno, para siempre. **La media nunca salta el techo**: dos
+  1,3 dan 1,3, no más, que es lo que impide que tres forjas seguidas de un par bueno
+  lleven un afijo al máximo sin esfuerzo. Recolector y compañero usan la misma función.
+  Cubierto por ocho filas de `afijoValorCheck`, la última de ellas sobre la forja de
+  verdad y no sobre la función pura — porque la función andaba bien mientras el item
+  forjado nacía con `affixVals: {}` y todos sus afijos a 1.
+
+**Lo que NO está hecho, y hay que decidir antes de empezarlo:**
+
+- [ ] **F98 · El techo por rareza en el sorteo.** Que un Épico no pueda sacar un Divino por
+  azar. Se intentó dos veces y **las dos quedaron mal**: la primera en un filtro *después* del
+  sorteo que construía una lista y no se usaba —código muerto, no restringía nada—, y la
+  segunda con un reemplazo que llamaba a `pickAffixes(...)[0]` hasta cien veces, que regenera
+  la lista entera y podía **duplicar afijos** en el item. Lo natural es hacerlo dentro de
+  `sorteaAfijos()`, filtrando el pool, y **sin tocar la herencia**: los afijos de los padres
+  tienen que poder pasar el techo, porque forjar siempre da calidad.
+- [ ] **F99 · Los afijos nuevos y los pools separados.** Lo que pidió el jugador de "los
+  recolectores deben tener afijos distintos a los compañeros". Hoy solo hay un filtro: los
+  compañeros no reciben los de crítico, porque no critican. Lo demás es el mismo catálogo.
+  La forma que encaja con las reglas del proyecto es una propiedad `aplica` en el catálogo en
+  vez de dos listas escritas a mano, y **cada efecto nuevo tiene que ser consumido por una
+  cuenta** —el fantasma de `aff_luck`—.
+- [x] **La valoración cobra el valor.** `affixValueMult()` multiplica por el valor guardado del
+  afijo **y** por la potencia del tier, y antes leía solo `a.effect` —la magnitud de catálogo—,
+  con lo que un Baluarte de 1,3 y otro de 0,7 se vendían por lo mismo: el rango se veía en la
+  ficha y **no existía en el mercado**, así que buscar buenos materiales no tenía recompensa
+  económica. Medido sobre un T5 con un Baluarte: **7.140 → 7.644 → 8.148** según el valor, un
+  14 % entre el peor y el mejor. Un item viejo sin `affixVals` se valúa por catálogo y no
+  revienta. Cubierto por seis filas de `afijoValorCheck` que miran el **`sellPrice()` final**, no
+  el multiplicador — porque un multiplicador correcto al que nada lo llama también pasa.
+
+**Y una nota de método, que es lo que más costó de este lote, y que aplica a los cuatro.**
+
+Los cuatro cambios fallaron de la misma manera: **en silencio, con la suite en verde**. Ninguno
+tiró un rojo, y los cuatro estaban escritos, documentados y —en dos casos— probados.
+
+1. **La migración de valores** estaba escrita **después** de un `return` temprano que cortaba
+   justo en el caso de los items que ya existían. Devolvía `changed: false` y nadie se enteraba.
+2. **El techo por rareza** construía una lista filtrada y **no la usaba**: el item se creaba con
+   la original. Código muerto que parecía una regla.
+3. **`textoDeAfijo()`** pasaba un número donde esperaba un mapa. `numero?.[id]` sobre un número
+   da `undefined`, el afijo salía siempre a 1 y la ficha seguía enseñando la magnitud de
+   catálogo: la Fase 2a entera no hacía nada y sus pruebas pasaban.
+4. **Los pesos del sorteo** estaban escritos en una función nueva, probados en esa función, y
+   **los dos sorteos seguían con la aritmética vieja a mano**. La mitad del encargo.
+Retirado.
+
+**El patrón es siempre el mismo y por eso vale la pena escribirlo:** *existe el código, existe la
+prueba, y la prueba mira el código en vez del resultado*. En los cuatro casos la función nueva
+funcionaba perfectamente y lo que fallaba era que **nadie la llamaba**, o se llamaba con otra
+firma, o el `return` de antes se comía el bloque entero.
+
+Lo que se hizo para que no vuelva a pasar: `afijoValorCheck` **no se conforma con comprobar
+funciones**. Mira las cosas por los dos lados —que el item viejo *tiene* valor, que **quitar** el
+afijo de pasivo *baja* el ingreso, que el valor corrupto cae a 1 en vez de arrastrar `NaN` al
+daño— y **sortea de verdad** 3.000 veces para contar la distribución en vez de mirar el peso de
+la función.
+
+La regla que queda para lo que venga: *una prueba que solo puede pasar si el resultado existe en
+el juego, no una que pasa si la función está bien escrita.*
+

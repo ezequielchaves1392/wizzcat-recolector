@@ -265,7 +265,17 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
    click del jugador (lo cubre `senalCheck`), y `crateLuck` ya multiplica
    la parte del salto (lo cubre `saltoCheck`). Quedan `offlineClicks` —el nodo se sacó
    del árbol y el campo solo sobrevive en partidas viejas— y el `passiveMult` de
-   afijos en el pasivo, que `recalculatePassiveIncome` sigue sin leer.
+   afijos en el pasivo.
+   **EL `passiveMult` DE AFIJOS YA ESTÁ ARREGLADO, Y LO QUE FALTA AHORA ES OTRA COSA.**
+   `recalculatePassiveIncome()` multiplica por el `passiveMult` de los afijos del
+   recolector equipado, así que Rendimiento, Flujo, Núcleo, la mitad de Efenéreo,
+   Absorción, Primo y Vacío Devorador **cobran de verdad**. Antes prometían "+X % al
+   ingreso por segundo" y no pagaban nada —se cobraban en la valoración y no
+   hacían nada jugando, la misma clase que `aff_luck`—.
+   **Lo que sí queda de esta discrepancia es solo `offlineClicks`.**
+   Lo cubre `afijoValorCheck`, en la fila "pasivo: y QUITAR el afijo de pasivo lo
+   baja": quitar el afijo tiene que **bajar** el ingreso, que es la dirección en
+   la que una bonificación que no hace nada se distingue de una que sí.
 9. **Código muerto:** `state.totalInfraestructure`, `COLLECTOR_BASE_COSTS`,
    `TIER_POWER`, `types.ts` (`GameState`, `defaultState`), `ProfileState`,
    `UserProfile`, y las pantallas `components/crates.ts` y
@@ -419,7 +429,7 @@ conocidas, y escribirlas aquí es más útil que olvidarlas.
 | 5 | La nanopartícula cuesta 90 000 en un sitio y 220 000 en otro | sigue |
 | 6 | Los cosméticos de logro y núcleo no se repartían nunca | **medio**: quedan los 5 de ranking, declarados |
 | 7 | Las esquirlas nunca se gastan | **arreglada** (fuera del juego; el fallo paga cristales) |
-| 8 | `crateLuck` y `offlineClicks` no se consumen | sigue |
+| 8 | `crateLuck` y `offlineClicks` no se consumen | sigue (el `passiveMult` de afijos ya está **arreglado**) |
 | 9 | Código muerto | sigue |
 | 10 | El techo de niveles estaba escrito en 5 sitios y no coincidían | **arreglada** |
 | 11 | Un docblock en inglés | sigue |

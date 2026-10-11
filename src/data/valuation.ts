@@ -14,7 +14,7 @@
 // ==========================================================================
 
 import type { Rarity, CollectorItem } from '../types/domain';
-import { AFFIX_BY_ID, collectorMaxLevel, BASE_COLLECTOR_MAX_LEVEL, potencialNormalizado } from './crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, BASE_COLLECTOR_MAX_LEVEL, potencialNormalizado, valorGuardadoDeAfijo, potenciaDeAfijoPorTier } from './crafting';
 import { TIER_SYSTEM } from './tiers';
 
 /** Valor de referencia de un recolector base de cada tier (sin nivel ni afijos). */
@@ -84,21 +84,52 @@ export function potentialValueMult(potential: number | undefined): number {
   return 1 + (potencialNormalizado(potential) - 1) * 0.45;
 }
 
+/**
+ * LO QUE APORTA CADA AFIJO AL PRECIO, Y POR QUÉ AHORA MIRA SU VALOR.
+ *
+ * Cada afijo aporta según lo que hace, no por su rareza nominal. Los coeficientes de
+ * abajo son **política de valoración**, no la regla del juego: por eso esto no se
+ * deduce de `efectoDeAfijos()`. Lo que sí tiene que coincidir es **la magnitud**.
+ *
+ * **EL VALOR SORTEADO, Y POR QUÉ EL PRECIO LO NECESITA.** Un afijo ya no es una
+ * palabra fija: cada uno tiene una magnitud concreta en cada item. Un Baluarte de
+ * 1,3 da +45 % y uno de 0,7 da +24 %, y esta función los valoraba **igual** —
+ * leía `a.effect`, la magnitud de catálogo. Con eso un Baluarte de 1,3 y otro de
+ * 0,7 se vendían por lo mismo, y el rango era invisible en el mercado: la forja
+ * heredaba valores, la ficha los enseñaba, y **el almacén no los diferenciaba**.
+ * Buscar buenos materiales no tenía recompensa económica, que es el Incentive que
+ * faltaba.
+ *
+ * **Y LA POTENCIA POR TIER, QUE TAMBIÉN FALTABA.** El mismo afijo rinde menos en un
+ * tier bajo —un Baluarte de T3 es del 80 %, el de T10 del 150 %—, así que dos items
+ * con el mismo afijo y distinto tier **no valen lo mismo**, y la cuenta no lo sabía.
+ *
+ * **LAS DOS JUNTAS, Y NO SON LA MISMA COSA.** La potencia va por el afijo y el
+ * valor por el item: un T3 con un Baluarte del 100 % vale más que un T3 con uno
+ * del 70 %, y un T5 con el mismo afijo del 100 % vale más que el T3. Multiplicar
+ * los dos es lo correcto, y no es contar el tier dos veces: la base del precio ya
+ * es la del tier (`VALOR_BASE_POR_TIER`) y esto es cuánto mejora **dentro** de él.
+ */
 export function affixValueMult(collector: CollectorItem): number {
   if (!collector.affixes?.length) return 1;
+  const potencia = potenciaDeAfijoPorTier(collector.tier);
   let mult = 1;
   for (const id of collector.affixes) {
     const a = AFFIX_BY_ID[id];
     if (!a) continue;
+    // El valor guardado de ESE afijo en ESE item. Sin él cae a 1, que es la
+    // magnitud de catálogo: un item viejo o un guardado editado a mano siguen
+    // valuándose por la palabra, no por un número que no existe.
+    const valor = valorGuardadoDeAfijo(collector.affixVals, id);
     // Cada afijo aporta según lo que hace, no por su rareza nominal
     let contrib = 0;
-    if (a.effect.clickMult) contrib += a.effect.clickMult * 0.8;
-    if (a.effect.passiveMult) contrib += a.effect.passiveMult * 0.8;
+    if (a.effect.clickMult) contrib += a.effect.clickMult * 0.8 * potencia * valor;
+    if (a.effect.passiveMult) contrib += a.effect.passiveMult * 0.8 * potencia * valor;
     // Los de nivel se valoran por su tope: un afijo que da +2% por nivel llega al
     // +40% en el techo de 20. Es un porcentaje del item, así que no rompe nada.
-    if (a.effect.clickMultPorNivel) contrib += a.effect.clickMultPorNivel * 20;
-    if (a.effect.passiveMultPorNiveles) contrib += a.effect.passiveMultPorNiveles * 4;
-    if (a.effect.critChance) contrib += a.effect.critChance * 2.5;
+    if (a.effect.clickMultPorNivel) contrib += a.effect.clickMultPorNivel * 20 * valor;
+    if (a.effect.passiveMultPorNiveles) contrib += a.effect.passiveMultPorNiveles * 4 * valor;
+    if (a.effect.critChance) contrib += a.effect.critChance * 2.5 * valor;
     mult += contrib;
   }
   return mult;

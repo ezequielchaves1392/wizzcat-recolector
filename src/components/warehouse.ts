@@ -37,7 +37,7 @@ import { sfx } from '../utils/audio';
 import { rarityClass, raritySlug, RARITY_RANK } from './crateLoot';
 import { marcoDeBrillo } from '../ui/brillo';
 import { puntosDeAfijos } from '../ui/fichas';
-import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio } from '../data/crafting';
+import { AFFIX_BY_ID, collectorMaxLevel, estrellasDe, nivelMaximoDeCompanio, costeDeNivelDeCompanio, textoDeAfijo } from '../data/crafting';
 import { valuationBreakdown } from '../data/valuation';
 import { CRISTAL_NOMBRE } from '../data/items';
 import {
@@ -1007,13 +1007,31 @@ function detailContent(item: any, state: any, game: any): string {
     ?? Math.floor((game.getSellPrice?.(item.id) ?? item.sellPrice ?? 0) * stackUnits(item));
   const maxStack = MAX_STACK[item.type] ?? 1;
 
+  // **EL TEXTO DEL AFIJO NO ES `description`: ES LO QUE PAGA ESE ITEM.**
+  //
+  // `description` es la magnitud de catálogo —"+35 %"— y es la misma en un T2 y en
+  // un T10. Ponerla aquí era la mitad del problema que se pidió arreglar: un
+  // Baluarte de T2 con valor 0,8 enseña "+35 %" y cobra +22 %, y el jugador no
+  // tiene forma de saberlo mirando la ficha. El número sale de `textoDeAfijo()`,
+  // que compone desde `efectoDeAfijos()` —la misma función que cuenta el daño—,
+  // y por eso no puede separarse del número que se cobra (R3).
+  //
+  // El rango va en el `title`, que es lo que sale al pasar el cursor: es un dato
+  // de consulta, no algo que deba ocupar la línea.
   const affixList = (item.affixes || []).map((id: string) => {
     const a = AFFIX_BY_ID[id];
     if (!a) return '';
-    return `<li class="text-[10px] flex items-start gap-1.5">
+    const t = textoDeAfijo(id, {
+      valor: (item as any).affixVals?.[id],
+      tier: (item as any).tier,
+      nivel: (item as any).level
+    });
+    const magnitud = t ? `${t.magnitud} ${t.prosa}`.trim() : a.description;
+    const title = t?.rango ? ` — ${t.rango} en este item` : '';
+    return `<li class="text-[10px] flex items-start gap-1.5" title="${title}">
       <span class="${rarityClass(a.rarity)} flex-shrink-0 mt-[3px]">◆</span>
       <span><span class="${rarityClass(a.rarity)}">${a.name}</span>
-      <span class="text-[var(--text-muted)]"> — ${a.description}</span></span>
+      <span class="text-[var(--text-muted)]"> — ${magnitud}</span></span>
     </li>`;
   }).join('');
 

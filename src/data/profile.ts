@@ -102,6 +102,20 @@ export interface RecolectorPublico {
   equipado?: boolean;
   /** Los afijos del arma, que cuentan al equiparla (F83: el recálculo los usa). */
   affixes?: string[];
+  /**
+   * El valor sorteado de cada afijo, y por qué viaja en una tarjeta pública.
+   *
+   * Sin esto, la tarjeta **reconstruye un objeto distinto del que muestra su
+   * dueño**: los ids viajan tal cual, pero cada afijo a magnitud de catálogo.
+   * El jugador ve en su perfil un Baluarte y quien lo mira desde fuera ve otro,
+   * y los dos números no cuadran. Salió en `identidadCheck`: 733 en la tarjeta
+   * contra 729 en la ficha del mismo item.
+   *
+   * Es público a propósito y no es un spoiler: el valor de un afijo ya se
+   * deduce de la Rareza, el Tier y el Nivel, que también se publican. Lo que no
+   * se puede es publicar el resultado y no la fórmula que lo produce.
+   */
+  affixVals?: Record<string, number>;
 }
 
 export interface CompanionPublico {
@@ -229,6 +243,12 @@ export function tarjetaDesdeEstado(state: any, userId: string, username: string)
         damage: num(w.damage),
         equipado: true,
         affixes: Array.isArray(w.affixes) ? w.affixes.map(String) : [],
+        // Sin esta línea el recálculo de `danoFinalDeTarjeta()` cuenta cada afijo
+        // a magnitud de catálogo y la tarjeta muestra un daño que no es el de la
+        // ficha. No es un dato opcional: es la mitad de la cuenta.
+        affixVals: (w.affixVals && typeof w.affixVals === 'object')
+          ? w.affixVals as Record<string, number>
+          : undefined,
         forgedBy: String(w.forgedBy ?? ''),
         details: String(w.details ?? '')
       }))
@@ -378,7 +398,19 @@ export function danoFinalDeTarjeta(
   if (!arma) return vacio;
   const nivel = Math.max(0, Math.floor(Number(arma.level) || 0));
   const base = Math.max(DANIO_MINIMO_SIN_RECOLECTOR, Number(arma.damage) || 0);
-  const multAfijos = 1 + efectoDeAfijos(arma.affixes, nivel, arma.tier).clickMult;
+  // **EL `affixVals` VIAJA CON EL ARMA, O LA TARJETA CUENTA OTRA COSA.** Esta
+  // línea era `efectoDeAfijos(arma.affixes, nivel, arma.tier)` a secas, sin el
+  // cuarto argumento: la tarjeta pública recalcula el daño de un recolector que
+  // el jugador ve **desde su propio perfil**, y sin el valor sorteado cada afijo
+  // contaba a magnitud de catálogo. El resultado era que el número de la tarjeta
+  // y el número de la ficha —que sí lo usa— no cuadraban, y `identidadCheck` lo
+  // cazó: 733 en la tarjeta contra 729 en la ficha.
+  //
+  // Un descriptor que no lleva los valores guardados **no puede reconstruir el
+  // objeto**: le falta justo lo que hace que ese Baluarte sea ese Baluarte y no
+  // otro del mismo tier. Por eso el campo tiene que ir en la tarjeta.
+  const multAfijos = 1 + efectoDeAfijos(
+    arma.affixes, nivel, arma.tier, arma.affixVals).clickMult;
   let multCompaneros = 1;
   for (const c of t?.companeros ?? []) {
     if (c?.tipo === 'multiplier' && c?.equipado) multCompaneros += Number(c?.power) || 0;
