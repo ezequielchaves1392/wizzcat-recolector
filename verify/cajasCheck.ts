@@ -138,52 +138,42 @@ async function main() {
   //  colocarse, y ese es el punto en que el item existe por primera vez. Si el
   //  generador no trae base, el almacén tampoco la puede enseñar.
   {
-    let salidas = 0;
+    // **LA COBERTURA SE MIDE SOBRE LA TABLA, NO SORTEANDO.** Esto se escribió primero
+    // abriendo cajas hasta ver un objeto, y así el banco era **intermitente**: salía
+    // en rojo una de cada dos veces, según si a esa caja le tocaba nanitas treinta
+    // veces seguidas. Un banco que depende del azar no es un banco: es una moneda
+    // que además da un fallo falso, y cuando da un fallo rojo real nadie lo cree.
+    //
+    // Lo que hay que comprobar es "¿esta caja SABE tirar base?", y esa pregunta no
+    // necesita azar: la tabla de cada caja tiene una entrada de recolector y otra de
+    // compañero, y se construyen directamente. Si el generador de un tier no sabe
+    // tirar base, la tabla lo enseña sin que haya que tener suerte.
+    const sinVerificar: number[] = [];
+    for (const c of CAJAS) {
+      const entradas = (CRATE_LOOT as Record<number, any[]>)[c] ?? [];
+      const objetos = entradas.filter(e => e.id === 'collector' || e.id === 'companion');
+      for (const e of objetos) {
+        const p = e.build({ ownedCosmetics: [] }) as any;
+        if (!p?.item?.baseId || !p?.item?.name) sinVerificar.push(c);
+      }
+      // Y que la caja tenga las dos mitades, que es lo que hace que un tier sea
+      // jugable por los dos lados.
+      if (objetos.length !== 2) sinVerificar.push(c);
+    }
+    check('abrir: toda caja construye un recolector y un compañero con base y nombre',
+      sinVerificar.length === 0,
+      sinVerificar.length ? `cajas problemáticas: ${sinVerificar.join(',')}` : `las ${CAJAS.length} cajas`);
+
+    // **Y ADEMÁS, UNA APERTURA DE VERDAD POR CAJA**, sin exigir nada de ella. No es la
+    // prueba de que la caja sabe tirar base —eso está arriba, y es determinista— sino
+    // de que abrir una caja de este contenido no revienta. Aquí el azar no puede
+    // hacer fallar el banco: no se mira lo que salió.
     for (const c of CAJAS) {
       const g = await boot(baseSave([crate('c1', c)], { nanites: 0 }));
       const r: any = g.openCrateBox('c1');
-      const p = r?.reward as any;
-      if (p?.kind !== 'collector' && p?.kind !== 'companion') continue;
-      salidas++;
-      const sinBase = !p.item?.baseId || !p.item?.name;
-      check(`abrir: lo que sale de la T${c} trae base y nombre, no un prototipo`,
-        !sinBase, `${p.kind}: ${p.item?.name} (base ${p.item?.baseId})`);
+      check(`abrir: la T${c} se abre y da algo`,
+        r?.ok === true && !!r?.reward, r?.msg ?? 'sin premio');
     }
-
-    // **LA COBERTURA SE MIDE ABRIENDO VARIAS VECES, NO UNA.** Una caja reparte por
-    // pesos y el objeto no siempre sale: en una apertura sale un objeto en nueve de
-    // las veinte cajas, y eso es la ruleta funcionando, no un fallo. La pregunta que
-    // importa es otra —"de las veinte cajas, ¿cuál es la que no sabe tirar base?"—,
-    // y para contestarla hay que abrir hasta que cada caja haya dado un objeto al
-    // menos una vez.
-    //
-    // **DIEZ APERTURAS POR CAJA** sale de la rarerza del objeto dentro de la caja: el
-    // compañero pesa 58 contra 62 del recolector pero las dos son entradas del mismo
-    // sorteo, y con diez aperturas la probabilidad de no ver ninguna vez un objeto es
-    // bajísima. No es un número mágico: es "lo suficiente para que el fallo sea real".
-    const sinVerificar: number[] = [];
-    for (const c of CAJAS) {
-      let conObjeto = 0;
-      let conFallo = 0;
-      // **HASTA QUE SALGA UN OBJETO, PERO SIN UN TECHO DE UN SOLO INTENTO.** Con diez
-      // aperturas y objeto en la mayoría de las veces, es normal que alguna caja
-      // sortease nanitas las diez veces seguidas por azar —sobre todo con la misma
-      // semilla del banco—. Treinta intentos es suficiente para que la probabilidad de
-      // fallar sea despreciable sin que el banco tarde una eternidad.
-      for (let intento = 0; intento < 30 && conObjeto === 0; intento++) {
-        const g = await boot(baseSave([crate('c1', c)], { nanites: 0 }));
-        const r: any = g.openCrateBox('c1');
-        const p = r?.reward as any;
-        if (p?.kind === 'collector' || p?.kind === 'companion') {
-          conObjeto++;
-          if (!p.item?.baseId || !p.item?.name) conFallo++;
-        }
-      }
-      if (conObjeto === 0 || conFallo > 0) sinVerificar.push(c);
-    }
-    check('abrir: todas las cajas dan un objeto con base y nombre, en alguna apertura',
-      sinVerificar.length === 0,
-      sinVerificar.length ? `cajas problematicas: ${sinVerificar.join(',')}` : 'las 20 verificadas');
   }
   // -----------------------------------------------------------------------
   //  2. LA ECONOMÍA NO SE HA MOVIDO. Y ESTO SE COMPRUEBA DIEZ VECES.
