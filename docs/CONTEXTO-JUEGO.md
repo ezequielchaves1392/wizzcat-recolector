@@ -599,12 +599,42 @@ viejo hacia `appendChild`—, mientras que sobre el padre encuentra el nodo.
 
 `verify/` no cubre esto, y no puede: es exactamente el tipo de cosa que necesita un
 DOM de verdad.
+
+### 6.1 La más seria de las nuevas: la ficha del compañero se renombraba a medias
+
+Con el nombre del item pasando a ser el de su base (`92193ec`), la migración renombra
+los recolectores y los compañeros. **El compañero se guardaba en dos sitios** —su
+entrada en `state.companions` y su ficha en `state.warehouse`— y el nombre se
+renombraba **solo en el primero**. El resultado era un compañero con el nombre nuevo
+en su array y **el nombre viejo todavía en la rejilla del almacén y en el buscador**,
+que es donde el jugador lo ve.
+
+**Por qué ningún banco lo cazó:** los bancos de `basesCheck` llaman a
+`migraPotencialesDeCompaneros()` directamente, y esa función sí renombraba —en su
+mitad—. El fallo estaba un nivel más arriba: entre la función y el motor hay una
+llamada que se podía no hacer, y los bancos que medían el guardado miraban otra cosa.
+**Lo cazó un banco nuevo que carga una partida vieja por el camino completo del
+motor**, que es lo que hace un jugador al entrar. Es la diferencia entre probar una
+función y probar una partida.
+
+**Arreglado.** La ficha se renombra con la misma regla que el array, tomando el nombre
+de la base —no del compañero— porque la ficha se empareja por id y puede no tener
+companero a la vista: un compañero forjado cuyo compañero se vendió no está en el
+array. Lo cubre `stateCheck` con cinco pruebas que cargan una partida con los nombres
+que el juego llevaba hasta `92193ec`.
+
+**Y DE QUÉ TIPO ES EL FALLO, PORQUE ES EL QUE MÁS SE REPITE EN ESTE FICHERO:** el
+comentario del código afirmaba que la ficha y el compañero "son el mismo objeto" y
+que por eso no se renombraba en los dos sitios. **Son el mismo objeto en el juego y no
+lo son en el guardado.** Una regla que se deduce de la pantalla y no del archivo
+guardado se rompe en cuanto los dos dejan de coincidir, y no hay ninguna señal.
+
 ## 7. Lo que NO está verificado
 
 `npm run verify` cubre la **economía, el guardado, el botín y el ritmo del cobro**,
-no el pintado ni la navegación. **30 bancos, 1853 pruebas.** El total varía en ±1
-según la ejecución: `playthroughCheck` tiene un `check()` dentro de un `if` que
-depende del botín. Queda fuera a propósito:
+no el pintado ni la navegación. **52 bancos, 3254 pruebas**, y el total es estable:
+sale el mismo las veces seguidas, porque los bancos que dependen del azar se
+reescribieron contra la tabla en vez de tirar el dado. Queda fuera a propósito:
 
 - Toda la capa de render (`ui/*`, `components/*` salvo sus helpers puros).
 - `forgePage`, `profilePage`, `prestigePage`, `router`, `rankings`, `auth`.
@@ -620,6 +650,29 @@ depende del botín. Queda fuera a propósito:
 Esos huecos se cubren con bancos de pruebas visuales, no automáticos:
 `preview.html` (monta cualquier pantalla con datos de ejemplo y viewport real),
 `nav-test.html` (recorrido automático de navegación) y `auth-preview.html`.
+
+**Lo que sí se ha mirado en navegador, con el contenido del T11 al T20 ya puesto:**
+
+| Pantalla | Qué se comprobó | Resultado |
+|---|---|---|
+| `almacen` a 1440×900 | Nombres de base, sin nombres viejos ni "Prototipo" | 0 px de overflow |
+| `almacen` a 390×844 | Lo mismo en móvil, que es donde se consulta | 0 px de overflow |
+| `tienda` a 390×844 | Las cajas que se venden y sus precios | 0 px de overflow |
+| Wiki · bases | Los veinte tiers con sus diez bases, sin `undefined` ni `NaN` | legible |
+| Wiki · buscador | "Colmillo de Meteorito" encuentra y lleva a su sección | funciona |
+
+**Lo que NO se ha mirado, y sigue sin mirar:** `forja`, `perfil`, `prestigio`,
+`rankings`, `base` (la pantalla principal con el botón de click), `nav-test.html` y
+`auth-preview.html`. Con el contenido nuevo, `base` es la que más conviene mirar —es
+donde está el recolector equipado y su daño—, y sigue sin mirarse.
+
+**Y LA DISCREPANCIA DE LA TIENDA, QUE NO ES UN FALLO.** La tienda solo vende las cajas
+T1, T2 y T3, y ha sido así desde F97: la puerta de las demás es **la caja anterior**,
+que suelta la siguiente con un 12 % de probabilidad (`nextCrate` en `botinDeCaja()`).
+La cadena llega hasta la T20 y hay un banco que lo comprueba. Pero con diez cajas
+nuevas es un dato que conviene tener presente: **el T20 no se compra, se encadena**, y
+el jugador tiene que abrir cajas de la T19 para llegar a él. Si alguna vez quieres que
+se venda directamente, es una decisión de tienda y no una consecuencia de los tiers.
 
 ## 8. Antes de tocar nada
 

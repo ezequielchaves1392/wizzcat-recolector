@@ -962,13 +962,30 @@ export function migraPotencialesDeCompaneros(
     }
     const posF = baseId ? (basePorId(baseId)?.posicion ?? 6) : 6;
     const maxLevel = techoDeNivel(potential, posF, tierF);
-    // El nombre del compañero se renombra en el recorrido de arriba, no aquí: la
-    // ficha y el compañero son el mismo objeto, y renombrarlo en los dos sitios
-    // abriría la puerta a que uno se renombre y el otro no. Aquí solo se trae la
-    // base, que es lo que la ficha no tiene.
-    if (tiene && f.baseId === baseId && f.maxLevel === maxLevel) return f;
+
+    // **LA FICHA TAMBIÉN SE RENOMBRA, Y ANTES NO.** Aquí estaba escrito que el nombre
+    // se renombraba "solo en el recorrido de arriba", porque la ficha y el compañero
+    // se consideraban el mismo objeto. **No lo son en el guardado**: el motor    // escribe el `name` en los dos sitios, y el jugador los ve los dos —la ficha es la
+    // que sale en el almacén y en el buscador, y el buscador mira `item.name`.
+    //
+    // Lo que se veía: un compañero renombrado en su array y **con el nombre viejo
+    // todavía en la rejilla del almacén**. Renombrado en un sitio y no en el otro, que
+    // es la forma de que el guardado diga una cosa y la pantalla otra. Lo cazó el
+    // banco de `stateCheck` al cargar una partida vieja por el camino completo del
+    // motor: los bancos de `basesCheck` llaman a la función directamente y lo daba
+    // por bueno, porque la función sí renombraba —en su mitad.
+    //
+    // **Y POR QUÉ NO SE TOMA EL NOMBRE DEL COMPAÑERO, SINO DE LA BASE.** Porque la
+    // ficha se empareja por id y puede no tener compañero a la vista —un item forjado
+    // cuyo compañero se vendió no está en el array—, y en ese caso no hay de dónde
+    // sacarlo. La base sí está, y da el mismo nombre. Es la misma regla para los dos
+    // lados, y por eso no pueden separarse.
+    const nombreF = nombreDe('companion', baseId ? basePorId(baseId) ?? null : null)
+      + sufijoDeObraDe(f.name);
+
+    if (tiene && f.baseId === baseId && f.maxLevel === maxLevel && f.name === nombreF) return f;
     changed = true;
-    return { ...f, potential, baseId, maxLevel };
+    return { ...f, name: nombreF, potential, baseId, maxLevel };
   });
 
   if (!changed) return { companeros, fichas, changed: false };

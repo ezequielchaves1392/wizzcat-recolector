@@ -269,6 +269,92 @@ async function main() {
       `documento=${guardado().saveVersion} estado=${s(g).saveVersion}`);
   }
   {
+    // ======================================================================
+    //  F105 · UNA PARTIDA DE ANTES DEL RENOMBRADO, CARGADA DE VERDAD
+    // ======================================================================
+    //
+    //  **ESTE ES EL BANCO QUE FALTABA, Y ES EL MÁS IMPORTANTE DE TODOS LOS QUE
+    //  HIZO EL CAMBIO DE NOMBRES.** Los demás llaman a `migraPotenciales()`
+    //  directamente y comprueban que renombra. Este carga una partida por el
+    //  **camino completo del motor** —el mismo que usa un jugador al entrar— y
+    //  comprueba que lo que tenía guardado sale con el nombre de su base.
+    //
+    //  La diferencia no es académica: entre la función y el motor hay una llamada
+    //  a `migraPotenciales()` que se puede no hacer, y hay bancos que miden el
+    //  guardado y no se.enteran. Un guardado que no se renombra deja al jugador
+    //  con veinte items llamados "Blaster Láser" que ya no puede buscar, y eso no
+    //  sale en ningún banco de los que había.
+    //
+    //  **CON LOS NOMBRES VIEJOS DE VERDAD.** No inventados: los que llevaba el
+    //  juego hasta `92193ec`, que son los que tiene guardados cualquiera que haya
+    //  jugado antes. Un banco con un nombre inventado mediría una partida que
+    //  nunca existió.
+    const VIEJOS = [
+      'Blaster Láser', 'Pistola de Plasma', 'Rifle de Pulso',
+      'Dron Explorador', 'Dron Centinela', 'Dron Mensajero',
+      'Forja de Vórtice PRIMIGENIA·Absoluta'
+    ];
+    const guardadoViejo = baseSave([
+      collector('r1', 3, { name: 'Blaster Láser', baseId: 'base_rec_t3_7' }),
+      collector('r2', 7, { name: 'Rifle de Pulso', baseId: 'base_rec_t7_2' }),
+      companion('m1', 2, { name: 'Dron Explorador', baseId: 'base_com_t2_3' })
+    ]);
+    // **Y EL COMPAÑERO TAMBIÉN EN SU ARRAY, QUE ES DONDE VIVE SU NOMBRE.** El
+    // compañero es un objeto doble —`state.companions` y su ficha en el almacén—, y
+    // el nombre se renombra en el primero. Una partida guardada tiene los dos, así que
+    // este banco monta los dos: meterlo solo en el almacén midía un estado que el
+    // juego no produce.
+    (guardadoViejo as any).companions = [
+      { id: 'm1', name: 'Dron Explorador', type: 'click', power: 10, rarity: 'Común', tier: 2, potential: 3, baseId: 'base_com_t2_3' }
+    ];
+    const gViejo = await boot(guardadoViejo);
+
+    const nombres = (s(gViejo).warehouse ?? []).map((w: any) => w.name);
+    const sinRenombrar = nombres.filter((n: string) => VIEJOS.includes(n));
+    check('F105: al cargar, ningún item conserva un nombre viejo',
+      sinRenombrar.length === 0, sinRenombrar.join(', ') || `${nombres.length} renombrados`);
+
+    // Y el compañero por su sitio real, que es el array.
+    const compNombre = ((s(gViejo).companions ?? []) as any[]).find(c => c.id === 'm1')?.name;
+    check('F105: y el compañero se renombra en su array, no solo en su ficha',
+      compNombre !== 'Dron Explorador' && !!compNombre,
+      `${compNombre}`);
+
+    // Y que cada uno lleve el nombre de SU base, no el de otra: el id no puede
+    // cambiar, porque si cambia el jugador pierde el item que tenía equipado.
+    // Los nombres esperados salen de las tablas y no se escriben a mano: ponerlos
+    // a mano es volver a tener la tabla escrita en dos sitios, que es el fallo que
+    // este mismo cambio vino a arreglar.
+    const porId = (id: string) => (s(gViejo).warehouse ?? []).find((w: any) => w.id === id);
+    const nombreEsperado = (baseId: string) => basePorId(baseId)?.nombre;
+    check('F105: y el nombre es el de su propia base, sin perder el id',
+      porId('r1')?.name === nombreEsperado('base_rec_t3_7')
+        && porId('r2')?.name === nombreEsperado('base_rec_t7_2'),
+      `r1=${porId('r1')?.name} r2=${porId('r2')?.name}`);
+
+    // La firma de obra se conserva: es lo único del nombre viejo que no está en
+    // otro campo, y sin ella se pierde una marca que el jugador puede buscar.
+    // **`obraMaestra: true` VIENE EN LA FICHA GUARDADA**, porque es lo que una
+    // partida real tiene: la marca se escribió en el item, no solo en su nombre.
+    const conObra = await boot(baseSave([
+      { ...collector('o1', 5, { name: 'Forja de Vórtice·Obra Maestra', obraMaestra: true }), tier: 5, baseId: 'base_rec_t5_4' }
+    ]));
+    const o1 = (s(conObra).warehouse ?? []).find((w: any) => w.id === 'o1');
+    check('F105: y la firma de obra sobrevive al renombrado',
+      typeof o1?.name === 'string' && o1.name.endsWith('·Obra Maestra') && o1.obraMaestra === true,
+      `${o1?.name} obra=${o1?.obraMaestra}`);
+
+    // **Y QUE NO SE RENOMBRE EN CADA CARGA.** Esta es la parte que más daño haría
+    // si se rompió y la más fácil de no mirar: la partida se marcaría de sucia en
+    // cada entrada, escribiendo un documento a Firestore por sesión sin que nada
+    // haya cambiado. Y un banco que no lo comprueba deja que pase.
+    const guardado2 = await boot({ ...guardadoViejo, saveVersion: 4 });
+    const antes = JSON.stringify((s(gViejo).warehouse ?? []).map((w: any) => [w.id, w.name]));
+    const despues = JSON.stringify((s(guardado2).warehouse ?? []).map((w: any) => [w.id, w.name]));
+    check('F105: y cargar dos veces la misma partida no la vuelve a tocar',
+      antes === despues, antes === despues ? 'idéntica' : `${antes} ≠ ${despues}`);
+  }
+  {
     // Un item sin `damage`: se le inventa uno segun su tier, y se corrige la
     // descripcion. Si no, la rejilla pinta "+undefined".
     const g = await boot(baseSave([{ id: 'r1', name: 'Cosa Vieja', type: 'collector', rarity: 'Común', tier: 2 }],
