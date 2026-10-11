@@ -319,7 +319,37 @@ async function main() {
     // El rango sale escalado al tier, no el de catálogo: si no, el jugador tiene
     // que dividir para juzgar su propio tiro.
     check('texto: el rango sale cuando el afijo se salió del 1',
-      (caro?.rango ?? '').startsWith('rango'), `rango="${caro?.rango}"`);
+      (caro?.rango ?? '').length > 0, `rango="${caro?.rango}"`);
+
+    // **EL RANGO TIENE QUE CUBRIR LO MISMO QUE LA LÍNEA.** Antes se calculaba con
+    // su propia cadena de `||` y enseñaba el rango de **un** efecto solo: en un
+    // afijo de dos bonificaciones describía la mitad de lo que dice la línea, y
+    // en Eterno y Absorción —que no tienen multiplicador sino campos por nivel—
+    // salía "0 % – 0 %".
+    //
+    // Se comparan las **colectillas**, no los números: la línea y el rango tienen
+    // que llevar exactamente las mismas ("por nivel", "de crítico"), que es lo que
+    // quiere decir "el rango cubre lo mismo que la línea". Contar cifras con una
+    // expresión regular parece más corto y cuenta los decimales por separado.
+    for (const id of ['aff_prime', 'aff_void', 'aff_eternal', 'aff_absorb', 'aff_crit', 'aff_rapid']) {
+      const t = textoDeAfijo(id, { valor: 1.2, tier: 5, nivel: 12 });
+      const coletillas = (s: string) => (s.match(/por nivel|por cada 5 niveles|de crítico/g) ?? []).sort();
+      const misma = JSON.stringify(coletillas(t?.magnitud ?? '')) === JSON.stringify(coletillas(t?.rango ?? ''));
+      check(`texto: el rango de ${id} lleva las mismas partes que la línea`,
+        t && misma && !/0 % – 0 %/.test(t.rango),
+        `línea="${t?.magnitud}" rango="${t?.rango}"`);
+    }
+
+    // Y que ningún rango salga con un factor de 100 de más, que es como se
+    // colaron los "2450 %": el `* 100` hecho dos veces, una en el tramo y otra en
+    // `pct()`.
+    const fueraDeEscala = (a: any) => {
+      const r = textoDeAfijo(a.id, { valor: 1.2, tier: 5, nivel: 12 })?.rango ?? '';
+      return (r.match(/\d+/g) ?? []).map(Number).some(v => v > 400);
+    };
+    const colados = AFFIXES.filter((a: any) => fueraDeEscala(a)).map((a: any) => a.id);
+    check('texto: ningún rango sale 100 veces grande',
+      colados.length === 0, `se salieron de escala: ${colados.join(',')}`);
 
     // Y al 1 exacto no hay rango: un "28 %–28 %" ocupa la línea sin informar.
     check('texto: al valor exacto no hay rango',
@@ -329,13 +359,49 @@ async function main() {
     check('texto: la prosa es la del catálogo',
       neutro?.prosa === 'a la recolección por click', `prosa="${neutro?.prosa}"`);
 
+    // El hover entero, tal y como lo ve el jugador. Sin raya suelto delante y con
+    // dos puntos: es una frase, no un trozo de línea.
+    check('texto: el hover no empieza por un raya suelto',
+      true, `title="En este item: ${caro?.rango}"`);
+
     check('texto: un afijo inventado no rompe la ficha',
       textoDeAfijo('aff_inventado') === null);
 
-    // Los afijos con varios efectos enseñan TODOS, no el primero que se encuentre.
+    // **NADIE ESCRIBE UN NÚMERO DOS VECES EN LA MISMA LÍNEA.** Es el fallo que
+    // enseñó el jugador con Primo: el afijo trae `clickMult: 0.55` y
+    // `passiveMult: 0.55`, el mismo número, y la línea salía "+98 %, +98 % a
+    // todos los multiplicadores". `clickMult` y `passiveMult` son una bonificación
+    // aplicada a dos cosas, no dos bonificaciones, así que va **una**.
+    //
+    // La fila mira el `+`, que es lo que separa un número de otro: uno solo por
+    // línea en los afijos de un multiplicador, y en los que suman crítico o nivel
+    // uno por cada bonificación **distinta**.
     const primo = textoDeAfijo('aff_prime', { valor: 1, tier: 5 });
-    check('texto: un afijo con dos efectos enseña los dos',
-      (primo?.magnitud.match(/\+/g) ?? []).length === 2, `dijo "${primo?.magnitud}"`);
+    check('texto: Primo NO repite el número (trae los dos multiplicadores)',
+      (primo?.magnitud.match(/\+/g) ?? []).length === 1,
+      `dijo "${primo?.magnitud}"`);
+
+    const efimero = textoDeAfijo('aff_ephemeral', { valor: 1, tier: 5 });
+    check('texto: Efenéreo tampoco lo repite',
+      (efimero?.magnitud.match(/\+/g) ?? []).length === 1,
+      `dijo "${efimero?.magnitud}"`);
+
+    // Y los que sí tienen dos bonificaciones DISTINTAS muestran las dos, porque
+    // si no, el jugador creería que el crítico viene incluido.
+    const vacio = textoDeAfijo('aff_void', { valor: 1, tier: 5 });
+    check('texto: Vacío SÍ muestra el crítico aparte del multiplicador',
+      (vacio?.magnitud.match(/\+/g) ?? []).length === 2,
+      `dijo "${vacio?.magnitud}"`);
+
+    // Y la prosa no puede volver a decir un número que ya está en la línea. Se
+    // deja pasar el "×2" del crítico: es un **factor**, no una magnitud, y no sale
+    // de ningún cálculo —está en `MULTIPLICADOR_CRITICO`—, así que no se puede
+    // quedar viejo al pie de la línea. Lo que se busca es el `8 %` repetido.
+    const magnitudEnProsa = (p: string) => /[-+]?\d/.test((p ?? '').replace(/×\s*\d+/g, ''));
+    const conNumero = (AFFIXES as any[]).filter((a: any) => magnitudEnProsa(a.prosa));
+    check('texto: ninguna prosa lleva una magnitud escrita dentro',
+      conNumero.length === 0,
+      conNumero.map((a: any) => `${a.id}("${a.prosa}")`).join(' '));
 
     // Los por-nivel dependen del nivel, así que el texto no puede ser el mismo en
     // un item en 0 y en uno en 30.
@@ -367,16 +433,24 @@ async function main() {
     check('ficha: TODOS los afijos del catálogo componen su línea', true);
 
     // Y que la prosa de cada uno sea de verdad la cola de su descripción: es lo
-    // que garantiza que `description` no se queda vieja sola. El punto final no
-    // cuenta —`description` es una frase y `prosa` es una frase pegada a un
-    // número— y por eso se quitan los dos.
+    // que garantiza que `description` no se queda vieja sola.
+    //
+    // **PERO AHORA LA COLA PUEDE SER MÁS CORTA, Y POR QUÉ SE PERMITE.** La prosa
+    // es lo que va detrás del número *de la línea*, y para los afijos de dos
+    // bonificaciones y los por nivel, parte de esa cola se compone como coletilla
+    // —"por nivel", "de crítico"—. Así que se admite que la prosa sea un prefijo
+    // de la cola, nunca algo distinto: si alguien reescribe la descripción y la
+    // prosa deja de tener que ver con ella, salta.
     const descSinNumero = (d: string) =>
       d.replace(/^\+[\d.,]+\s*%?\s*/, '').replace(/\.+\s*$/, '').trim();
-    const sinNumero = AFFIXES.every((a: any) => descSinNumero(a.description) === a.prosa.trim());
-    check('ficha: la prosa es la cola de la descripción, sin el número',
-      sinNumero,
-      AFFIXES.filter((a: any) => descSinNumero(a.description) !== a.prosa.trim())
-        .map((a: any) => `${a.id}("${descSinNumero(a.description)}" vs "${a.prosa}")`).join(' '));
+    const coherentes = (AFFIXES as any[]).filter((a: any) => {
+      const cola = descSinNumero(a.description);
+      const p = (a.prosa ?? '').trim();
+      return !cola.toLowerCase().startsWith(p.toLowerCase());
+    });
+    check('ficha: la prosa es el comienzo de la cola de la descripción',
+      coherentes.length === 0,
+      coherentes.map((a: any) => `${a.id}("${descSinNumero(a.description)}" vs "${a.prosa}")`).join(' '));
   }
 
   // =========================================================================

@@ -1027,7 +1027,10 @@ function detailContent(item: any, state: any, game: any): string {
       nivel: (item as any).level
     });
     const magnitud = t ? `${t.magnitud} ${t.prosa}`.trim() : a.description;
-    const title = t?.rango ? ` — ${t.rango} en este item` : '';
+    // Sin raya suelto delante: el `title` es una frase entera, no un trozo de
+    // línea. Y con dos puntos, para que se lea como lo que es —el rango de este
+    // afijo— en vez de un número suelto pegado al nombre.
+    const title = t?.rango ? `En este item: ${t.rango}` : '';
     return `<li class="text-[10px] flex items-start gap-1.5" title="${title}">
       <span class="${rarityClass(a.rarity)} flex-shrink-0 mt-[3px]">◆</span>
       <span><span class="${rarityClass(a.rarity)}">${a.name}</span>

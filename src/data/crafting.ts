@@ -107,7 +107,7 @@ export const AFFIXES: Affix[] = [
     effect: { clickMult: 0.35 } },
   { id: 'aff_core', name: 'Núcleo', description: '+25% a la recolección por segundo.', prosa: 'a la recolección por segundo', rarity: 'Épico',
     effect: { passiveMult: 0.25 } },
-  { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 a la recolección por click).', prosa: 'de probabilidad de crítico (×2 a la recolección por click)', rarity: 'Épico',
+  { id: 'aff_crit', name: 'Crítico', description: '+8% de probabilidad de crítico (×2 la recolección por click).', prosa: 'de probabilidad de crítico (×2 la recolección por click)', rarity: 'Épico',
     effect: { critChance: 0.08 } },
   { id: 'aff_focus', name: 'Foco', description: '+14% de probabilidad de crítico.', prosa: 'de probabilidad de crítico', rarity: 'Legendario',
     effect: { critChance: 0.14 } },
@@ -120,15 +120,22 @@ export const AFFIXES: Affix[] = [
   // partida —la misma clase que `crateLuck` antes de B18—, con el agravante de
   // que invitaba al swap (ponerlo solo para tirar). La migración lo quita de los
   // items guardados; lo que ya filtraba ids desconocidos lo ignora igual.
+  // **ESTOS TRES, Y LA PROSA.** La prosa es lo que va detrás del número y no
+  // puede volver a decir lo que el número ya dice. Efenéreo y Primo traen los dos
+  // multiplicadores con la misma cifra, así que su prosa habla de "ambos" y de
+  // "todos" — una bonificación aplicada a dos cosas, no dos bonificaciones — y el
+  // número va **una vez**. Vacío trae además crítico, y su prosa ya no escribe
+  // "+10 % crítico": ese número lo pone la línea, y escribirlo también dentro de
+  // la prosa lo duplicaba.
   { id: 'aff_ephemeral', name: 'Efenéreo', description: '+35% a ambos multiplicadores.', prosa: 'a ambos multiplicadores', rarity: 'Legendario',
     effect: { clickMult: 0.35, passiveMult: 0.35 } },
-  { id: 'aff_eternal', name: 'Eterno', description: '+2% a la recolección por click por cada nivel del recolector.', prosa: 'a la recolección por click por cada nivel del recolector', rarity: 'Mítico',
+  { id: 'aff_eternal', name: 'Eterno', description: '+2% a la recolección por click por cada nivel del recolector.', prosa: 'a la recolección por click', rarity: 'Mítico',
     effect: { clickMultPorNivel: 0.02 } },
-  { id: 'aff_absorb', name: 'Absorción', description: '+5% a la recolección por segundo por cada 5 niveles.', prosa: 'a la recolección por segundo por cada 5 niveles', rarity: 'Mítico',
+  { id: 'aff_absorb', name: 'Absorción', description: '+5% a la recolección por segundo por cada 5 niveles.', prosa: 'a la recolección por segundo', rarity: 'Mítico',
     effect: { passiveMultPorNiveles: 0.05 } },
   { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', prosa: 'a todos los multiplicadores del recolector', rarity: 'Mítico',
     effect: { clickMult: 0.55, passiveMult: 0.55 } },
-  { id: 'aff_void', name: 'Vacío Devorador', description: '+25% a la recolección por click y por segundo, +10% crítico.', prosa: 'a la recolección por click y por segundo, +10% crítico', rarity: 'Divino',
+  { id: 'aff_void', name: 'Vacío Devorador', description: '+25% a la recolección por click y por segundo, +10% crítico.', prosa: 'a la recolección por click y por segundo', rarity: 'Divino',
     effect: { clickMult: 0.25, passiveMult: 0.25, critChance: 0.10 } }
 ];
 
@@ -1446,18 +1453,6 @@ export interface TextoDeAfijo {
   prosa: string;
 }
 
-/** El porcentaje de un efecto, ya con el tier y el valor del afijo aplicados. */
-function magnitudDeEfecto(
-  efecto: number | undefined,
-  valor: number,
-  potencia: number,
-  porNivel = false,
-  nivel = 0
-): number {
-  const base = (efecto || 0) * potencia * valor;
-  return porNivel ? base * nivel : base;
-}
-
 /** Un número con su `+`, y con un decimal solo cuando el decimal cuenta. */
 function pct(valor: number): string {
   const v = valor * 100;
@@ -1484,38 +1479,75 @@ export function textoDeAfijo(
   const nivel = Math.max(0, Math.floor(Number(opts.nivel) || 0));
   const potencia = tier === null || tier === undefined ? 1 : potenciaDeAfijoPorTier(tier);
 
-  // **QUÉ NÚMERO SE ENSEÑA, Y POR QUÉ EN ESTE ORDEN.** Un afijo puede traer varios
-  // efectos a la vez —Primo y Vacío tocan click y pasivo, Crítico trae la
-  // probabilidad—, y enseñar el primero que se encuentre sería arbitrario. Se
-  // enseñan **todos**, en el orden del `effect`, que es el orden en que el jugador
-  // los lee en la wiki. La prosa es la del catálogo y ya lleva el resto.
+  // **UN SOLO MULTIPLICADOR, Y POR QUÉ NO SE ENSEÑAN LOS EFECTOS UNO A UNO.**
+  //
+  // La versión anterior recorría `effect` con una cadena de `||` y empujaba un
+  // número por cada campo. Eso producía **"+98 %, +98 % a todos los
+  // multiplicadores"** en Primo: tiene `clickMult: 0.55` y `passiveMult: 0.55`,
+  // el mismo número dos veces, y su prosa dice ya "a todos los multiplicadores".
+  // El jugador lee un afijo duplicado, y lo que la prosa explica queda
+  // contradicho por la línea.
+  //
+  // El arreglo sale de un invariante que el catálogo cumple y que conviene
+  // escribir: **`clickMult` y `passiveMult` están los dos o ninguno, y cuando
+  // están, valen lo mismo.** Primo, Efenéreo y Vacío tocan los dos con la misma
+  // cifra porque "a todos los multiplicadores" es **una** bonificación aplicada
+  // a dos cosas, no dos bonificaciones. Se cuenta una vez.
   const e = affix.effect as any;
-  const partes: string[] = [];
-  if (e.clickMult) partes.push(pct(magnitudDeEfecto(e.clickMult, valor, potencia)));
-  if (e.passiveMult) partes.push(pct(magnitudDeEfecto(e.passiveMult, valor, potencia)));
-  if (e.critChance) partes.push(pct(magnitudDeEfecto(e.critChance, valor, 1)));
-  if (e.clickMultPorNivel) {
-    partes.push(`${pct(magnitudDeEfecto(e.clickMultPorNivel, valor, potencia, true, nivel))} / nivel`);
-  }
-  if (e.passiveMultPorNiveles) {
-    partes.push(`${pct(magnitudDeEfecto(e.passiveMultPorNiveles, valor, potencia, false, nivel / 5))} / 5 niveles`);
-  }
+  const mult = e.clickMult ?? e.passiveMult ?? 0;
+  const hayMult = mult > 0;
 
-  const magnitud = partes.join(', ');
+  /**
+   * UN TRAMO ES UN NÚMERO CON SU RANGO, Y EL RANGO SE CALCULA CON LA MISMA
+   * FORMA QUE EL NÚMERO.
+   *
+   * Antes esta función hacía el rango por su cuenta con `* 100` dentro y lo
+   * empujaba ya en porcentaje, y luego `pct()` lo multiplicaba por 100 otra
+   * vez: el hover llegaba a decir "2450 % – 4550 %". Por eso el `* 100` de aquí
+   * está en `pct()` y en ningún otro sitio.
+   *
+   * Y `porNivel` es un bandero **explícito**, no se deduce de la escala: se
+   * dedujo, y Eterno dejó de enseñar el nivel del item —salía "+2 % por nivel"
+   * con el mismo número en nivel 0 y en nivel 30—, que es un afijo que promete
+   * crecer con el nivel y no crece.
+   */
+  type Tramo = { n: number; min: number; max: number; sufijo: string };
+  const tramos: Tramo[] = [];
+  const tramo = (
+    base: number,
+    conPotencia: boolean,
+    sufijo: string,
+    porNivel = false,
+    escalaNivel = 1
+  ) => {
+    if (!base) return;
+    const calc = (v: number) => {
+      const bruto = base * v * (conPotencia ? potencia : 1);
+      return porNivel ? bruto * (nivel * escalaNivel) : bruto;
+    };
+    tramos.push({ n: calc(valor), min: calc(VALOR_AFIJO_MIN), max: calc(VALOR_AFIJO_MAX), sufijo });
+  };
+
+  if (mult) tramo(mult, true, '');
+  // El crítico solo lleva coletilla cuando hay un multiplicador delante: en Crítico
+  // y Foco no lo hay, son la bonificación entera, y su prosa ya dice "de
+  // probabilidad de crítico". Ponerle coletilla ahí repetía la frase.
+  if (e.critChance) tramo(e.critChance, false, hayMult ? ' de crítico' : '');
+  if (e.clickMultPorNivel) tramo(e.clickMultPorNivel, true, ' por nivel', true, 1);
+  if (e.passiveMultPorNiveles) tramo(e.passiveMultPorNiveles, true, ' por cada 5 niveles', true, 1 / 5);
+
+  const magnitud = tramos.map(t => pct(t.n) + t.sufijo).join(', ');
   const prosa = (affix as any).prosa ?? '';
 
   // **EL RANGO, Y POR QUÉ SOLO SALE SI EL AFIXO TIENE VARIACIÓN.** Con el valor al
-  // 1 exacto el afijo paga lo mismo en cualquier item: un "rango 28 %–28 %" es
-  // ruido que ocupa la línea y no informa. Si se salió del 1, se enseñan los dos
-  // extremos con el mismo criterio con el que se enseña el número.
-  let rango = '';
-  if (Math.abs(valor - 1) > 1e-9) {
-    const bajo = magnitudDeEfecto(e.clickMult || e.passiveMult || e.critChance || 0,
-      VALOR_AFIJO_MIN, potencia) * 100;
-    const alto = magnitudDeEfecto(e.clickMult || e.passiveMult || e.critChance || 0,
-      VALOR_AFIJO_MAX, potencia) * 100;
-    rango = `rango ${Math.round(bajo * 10) / 10} %–${Math.round(alto * 10) / 10} %`;
-  }
+  // 1 exacto el afijo paga lo mismo en cualquier item: un "28 % – 28 %" es ruido
+  // que ocupa la línea y no informa. Si se salió del 1, salen los dos extremos con
+  // el mismo criterio con el que sale el número, y **en el mismo orden y con las
+  // mismas coletillas**: un rango que solo cubre la mitad de lo que dice la línea
+  // es una mentira, y era lo que pasaba con los afijos de dos bonificaciones.
+  const rango = (Math.abs(valor - 1) > 1e-9 && tramos.length > 0)
+    ? tramos.map(t => `${pct(t.min).replace('+', '').trim()} – ${pct(t.max).replace('+', '').trim()}${t.sufijo}`).join(' · ')
+    : '';
 
   return { magnitud, rango, prosa };
 }
