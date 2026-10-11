@@ -66,7 +66,7 @@ export const NOTAS: NotaDeParche[] = [
       'Antes la caja T20 era Divino como la T10 y repartía exactamente lo mismo, así que abrirla era abrir un T10 por quince veces más.',
       'Dos logros nuevos por llegar lejos: llegar al T15 y llegar al T20, que antes no se podían ganar porque ningún logro miraba el nivel.',
       'El del T15 te pone el título "Mitad del Cielo" encima. El del T20, el banner "El Final".',
-      'Son cosméticos, no bonificación: reconocer el progreso sin que te pegue más ingreso del que toca.'
+      'Son cosméticos y no suman a tu recolección: reconocer el progreso sin que la partida se te descuadre.'
     ]
   },
   {

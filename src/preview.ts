@@ -111,21 +111,42 @@ const MOCK: any = {
   // verdad: un saldo redondo no ense�ar�a si el redondeo funciona.
   crystals: 2_480,
   warehouse: [
+    // =========================================================================
+    //  F105 · LOS NOMBRES SON DE BASE, Y LOS ITEMS TRAEN SU `baseId`.
+    //
+    //  Antes el mock ponía nombres inventados —"Embestida Cuántica", "Forja de Éter
+    //  PRIMIGENIA·Absoluta"— y **sin `baseId`**. Con el nombre saliendo de la base, la
+    //  migración renombra cualquier item cuyo nombre no sea el suyo: así que al abrir
+    //  el preview, cada uno de estos se renombraba a la base que le tocara en el
+    //  sorteo. El preview enseñaba una cosa y luego, en la misma sesión, otra.
+    //
+    //  **Y ESO NO ERA SOLO COSMETICO.** El almacén del preview es lo que se mira para
+    //  revisar la rejilla, la ficha y el buscador, y con el nombre moviéndose no había
+    //  forma de revisar nada que llevara nombre. Un mock que fabrica un objeto que el
+    //  juego no fabrica mide un objeto que no existe — el mismo criterio que se aplica
+    //  a los bancos, y por el mismo motivo.
+    //
+    //  Cada item lleva ahora la base que le toca, y el nombre sale de ahí. El de la
+    //  T11 incluye además un **nombre de forja con sufijo**, para que se vea que una
+    //  firma sobrevive al renombrado y que un nombre con sufijo no tiene lore.
+    // =========================================================================
     {
       id: 'forged_1',
-      name: 'Forja de Éter PRIMIGENIA·Absoluta',
+      name: 'Colmillo de Meteorito·Obra Maestra',
       type: 'collector',
       details: 'Recolección por click: +340',
       rarity: 'Divino',
       tier: 11,
       level: 12,
-      maxLevel: 35,
+      maxLevel: 38,
       damage: 340,
       potential: 5,
+      baseId: 'base_rec_t11_10',
       affixes: ['aff_prime', 'aff_focus', 'aff_eternal'],
       forgedBy: 'CyberKnight',
       forgedAt: Date.now() - 86_400_000 * 3,
       lineage: ['Legendario', 'Mítico', 'Mítico'],
+      obraMaestra: true,
       equipped: true
     },
     // **UN DIVINO AL TECHO DE NIVEL, Y ES PARA PODER REVISAR EL EFECTO PROPIO.** El otro
@@ -135,7 +156,8 @@ const MOCK: any = {
     // que se pidió y lo único que no se puede comprobar con un número.
     collector(10, {
       id: 'forja_1',
-      name: 'Forja de Éter ABSOLUTA',
+      name: 'Alfa y Omega',
+      baseId: 'base_rec_t10_10',
       level: 35,
       maxLevel: 35,
       damage: 320,
@@ -145,23 +167,28 @@ const MOCK: any = {
       forgedBy: 'CyberKnight',
       lineage: ['Legendario', 'Mítico', 'Mítico', 'Mítico', 'Mítico', 'Mítico'],
     }),
-    collector(8, { id: 'a', name: 'Embestida Cuántica', level: 18, damage: 62 }),
-    collector(7, { id: 'b', name: 'Lanza de Plasma', level: 9, damage: 44, potential: 2, affixes: ['aff_sharp'] }),
-    collector(7, { id: 'c', name: 'Riel de Iones', level: 12, damage: 51 }),
-    collector(7, { id: 'g', name: 'Martillo de Fase', level: 3, damage: 30 }),
-    collector(6, { id: 'd', name: 'Pulso Nebula', level: 6, damage: 35 }),
-    collector(5, { id: 'e', name: 'Cincel Orbital', level: 20, damage: 28, maxLevel: 20 }),
-    collector(4, { id: 'f', name: 'Bastón de Chispas', level: 8, damage: 20 }),
+    collector(8, { id: 'a', name: 'Colapso Controlado', baseId: 'base_rec_t8_4', level: 18, damage: 62 }),
+    collector(7, { id: 'b', name: 'Guadaña del Vacío', baseId: 'base_rec_t7_1', level: 9, damage: 44, potential: 2, affixes: ['aff_sharp'] }),
+    collector(7, { id: 'c', name: 'Riel de Iones', baseId: 'base_rec_t7_5', level: 12, damage: 51 }),
+    collector(7, { id: 'g', name: 'Martillo de Fase', baseId: 'base_rec_t7_2', level: 3, damage: 30 }),
+    collector(6, { id: 'd', name: 'Pulso Nebula', baseId: 'base_rec_t6_3', level: 6, damage: 35 }),
+    collector(5, { id: 'e', name: 'Cincel Orbital', baseId: 'base_rec_t5_8', level: 20, damage: 28, maxLevel: 20 }),
+    collector(4, { id: 'f', name: 'Bastón de Chispas', baseId: 'base_rec_t4_6', level: 8, damage: 20 }),
     // Q6 · NIVEL Y AFIJOS EN LA FICHA DEL COMPAÑERO, Y POR QUÉ SE LE PONEN AQUÍ.
     // Los companions del mock no traían ni nivel ni afijos, y esa casilla es el único
     // sitio donde se ve la mitad del cambio: sin dato que enseñar, el preview aprueba
     // una casilla que no enseña nada. `level` y `affixes` son los campos reales que
     // escribe el motor al crear la ficha (ver `generateCompanionByTier`).
+    // F105 · Los compañeros también llevan su `baseId`, por el mismo motivo que los
+    // recolectores: sin él la migración les renombra al cargar y el preview deja de
+    // enseñar lo que dice enseñar. "Avatar del Vacío" y "Oráculo Tribal" son
+    // **exclusivos de caja**, y esos no tienen base —no salen del generador, salen
+    // escritos en `CRATE_ONLY_COMPANIONS`—, así que se quedan sin ella a propósito.
     { id: 'c1', name: 'Avatar del Vacío', type: 'companion', potential: 3, details: 'Recolección por segundo: +65/s', rarity: 'Divino', tier: 10, power: 65, level: 7, affixes: ['aff_prime', 'aff_void'] },
     { id: 'c2', name: 'Oráculo Tribal', type: 'companion', potential: 3, details: 'Multiplicador global +75%', rarity: 'Legendario', tier: 8, power: 0.75 },
-    { id: 'c3', name: 'Titán de Acero', type: 'companion', potential: 3, details: 'Recolección por segundo: +68/s', rarity: 'Legendario', tier: 9, power: 68 },
-    { id: 'c4', name: 'Dron Explorador', type: 'companion', potential: 3, details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6 },
-    { id: 'c5', name: 'Fénix de Datos', type: 'companion', potential: 3, details: 'Recolección por segundo: +40/s', rarity: 'Mítico', tier: 9, power: 40 },
+    { id: 'c3', name: 'Guardián de la Última Veta', type: 'companion', potential: 3, details: 'Recolección por segundo: +160/s', rarity: 'Divino', tier: 11, power: 160, baseId: 'base_com_t11_8', level: 4, affixes: ['aff_eternal'] },
+    { id: 'c4', name: 'Chispa Perdida', type: 'companion', potential: 3, details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6, baseId: 'base_com_t1_1' },
+    { id: 'c5', name: 'Fénix de Datos', type: 'companion', potential: 3, details: 'Recolección por segundo: +40/s', rarity: 'Mítico', tier: 9, power: 40, baseId: 'base_com_t9_7' },
     // F52 · EL MOCK USA LOS NOMBRES DE VERDAD, Y ANTES NO.
     //
     // Decía "Caja Legendaria", que fue el nombre que tenían las cajas antes de F31:
