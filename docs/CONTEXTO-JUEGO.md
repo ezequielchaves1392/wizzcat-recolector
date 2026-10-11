@@ -657,14 +657,15 @@ Esos huecos se cubren con bancos de pruebas visuales, no automáticos:
 |---|---|---|
 | `almacen` a 1440×900 | Nombres de base, sin nombres viejos ni "Prototipo" | 0 px de overflow |
 | `almacen` a 390×844 | Lo mismo en móvil, que es donde se consulta | 0 px de overflow |
+| `base` a 390×844 | El desglose de daño cuadra con la suma, y el techo del T11 es 38 | 0 px de overflow |
 | `tienda` a 390×844 | Las cajas que se venden y sus precios | 0 px de overflow |
+| `forja` a 390×844 | El yunque, las piedras y la lista de materiales | 0 px de overflow |
+| `perfil` a 390×844 | Los dos hitos de tier salen, con la barra a medias | 0 px de overflow |
 | Wiki · bases | Los veinte tiers con sus diez bases, sin `undefined` ni `NaN` | legible |
 | Wiki · buscador | "Colmillo de Meteorito" encuentra y lleva a su sección | funciona |
 
-**Lo que NO se ha mirado, y sigue sin mirar:** `forja`, `perfil`, `prestigio`,
-`rankings`, `base` (la pantalla principal con el botón de click), `nav-test.html` y
-`auth-preview.html`. Con el contenido nuevo, `base` es la que más conviene mirar —es
-donde está el recolector equipado y su daño—, y sigue sin mirarse.
+**LO QUE NO SE HA MIRADO, Y SIGUE SIN MIRAR:** `prestigio`, `rankings`,
+`nav-test.html` (el recorrido automático de navegación) y `auth-preview.html`.
 
 **Y LA DISCREPANCIA DE LA TIENDA, QUE NO ES UN FALLO.** La tienda solo vende las cajas
 T1, T2 y T3, y ha sido así desde F97: la puerta de las demás es **la caja anterior**,

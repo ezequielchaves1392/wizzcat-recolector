@@ -330,6 +330,19 @@ const fakeGame: any = {
   isAfk: () => false,
   isPresent: () => true,
   getClickDamage: () => 1962,
+  // =========================================================================
+  //  F105 · LOS LOGROS NUEVOS, Y POR QUÉ EL MOCK TIENE UNA LISTA Y NO EL JUEGO
+  //
+  //  El perfil cuenta `${unlocked.length}/${achievements.length}` sobre lo que
+  //  devuelve `getAchievements()`, y el mock devolvía **ocho logros escritos a mano**.
+  //  Con los dos hitos de tier añadidos, el perfil enseñaba "Logros 7/8" y una lista
+  //  en la que no estaban: el perfil es justo donde se puede comprobar cómo se ven.
+  //
+  //  No se cambia el mock a la tabla completa —eso haría el preview inservible, con
+  //  treinta y seis tarjetas— sino que se **añaden los dos**, con el estado que hace
+  //  falta para verlos de las dos formas: uno sin ganar, que es lo que se quiere
+  //  revisar, y uno ganado, para ver el título y el banner puestos.
+  // =========================================================================
   getAchievements: () => [
     { id: 'first_click', title: 'Primer Contacto', description: 'Recolecta por primera vez', icon: 'bolt', rewardText: '+2% recolección por click', reward: { clickBonus: .02, passiveBonus: 0 }, unlocked: true, current: 1, target: 1 },
     { id: 'collector_10', title: 'Coleccionista', description: 'Equipa 10 recolectores', icon: 'collector', rewardText: '+5% recolección por click', reward: { clickBonus: .05, passiveBonus: 0 }, unlocked: true, current: 10, target: 10 },
@@ -338,7 +351,12 @@ const fakeGame: any = {
     { id: 'smith_25', title: 'Maestro de Forja', description: 'Forja 25 recolectores con éxito', icon: 'anvil', rewardText: '+10% recolección por click y +10% recolección por segundo', reward: { clickBonus: .1, passiveBonus: .1 }, unlocked: true, current: 9, target: 25 },
     { id: 'ascendant', title: 'Ascendido', description: 'Recicla tu progreso 5 veces', icon: 'recycle', rewardText: '+20% recolección por click y +20% recolección por segundo', reward: { clickBonus: .2, passiveBonus: .2 }, unlocked: true, current: 3, target: 5 },
     { id: 'tycoon', title: 'Barón de Nanobots', description: 'Alcanza 5.000 Nanitas por segundo', icon: 'sparkle', rewardText: '+30% recolección por click y +30% recolección por segundo', reward: { clickBonus: .3, passiveBonus: .3 }, unlocked: false, current: 1420, target: 5000 },
-    { id: 'hidden', title: '???', description: 'Cien cajas. Ni una más.', icon: 'crate', rewardText: 'Banner oculto', reward: { clickBonus: 0, passiveBonus: 0 }, unlocked: true, current: 128, target: 100 }
+    { id: 'hidden', title: '???', description: 'Cien cajas. Ni una más.', icon: 'crate', rewardText: 'Banner oculto', reward: { clickBonus: 0, passiveBonus: 0 }, unlocked: true, current: 128, target: 100 },
+    // El T15 sin ganar: el mock tiene un T11 equipado, así que sale a medias. Es el
+    // estado que hay que revisar —una barra de logro a medias es la que no se ha
+    // visto nunca— y además enseña que el progreso se lee.
+    { id: 'tier_15', title: 'Mitad del Cielo', description: 'Consigue un objeto del T15', icon: 'crown', rewardText: 'Título "Mitad del Cielo"', reward: { clickBonus: 0, passiveBonus: 0 }, unlocked: false, current: 11, target: 15 },
+    { id: 'tier_20', title: 'El Final', description: 'Consigue un objeto del T20', icon: 'core', rewardText: 'Banner "El Final"', reward: { clickBonus: 0, passiveBonus: 0 }, unlocked: false, current: 11, target: 20 }
   ],
   getCapacity: () => MOCK.warehouseCapacity + MOCK.bonus.storageSlots,
   getCompanionSlots: () => MOCK.maxCompanionSlots + MOCK.bonus.companionSlots,
