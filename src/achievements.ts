@@ -28,6 +28,26 @@ export interface Achievement {
   progress: (state: any) => { current: number; target: number };
 }
 
+/**
+ * EL TIER MÁS ALTO QUE HAY EN EL ALMACÉN, Y POR QUÉ SE LEE AHÍ Y NO SE GUARDA.
+ *
+ * No hay un campo "tier más alto" en el estado, y **no se añade uno**: un campo así
+ * puede desincronizarse del almacén —que es lo que ya pasó con el potencial y con
+ * los afijos, y por eso los dos viven en el item y no aparte—. Se lee de los items,
+ * que es donde el tier está de verdad, y con `Math.max(0, ...)` porque un almacén
+ * vacío con `Math.max(...[])` da `-Infinity`, y un progreso negativo en la barra de
+ * un logro es un fallo que se ve.
+ *
+ * Cuenta **cualquier** item con tier, no solo recolectores: los compañeros también
+ * suben de tier y un jugador puede haber llegado al T15 por la vía de los compañeros
+ * sin tener nunca un recolector de ese tier. Si solo mirara un lado, el logro sería
+ * falso para la mitad de los jugadores que lo han ganado.
+ */
+function tierMasAltoDe(s: any): number {
+  const items: any[] = Array.isArray(s?.warehouse) ? s.warehouse : [];
+  return Math.max(0, ...items.map(w => Number(w?.tier) || 0));
+}
+
 export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'first_click',
@@ -259,6 +279,44 @@ export const ACHIEVEMENTS: Achievement[] = [
     rewardText: '+20% recolección por click y +20% recolección por segundo · Banner "Carmesí"',
     reward: { clickBonus: 0.20, passiveBonus: 0.20 },
     progress: (s) => ({ current: Math.min(s.resets ?? 0, 5), target: 5 })
+  },
+  // =========================================================================
+  //  F105 · LLEGAR LEJOS
+  //
+  //  **ANTES NO HABÍA NINGÚN LOGRO QUE MIRARA EL TIER.** Los veintidós de arriba
+  //  miden producción, forja, cajas, prestigio y árbol: ninguno pregunta qué has
+  //  alcanzado. Con diez tiers eso era un hueco pequeño —la T10 se reconocía por
+  //  ser el final—. **Con veinte es un agujero grande**: hay un camino largo, con
+  //  cajas nuevas y bases nuevas, y nada que diga que has llegado a la mitad. El
+  //  jugador sube al T15 y el juego no se entera.
+  //
+  //  **MIDEN LO QUE HAY EN EL ALMACÉN, NO UN CONTADOR.** No hay un campo "tier más
+  //  alto guardado", y añadirlo sería un campo nuevo que puede desincronizarse del
+  //  almacén —que es lo que ya pasó con el potencial y con los afijos—. Se lee de
+  //  los items, que es donde vive de verdad, y con `Math.max(0, ...)` para que un
+  //  almacén vacío dé 0 y no `-Infinity`.
+  //
+  //  **EL T15 Y EL T20, Y NO UNO POR TRAMO.** Diez tramos serían diez logros con
+  //  bonificación acumulativa, y el balance de esa suma es tuyo. Con dos, la suma es
+  //  una línea y el segundo es claramente "llegar al final sin reciclar".
+  // =========================================================================
+  {
+    id: 'tier_15',
+    title: 'Mitad del Cielo',
+    description: 'Consigue un objeto del T15',
+    icon: 'crown',
+    rewardText: '+25% recolección por click y +25% recolección por segundo · Título "Mitad del Cielo"',
+    reward: { clickBonus: 0.25, passiveBonus: 0.25 },
+    progress: (s) => ({ current: tierMasAltoDe(s), target: 15 })
+  },
+  {
+    id: 'tier_20',
+    title: 'El Final',
+    description: 'Consigue un objeto del T20',
+    icon: 'core',
+    rewardText: '+50% recolección por click y +50% recolección por segundo · Banner "El Final"',
+    reward: { clickBonus: 0.50, passiveBonus: 0.50 },
+    progress: (s) => ({ current: tierMasAltoDe(s), target: 20 })
   },
 // =========================================================================
   //  2 · LOS DIFÍCILES

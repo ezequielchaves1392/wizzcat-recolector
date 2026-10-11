@@ -144,6 +144,17 @@ export const LORE: Record<string, string> = {
   'Fénix de Datos': 'Renace de cada reinicio con más hambre.',
   'Centinela Eterno': 'Juró guardar tu base hasta el fin de los ciclos.',
   'Espectro Azulado': 'Solo sale de la legendaria. Por eso brilla.',
+  // ---------------------------------------------------------- EXCLUSIVOS T11-T20
+  'Guardián de la Última Veta': 'Vigila la veta más hondo del mapa. No es un turno: no se va nunca.',
+  'Motor del Ocaso': 'Un click y se acaba el día. Después vuelve a empezar, y vuelve más fuerte.',
+  'Coro de lo Primordial': 'Cantan en la misma nota desde antes de que hubiera quien los escuchara.',
+  'Azote del Confín': 'No hace falta saber cómo funciona. Solo que llega desde el borde y llega.',
+  'Forjador de Constelaciones': 'Fabrica estrellas con chatarra. Le sale bien porque lleva millones de años practicando.',
+  'Yunque Infinito': 'No se desgasta. Todo lo que se pone encima sale mejor de como entró.',
+  'Tejedor de Vacíos': 'Cose huecos entre cosas que no deberían tocarse. Lo que cose, queda entero.',
+  'Arconte del Silencio': 'No hace ruido. Solo hace que los demás hagan más, sin que se note.',
+  'Heraldo del Infinito': 'Anuncia lo que no tiene final. Y lo que anuncia, llega antes que él.',
+  'La Última Mano': 'La que tocó la veta por última vez. Desde entonces, todo lo demás es segundo.',
   // =========================================================================
   //  F52 · EL LORE DE LOS OBJETOS QUE NO ERAN RECOLECTORES NI COMPAÑEROS
   //

@@ -788,6 +788,54 @@ async function main() {
         return `${a.id}=${p.current}/${p.target}`;
       }).join(' | ') || 'los doce, en la misma partida');
 
+    // =========================================================================
+    //  F105 · "LLEGAR LEJOS", Y LOS DOS ÚNICOS QUE MIRAN EL TIER
+    // =========================================================================
+    //
+    //  **ESTOS DOS NO PUEDEN QUEDAR SIN BANCO PROPIO**, porque los de arriba solo
+    //  comprueban que la barra no se pase y que un estado vacío no los complete, y las
+    //  dos cosas las cumpliría una función que devolviera siempre 0. Lo que hay que
+    //  afirmar es que **miden el tier y no otra cosa**: un logro que se completara
+    //  teniendo un T10 sería falso, y ese es justo el fallo que hace que uno nuevo
+    //  sea mentira: se ve bonito en la wiki y no se puede ganar.
+    {
+      const deTier = ACHIEVEMENTS.filter(a => a.id === 'tier_15' || a.id === 'tier_20');
+      check('logros: hay un logro por tramo alto, y son dos',
+        deTier.length === 2, deTier.map(a => a.id).join(',') || 'no hay');
+
+      /** Un estado con un almacén del tier pedido y todo lo demás a cero. */
+      const conTier = (tier: number) => ({
+        ...vacio(),
+        warehouse: [{ id: 'x', name: 'X', type: 'collector', tier, level: 0, damage: 1 }]
+      });
+
+      for (const a of deTier) {
+        const objetivo = a.id === 'tier_15' ? 15 : 20;
+        // Con un tier por debajo no se completa, con el tier exacto sí.
+        const bajo = a.progress(conTier(objetivo - 1));
+        const justo = a.progress(conTier(objetivo));
+        check(`logros: ${a.id} no se completa con un T${objetivo - 1}`,
+          bajo.current < bajo.target, `${bajo.current}/${bajo.target}`);
+        check(`logros: ${a.id} sí se completa con un T${objetivo}`,
+          justo.current >= justo.target, `${justo.current}/${justo.target}`);
+        // Y que su progreso no dependa del tipo: un compañero del mismo tier cuenta.
+        const comoCompanion = a.progress({
+          ...vacio(),
+          warehouse: [{ id: 'y', name: 'Y', type: 'companion', tier: objetivo, level: 0 }]
+        });
+        check(`logros: ${a.id} cuenta también un compañero del tier`,
+          comoCompanion.current >= comoCompanion.target, `${comoCompanion.current}/${comoCompanion.target}`);
+      }
+
+      // Y que el más caro tenga el premio más grande: si el T20 pagara menos que el
+      // T15, el segundo sería una equivocación y no un peldaño.
+      const quince = ACHIEVEMENT_REWARDS.tier_15;
+      const veinte = ACHIEVEMENT_REWARDS.tier_20;
+      check('logros: y llegar al final paga más que llegar a la mitad',
+        veinte.clickBonus > quince.clickBonus && veinte.passiveBonus > quince.passiveBonus,
+        `T15=${quince.clickBonus}/${quince.passiveBonus} T20=${veinte.clickBonus}/${veinte.passiveBonus}`);
+    }
+
     // **Y CADA COSMÉTICO DE LOS DOCE LO ABRE UNO DE ELLOS, DE VERDAD.** La vía del logro
     // la reconcilia el motor desde `unlockedAchievements`, así que esto no mira el
     // catálogo: mira lo que `cosmeticsAlcanzables` devuelve cuando el logro está

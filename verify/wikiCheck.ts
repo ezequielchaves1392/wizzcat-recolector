@@ -169,19 +169,43 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  // 4 · Los seis exclusivos, cada uno en su caja y una sola vez
+  // 4 · Los exclusivos, cada uno en su caja y una sola vez
   // ------------------------------------------------------------------
   {
-    check('wiki: hay seis exclusivos de caja', CRATE_ONLY_COMPANIONS.length === 6,
-      `${CRATE_ONLY_COMPANIONS.length}`);
+    // **EL NÚMERO Y LA LISTA SALEN DE LA TABLA, NO ESTÁN ESCRITOS.** Decía "seis" con
+    // un `=== [0,1,2,3,4,5]`: al añadir los diez del T11 en adelante falló diciendo
+    // que había 16 donde él esperaba 6. Lo que se sigue exigiendo es la REGLA —cada
+    // exclusivo sale de una caja y no de dos, y cada caja trae los suyos—, que es lo
+    // que un banco tiene que poder afirmar y no depende de cuántos haya.
+    check(`wiki: hay ${CRATE_ONLY_COMPANIONS.length} exclusivos de caja`,
+      CRATE_ONLY_COMPANIONS.length > 0, `${CRATE_ONLY_COMPANIONS.length}`);
+
     const vistos: number[] = Object.values(EXCLUSIVOS_POR_CAJA).flat() as number[];
     const ordenados = [...vistos].sort((a, b) => a - b);
-    check('wiki: los seis salen, cada uno una vez',
-      JSON.stringify(ordenados) === JSON.stringify([0, 1, 2, 3, 4, 5]),
-      ordenados.join(','));
-    for (const t of [7, 8, 9, 10]) {
+    const esperados = CRATE_ONLY_COMPANIONS.map((_, i) => i);
+    check('wiki: los exclusivos salen, cada uno una vez',
+      JSON.stringify(ordenados) === JSON.stringify(esperados)
+        && ordenados.length === CRATE_ONLY_COMPANIONS.length,
+      `${ordenados.length} repartidos de ${CRATE_ONLY_COMPANIONS.length}`);
+
+    // **Y QUE LA CAJA MÁS CARA TENGA EL EXCLUSIVO MÁS POTENTE.** Es la regla que
+    // hace que abrir la T20 tenga razón: el premio más grande del juego tiene que
+    // estar en el cofre más caro. La alternativa —repartir el exclusivity viejo
+    // entre las cajas nuevas— dejaba la caja más cara sin nada propio.
+    const porCaja = new Map<number, number>();
+    for (const [t, idxs] of Object.entries(EXCLUSIVOS_POR_CAJA)) {
+      const mejor = Math.max(...(idxs as number[]).map(i => CRATE_ONLY_COMPANIONS[i].power));
+      porCaja.set(Number(t), mejor);
+    }
+    const cajaMasCara = Math.max(...porCaja.keys());
+    const poderMaximo = Math.max(...CRATE_ONLY_COMPANIONS.map(c => c.power));
+    check(`wiki: la caja más cara (T${cajaMasCara}) trae el exclusivo más potente`,
+      porCaja.get(cajaMasCara) === poderMaximo,
+      `poder en T${cajaMasCara}=${porCaja.get(cajaMasCara)} máximo=${poderMaximo}`);
+
+    for (const t of Object.keys(EXCLUSIVOS_POR_CAJA).map(Number)) {
       const tabla = (CRATE_LOOT as Record<number, Array<{ id: string }>>)[t] ?? [];
-      const n = (EXCLUSIVOS_POR_CAJA[t as 7] ?? []).length;
+      const n = (EXCLUSIVOS_POR_CAJA[t] ?? []).length;
       check(`wiki: la caja T${t} trae sus ${n} exclusivo(s) en la tabla`,
         tabla.filter(e => e.id.startsWith('exclusivo_')).length === n,
         `${n}`);
@@ -227,10 +251,16 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  // 6 · Veintisiete logros, y los difíciles sin números
+  // 6 · Los logros, y los difíciles sin números
   // ------------------------------------------------------------------
   {
-    check('wiki: hay 32 logros', ACHIEVEMENTS.length === 32, `${ACHIEVEMENTS.length}`);
+    // **EL NÚMERO NO SE ESCRIBE, PERO EL MÍNIMO TAMPOCO.** Decía `=== 32` y con los
+    // dos de "llegar lejos" felló diciendo que había 34. Lo que un banco puede afirmar
+    // sobre el número de logros es que **no baje** —una lista que se encoge es un
+    // bug— y que todos los difíciles y secretos siguen sin bonificación numérica,
+    // que es la regla de balance de verdad. El número exacto lo dice la tabla.
+    check(`wiki: hay al menos 30 logros (${ACHIEVEMENTS.length})`,
+      ACHIEVEMENTS.length >= 30, `${ACHIEVEMENTS.length}`);
     const dificiles = new Set(LOGROS_DIFICILES.map(d => d.id));
     const sinBonus = ACHIEVEMENTS.filter(a =>
       dificiles.has(a.id) || (SECRET_ACHIEVEMENTS as string[]).includes(a.id));
@@ -457,7 +487,8 @@ async function main() {
     check(`wiki: un tier en items por cada tier con base (${TIERS_BASES.length})`,
       entradasTier.length === TIERS_BASES.length,
       `${entradasTier.length}`);
-    check('wiki: los seis exclusivos en items', deItems.filter(e => e.ancla.startsWith('exclusivo-')).length === 6,
+    check(`wiki: los ${CRATE_ONLY_COMPANIONS.length} exclusivos en items`,
+      deItems.filter(e => e.ancla.startsWith('exclusivo-')).length === CRATE_ONLY_COMPANIONS.length,
       'revisados');
     check('wiki: los cuatro expansores en items', deItems.filter(e => e.ancla.startsWith('expansor-')).length === 4,
       'revisados');

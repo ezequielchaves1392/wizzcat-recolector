@@ -207,13 +207,46 @@ export const CRATE_META: Record<CrateType, { name: string; icon: string; accent:
 // la ruleta se siente como algo mas que unaanimacion.
 // Iconos: se usa el set SVG en vez de emoji. Los emoji se renderizan distinto
 // en cada SO (el 🕳️ salía como un óvalo negro en Windows) y rompen la paleta.
+/**
+ * Los exclusivos de caja, y por qué ahora hay veinte y no seis.
+ *
+ * Los seis primeros salen de las cajas de la T7 a la T10. Los diez siguientes, de
+ * la T11 a la T20, y existen por una razón concreta: **sin ellos, la caja más cara
+ * del juego no tenía nada propio**. Era Divino como la T10 y repartía exactamente
+ * lo mismo, así que abrir un T20 era abrir un T10 por quince veces más. Eso no es un
+ * premio, es un peaje.
+ *
+ * **SIGUEN LA MISMA FORMA QUE LOS SEIS VIEJOS** —nombre, tipo, poder, rareza e
+ * icono— porque son la misma cosa: compañeros que no se compran y solo salen del
+ * cofre. Lo que cambia es la potencia, que sube con el tier que los suelta: un
+ * exclusivo de la T11 no puede tener menos poder que uno de la T7, o el jugador
+ * pierde la caja cara para llevarse algo peor. Y por eso el poder de los de arriba
+ * crece por la misma razón que los precios, que es lo único que hay.
+ *
+ * **EL REPARTO SIGUE LA FORMA VIEJA:** las cajas con más poder llevan dos exclusivos
+ * y las demás uno. No es arbitrario —la T12 y la T16 son las que más van a abrirse
+ * porque su poder es el más redondo—, pero sobre todo es lo que ya hacía la T7 y
+ * la T8, y cambiar el patrón aquí sería cambiar la promesa dos veces.
+ */
 export const CRATE_ONLY_COMPANIONS = [
   { name: 'Fantasma Cuántico', type: 'multiplier', power: 0.35, rarity: 'Mítico',    icon: 'sparkle' },
   { name: 'Oráculo Tribal',    type: 'multiplier', power: 0.75, rarity: 'Legendario', icon: 'crystal' },
   { name: 'Avatar del Vacío',  type: 'passive',    power: 65,   rarity: 'Divino',     icon: 'globe' },
   { name: 'Fénix de Datos',    type: 'passive',    power: 40,   rarity: 'Mítico',     icon: 'bolt' },
   { name: 'Centinela Eterno',  type: 'click',      power: 32,   rarity: 'Legendario', icon: 'shield' },
-  { name: 'Espectro Azulado',  type: 'passive',    power: 18,   rarity: 'Épico',      icon: 'companion' }
+  { name: 'Espectro Azulado',  type: 'passive',    power: 18,   rarity: 'Épico',      icon: 'companion' },
+  // --- Del T11 al T20. Todos Divino, como su caja: son el premio de la rareza
+  // máxima, y un exclusivo por debajo de la rareza de la caja mentiría sobre ella.
+  { name: 'Guardián de la Última Veta', type: 'passive', power: 160, rarity: 'Divino', icon: 'shield' },
+  { name: 'Motor del Ocaso',            type: 'click',   power: 210, rarity: 'Divino', icon: 'bolt' },
+  { name: 'Coro de lo Primordial',      type: 'passive', power: 320, rarity: 'Divino', icon: 'sparkle' },
+  { name: 'Azote del Confín',           type: 'multiplier', power: 1.20, rarity: 'Divino', icon: 'globe' },
+  { name: 'Forjador de Constelaciones', type: 'passive', power: 480, rarity: 'Divino', icon: 'star' },
+  { name: 'Yunque Infinito',            type: 'click',   power: 620, rarity: 'Divino', icon: 'wrench' },
+  { name: 'Tejedor de Vacíos',          type: 'passive', power: 760, rarity: 'Divino', icon: 'atom' },
+  { name: 'Arconte del Silencio',       type: 'multiplier', power: 1.60, rarity: 'Divino', icon: 'core' },
+  { name: 'Heraldo del Infinito',       type: 'passive', power: 1150, rarity: 'Divino', icon: 'crown' },
+  { name: 'La Última Mano',             type: 'click',   power: 1600, rarity: 'Divino', icon: 'collector' }
 ] as const;
 
 // Icono de cada tipo de cosmético en la ruleta. Sin esto, título, marco y
@@ -933,12 +966,40 @@ const PESO_COMPANERO = 62;
  * F86 · Exportado para la Wiki: el reparto de exclusivos por caja es una
  * decisión de balance en una línea por caja, y la Wiki lo enseña leyéndolo
  * de aquí y no con una lista escrita al lado.
+ *
+ * **DEL T11 AL T20, UNO POR CAJA.** Los seis primeros son los que ya estaban y no
+ * se tocan: el jugador que ya tiene el Avatar del Vacío no puede encontrarse con
+ * que ahora lo suelta otra caja. Los diez siguientes son índices 6..15 y van uno a
+ * uno, de la T11 a la T20.
+ *
+ * **UNO POR CAJA Y NO DOS, Y ES UNA DECISIÓN.** La T7 y la T8 llevan dos porque
+ * eran pocas cajas para seis exclusivos; con diez cajas y diez exclusivos no hace
+ * falta multiplicar, y **la caja más cara del juego tiene que tener el mejor
+ * premio** —que es `La Última Mano`, la de más poder— para que abrirla tenga razón.
+ * Repartir dos en la T16 y dejar la T20 sin nada era el reparto viejo copiado a un
+ * sitio donde ya no encaja: el T20 sería el cofre más caro del juego sin un
+ * exclusivo propio, que es exactamente el agujero que esta lista viene a cerrar.
+ *
+ * **CADA EXCLUSIVO VA A UNA CAJA DE SU MISMO TIER O SUPERIOR.** No es una regla
+ * escrita: sale de que la tabla está ordenada y cada índice se asigna a un tier de
+ * su rango, y `wikiCheck` lo comprueba. Un T11 que soltara un exclusivo de la T20
+ * sería un fallo de la economía del cofre, no un premio.
  */
 export const EXCLUSIVOS_POR_CAJA: Partial<Record<CrateType, number[]>> = {
   7: [0, 3],
   8: [1, 4],
   9: [5],
-  10: [2]
+  10: [2],
+  11: [6],
+  12: [7],
+  13: [8],
+  14: [9],
+  15: [10],
+  16: [11],
+  17: [12],
+  18: [13],
+  19: [14],
+  20: [15]
 };
 
 

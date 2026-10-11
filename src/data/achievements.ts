@@ -37,6 +37,12 @@ export type AchievementId =
   | 'first_forge'
   | 'smith_25'
   | 'ascendant'
+  // F105 · Los dos de "llegar lejos". Antes no había **ningún** logro que mirara el
+  // tier: los veintidós medían producción, forja, cajas y prestigio, y con veinte
+  // tiers no había forma de ganarse "llegar al T15". El contenido nuevo hace ese
+  // hueco más visible, porque ahora hay un camino largo y sin nada que lo reconozca.
+  | 'tier_15'
+  | 'tier_20'
   // F97 · Los cinco del árbol nuevo: un keystone, una rama llena, una firma,
   // un salto de premio y un eco. Son cortos (uno por mecánica) con bono
   // pequeño, como los de arriba: celebrar, no pagar la partida.
@@ -107,6 +113,11 @@ export const ACHIEVEMENT_REWARDS: Record<AchievementId, { clickBonus: number; pa
   first_forge: { clickBonus: 0.05, passiveBonus: 0 },
   smith_25: { clickBonus: 0.10, passiveBonus: 0.10 },
   ascendant: { clickBonus: 0.20, passiveBonus: 0.20 },
+  // F105 · "Llegar lejos" paga más que cualquier otro corto, y es a propósito: llegar
+  // al T15 es lo más caro que se puede hacer en una partida sin reciclar, así que el
+  // logro tiene que estar a la altura de lo que costó. El T20 es todavía más.
+  tier_15: { clickBonus: 0.25, passiveBonus: 0.25 },
+  tier_20: { clickBonus: 0.50, passiveBonus: 0.50 },
   // F97 · Cortos del árbol nuevo: bono pequeño, el premio gordo es el banner.
   primera_maestria: { clickBonus: 0, passiveBonus: 0.03 },
   rama_completa: { clickBonus: 0.05, passiveBonus: 0 },

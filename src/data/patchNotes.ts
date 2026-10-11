@@ -57,6 +57,18 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.20.0',
+    fecha: '11 de octubre de 2026',
+    titulo: 'La caja más cara del juego ya tiene algo propio',
+    lineas: [
+      'Cada caja a partir del T11 trae un compañero exclusivo que no se compra en ningún sitio.',
+      'Son diez nuevos y el poder sube con el nivel del cofre: el mejor está en la última caja, que es la más cara del juego.',
+      'Antes la caja T20 era Divino como la T10 y repartía exactamente lo mismo, así que abrirla era abrir un T10 por quince veces más.',
+      'Dos logros nuevos por llegar lejos: llegar al T15 y llegar al T20, que antes no se podían ganar porque ningún logro miraba el nivel.',
+      'El del T15 te pone el título "Mitad del Cielo" encima. El del T20, el banner "El Final".'
+    ]
+  },
+  {
     version: '1.19.0',
     fecha: '11 de octubre de 2026',
     titulo: 'La forja llega hasta el T20',

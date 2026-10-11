@@ -185,6 +185,17 @@ export const COSMETICS: Cosmetic[] = [
   { id: 'banner_eco', type: 'banner', name: 'Eco', description: 'Azul de botín doble.', rarity: 'Épico',
     unlock: { kind: 'achievement', value: 'doble_eco' },
     style: { background: 'repeating-linear-gradient(180deg,#0c4a6e 0 6px,#082f49 6px 12px)' } },
+  // F105 · Los dos de "llegar lejos". El primero es un título, no un banner: el
+  // logro del T15 paga con un nombre encima del perfil, porque a esa altura lo que
+  // se quiere es que se sepa que has llegado y no un fondo más. El del T20 sí es un
+  // banner, y es el primero del juego con fondo blanco —no hay nada más allá del
+  // Divino, y aquí ya no queda color por debajo—.
+  { id: 'title_mitad_cielo', type: 'title', name: 'Mitad del Cielo', description: 'Has llegado al T15.',
+    rarity: 'Legendario', unlock: { kind: 'achievement', value: 'tier_15' },
+    style: { color: '#e0e7ff', fontFamily: 'var(--font-mono)' } },
+  { id: 'banner_el_final', type: 'banner', name: 'El Final', description: 'Blanco del T20.', rarity: 'Divino',
+    unlock: { kind: 'achievement', value: 'tier_20' },
+    style: { background: 'radial-gradient(circle at 50% 30%,#ffffff,#cbd5e1 55%,#475569 90%)' } },
   // Corona: el conic dorado daba vueltas como un cuadrado girando. Ahora el fondo cambia
   // de TONO, que no mueve la caja: un fondo no rota.
   { id: 'banner_crown', type: 'banner', name: 'Corona', description: 'Solo para el primer lugar.',
