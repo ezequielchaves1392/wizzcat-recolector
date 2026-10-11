@@ -393,23 +393,22 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       tenía— y las estrellas pasan a ser "de qué parte del rango viene", que es información
       distinta.
 
-- [ ] **C104 · Los especiales del T11 al T20.** **Es lo único que queda del B10, y es
-      contenido, no un fallo.**
-      Las cajas del T11 al T20 ya existen y reparten bien: Divino, con su base, su nombre y
-      su precio. Lo que **no** hay es nada propio de la mitad final de la progresión. Los
-      seis exclusivos de caja (`CRATE_ONLY_COMPANIONS`) siguen repartiéndose entre la T7,
-      la T8, la T9 y la T10, y las cajas nuevas no sueltan ninguno: son Divino con el mismo
-      botín de siempre.
-      **Es una decisión, no un descuido.** Tres caminos, y ninguno se ha tomado:
-      - **Repetir los seis en las cajas nuevas.** Lo más barato, y hace que el T20 no sea
-        un escalón con nada propio sino "más caro".
-      - **Exclusivos nuevos para el T11 al T20.** Lo que da un motivo para abrir la última
-        caja, pero son contenido nuevo: nombre, poder, rareza y su entrada en `loreCheck`.
-      - **Un exclusivo por caja, como en la T7 a la T10.** El paso intermedio.
-      Y en el mismo saco, sin decidir: **logros, títulos y banners** que se ganen a partir
-      del T11. Hoy ningún logro mira el tier, así que no hay ninguno que se pueda ganar
-      "llegar al T15": es un agujero de contenido que ya existía y que el contenido nuevo
-      hace más visible.
+- [x] **C104 · Los especiales del T11 al T20.** **Hecho en `d11e06e`.**
+      Diez exclusivos nuevos, uno por caja del T11 al T20, todos Divino y con el poder
+      subiendo con el tier que los suelta. **El más potente está en la caja más cara**, y
+      hay un banco que lo exige: mi primer reparto metía dos en la T16 y dejaba la T19 y la
+      T20 sin nada, que es el patrón viejo copiado a un sitio donde ya no encaja.
+      Más dos logros que miran el tier, que **antes no existía ninguno**: llegar al T15 da
+      el título "Mitad del Cielo" y llegar al T20 el banner "El Final". Miden el almacén, no
+      un contador guardado, y cuentan también un compañero del tier —un jugador puede
+      llegar al T15 por la vía de los compañeros sin tener un recolector de ese tier—.
+
+      **Lo que queda abierto, y es decisión de contenido:** más hitos intermedios. Hay un
+      logro en el T15 y otro en el T20, y nada en medio. Diez tramos serían diez bonificaciones
+      acumulativas, y esa suma es un número que hay que decidir, no deducir. Los dos que hay
+      pagan +25 % y +50 %, y añadir un tercero hay que encajarlo entre los dos sin que la
+      progresión deje de leerse como peldaños.
+
 - [-] **B11 · En la Forja, "materiales" son "compañeros y armas".** **Dos de las tres partes
       hechas; la tercera ya lo estaba.**
       (a) **El nombre.** La sección se llamaba "Materiales" y el juego no tiene esa palabra:
