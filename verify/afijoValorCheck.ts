@@ -31,7 +31,9 @@ import { boot, reload, check, resumen, wh, baseSave, collector, companion, conRo
 import { sellPrice, valuationConCifras, affixValueMult } from '../src/data/valuation';
 import {
   efectoDeAfijos, valorGuardadoDeAfijo, textoDeAfijo, heredaValoresDeAfijo,
-  afijosParaRareza, cabePorRareza, AFIX_MIN_POR_RARIDAD, AFFIXES,
+  afijosParaRareza, cabePorRareza, AFIX_MIN_POR_RARIDAD, AFFIXES, POOL_AFIJOS_COMPANERO,
+  AFIJOS_SOLO_CRITICO,
+  efectoDeAfijosDeCompanero,
   VALOR_AFIJO_MIN, VALOR_AFIJO_MAX, pesoDeAfijo,
   // **UN SOLO IMPORT POR MODULO, Y NO POR ESTETICA.** Este fichero tenia dos
   // lineas importando de `data/crafting`: una para la forja y otra para el resto.
@@ -731,6 +733,227 @@ async function main() {
     //     dato que no se sabe leer.
     check('techo: una rareza desconocida deja pasar el afijo',
       cabePorRareza('Rarísimo', 'Divino'));
+  }
+
+  // =========================================================================
+  // 16 · NINGÚN AFIJO ES UN FANTASMA (F99).
+  //
+  //     Esta es la prueba que habría cazado a `aff_luck`, el afijo que decía
+  //     "+10 % a la probabilidad de crafteo" y que no leía ninguna cuenta: se
+  //     cobraba en la valoración y no hacía nada jugando. Se borró por eso.
+  //
+  //     Y es exactamente el riesgo de añadir afijos: un afijo nuevo puede
+  //     declararse, sortable, heredarse y valuarse, y **no hacer nada**, sin que
+  //     ninguna otra prueba se entere —porque todas comprueban que la función
+  //     existe, no que su efecto llegue al número—.
+  //
+  //     La comprobación es de punta a punta y **por el lado que no miente**: se
+  //     pone el afijo en un item, se equipa, y se mira **el daño y el ingreso**.
+  //     Si el afijo no mueve ninguno de los dos números, es un fantasma —aunque
+  //     su función esté impeccable y tenga tres pruebas—.
+  // =========================================================================
+  {
+    // 1 · El más rápido: el efecto existe y no es cero. Atrapa al afijo declarado
+    //     con un `effect: {}` vacío o con una clave que nadie inventó.
+    const mudos = (AFFIXES as any[])
+      .filter(a => {
+        const e = efectoDeAfijos([a.id], 10, 5);
+        return e.clickMult === 0 && e.passiveMult === 0 && e.critChance === 0;
+      })
+      .map(a => a.id);
+    check('fantasma: NINGÚN afijo del catálogo tiene el efecto a cero',
+      mudos.length === 0, `mudos: ${mudos.join(', ')}`);
+
+    // 2 · El que importa: **de verdad mueve el daño del item equipado**.
+    //
+    //     **Y AQUÍ ESTÁ LA TRAMPA QUE CASI CONVIRTÓ ESTA PRUEBA EN RUIDO.** La
+    //     primera versión montaba dos items y los comparaba, y fallaba por dos
+    //     motivos que no tienen nada que ver con los afijos:
+    //
+    //     - Un `Épico` **debe llevar 2 afijos**, así que la migración le sorteaba
+    //       dos al cargar y los dos items salían con afijos distintos y al azar.
+    //     - Y con un `Común` —que sí lleva 0— la migración le **borraba** el
+    //       afijo de la prueba, que es por lo que el ingreso daba `100 = 100`
+    //       clavado en los siete afijos de pasivo.
+    //
+    //     Aparte, cada item recibe una **base oculta distinta** al cargar
+    //     (`migraPotenciales()` la sortea si no viene puesta), así que dos items
+    //     comparable nunca tienen el mismo daño base: salían 131 contra 132 y la
+    //     prueba podía pasar por casualidad.
+    //
+    //     **LA SOLUCIÓN ES NO COMPARAR DOS ITEMS: ES EL MISMO ITEM CON Y SIN EL
+    //     AFIJO.** Se monta un item Común —que la migración no toca— y se le
+    //     pone el afijo encima. Todo lo demás —base, nivel, potencial— es el
+    //     mismo número en las dos mediciones, que es lo que hace que la
+    //     diferencia sea el afijo y solo el afijo.
+    //
+    //     **Y HAY QUE RECALCULAR LA CUENTA A MANO.** `equipCollector()` es un
+    //     conmutador: llamarlo dos veces sobre el mismo item lo **desequipa**, y
+    //     `passiveIncome` es un campo ya calculado, no un getter —mutar el almacén
+    //     no lo recalcula y se queda viejo—. La primera versión usaba
+    //     `equipCollector(null)`, que **no es una API**: dejaba el item
+    //     desequipado y la segunda llamada no lo recuperaba, así que la
+    //     medición daba `con=1`, el suelo de daño sin recolector. Lo que sí
+    //     funciona es el conmutador de verdad: equipar, leer, desequipar,
+    //     equipar otra vez.
+    const RECARGAR = 'f-x';
+    const conAfijoEnClick = async (ids: string[]) => {
+      const g: any = await boot(baseSave([collector(RECARGAR, 5, { rarity: 'Común', affixes: [] })]));
+      const st: any = g.getState();
+      g.equipCollector(RECARGAR);                       // encendido
+      const sin = g.getClickDamage();
+      g.equipCollector(RECARGAR);                       // apagado
+      st.warehouse = st.warehouse.map((w: any) => (w.id === RECARGAR ? { ...w, affixes: ids } : w));
+      g.equipCollector(RECARGAR);                       // encendido otra vez, ya recalculado
+      const con = g.getClickDamage();
+      return { con, sin };
+    };
+
+    const soloClick = (AFFIXES as any[]).filter(a => (a.effect.clickMult || 0) > 0);
+    const mudosAlClick: string[] = [];
+    for (const a of soloClick) {
+      const { con, sin } = await conAfijoEnClick([a.id]);
+      if (!(con > sin)) mudosAlClick.push(`${a.id} (con=${con} sin=${sin})`);
+    }
+    check('fantasma: TODO afijo de click AUMENTA el daño del item',
+      mudosAlClick.length === 0, `no lo aumentan: ${mudosAlClick.join(' ')}`);
+
+    // 3 · El reflejo por el otro lado: los de pasivo tienen que subir el ingreso.
+    const soloPasivo = (AFFIXES as any[]).filter(a => (a.effect.passiveMult || 0) > 0);
+    const mudosAlPasivo: string[] = [];
+    for (const a of soloPasivo) {
+      const g: any = await boot(baseSave([
+        collector(RECARGAR, 5, { rarity: 'Común', affixes: [] }), companion('c1')
+      ]));
+      const st: any = g.getState();
+      st.companions = [{ id: 'c1', name: 'C', type: 'passive', power: 100, tier: 3, rarity: 'Común' }];
+      g.equipCompanion('c1');
+      g.equipCollector(RECARGAR);
+      const sin = st.passiveIncome;
+      g.equipCollector(RECARGAR);
+      st.warehouse = st.warehouse.map((w: any) =>
+        (w.id === RECARGAR ? { ...w, affixes: [a.id] } : w));
+      g.equipCollector(RECARGAR);
+      const con = st.passiveIncome;
+      if (!(con > sin)) mudosAlPasivo.push(`${a.id} (con=${con} sin=${sin})`);
+    }
+    check('fantasma: TODO afijo de pasivo AUMENTA el ingreso',
+      mudosAlPasivo.length === 0, `no lo aumentan: ${mudosAlPasivo.join(' ')}`);
+
+    // 4 · Y que ningun afijo deje al item sin hacer dano: un fantasma colado por
+    //     un `NaN` en `efectoDeAfijos()` dejaria el click a cero.
+    const rotos: string[] = [];
+    for (const a of (AFFIXES as any[])) {
+      const { con } = await conAfijoEnClick([a.id]);
+      if (!Number.isFinite(con) || con <= 0) rotos.push(`${a.id}(d=${con})`);
+    }
+    check('fantasma: ningun afijo deja al item sin hacer dano',
+      rotos.length === 0, `rotos: ${rotos.join(' ')}`);
+
+    // 5 · **Y QUE EL COMPANERO TAMBIEN LOS COBRA**, porque son la mitad del
+    //     pool. Cada afijo se mide contra **el tipo de compañero que le
+    //     corresponde**: uno de click no dice nada en uno de pasivo, y afirmar lo
+    //     contrario sería declarar fantasma a la mitad del catálogo. Por eso la
+    //     versión anterior de esta fila marcaba seis afijos como mudos — y los
+    //     seis estaban bien, la fila estaba mal.
+    const mudosAlCompanero: string[] = [];
+    for (const a of POOL_AFIJOS_COMPANERO as any[]) {
+      const deClick = efectoDeAfijosDeCompanero([a.id], 10, 5, 'click') > 0;
+      const dePasivo = efectoDeAfijosDeCompanero([a.id], 10, 5, 'passive') > 0;
+      if (!deClick && !dePasivo) mudosAlCompanero.push(a.id);
+    }
+    check('fantasma: todo afijo del pool de compañero hace ALGO para el compañero',
+      mudosAlCompanero.length === 0,
+      `mudos: ${mudosAlCompanero.join(', ')}`);
+
+    // 6 · Y LA REGLA QUE LO HACE IMPOSIBLE DE VOLVER A ROMPER: el pool no puede
+    //     llevar dentro un afijo **solo** de crítico, se escriba el id que se
+    //     escriba. Es lo que dejó colarse a `aff_precise` al añadirlo.
+    //
+    //     **"SOLO CRÍTICO" SIGNIFICA QUE NO TRAE NADA MÁS, NO QUE TENGA
+    //     CRÍTICO.** La primera versión de esta fila filtraba por `critChance > 0`
+    //     y marcaba al Vacío Devorador, que trae crítico **y click y pasivo**: es
+    //     un afijo de tres efectos y el compañero sí cobra las dos mitades que
+    //     le sirven. Declarar fantasma a un afijo que funciona es la forma de que
+    //     alguien "arregle" el filtro y lo borre de verdad.
+    //
+    //     Y el criterio **no está escrito aquí**: bebe `AFIJOS_SOLO_CRITICO`, que
+    //     es la misma lista que usa el filtro del pool y la wiki. Escrito tres
+    //     veces, añadir un cuarto afijo de crítico dejaría a dos versiones
+    //     viejas, y la que se queda vieja es la que nadie vuelve a mirar.
+    const colados = (POOL_AFIJOS_COMPANERO as any[]).filter(a => AFIJOS_SOLO_CRITICO.includes(a));
+    check('fantasma: el pool de compañero NO lleva afijos solo de crítico',
+      colados.length === 0,
+      `colados: ${colados.map(a => a.id).join(', ')}`);
+
+    // Y el reverso: **todo** afijo solo de crítico del catálogo está fuera del
+    // pool. Es la misma regla desde el otro lado, y cubre los que se añadan
+    // después. La variable recoge los **colados**, no las fugas: un crítico puro
+    // fuera del pool es lo correcto, y una versión anterior de esta línea
+    // contaba justamente los que estaban bien y los daba por error.
+    const criticosPuros = (AFIJOS_SOLO_CRITICO as any[]).map(a => a.id);
+    const colados2 = criticosPuros.filter(id =>
+      (POOL_AFIJOS_COMPANERO as any[]).some(a => a.id === id));
+    check('fantasma: todo afijo solo de crítico queda FUERA del pool de compañero',
+      colados2.length === 0,
+      `dentro del pool: ${colados2.join(', ')} (críticos puros: ${criticosPuros.join(', ')})`);
+
+    // Y que esa lista sea **real**: ni vacía ni entera. Si alguien invierte el
+    // criterio y la deja con todos los afijos, el pool se queda sin nada y
+    // estas dos filas siguen en verde —el fallo más caro de todos, porque
+    // desactiva el filtro entero en silencio.
+    check('fantasma: la lista de solo crítico es real (ni vacía ni todo)',
+      criticosPuros.length > 0 && criticosPuros.length < AFFIXES.length,
+      `${criticosPuros.length} de ${AFFIXES.length}`);
+
+    // Y que el Vacío, que sí lleva crítico, **no se haya caído** por el mismo
+    // filtro: el ERROR AL REVÉS también es un bug, y más caro —borra un afijo
+    // bueno del pool sin que nada salga rojo.
+    check('fantasma: el Vacío sigue en el pool (tiene click y pasivo, no es solo crítico)',
+      (POOL_AFIJOS_COMPANERO as any[]).some(a => a.id === 'aff_void')
+      && !(AFIJOS_SOLO_CRITICO as any[]).some(a => a.id === 'aff_void'));
+  }
+
+  // =========================================================================
+  // 17 · Y QUE LOS TRES NUEVOS ESTÁN EN SU ESCALÓN.
+  //
+  //     No basta con que existan: tienen que llenar el hueco que dijeron llenar,
+  //     y el catálogo tiene que seguir siendo coherente para lo que depende de
+  //     su forma —el techo por rareza, el invariante de los multiplicadores y
+  //     las proseas.
+  // =========================================================================
+  {
+    check('F99: la escalera de crítico es completa y sube (5 → 8 → 14)',
+      (() => {
+        const pct = (id: string) => Math.round(efectoDeAfijos([id], 0, 5).critChance * 1000) / 10;
+        return pct('aff_precise') === 5 && pct('aff_crit') === 8 && pct('aff_focus') === 14;
+      })(),
+      `precisión=${Math.round(efectoDeAfijos(['aff_precise'], 0, 5).critChance * 1000) / 10}`
+      + ` crítico=${Math.round(efectoDeAfijos(['aff_crit'], 0, 5).critChance * 1000) / 10}`
+      + ` foco=${Math.round(efectoDeAfijos(['aff_focus'], 0, 5).critChance * 1000) / 10}`);
+
+    check('F99: hay un afijo de pasivo en cada peldaño entre Raro y Mítico',
+      (AFFIXES as any[]).some(a => a.rarity === 'Épico' && (a.effect.passiveMult || 0) > 0)
+      && (AFFIXES as any[]).some(a => a.rarity === 'Legendario' && (a.effect.passiveMult || 0) > 0),
+      'falta algún peldaño');
+
+    check('F99: y hay un afijo de click puro en Legendario',
+      (AFFIXES as any[]).some(a => a.rarity === 'Legendario'
+        && (a.effect.clickMult || 0) > 0 && (a.effect.passiveMult || 0) === 0));
+
+    // **NO SE DEBILITÓ AL MÁS FUERTE.** Añadir huecos de presencia no puede
+    // hacer que el Divino deje de ser el premio: el logro que lo vigila dice
+    // "casi imposible" y dejar de ser verdad sería romperlo en silencio.
+    const divino = (AFFIXES as any[]).filter(a => a.rarity === 'Divino');
+    check('F99: sigue habiendo UN solo afijo Divino, y es el Vacío',
+      divino.length === 1 && divino[0].id === 'aff_void',
+      `divinos: ${divino.map(a => a.id).join(',')}`);
+
+    // Y el único Mítico de click fuerte sigue siendo el Primo.
+    const maxMult = Math.max(...(AFFIXES as any[]).map(a => a.effect.clickMult || 0));
+    const masFuerte = (AFFIXES as any[]).find(a => (a.effect.clickMult || 0) === maxMult);
+    check('F99: el afijo de click más fuerte del juego sigue siendo el Primo',
+      masFuerte?.id === 'aff_prime', `el más fuerte es ${masFuerte?.id}`);
   }
 
   resumen('el valor de cada afijo');

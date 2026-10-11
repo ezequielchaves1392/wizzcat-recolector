@@ -49,7 +49,8 @@ import {
   AFFIXES, baseSuccessChance,
   baseDeTier, techoDeNivel, costeDeNivel,
   explicacionDeAfijos,
-  VALOR_AFIJO_MIN, VALOR_AFIJO_MAX
+  VALOR_AFIJO_MIN, VALOR_AFIJO_MAX,
+  POOL_AFIJOS_COMPANERO, AFIJOS_SOLO_CRITICO
 } from '../data/crafting';
 import {
   PIEDRA_PUNTOS, PROB_NANO_SUBE_RAREZA, PROB_SUBE_POTENCIAL,
@@ -501,6 +502,9 @@ function seccionItems(): string {
       los tiers bajos. La lista de abajo es <strong>el valor de catálogo</strong>, el que paga un
       afijo justo en la mitad de su rango y sin escala de tier; cada item enseña el suyo.
       Qué hace cada uno:</p>
+      <p class="wiki-p">Un <strong>compañero no lleva afijos de crítico</strong>: se quedan fuera los
+      ${AFIJOS_SOLO_CRITICO.length} que solo dan crítico, porque no podría cobrarlos. El resto
+      de la lista sí vale, y son ${POOL_AFIJOS_COMPANERO.length} de ${AFFIXES.length}.</p>
       <div class="wiki-box">${afijos}</div>
     `, ANCLA.itemsAfijos)}
   `;

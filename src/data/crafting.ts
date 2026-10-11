@@ -136,21 +136,83 @@ export const AFFIXES: Affix[] = [
   { id: 'aff_prime', name: 'Primo', description: '+55% a todos los multiplicadores del recolector.', prosa: 'a todos los multiplicadores del recolector', rarity: 'Mítico',
     effect: { clickMult: 0.55, passiveMult: 0.55 } },
   { id: 'aff_void', name: 'Vacío Devorador', description: '+25% a la recolección por click y por segundo, +10% crítico.', prosa: 'a la recolección por click y por segundo', rarity: 'Divino',
-    effect: { clickMult: 0.25, passiveMult: 0.25, critChance: 0.10 } }
+    effect: { clickMult: 0.25, passiveMult: 0.25, critChance: 0.10 } },
+  // ==========================================================================
+  //  F99 · LOS TRES QUE LLENAN HUECOS, Y POR QUÉ SOLO TRES
+  //
+  //  La escalera de crítico estaba rota: el primer crítico del catálogo era Épico
+  //  (8 %) y el siguiente Legendario (14 %). Un item Raro —que lleva un solo
+  //  afijo— no tenía **ningún** crítico propio: dependía de que le tocara un
+  //  afijo de otro peldaño. Con Precisión la escalera es 5 → 8 → 14, y cada
+  //  peldaño tiene lo suyo.
+  //
+  //  El pasivo se quedaba **sin nada entre Épico y Mítico**: Rendimiento y Flujo
+  //  son Raros, Núcleo es Épico, y el siguiente era Absorción, que es Mítico y
+  //  además depende del nivel. Un afijo de pasivo Legendario no existía.
+  //
+  //  Y el click tampoco tenía un Legendario **puro**: los dos que había eran un
+  //  crítico (Foco) y uno de los dos (Efenéreo).
+  //
+  //  **SOLO CLAVES QUE EL MOTOR YA LEE.** Los tres usan `critChance`,
+  //  `passiveMult` y `clickMult`, que `efectoDeAfijos()` y
+  //  `efectoDeAfijosDeCompanero()` ya consumen. Ninguno necesita código de
+  //  motor nuevo, y por eso **no pueden salir fantasmas**: un afijo cuyo efecto no
+  //  lee nadie es la peor cosa que se puede añadir —el fantasma de `aff_luck`,
+  //  que se cobró en la valoración y no hizo nada en la partida— y aquí no hay
+  //  forma de colarlo sin que una cuenta nueva lo lea.
+  //
+  //  **Y NO SE TOCA LA MAGNITUD DE LOS VIEJOS.** Estos tres son huecos de
+  //  *presencia*, no de potencia: el afijo más fuerte del juego sigue siendo el
+  //  Primo, y el único Divino sigue siendo el Vacío Devorador. Añadir un Divino
+  //  nuevo más fuerte que ese lo haría dejar de ser el premio que es, y el logro
+  //  que lo vigila ("casi imposible") dejaría de ser cierto.
+  // ==========================================================================
+  { id: 'aff_precise', name: 'Precisión', description: '+5% de probabilidad de crítico (×2 la recolección por click).', prosa: 'de probabilidad de crítico (×2 la recolección por click)', rarity: 'Raro',
+    effect: { critChance: 0.05 } },
+  { id: 'aff_hambre', name: 'Hambre', description: '+40% a la recolección por segundo.', prosa: 'a la recolección por segundo', rarity: 'Legendario',
+    effect: { passiveMult: 0.40 } },
+  { id: 'aff_filo', name: 'Filo', description: '+45% a la recolección por click.', prosa: 'a la recolección por click', rarity: 'Legendario',
+    effect: { clickMult: 0.45 } },
 ];
 
 export const AFFIX_BY_ID: Record<string, Affix> = Object.fromEntries(AFFIXES.map(a => [a.id, a]));
 
 /**
+ * LOS QUE SOLO DAN CRÍTICO (y por eso no pueden ir en un compañero).
+ *
+ * **UN SOLO CRÍTICO.** El criterio no es "tiene crítico" —el Vacío Devorador tiene
+ * crítico y además click y pasivo, y las otras dos mitades sí le sirven a un
+ * compañero—, sino que **no trae nada más**. Escribirlo al revés declararía
+ * fantasma a un afijo que funciona, y lo peor es que alguien "arreglaría" el
+ * filtro y lo borraría de verdad.
+ *
+ * Vive aquí y no en el filtro, en la wiki y el banco por separado: tres copias
+ * de un mismo criterio son tres ocasiones de que una se quede vieja, y esta
+ * justamente se quedó vieja al añadir `aff_precise`.
+ */
+export const AFIJOS_SOLO_CRITICO: Affix[] = AFFIXES.filter((a) => {
+  const e = a.effect as any;
+  return (e.critChance || 0) > 0
+    && !(e.clickMult || e.passiveMult || e.clickMultPorNivel || e.passiveMultPorNiveles);
+});
+
+/**
  * EL POOL DE AFIJOS DE COMPAÑERO (F97 Lote 2d).
  *
- * El mismo catálogo menos los de crítico puro (`aff_crit`, `aff_focus`): un
- * compañero no critica, así que sortearle un afijo que solo da crítico sería
- * sortearle un hueco vacío. Una sola lista para el sorteo, la migración y el
- * banco: tres filtros escritos a mano son tres ocasiones de que uno incluya lo
- * que los otros quitan.
+ * Un compañero no critica, así que **cualquier afijo que solo dé crítico le sería
+ * un hueco vacío**: se sortea, aparece en su ficha y no hace nada.
+ *
+ * **EL FILTRO SE DERIVA DEL EFECTO, NO ES UNA LISTA DE IDS.** Estaba escrito como
+ * `AFFIXES.filter(a => a.id !== 'aff_crit' && a.id !== 'aff_focus')`, y al añadir
+ * `aff_precise` —un crítico Raro— el filtro no lo alcanzaba: un compañero podía
+ * sacar Precisión y no cobrarla. Es exactamente el fantasma de `aff_luck`, y
+ * salió al añadir un afijo nuevo a un catálogo que ya tenía el filtro "bien".
+ *
+ * Añadir un afijo nuevo no puede volver a abrir el hueco, porque el filtro se
+ * entera solo. Lo vigila `afijoValorCheck`, que declara fantasma a todo afijo
+ * del pool que no haga nada ni a un compañero de click ni a uno de pasivo.
  */
-export const POOL_AFIJOS_COMPANERO: Affix[] = AFFIXES.filter(a => a.id !== 'aff_crit' && a.id !== 'aff_focus');
+export const POOL_AFIJOS_COMPANERO: Affix[] = AFFIXES.filter(a => !AFIJOS_SOLO_CRITICO.includes(a));
 
 /**
  * EL MULTIPLICADOR DE CRÍTICO, Y POR QUÉ ES UN NÚMERO Y NO PARTE DE CADA AFIJO.
