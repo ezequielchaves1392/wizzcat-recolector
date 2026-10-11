@@ -372,11 +372,14 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       potencial. **Y ojo:** subir el multiplicador de nivel sube también el ingreso de los
       compañeros, que usan la misma función, así que es un cambio de economía y no un ajuste
       de la forja.
-- [ ] **B10 · Que dentro de un mismo tier haya bases distintas.** *(Ahora es F74, y
-      está en marcha: desde `c28dd5e` el daño y el poder pasan por una base oculta
-      —peso de 0,92 a 1,10—, así que **dos ★5 del T1 al T3 ya no son el mismo
-      objeto**. Lo que queda —contenido T4–T10 y qué base suelta cada caja— está
-      escrito en F74. El texto de abajo describe el estado anterior al commit.)*
+- [x] **B10 · Que dentro de un mismo tier haya bases distintas.** **Cerrado en dos
+      commits, de los tres que-harían falta.** `5983775` puso el nombre del item igual
+      al de su base —que era la mitad de arriba de esto: las bases existían y se
+      sorteaban, pero el item se llamaba con una lista de tres nombres por tier
+      distinta del sorteo de la base, así que de diez bases se veían tres y dos T1
+      con el mismo nombre podían pegar 6 y 8—. `770d556` escribió el contenido del T11
+      al T20: doscientas bases más, veinte cajas y el precio que de verdad sube. Lo que
+      queda es el tercer punto, más abajo, y es contenido nuevo.
       Hoy **no las hay**:
       `danioDeRango()` es `base del tier × (1 + 0,2 × potencial)`, y el potencial es un
       entero de 1 a 5. O sea que **dentro de un tier hay exactamente cinco valores**, y dos
@@ -389,6 +392,24 @@ lo que evita que vivan solo en una conversación. Las tres primeras están medid
       Si se añade la tira, la forja necesita una regla para promediarla —que es la que F33 ya
       tenía— y las estrellas pasan a ser "de qué parte del rango viene", que es información
       distinta.
+
+- [ ] **C104 · Los especiales del T11 al T20.** **Es lo único que queda del B10, y es
+      contenido, no un fallo.**
+      Las cajas del T11 al T20 ya existen y reparten bien: Divino, con su base, su nombre y
+      su precio. Lo que **no** hay es nada propio de la mitad final de la progresión. Los
+      seis exclusivos de caja (`CRATE_ONLY_COMPANIONS`) siguen repartiéndose entre la T7,
+      la T8, la T9 y la T10, y las cajas nuevas no sueltan ninguno: son Divino con el mismo
+      botín de siempre.
+      **Es una decisión, no un descuido.** Tres caminos, y ninguno se ha tomado:
+      - **Repetir los seis en las cajas nuevas.** Lo más barato, y hace que el T20 no sea
+        un escalón con nada propio sino "más caro".
+      - **Exclusivos nuevos para el T11 al T20.** Lo que da un motivo para abrir la última
+        caja, pero son contenido nuevo: nombre, poder, rareza y su entrada en `loreCheck`.
+      - **Un exclusivo por caja, como en la T7 a la T10.** El paso intermedio.
+      Y en el mismo saco, sin decidir: **logros, títulos y banners** que se ganen a partir
+      del T11. Hoy ningún logro mira el tier, así que no hay ninguno que se pueda ganar
+      "llegar al T15": es un agujero de contenido que ya existía y que el contenido nuevo
+      hace más visible.
 - [-] **B11 · En la Forja, "materiales" son "compañeros y armas".** **Dos de las tres partes
       hechas; la tercera ya lo estaba.**
       (a) **El nombre.** La sección se llamaba "Materiales" y el juego no tiene esa palabra:
