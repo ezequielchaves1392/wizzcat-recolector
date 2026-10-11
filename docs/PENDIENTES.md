@@ -4608,12 +4608,55 @@ de núcleos va en el parche grande y es una sola vez.*
 
 **Lo que queda sin hacer:**
 
-- [ ] **F99 · Los afijos nuevos y los pools separados.** Lo que pidió el jugador de "los
-  recolectores deben tener afijos distintos a los compañeros". Hoy solo hay un filtro: los
-  compañeros no reciben los de crítico, porque no critican. Lo demás es el mismo catálogo.
-  La forma que encaja con las reglas del proyecto es una propiedad `aplica` en el catálogo en
-  vez de dos listas escritas a mano, y **cada efecto nuevo tiene que ser consumido por una
-  cuenta** —el fantasma de `aff_luck`—.
+- [x] **F99 · Los afijos nuevos y los pools separados.** Hecho en v1.17.0, **a medias y a
+  sabiendas**. De la mitad decidir del jugador —los compañeros `multiplier` no tienen afijos,
+  y hay que elegir si su afijo multiplica el aura o si es un eje nuevo— solo se hizo la
+  parte que no necesitaba esa decisión: **tres afijos nuevos** y **el pool separado de verdad**.
+  - **Los tres llenan huecos que existían, y no suben la potencia de los viejos.** El
+    catálogo tenía la escalera del crítico rota (el primer crítico era Épico, y un Raro —que
+    lleva un solo afijo— no tenía ninguno propio), el pasivo sin nada entre Épico y Mítico, y
+    ningún Legendario de click puro. Ahora: **Precisión** (Raro, 5 % de crítico) cierra la
+    escalera 5 → 8 → 14, **Hambre** (Legendario, 40 % de pasivo) llena el escalón vacío, y
+    **Filo** (Legendario, 45 % de click) da un Legendario de una sola magnitud. La prueba
+    `afijoValorCheck` lo dice con tres filas, y una cuarta **que no se debilite al más fuerte**:
+    el de click más potente sigue siendo el Primo y el único Divino sigue siendo el Vacío, que
+    es el premio que el logro "casi imposible" vigila.
+  - **Solo usan claves que el motor ya leía** —`clickMult`, `passiveMult`, `critChance`—: por
+    eso no pueden salir fantasmas, porque no hay efecto nuevo que nadie calcule.
+  - **Y el pool del compañero se derivó del efecto en vez de ser una lista de ids.** Estaba
+    escrito como `filter(a => a.id !== 'aff_crit' && a.id !== 'aff_focus')`, y al añadir
+    `aff_precise` —un crítico Raro— **el filtro no lo alcanzaba: un compañero podía sacar
+    Precisión y no cobrarla.** Es el fantasma de `aff_luck` otra vez, y salió precisamente por
+    añadir un afijo a un catálogo que ya tenía el filtro "bien". Ahora el criterio vive en
+    `AFIJOS_SOLO_CRITICO` y lo beben el filtro, la wiki y el banco: **"solo crítico" quiere
+    decir que no trae nada más**, no que tenga crítico —el Vacío trae los tres y sí entra—.
+  - **Lo que falta, y sigue bloqueado por una decisión del jugador:** los compañeros
+    `multiplier` siguen sin afijos y `efectoDeAfijosDeCompanero()` les devuelve 0. La pregunta
+    sigue abierta: ¿su afijo multiplica el aura que suelta, o es un eje nuevo (fuerza de aura,
+    ranuras)? Ese camino no tiene ni una prueba hoy, y por eso no se tocó.
+- [x] **La prueba que habría cazado a `aff_luck`, y que es lo mejor de este lote.**
+  `afijoValorCheck` ahora **mide los números, no las funciones**: pone el afijo en un item, lo
+  equipa y mira el daño y el ingreso. Un afijo que no mueva ninguno de los dos es fantasma, por
+  bien escrito que esté su efecto. Le salió un bug real en el minuto de escribirla.
+  - **La primera versión era ruido y podía pasar por casualidad.** Montaba dos items Épicos y
+    los comparaba, pero un Épico **debe llevar 2 afijos**, así que la migración le sorteaba dos
+    al cargar y cada item salía con afijos distintos y al azar —un afijo de pasivo "movía" el
+    click, que es imposible—. Con un Común la migración le **borraba** el afijo de la prueba, y
+    por eso el ingreso daba `100 = 100` clavado en los siete afijos de pasivo.
+  - **Y cada item recibe una base oculta distinta al cargar**, así que dos items comparables
+    nunca tienen el mismo daño base: salían 131 contra 132. La solución fue **no comparar dos
+    items sino el mismo con y sin el afijo**, que es lo único que hace que la diferencia sea el
+    afijo y solo el afijo.
+  - **`equipCollector()` es un conmutador y `equipCollector(null)` no es una API.** La primera
+    versión desequipaba con `null` y la segunda llamada no lo recuperaba, así que la medición
+    daba `con=1`, el suelo de daño sin recolector. Lo que funciona es equipar, leer, equipar
+    otra vez —y hace falta porque `passiveIncome` es un campo ya calculado, no un getter: mutar
+    el almacén no lo recalcula y se queda viejo.
+  - **Y una prueba que declara fantasma a la mitad del catálogo es peor que no tenerla.** La
+    fila del compañero daba seis mudos: los seis estaban bien, la fila estaba mal —un afijo de
+    click no dice nada en un compañero de pasivo—. Y la del crítico puro marcaba al Vacío,
+    porque filtraba por "tiene crítico" en vez de por "solo tiene crítico". Un test que rojo
+    donde no hay bug enseña a ignorar los rojos.
 - [x] **La valoración cobra el valor.** `affixValueMult()` multiplica por el valor guardado del
   afijo **y** por la potencia del tier, y antes leía solo `a.effect` —la magnitud de catálogo—,
   con lo que un Baluarte de 1,3 y otro de 0,7 se vendían por lo mismo: el rango se veía en la
@@ -4676,47 +4719,60 @@ el juego, no una que pasa si la función está bien escrita.*
 *Las tres son del jugador y están escritas aquí antes de tocarlas, que es el protocolo. La tercera
 es la mitad (b) de **F88**, que ya estaba escrita más arriba; aquí va con su causa raíz.*
 
-- [ ] **K1 · Multicompra de las cajas T2 y T3, como el resto de los items.**
+- [x] **K1 · Multicompra de las cajas T2 y T3, como el resto de los items.** Hecho.
       > "Compra de cajas 2 y 3 por mayor, habilitar la funcion multicompra como el resto de los items"
       **No es un camino de compra distinto: las tres cajas pasan por `buyStoreItem` igual que
-      todo.** Lo que frena a la T2 y a la T3 es una **lista blanca escrita a mano**,
-      `esCartaEnLote()`, que solo contiene `crateT1`. De ahí sale todo lo demás:
-      `unidadesCompra()` devuelve 1 para T2 y T3, y `getBulkMax()` devuelve 1, con lo que la
-      vista ve `max <= 1` y compra directo **sin preguntar cuántas**.
-      **Y el propio comentario de encima avisa de este fallo exacto.** Antes la condición era
+      todo.** Lo que frena a la T2 y a la T3 era una **lista blanca escrita a mano**,
+      `esCartaEnLote()`, que solo contenía `crateT1`. De ahí salía todo: `unidadesCompra()`
+      devolvía 1 para T2 y T3, y `getBulkMax()` devolvía 1, con lo que la vista veía
+      `max <= 1` y compraba directo **sin preguntar cuántas**.
+      **Y el propio comentario de encima ya avisaba de este fallo.** Antes la condición era
       `itemKey.endsWith('Crate')` —el nombre de la carta antes de F31— y con una caja por tier
       la carta pasó a llamarse `crateT1`: el `if` dejó de cumplirse **en silencio**, sin error
       ni aviso. La corrección metió `crateT1` **a literal**, y F97 añadió después `crateT2` y
       `crateT3` a la tienda sin añadirlas a la lista. Son dos maneras de cometer el mismo bug:
       un patrón que depende del nombre, y una lista que alguien tiene que acordarse de mantener.
-      **Lo que hay que cambiar no es añadir dos literales: es que la regla deje de ser una lista.**
-      El motor ya soporta el lote de T2 y T3 sin tocar nada más (`tierDeCartaCaja()`,
-      `createCrateItem(tier, n)` y `cabeLaCompra()` son genéricos por `type: 'crate'`), así que
-      la compra en lote funciona de serie: solo estaba apagada.
-      De paso, dos sitios que tratan la caja como si fuera una sola:
-      `nombreDeUnidad()` diría "elige cuántas **unidad**" para T2 y T3, y `getOwnedCount()`
-      solo cuenta `crateT1`, así que esas dos tarjetas no enseñan "En almacén: N".
-      `loteCheck` / `buyCheck`: ninguna prueba comprueba hoy un lote de T2 o T3 —solo de T1,
-      que es justo lo que hacía que esto pasara inadvertido.
+      **Por eso la regla dejó de ser una lista: ahora es `tierDeCartaCaja()`,** la misma
+      función que el motor ya usaba para saber de qué tier es una carta de caja. Responde por
+      patrón **y** exige que la carta exista en la tienda, así que cubre las tres de hoy y
+      cualquier otra que se ponga a la venta, sin que haya un segundo sitio que actualizar.
+      El motor ya soportaba el lote de T2 y T3 sin tocar nada más (`createCrateItem(tier, n)`
+      y `cabeLaCompra()` son genéricos por `type: 'crate'`): la compra en lote funcionaba de
+      serie y solo estaba apagada.
+      De paso, los otros dos sitios que nombraban solo a la T1: `nombreDeUnidad()` —que decía
+      "elige cuántas **unidad**"— y `getOwnedCount()`, que no contaba T2 ni T3, así que esas
+      dos tarjetas no enseñaban "En almacén: N". Los tres salen del mismo sitio ahora.
+      `loteCheck` +7, y el motivo de escribirlas es el de siempre: **ninguna prueba
+      compraba un lote de T2 o T3** —solo de T1, que era justo lo que hacía que esto pasara
+      inadvertido—. Ahora se prueban las dos cartas y el contador por tier.
 
-- [ ] **K2 · El Ascensión pregunta si conservas el árbol o te devuelven los núcleos.**
+- [x] **K2 · El Ascensión pregunta si conservas el árbol o te devuelven los núcleos.** Hecho.
       > "Al ascender un checkbox pregunta si quiere resetear todo o mantener la build actual"
       Aclarado con el jugador: **"la build" es el árbol de pasivos ya pagado**, y la alternativa
       es **devolver los núcleos gastados** para empezarlo de nuevo. No es el inventario ni el
       equipo: el Ascensión reconstruye la partida nueva igual que antes.
-      **Hoy el árbol se conserva siempre y sin preguntar**, que es la mitad de una decisión
-      tomada por el jugador sin que conste en ninguna parte. La confirmación ya existe
-      (`showConfirmModal` en la página de prestigio) pero **no tiene checkbox**, y el
-      `showConfirmModal` ya acepta un **nodo DOM** como mensaje, que es por donde entra el check.
-      La devolución tiene su función ya escrita y probada: `coresGastadosEnArbol()`, la misma
-      que usa la migración de F97, que es exacta porque la suma nivel a nivel con `nodeCost`.
-      **Y no hay exploit, y por eso se puede hacer de una vez:** los núcleos de un Ascensión son
-      `nextCores(totalNanitesProduced, totalCores)`, y `totalCores` es el **histórico de lo
-      ganado**, no la cartera. Gastar en el árbol no lo baja, así que devolver la cartera no
-      aumenta lo que da el siguiente Ascensión.
-      Ojo con la lista "Se pierde / Se conserva" pintada a mano en la página de prestigio: es
-      R3, el texto tiene que decir lo que el motor hace, y con esta opción deja de ser una
-      lista fija.
+      **Hoy el árbol se conservaba siempre y sin preguntar**, que es la mitad de una decisión
+      tomada por el jugador sin que conste en ninguna parte. `prestige()` acepta ahora
+      `{ mantenerArbol }` y **por defecto sigue conservando**, porque un `prestige()` sin
+      argumentos no puede cambiarle la partida a nadie. La casilla va como **nodo DOM** dentro
+      del `showConfirmModal`, que ya lo aceptaba para la hoja de nodo, y el `onConfirm` lee
+      `checked` del closure: el modal quita el nodo del overlay al cerrarse, pero la
+      referencia sigue viva y la propiedad también.
+      **Y NO SE PINTA SI EL ÁRBOL ESTÁ VACÍO.** Una casilla que no cambia nada en el
+      resultado es una pregunta trampa: el jugador elige y las dos opciones hacen lo mismo.
+      La devolución reutiliza `coresGastadosEnArbol()`, la misma función que la migración de
+      F97: suma nivel a nivel con `nodeCost`, así que es exacta y no hay una segunda tabla de
+      precios que pueda quedarse vieja.
+      **Y NO HAY EXPLOIT, Y LA PRUEBA ESTÁ ESCRITA.** Lo que parecía gratis es comprar
+      "Rendimiento del Núcleo" —+10 % de núcleos por reinicio— justo antes de reciclar,
+      cobrar el bonus y quedarse además con la devolución. No funciona porque F70 solo
+      bonifica producción hecha **después** de comprar el nodo y `buyNode` mueve la foto al
+      instante. `guardadoCheck` compra el camino entero (7 nodos), **comprueba que el bonus
+      está activo** —porque la primera versión pasaba en verde sin que el nodo se hubiera
+      comprado nunca— y compara dos partidas idénticas: mismos núcleos con y sin el nodo.
+      Y lo que se decide en el árbol se va con el árbol: `storage_rack` da espacios, y al
+      devolver el nodo esos espacios desaparecen, que es lo que evita re-comprarlo para
+      duplicarlos. `guardadoCheck` +19.
 
 - [x] **K3 · Al ascender no se pierden los espacios de almacén comprados.** *(Es la mitad (b)
       de **F88**, que está más arriba en "Features".)*
@@ -4732,4 +4788,9 @@ es la mitad (b) de **F88**, que ya estaba escrita más arriba; aquí va con su c
       Y **no hace falta subir `SAVE_VERSION`**: no se transforma ningún dato guardado, se deja
       de reiniciar uno, y en la carga se coacciona con `?? 15` como ya se hace. R8:
       la versión sube solo para lo irreversible.
+      **Y se mide el DESGLOSE y no solo el total**, porque la capacidad son dos sumandos de dos
+      sitios distintos y un total correcto puede estar hecho de dos mitades equivocadas: los
+      65 comprados siguen siendo comprados tras ascender, y los del nodo se van con el nodo.
+      `guardadoCheck` (bloque 4b), con la recarga incluida: lo que solo vive en memoria es un
+      bug (R28).
 

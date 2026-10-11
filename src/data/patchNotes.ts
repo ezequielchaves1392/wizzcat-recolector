@@ -57,6 +57,32 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.17.0',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Tres afijos nuevos y ningún afijo de mentira',
+    lineas: [
+      'Tres afijos nuevos: Precisión, Hambre y Filo.',
+      'Precisión es el primer crítico de los rareles, así que la escalera del crítico ya está completa de abajo arriba.',
+      'Hambre es el primer afijo de recolección por segundo de los legendarios, que antes saltaban de los épicos a los míticos.',
+      'Filo es un afijo de click puro de los legendarios: hasta ahora ese escalón solo tenía un crítico y uno de los dos.',
+      'Un compañero ya no puede llevar un afijo que no le sirva: Precisión es solo crítico y no se lo cobraba, así que podía salir en su ficha sin hacer nada.',
+      'Ningún afijo del juego hace ya nada fuera de donde dice que lo hace.'
+    ]
+  },
+  {
+    version: '1.16.2',
+    fecha: '10 de octubre de 2026',
+    titulo: 'Cajas a granel y el árbol a tu elección',
+    lineas: [
+      'Las Cajas T2 y T3 se compran ahora de varias en varias, igual que la T1 y el resto de la tienda.',
+      'Sus tarjetas enseñan cuántas tienes en el almacén, que antes no lo decían.',
+      'Al reciclar te preguntamos si conservas tu árbol de pasivos o prefieres que te devolvamos los núcleos que gastaste en él.',
+      'Viene marcado conservarlo, que es lo que pasaba siempre: es una opción, no un cambio obligatorio.',
+      'Los espacios de almacén que compraste con expansores ya no se pierden al reciclar.',
+      'Si devuelves el árbol, los espacios que te daban sus nodos se van con él: son del nodo.'
+    ]
+  },
+  {
     version: '1.16.1',
     fecha: '10 de octubre de 2026',
     titulo: 'Cada afijo tiene su propia magnitud',
