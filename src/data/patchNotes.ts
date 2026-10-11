@@ -57,7 +57,7 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
-    version: '1.16.0',
+    version: '1.16.1',
     fecha: '10 de octubre de 2026',
     titulo: 'Cada afijo tiene su propia magnitud',
     lineas: [
@@ -67,6 +67,7 @@ export const NOTAS: NotaDeParche[] = [
       'Los afijos de recolección por segundo ahora cumplen lo que dicen: antes prometían el bonus y no lo daban.',
       'En la forja, el valor de cada afijo se hereda de los materiales, así que elegir cuáles fusionas empieza a importar.',
       'Los afijos raros son mucho más difíciles de salir: los mejores ya no caen en cualquier item.',
+      'Un afijo nunca es de más rareza que la del item donde cae. En la forja sí puede: si lo traen los materiales, entra.',
       'Los recolectores que ya tenías reciben un valor al cargar la partida. No pierdes nada por ello.'
     ]
   },

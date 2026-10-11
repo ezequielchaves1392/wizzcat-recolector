@@ -1061,8 +1061,14 @@ function motivoDeExpansorAlTope(tipo: any, capacidad: number): string {
 }
 
 function esCartaEnLote(itemKey: string): boolean {
+  // LAS CAJAS NO VAN EN LA LISTA, VAN POR SU CLAVE. Mira el comentario de arriba:
+  // el `crateT1` literal era la segunda versión del mismo `endsWith('Crate')`, y
+  // fue exactamente lo que dejó a la T2 y a la T3 fuera del lote cuando F97 las
+  // puso a la venta. `tierDeCartaCaja()` ya responde "¿esta clave es una carta de
+  // caja que existe en la tienda?", que es la misma pregunta que se hacía la lista
+  // —y responde de diez en diez si algún día se venden más—.
   return itemKey === 'upgradeCrystal'
-    || itemKey === 'crateT1'
+    || tierDeCartaCaja(itemKey) !== null
     || !!CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
 }
 
@@ -1072,7 +1078,9 @@ function nombreDeUnidad(itemKey: string): string {
   // unidades, o sea 675). Llamar "cristal" a la unidad de compra hacía que el diálogo
   // dijera "2 × cristal", como si compraras dos cristales. Es un pack, y se llama pack.
   if (itemKey === 'upgradeCrystal') return 'pack';
-  if (itemKey === 'crateT1') return 'caja';
+  // Igual que arriba: sin la T2 y la T3 en la lista, el diálogo decía "elige cuántas
+  // **unidad**". Por tier, no por clave.
+  if (tierDeCartaCaja(itemKey) !== null) return 'caja';
   return 'unidad';
 }
 
@@ -6928,8 +6936,32 @@ function sePuedeGuardar(): boolean {
      * hacer `Object.assign` con un reset parcial: si mañana se añade un campo
      * al save, el reinicio lo limpia solo.
      */
-    prestige: () => {
+    /**
+     * EL ASCENSIÓN.
+     *
+     * K2 · ACEPTA SI SE CONSERVA EL ÁRBOL O SE DEVUELVEN LOS NÚCLEOS. Por
+     * defecto se conserva, que es lo único que ha hecho el juego hasta hoy: el
+     * checkbox de la página es quien decide, y un `prestige()` sin argumentos
+     * sigue comportándose exactamente como antes.
+     *
+     * **NO HAY EXPLOIT, Y LA RAZÓN NO ESTÁ AQUÍ SINO EN F70.** Lo que parecía
+     * peligroso es comprar `core_yield` justo antes de reciclar, cobrar el bonus
+     * sobre los núcleos y después quedarse además con la devolución. No funciona:
+     * `nextCores` solo bonifica `max(0, base − max(histórico, foto))`, o sea
+     * producción hecha **después** de comprar el nodo, y `buyNode` mueve la foto
+     * al instante. Comprar y reciclar a continuación da un bonus de cero.
+     *
+     * Tampoco sale rentable devolver y recomprar: quien devuelve paga el nodo en
+     * cada vuelta y quien lo conserva lo paga una vez, así que conservar es
+     * siempre la opción mejor a igualdad de juego. Devolver es deshacer una
+     * compra, no ganar una.
+     *
+     * @param opts.mantenerArbol `false` vacía el árbol y devuelve a la cartera lo
+     *        que costó. Cualquier otro valor, incluido no pasar nada, lo conserva.
+     */
+    prestige: (opts?: { mantenerArbol?: boolean }) => {
       handleUserActivity();
+      const mantenerArbol = opts?.mantenerArbol !== false;
       const gained = nextCores({
         totalNanitesProduced: state.totalNanitesProduced,
         totalCores: state.totalCores,
@@ -6959,7 +6991,13 @@ function sePuedeGuardar(): boolean {
 
       const keptForged = state.forgedCount;
       const keptAchievements = [...state.unlockedAchievements];
-      const keptCores = state.cores + gained;
+      // K2 · SE LEE ANTES DEL `Object.assign`, QUE ES EL ÚNICO MOMENTO EN QUE
+      // `state.nodeLevels` todavía está lleno. Y se usa **la misma función** que
+      // la migración de F97 (`coresGastadosEnArbol`), que suma nivel a nivel con
+      // `nodeCost`: los costes no cambian, así que la devolución es exacta y no
+      // hay una segunda tabla de precios que pueda quedarse vieja.
+      const devuelto = mantenerArbol ? 0 : coresGastadosEnArbol(state.nodeLevels);
+      const keptCores = state.cores + gained + devuelto;
       // `totalCores` es el HISTÓRICO de núcleos ganados, y tiene que incluir los
       // que se acaban de ganar. `nextCores` lo resta del total que la producción
       // actual justifica (`pendingCores`), así que si aquí no se sumaran, el
@@ -6968,7 +7006,10 @@ function sePuedeGuardar(): boolean {
       // del prestigio nunca avanzaría de 0.
       const keptTotalCores = state.totalCores + gained;
       const keptResets = state.resets + 1;
-      const keptNodes = { ...state.nodeLevels };
+      // K2 · EL ÁRBOL SE CONSERVA O SE VACÍA, SEGÚN LA ELECCIÓN. Vaciarlo aquí y
+      // no en el `Object.assign` es a propósito: el `assign` escribe lo que se
+      // conserva, y esta es una de las dos ramas posibles de una sola decisión.
+      const keptNodes = mantenerArbol ? { ...state.nodeLevels } : {};
       const keptCosmetics = { ...state.cosmetics, unlocked: [...state.cosmetics.unlocked] };
 
       /**
@@ -7013,6 +7054,25 @@ function sePuedeGuardar(): boolean {
       const keptClicks = state.totalClicks;
       const keptCratesOpened = state.cratesOpened;
       const keptCompanionSlots = state.maxCompanionSlots;
+      // K3 · LOS ESPACIOS DE ALMACÉN COMPRADOS TAMBIÉN SE CONSERVAN.
+      //
+      // `warehouseCapacity` era lo único de la tabla que seguía volviendo a 15,
+      // y **la capacidad entera vive en ese número**: no hay campo de "expansores
+      // comprados" que reconstruir, porque el expansor se consume y su efecto es
+      // subir ese número. Reiniciarlo a 15 era cobrar por algo que el siguiente
+      // Ascensión se llevaba, que es exactamente el argumento con el que ya se
+      // arregló `maxCompanionSlots` de arriba.
+      //
+      // **LO QUE NO SE CONSERVA AQUÍ ES LA PARTE DEL ÁRBOL** (`bonus.storageSlots`,
+      // de los nodos `storage_rack` y compañía): esa vive en `nodeLevels` y se
+      // comporta como todo lo del árbol. Y no puede recontarse ni fijarse un
+      // techo: `recomputeBonuses()` de abajo la recalcula desde los nodos.
+      //
+      // **TAMPOCO HACE FALTA SUBIR `SAVE_VERSION`**, que es la pregunta de R8:
+      // no se transforma ningún dato guardado, se deja de reiniciar uno, y una
+      // partida vieja que traiga 40 sigue traendo 40. Lo irreversible es lo que
+      // borra o reescribe datos, no esto.
+      const keptWarehouseCapacity = state.warehouseCapacity;
 
       // Reinicio total
       Object.assign(state, {
@@ -7036,7 +7096,9 @@ function sePuedeGuardar(): boolean {
         // contador de una partida nueva ponía 5 y el almacén podía bringir lo que
         // hubiera sobrevivido.
         crystals: 5,
-        warehouseCapacity: 15,
+        // K3 · No vuelve al kit de partida: son ranuras compradas con expansores,
+        // y se conservan igual que las de compañero. Ver `keptWarehouseCapacity`.
+        warehouseCapacity: keptWarehouseCapacity,
         maxCompanionSlots: keptCompanionSlots,
         afkCards: 0,
         afkExpiresAt: 0,
@@ -7104,7 +7166,14 @@ function sePuedeGuardar(): boolean {
       checkAchievements();
       onUpdate(state, isAfk);
       saveToFirebase();
-      return { success: true, gained, msg: `+${gained} núcleos` };
+      // K2 · EL MENSAJE DICE LAS DOS COSAS QUE SE ACABAN DE HACER. Un "+8 núcleos"
+      // sin más, en la rama de devolución, es mentir por omisión: el jugador acaba
+      // de recuperar todo lo que había gastado en el árbol y no se entera hasta
+      // que mira la cartera.
+      const msg = devuelto > 0
+        ? `+${gained} núcleos, y +${devuelto} devueltos del árbol`
+        : `+${gained} núcleos`;
+      return { success: true, gained, devuelto, msg };
     },
 
     /** Compra un nivel de un nodo del árbol. */
@@ -7799,11 +7868,14 @@ function sePuedeGuardar(): boolean {
       if (RANURA_POR_CARTA[itemKey]) return null;
 
       const def = CONSUMABLES[itemKey as keyof typeof CONSUMABLES];
-      if (itemKey === 'crateT1') {
+      // Por TIER, no por clave: la T2 y la T3 estaban fuera porque la condición
+      // nombraba solo a `crateT1`, y sus tarjetas no enseñaban "En almacén: N".
+      const tierCaja = tierDeCartaCaja(itemKey);
+      if (tierCaja !== null) {
         // La caja se cuenta por su nombre: el `crateType` no vive en el item, el
         // tipo se deduce del nombre (`getCrateTypeFromName`), que es lo mismo que
         // hace el abridor. Contar por `type === 'crate'` sumaría las diez cajas.
-        return countCratesInWarehouse()[1];
+        return countCratesInWarehouse()[tierCaja as CrateType] ?? 0;
       }
       if (def) {
         // La tarjeta AFK tiene su propio contador derivado (`state.afkCards`, que

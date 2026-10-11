@@ -2592,7 +2592,16 @@ function pickAffixes(
   // vez —código que existe, función que existe, prueba que mide la función— y
   // por eso el banco tiene que mirar **la distribución real que sale**, no el
   // peso de la función.
-  const restantes = pool.filter(a => !usados.has(a.id));
+  // **EL TECHO VA AQUÍ Y NO EN EL PASO DE ARRIBA.** Todo lo que viene del paso 1 es
+  // herencia: lo que traían los padres, que pasa siempre aunque no quepa en la
+  // rareza del resultado, porque forjar da calidad. Este es el único sorteo por
+  // azar, y es el único que se recorta.
+  //
+  // Y va **antes** de sortear y no después: si se filtrara la lista ya hecha, un
+  // afijo descartado dejaría un hueco sin rellenar y el item saldría con menos
+  // afijos de los que dice su rareza. Recortando el pool, el sorteo entrega
+  // siempre la cantidad pedida.
+  const restantes = pool.filter(a => !usados.has(a.id) && cabePorRareza(rarity, a.rarity));
   while (picked.length < objetivo && restantes.length > 0) {
     const weights = restantes.map(a => pesoDeAfijo(a.rarity));
     const total = weights.reduce((a, b) => a + b, 0);
@@ -2610,19 +2619,69 @@ function pickAffixes(
 }
 
 /**
- * Sorteo ponderado del catálogo, sin repetir y saltando los excluidos.
+ * LOS ESCALONES DE RAREZA, Y EL TECHO DE LO QUE UN ITEM PUEDE SACAR POR AZAR.
  *
- * Es el paso 2 de la mezcla de la forja sacado a función: los tres que sortean
- * afijos —la forja no, que hereda primero— tiran de aquí para no tener tres
- * dados con tres pesos. Los raros pesan menos, como siempre.
+ * La regla: **un item nunca sortea por azar un afijo más de UN escalón por encima
+ * de su propia rareza.** Un Raro no saca un Mítico por azar; un Divino sí puede
+ * sacar otro Divino.
+ *
+ * **POR QUÉ UN ESCALÓN Y NO CERO.** Es lo que evita que el catálogo se vacíe
+ * abajo. Un Raro lleva 1 afijo, y si su techo fuese "solo Raros", un Raro solo
+ * podría tener Raros y no habría ninguna expectativa —el afijo bueno existiría
+ * pero no podría tocar al item que empieza a existir—. Con un escalón, un Raro
+ * puede coger un Épico contado y un Épico un Legendario, y el salto se nota sin
+ * que nada quede inaccesible. Un Común no lleva afijos, así que no se queda sin
+ * pool en ningún escalón de los que existen.
+ *
+ * **LO QUE NO TOCA: LA HERENCIA.** El techo gobierna **el sorteo**, nunca lo que
+ * traen los padres. Dos materiales con un Vacío Devorador lo pasan al resultado
+ * aunque el resultado sea un Raro, porque **forjar siempre da calidad** y
+ * recortar la herencia sería castigar justo lo que la forja premia. Por eso el
+ * techo se aplica dentro de `sorteaAfijos()` —que es el sorteo del catálogo— y
+ * no como filtro después de `pickAffixes()`, que ya mezcló las dos cosas.
+ *
+ * **POR QUÉ NO SE FILTRA DESPUÉS, QUE ES LO QUE SE INTENTÓ DOS VECES.** Un filtro
+ * posterior sobre la lista ya sorteada tiene tres fallos y ninguno se ve: puede
+ * devolver **menos afijos de los que pide la rareza** —y "un Mítico lleva 4" se
+ * convierte en mentira—, y si la lista queda corta no hay dónde reponerla. La
+ * segunda versión "arreglaba" eso re-sorteando con `pickAffixes(...)[0]`, que
+ * regenera la lista **entera** y podía devolver un afijo **ya presente** —
+ * duplicados en el item—. Filtrando el pool antes de sortear no hay ninguno de
+ * los dos: el sorteo siempre entrega la cantidad que se le pidió, porque el pool
+ * entra ya recortado.
+ */
+const ESCALON_DE_RAREZA: Record<string, number> = {
+  'Común': 0, 'Raro': 1, 'Épico': 2, 'Legendario': 3, 'Mítico': 4, 'Divino': 5
+};
+
+/** Si un afijo de esa rareza puede salir por azar en un item de esta. */
+export function cabePorRareza(rarezaItem: string, rarezaAfijo: string): boolean {
+  const item = ESCALON_DE_RAREZA[rarezaItem];
+  const afijo = ESCALON_DE_RAREZA[rarezaAfijo];
+  // Una rareza que ninguno de los dos conoce no recorta nada: no se inventa una
+  // regla para un dato que no se sabe leer, se deja pasar.
+  if (item === undefined || afijo === undefined) return true;
+  return afijo <= item + 1;
+}
+
+/**
+ * Sorteo ponderado del catálogo, sin repetir, saltando los excluidos y **sin
+ * pasar del techo de rareza**.
+ *
+ * `rarezaItem` es el techo y es **opcional a propósito**: sin él la función
+ * sortea de todo el pool, que es lo que necesitan los llamadores que no tienen
+ * un item detrás —la simulación de la wiki, que no está dentro de una partida—.
  */
 function sorteaAfijos(
   cantidad: number,
   excluidos: string[],
   rng: () => number = Math.random,
-  pool: Affix[] = AFFIXES
+  pool: Affix[] = AFFIXES,
+  rarezaItem?: string | null
 ): string[] {
-  const restantes = pool.filter(a => !excluidos.includes(a.id));
+  const restantes = pool.filter(a =>
+    !excluidos.includes(a.id)
+    && (rarezaItem == null || cabePorRareza(rarezaItem, a.rarity)));
   const picked: string[] = [];
   while (picked.length < cantidad && restantes.length > 0) {
     // **MISMO PESO, MISMO MOTIVO QUE ARRIBA:** esta aritmética contra
@@ -2660,7 +2719,9 @@ export function afijosParaRareza(
   const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));
   if (tope <= 0) return [];
   // Sin semilla ni orden: cada llamante tira su propio dado, como `rollPotentialFrom()`.
-  return sorteaAfijos(tope, [], rng);
+  // El techo se lo pasa **la rareza del propio item**: es un T4 (Raro) y no
+  // puede salir con un Mítico aunque el dado lo pidiera.
+  return sorteaAfijos(tope, [], rng, AFFIXES, rarity);
 }
 
 /**
@@ -2703,7 +2764,11 @@ export function migraAfijosPorRareza(
     let lista = conocidos ?? [];
     // Relleno con lo que no esté ya, con el mismo sorteo de arriba.
     if (lista.length < tope) {
-      lista = [...lista, ...sorteaAfijos(tope - lista.length, lista, rng)];
+      // El relleno de la migración **también va con techo**, y es la razón por la
+      // que el techo importa en los items viejos: sin él, cada carga rellena los
+      // huecos con lo que salga del catálogo entero, y un Raro de hace tres meses
+      // acabaría con un Mítico que nunca pudo tocar la regla.
+      lista = [...lista, ...sorteaAfijos(tope - lista.length, lista, rng, AFFIXES, w.rarity)];
     } else if (lista.length > tope) {
       lista = lista.slice(0, tope);
     }
@@ -2787,7 +2852,7 @@ export function afijosParaCompanero(
   const objetivo = AFIX_MIN_POR_RARIDAD[rarity] ?? 0;
   const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));
   if (tope <= 0) return [];
-  return sorteaAfijos(tope, [], rng, POOL_AFIJOS_COMPANERO);
+  return sorteaAfijos(tope, [], rng, POOL_AFIJOS_COMPANERO, rarity);
 }
 
 /**
@@ -2885,7 +2950,7 @@ export function migraAfijosDeCompaneros(
       : [];
     let lista = conocidos;
     if (lista.length < tope) {
-      lista = [...lista, ...sorteaAfijos(tope - lista.length, lista, rng, pool)];
+      lista = [...lista, ...sorteaAfijos(tope - lista.length, lista, rng, pool, (f as any).rarity)];
     } else if (lista.length > tope) {
       lista = lista.slice(0, tope);
     }

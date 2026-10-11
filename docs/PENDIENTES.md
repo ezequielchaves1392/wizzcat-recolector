@@ -2111,8 +2111,8 @@ más alto": los estás haciendo tú.*
 - [ ] **F88 · Expansores más caros, y los espacios persisten en el prestigio.**
       > "Aumentar el precio de los expansores de almacen, enseguida el jugador puede llegar al máximo. (Al hacer prestigio se deben mantener los espacios que haya comprado anteriormente el jugador)"
       Dos mitades: (a) la curva de precio, contra F66 (cuatro tramos hasta 240);
-      (b) el prestigio conserva los espacios comprados, que hoy vuelve a 15 y
-      reescribe F41. Con banco que acabe en `reload()`.
+      **(b) HECHA — ver K3**, en "Lote K", al pie de este fichero: el prestigio
+      ya no reinicia `warehouseCapacity`. Con banco.
 - [ ] **F89 · Rareza y afijos en las cards de ítems.**
       > "Que aparezca la rareza y los afijos en las cards de ítems: en almacen, en forja, en forja automática, en apertura de cajas"
       Los cuatro sitios leen el mismo `item`, solo falta pintarlo. Continúa
@@ -4606,15 +4606,8 @@ de núcleos va en el parche grande y es una sola vez.*
   verdad y no sobre la función pura — porque la función andaba bien mientras el item
   forjado nacía con `affixVals: {}` y todos sus afijos a 1.
 
-**Lo que NO está hecho, y hay que decidir antes de empezarlo:**
+**Lo que queda sin hacer:**
 
-- [ ] **F98 · El techo por rareza en el sorteo.** Que un Épico no pueda sacar un Divino por
-  azar. Se intentó dos veces y **las dos quedaron mal**: la primera en un filtro *después* del
-  sorteo que construía una lista y no se usaba —código muerto, no restringía nada—, y la
-  segunda con un reemplazo que llamaba a `pickAffixes(...)[0]` hasta cien veces, que regenera
-  la lista entera y podía **duplicar afijos** en el item. Lo natural es hacerlo dentro de
-  `sorteaAfijos()`, filtrando el pool, y **sin tocar la herencia**: los afijos de los padres
-  tienen que poder pasar el techo, porque forjar siempre da calidad.
 - [ ] **F99 · Los afijos nuevos y los pools separados.** Lo que pidió el jugador de "los
   recolectores deben tener afijos distintos a los compañeros". Hoy solo hay un filtro: los
   compañeros no reciben los de crítico, porque no critican. Lo demás es el mismo catálogo.
@@ -4629,6 +4622,24 @@ de núcleos va en el parche grande y es una sola vez.*
   14 % entre el peor y el mejor. Un item viejo sin `affixVals` se valúa por catálogo y no
   revienta. Cubierto por seis filas de `afijoValorCheck` que miran el **`sellPrice()` final**, no
   el multiplicador — porque un multiplicador correcto al que nada lo llama también pasa.
+
+- [x] **F98 · El techo por rareza en el sorteo.** Un item nunca saca por azar un afijo más
+  de un escalón por encima de su rareza. Un Raro puede coger un Épico contado; un Épico no
+  toca un Mítico. **La herencia lo ignora**: dos materiales con un Vacío lo pasan igual,
+  porque forjar siempre da calidad y recortar la herencia sería castigar justo lo que la
+  forja premia.
+  - **Los dos intentos anteriores fallaron por lo mismo: el filtro iba DESPUÉS del
+    sorteo.** La primera versión construía una lista filtrada y no la usaba —código muerto,
+    no restringía nada—. La segunda "arreglaba" los huecos que dejaba re-sorteando con
+    `pickAffixes(...)[0]`, que regenera la lista **entera** y podía devolver un afijo **ya
+    presente**: duplicados en el item. Los dos fallos eran invisibles porque no había prueba.
+  - **Ahora el techo va dentro de `sorteaAfijos()`, recortando el pool antes de tirar.** Por
+    eso es imposible que falte un afijo: el sorteo entrega siempre la cantidad que se le
+    pidió. Medido con 1.000 tiradas por rareza: **0 afijos fuera de escala**, siempre la
+    cantidad correcta, **0 duplicados**, y en 300 forjas con dos Vacíos, ninguno repetido.
+  - Y el techo se le pasa también a los rellenos de las **dos migraciones**: sin eso, cada
+    carga rellenaba los huecos de los items viejos con lo que saliera del catálogo entero,
+    y un Raro de hace tres meses acababa con un Mítico que la regla nunca permitió tocar.
 
 **Y una nota de método, que es lo que más costó de este lote, y que aplica a los cuatro.**
 
@@ -4659,4 +4670,66 @@ la función.
 
 La regla que queda para lo que venga: *una prueba que solo puede pasar si el resultado existe en
 el juego, no una que pasa si la función está bien escrita.*
+
+### Lote K · ENCARGO DEL 10 DE OCTUBRE (multicompra de cajas y el Ascensión)
+
+*Las tres son del jugador y están escritas aquí antes de tocarlas, que es el protocolo. La tercera
+es la mitad (b) de **F88**, que ya estaba escrita más arriba; aquí va con su causa raíz.*
+
+- [ ] **K1 · Multicompra de las cajas T2 y T3, como el resto de los items.**
+      > "Compra de cajas 2 y 3 por mayor, habilitar la funcion multicompra como el resto de los items"
+      **No es un camino de compra distinto: las tres cajas pasan por `buyStoreItem` igual que
+      todo.** Lo que frena a la T2 y a la T3 es una **lista blanca escrita a mano**,
+      `esCartaEnLote()`, que solo contiene `crateT1`. De ahí sale todo lo demás:
+      `unidadesCompra()` devuelve 1 para T2 y T3, y `getBulkMax()` devuelve 1, con lo que la
+      vista ve `max <= 1` y compra directo **sin preguntar cuántas**.
+      **Y el propio comentario de encima avisa de este fallo exacto.** Antes la condición era
+      `itemKey.endsWith('Crate')` —el nombre de la carta antes de F31— y con una caja por tier
+      la carta pasó a llamarse `crateT1`: el `if` dejó de cumplirse **en silencio**, sin error
+      ni aviso. La corrección metió `crateT1` **a literal**, y F97 añadió después `crateT2` y
+      `crateT3` a la tienda sin añadirlas a la lista. Son dos maneras de cometer el mismo bug:
+      un patrón que depende del nombre, y una lista que alguien tiene que acordarse de mantener.
+      **Lo que hay que cambiar no es añadir dos literales: es que la regla deje de ser una lista.**
+      El motor ya soporta el lote de T2 y T3 sin tocar nada más (`tierDeCartaCaja()`,
+      `createCrateItem(tier, n)` y `cabeLaCompra()` son genéricos por `type: 'crate'`), así que
+      la compra en lote funciona de serie: solo estaba apagada.
+      De paso, dos sitios que tratan la caja como si fuera una sola:
+      `nombreDeUnidad()` diría "elige cuántas **unidad**" para T2 y T3, y `getOwnedCount()`
+      solo cuenta `crateT1`, así que esas dos tarjetas no enseñan "En almacén: N".
+      `loteCheck` / `buyCheck`: ninguna prueba comprueba hoy un lote de T2 o T3 —solo de T1,
+      que es justo lo que hacía que esto pasara inadvertido.
+
+- [ ] **K2 · El Ascensión pregunta si conservas el árbol o te devuelven los núcleos.**
+      > "Al ascender un checkbox pregunta si quiere resetear todo o mantener la build actual"
+      Aclarado con el jugador: **"la build" es el árbol de pasivos ya pagado**, y la alternativa
+      es **devolver los núcleos gastados** para empezarlo de nuevo. No es el inventario ni el
+      equipo: el Ascensión reconstruye la partida nueva igual que antes.
+      **Hoy el árbol se conserva siempre y sin preguntar**, que es la mitad de una decisión
+      tomada por el jugador sin que conste en ninguna parte. La confirmación ya existe
+      (`showConfirmModal` en la página de prestigio) pero **no tiene checkbox**, y el
+      `showConfirmModal` ya acepta un **nodo DOM** como mensaje, que es por donde entra el check.
+      La devolución tiene su función ya escrita y probada: `coresGastadosEnArbol()`, la misma
+      que usa la migración de F97, que es exacta porque la suma nivel a nivel con `nodeCost`.
+      **Y no hay exploit, y por eso se puede hacer de una vez:** los núcleos de un Ascensión son
+      `nextCores(totalNanitesProduced, totalCores)`, y `totalCores` es el **histórico de lo
+      ganado**, no la cartera. Gastar en el árbol no lo baja, así que devolver la cartera no
+      aumenta lo que da el siguiente Ascensión.
+      Ojo con la lista "Se pierde / Se conserva" pintada a mano en la página de prestigio: es
+      R3, el texto tiene que decir lo que el motor hace, y con esta opción deja de ser una
+      lista fija.
+
+- [x] **K3 · Al ascender no se pierden los espacios de almacén comprados.** *(Es la mitad (b)
+      de **F88**, que está más arriba en "Features".)*
+      > "Al ascender no se pierden los espacios de almacen"
+      **Causa raíz: `prestige()` escribe `warehouseCapacity: 15`**, que es el kit de partida
+      nueva, y la capacidad del almacén vive **entera** en ese único número: no hay campo de
+      "expansores comprados" que reconstruir. Reiniciarlo a 15 era **cobrar por algo que el
+      siguiente Ascensión se llevaba**, que es exactamente el argumento con el que ya se
+      arregló `maxCompanionSlots` en su momento —y **ese es el precedente**: son ranuras
+      compradas con recurso consumible, no ganadas por jugar.
+      **Lo que NO se toca es la parte del árbol** (`bonus.storageSlots`, que dan los nodos):
+      esa vive en `nodeLevels` y se comporta como todo lo del árbol, que es lo que decide K2.
+      Y **no hace falta subir `SAVE_VERSION`**: no se transforma ningún dato guardado, se deja
+      de reiniciar uno, y en la carga se coacciona con `?? 15` como ya se hace. R8:
+      la versión sube solo para lo irreversible.
 

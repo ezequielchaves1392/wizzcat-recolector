@@ -22,6 +22,7 @@
 import { boot, reload, check, resumen, baseSave, guardado, s } from './kit';
 import { computeScore } from '../src/services/rankingService';
 import { CLAVE_MODO_PRUEBAS } from '../src/gameLoop';
+import { coresGastadosEnArbol } from '../src/data/tree';
 
 /**
  * lush() NO espera al setDoc -es una promesa suelta-, as� que hay que dar un
@@ -200,6 +201,170 @@ async function main() {
     check('historico: y el guardado tamben las lleva',
       (globalThis as any).__MEM_DB__['users/test'].maxCompanionSlots === 4,
       `guardado=${(globalThis as any).__MEM_DB__['users/test'].maxCompanionSlots}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  4b · K3 · LOS ESPACIOS DE ALMACÉN COMPRADOS TAMBIÉN SE CONSERVAN
+  // -------------------------------------------------------------------------
+  //  Es la misma regla que la 4 de arriba y el mismo fallo: `warehouseCapacity`
+  //  se cobraba con expansores —que son items consumibles— y el Ascenso lo
+  //  devolvía a 15, o sea que el jugador pagaba dos veces.
+  //
+  //  **POR QUÉ SE MIDE EL DESGLOSE Y NO SOLO EL TOTAL.** La capacidad son dos
+  //  sumandos de dos sitios distintos: el expansor sube `warehouseCapacity` y el
+  //  árbol sube `bonus.storageSlots`. Un total correcto puede estar hecho de dos
+  //  mitades equivocadas, y aquí es exactamente lo que hay que separar: lo
+  //  comprado tiene que sobrevivir y lo del árbol tiene que irse con el árbol
+  //  (que es lo que decide K2 en 4c).
+  {
+    const g = await boot(baseSave([], {
+      nanites: 60_000_000,
+      totalNanitesProduced: 900_000_000,
+      warehouseCapacity: 65
+    }));
+    const antes = g.getCapacityBreakdown();
+    check('K3: los 65 espacios comprados se ven ANTES de ascender',
+      antes.delExpansor === 65, JSON.stringify(antes));
+    g.prestige();
+    const e = g.getState() as any;
+    check('K3: y siguen estando 65 DESPUÉS de ascender',
+      e.warehouseCapacity === 65, `tras=${e.warehouseCapacity}`);
+    check('K3: y el desglose los sigue contando como comprados',
+      g.getCapacityBreakdown().delExpansor === 65,
+      JSON.stringify(g.getCapacityBreakdown()));
+    check('K3: y el total no baja al kit de partida (15 + nada)',
+      g.getCapacityBreakdown().total >= 65,
+      `total=${g.getCapacityBreakdown().total}`);
+
+    // **Y SOBREVIVE A LA RECARGA.** Un número que solo vive en memoria es un
+    // bug (R28): lo que no se escribe no se guarda.
+    const g2 = await reload();
+    check('K3: y la recarga los trae igual',
+      (g2.getState() as any).warehouseCapacity === 65
+        && g2.getCapacityBreakdown().delExpansor === 65,
+      `recarga=${(g2.getState() as any).warehouseCapacity}`);
+  }
+
+  // -------------------------------------------------------------------------
+  //  4c · K2 · EL ÁRBOL SE CONSERVA O SE DEVUELVE, Y LA ELECCIÓN ES DEL JUGADOR
+  // -------------------------------------------------------------------------
+  //  Antes el árbol se conservaba **siempre y sin preguntar**: la mitad de una
+  //  decisión que solo existía en el motor. Ahora `prestige()` acepta la
+  //  elección, y **por defecto sigue conservando**, que es lo que hacía antes:
+  //  un `prestige()` sin argumentos no puede cambiarle la partida a nadie.
+  {
+    const nodos = { scrapyard: 1, storage_rack: 1 };
+    const gastados = coresGastadosEnArbol(nodos);
+
+    // (a) SIN ARGUMENTOS: se conserva, como siempre.
+    const g = await boot(baseSave([], {
+      nanites: 60_000_000,
+      totalNanitesProduced: 900_000_000,
+      nodeLevels: { ...nodos }
+    }));
+    check('K2: el árbol de partida tiene algo comprado y eso cuesta núcleos',
+      gastados > 0, `gastados=${gastados}`);
+    g.prestige();
+    check('K2: sin decir nada, el árbol se conserva (como siempre)',
+      Object.keys((g.getState() as any).nodeLevels ?? {}).length === 2,
+      JSON.stringify((g.getState() as any).nodeLevels));
+
+    // (b) PIDIENDO LA DEVOLUCIÓN: se vacía y se devuelve EXACTAMENTE lo que costó.
+    const g2 = await boot(baseSave([], {
+      nanites: 60_000_000,
+      totalNanitesProduced: 900_000_000,
+      cores: 0,
+      nodeLevels: { ...nodos }
+    }));
+    const totalAntes = (g2.getState() as any).totalCores;
+    const carteraAntes = (g2.getState() as any).cores;
+    const res = g2.prestige({ mantenerArbol: false }) as any;
+    const e = g2.getState() as any;
+
+    check('K2: la devolución importa lo mismo que costó el árbol',
+      res.devuelto === gastados, `devuelto=${res.devuelto} costaba=${gastados}`);
+    check('K2: el árbol queda vacío',
+      Object.keys(e.nodeLevels ?? {}).length === 0 && (e.unlockedNodes ?? []).length === 0,
+      `nodos=${JSON.stringify(e.nodeLevels)} unlocked=${JSON.stringify(e.unlockedNodes)}`);
+    check('K2: la cartera recibe el núcleo ganado MÁS la devolución',
+      e.cores === carteraAntes + res.gained + res.devuelto,
+      `cartera=${e.cores} antes=${carteraAntes} gained=${res.gained} devuelto=${res.devuelto}`);
+
+    // **LO QUE NO PUEDE PASAR: QUE EL ÁRBOL SEA UN PRÉSTAMO QUE SE COBRA DOS
+    // VECES.** `totalCores` es el HISTÓRICO de lo ganado, y la devolución no es
+    // ganancia: es devolver lo que se gastó. Contarla ahí haría que el histórico
+    // subiera y el siguiente Ascensión exigiera producir más, o sea que devolver
+    // el árbol saldría más caro que no devolverlo.
+    check('K2: la devolución NO entra en el histórico de núcleos',
+      e.totalCores === totalAntes + res.gained,
+      `totalCores=${e.totalCores} antes=${totalAntes} gained=${res.gained}`);
+    check('K2: el mensaje del motor dice las dos cosas',
+      res.msg.includes(`${res.gained}`) && res.msg.includes(`${res.devuelto}`),
+      `msg=${res.msg}`);
+
+    // (c) LO QUE SE DECIDE EN EL ÁRBOL SE VA CON EL ÁRBOL. `storage_rack` da
+    // espacios, y esos son del nodo: no se pueden quedar en el almacén si el
+    // nodo se devuelve, o re-comprarlo los duplicaría.
+    const g3 = await boot(baseSave([], {
+      nanites: 60_000_000,
+      totalNanitesProduced: 900_000_000,
+      warehouseCapacity: 65,
+      nodeLevels: { storage_rack: 1 }
+    }));
+    const arbolAntes = g3.getCapacityBreakdown().delArbol;
+    check('K2: el nodo de almacén aporta sus espacios antes de ascender',
+      arbolAntes > 0, `delArbol=${arbolAntes}`);
+    g3.prestige({ mantenerArbol: false });
+    const desglose = g3.getCapacityBreakdown();
+    check('K2: devolver el árbol se lleva SUS espacios, no los comprados',
+      desglose.delArbol === 0 && desglose.delExpansor === 65,
+      JSON.stringify(desglose));
+    check('K2: y los comprados siguen ahí, que es K3',
+      (g3.getState() as any).warehouseCapacity === 65,
+      `warehouseCapacity=${(g3.getState() as any).warehouseCapacity}`);
+
+    // **Y SOBREVIVE A LA RECARGA**: lo que solo vive en memoria es un bug (R28).
+    const g4 = await reload();
+    check('K2: el árbol devuelto sigue vacío al recargar',
+      Object.keys((g4.getState() as any).nodeLevels ?? {}).length === 0,
+      JSON.stringify((g4.getState() as any).nodeLevels));
+
+    // (d) **NO HAY EXPLOIT, Y ESTA ES LA PRUEBA QUE LO ATA.** Lo que podría
+    // salir gratis es esto: comprar "Rendimiento del Núcleo" —que da +10 % de
+    // núcleos por reinicio— justo antes de reciclar, cobrar el bonus y quedarse
+    // además con la devolución del nodo. No funciona porque F70 solo bonifica
+    // producción hecha **después** de comprarlo, y `buyNode` mueve la foto al
+    // instante. Las dos partidas de abajo son idénticas salvo por el nodo, y
+    // tienen que dar los MISMOS núcleos.
+    //
+    // Sin esta fila el argumento es un comentario, y un comentario no fija nada.
+    // **SE LLEGA A COMPRARLO DE VERDAD, Y ESO TAMBIÉN ES UNA PRUEBA.** Los nodos
+    // de nivel 3 del árbol piden 6 puntos en Fortuna, y el primer camino daba 5:
+    // la fila pasaba en verde **sin que el nodo se hubiera comprado nunca**, o
+    // sea que comparaba dos partidas idénticas. Un exploit que no se puede
+    // reproducir no está descartado, está sin probar. El camino tiene que pasar
+    // por `licencia_t2`, que es el tercer nodo de nivel 2 y el que lleva a 6.
+    const camino = ['scrapyard', 'refinery', 'storage_rack', 'bulk_buy', 'crate_sight', 'licencia_t2', 'core_yield'];
+    const a = await boot(baseSave([], { nanites: 60_000_000, totalNanitesProduced: 900_000_000, cores: 5000 }));
+    const b = await boot(baseSave([], { nanites: 60_000_000, totalNanitesProduced: 900_000_000, cores: 5000 }));
+    let comprado = 0;
+    let fallo = '';
+    for (const id of camino) {
+      const r = a.buyNode(id) as any;
+      if (r.success) comprado++;
+      else if (!fallo) fallo = `${id}: ${r.msg ?? ''}`;
+    }
+    check('K2: la partida de control llegó a comprar el nodo de bonus',
+      comprado === camino.length, `comprados=${comprado}/${camino.length} · ${fallo}`);
+    // Y además el bonus está ACTIVO, no solo comprado: es lo que hace que la
+    // comparación de abajo signifique algo.
+    check('K2: y el bonus de núcleos está activo justo antes de reciclar',
+      (a.getState() as any).bonus.coreGain > 0,
+      `coreGain=${(a.getState() as any).bonus.coreGain}`);
+    const conBonus = (a.prestige({ mantenerArbol: false }) as any).gained;
+    const sinBonus = (b.prestige({ mantenerArbol: false }) as any).gained;
+    check('K2: comprar el bonus justo antes de reciclar NO infla los núcleos',
+      conBonus === sinBonus, `con nodo=${conBonus} sin nodo=${sinBonus}`);
   }
 
   // -------------------------------------------------------------------------

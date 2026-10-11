@@ -19,7 +19,7 @@
 
 import { ic, icSafe } from './icons';
 import { pageShell, mountInto, wireNav, statStrip } from './pageShell';
-import { TREE_NODES, TREE_BY_ID, nodeCost, TREE_CATEGORY_META, COLUMNA_META } from '../data/tree';
+import { TREE_NODES, TREE_BY_ID, nodeCost, coresGastadosEnArbol, TREE_CATEGORY_META, COLUMNA_META } from '../data/tree';
 import { canBuyNode, nextCores, coreProgress, nanitesToNextCore, treeCompletion, puntosEnRama, UMBRAL_PUNTOS_RAMA } from '../data/prestige';
 import { formatNumber } from '../utils/format';
 import { bonusLabel } from './bonusLabels';
@@ -198,6 +198,13 @@ export function renderPrestigePage(
         </div>`;
       })()}
 
+      <!--
+        R3 · ESTA LISTA ES UNA PROMESA, Y CON K2 Y K3 DEJÓ DE SER FIJA.
+        K2: el árbol se conserva **porque lo decides en el diálogo**, así que no
+        se promete ni se amenaza con él, se dice lo que pasa en cada rama. K3: los
+        espacios de almacén ya no se pierden, y si se sigue diciendo lo contrario
+        el jugador los vende antes de ascender por un texto que ya no es cierto.
+      -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3 text-[10px]">
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">
           <div class="label-caps mb-1" style="color:#f87171">Se pierde</div>
@@ -210,9 +217,10 @@ export function renderPrestigePage(
         <div class="rounded-xl border border-[var(--border-color)] p-2.5">
           <div class="label-caps mb-1" style="color:#4ade80">Se conserva</div>
           <ul class="space-y-0.5 text-[var(--text-muted)] leading-snug">
-            <li>Núcleos, nodos del árbol y cosméticos</li>
-            <li>Logros y sus bonificaciones</li>
+            <li>Núcleos, logros y cosméticos</li>
             <li>Los recolectores que ya forjaste</li>
+            <li>Los espacios de almacén que compraste</li>
+            <li>Tu árbol de pasivos, si no prefieres devolverlo</li>
           </ul>
         </div>
       </div>
@@ -477,10 +485,58 @@ function wireEvents(root: HTMLElement, game: any, state: any, go?: (r: any) => v
       baseAlComprar: state.baseAlComprar
     });
     if (gained <= 0) return;
+
+    // K2 · EL CHECKBOX QUE PREGUNTA SI CONSERVAS EL ÁRBOL.
+    //
+    // Va como NODO dentro del modal porque `showConfirmModal` ya acepta
+    // `string | Node`, que es la vía que se abrió para la hoja de nodo. El
+    // `onConfirm` lee `checked` de la referencia del closure: el modal quita el
+    // nodo del overlay al cerrarse, pero la variable sigue viva y la propiedad
+    // también, así que no hace falta guardar nada en el estado.
+    //
+    // **NO SE PINTA SI EL ÁRBOL ESTÁ VACÍO.** Una casilla que no cambia nada en
+    // el resultado es una pregunta trampa: el jugador la mira, elige y las dos
+    // opciones hacen lo mismo. Con el árbol vacío el motor haría lo mismo con o
+    // sin ella, así que no aparece.
+    const gastados = coresGastadosEnArbol(state.nodeLevels);
+    const mensaje: string | Node = gastados <= 0
+      ? `Reciclarás todo tu progreso y ganarás ${gained} núcleos. Recolectores, compañeros, nanitas, cajas y cristales se pierden.`
+      : htmlToNode(`
+        <div class="flex flex-col gap-3 text-left">
+          <p class="text-[12px] font-mono text-[var(--text-main)] leading-snug">
+            Reciclarás todo tu progreso y ganarás ${gained} núcleos. Recolectores,
+            compañeros, nanitas, cajas y cristales se pierden.
+          </p>
+          <label class="flex items-start gap-3 min-h-[44px] cursor-pointer select-none
+                        rounded-xl border border-[var(--border-color)] p-2.5">
+            <input type="checkbox" id="conservar-arbol" checked
+                   class="cf-check mt-0.5 w-4 h-4 cursor-pointer"
+                   aria-describedby="conservar-arbol-hint">
+            <span class="min-w-0">
+              <span class="block text-[11px] font-bold text-[var(--text-main)]">
+                Conservar el árbol de pasivos
+              </span>
+              <span id="conservar-arbol-hint"
+                    class="block text-[10px] font-mono text-[var(--text-muted)] mt-0.5 leading-relaxed">
+                Viene marcado porque es lo normal. Sin marcarlo el árbol se vacía y
+                recibes ${gastados} núcleos de vuelta para empezarlo de nuevo.
+              </span>
+            </span>
+          </label>
+        </div>
+      `);
+
     showConfirmModal(
-      `Reciclarás todo tu progreso y ganarás ${gained} núcleos. Recolectores, compañeros, nanitas, cajas y cristales se pierden.`,
+      mensaje,
       () => {
-        const res = game.prestige();
+        // Con el árbol vacío `mensaje` es un `string`, y ahí no hay casilla que
+        // leer: `instanceof` lo resuelve sin engañar al tipado.
+        const check = mensaje instanceof HTMLElement
+          ? mensaje.querySelector<HTMLInputElement>('#conservar-arbol')
+          : null;
+        // Sin casilla no hay nada que leer, y el motor conserva el árbol por
+        // defecto: es el mismo comportamiento que tenía el juego antes de K2.
+        const res = game.prestige({ mantenerArbol: check ? check.checked : true });
         if (res.success) {
           sfx.prestige();
           showToast(`Ascendido: ${res.msg}`, 'success');

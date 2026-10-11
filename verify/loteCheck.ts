@@ -90,6 +90,69 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  //  1b · K1 · LA T2 Y LA T3 TAMBIÉN SE COMPRAN EN LOTE
+  // -------------------------------------------------------------------------
+  //
+  //  LA RAZÓN DE SER DE ESTE BLOQUE. `loteCheck` probaba el lote SOBRE `crateT1`
+  //  —el único que estaba en la lista blanca— y con eso la suite salía en verde
+  //  mientras las otras dos cajas seguían comprándose de una en una. Es el
+  //  fallo del "prueba solo lo que ya funciona": la lista decía una cosa y el
+  //  catálogo decía otra, y ninguna prueba miraba las dos a la vez.
+  //
+  //  Se prueban las DOS cartas y no una de ellas, porque la T2 y la T3 son dos
+  //  claves distintas con el mismo patrón: cubrir una y suponer la otra es
+  //  dejar la mitad sin mirar.
+  {
+    const licencias = {
+      licencia_t2: 1,
+      licencia_t3: 1
+    };
+    const t2 = STORE_ITEMS.crateT2.cost;
+    const t3 = STORE_ITEMS.crateT3.cost;
+    const g = await boot(baseSave([], {
+      nanites: t3 * 200,
+      warehouseCapacity: 40,
+      nodeLevels: { ...licencias }
+    }));
+
+    check('K1: la T2 se compra en lote, como la T1',
+      g.getBulkMax('crateT2') > 1, `max=${g.getBulkMax('crateT2')}`);
+    check('K1: y la T3 también',
+      g.getBulkMax('crateT3') > 1, `max=${g.getBulkMax('crateT3')}`);
+
+    // 200 = 99 + 99 + 2 otra vez: es el caso que reparte en varias pilas.
+    const r = g.buyStoreItem('crateT3', 200) as any;
+    const pilas = wh(g).filter((w: any) => w.type === 'crate');
+    check('K1: 200 cajas T3 de golpe entran las 200',
+      r !== false && pilas.reduce((a: number, w: any) => a + (w.stackCount || 1), 0) === 200,
+      `${pilas.length} pilas · ${pilas.map((w: any) => w.stackCount).join('+')}`);
+    check('K1: y se cobran 200 veces el unitario de la T3, no el de la T1',
+      nanites(g) === t3 * 200 - t3 * 200 && g.getBulkCost('crateT3', 200) === t3 * 200,
+      `bulk=${g.getBulkCost('crateT3', 200)} esperado=${t3 * 200}`);
+
+    // **EL SUSTANTIVO, QUE ES LO MISMO QUE LE PASÓ AL MOTOR CON EL `endsWith`.**
+    // Sin la T2 y la T3 en la regla, el diálogo decía "elige cuántas **unidad**".
+    check('K1: el selector de las dos dice "caja", no "unidad"',
+      g.getBulkUnitName('crateT2') === 'caja' && g.getBulkUnitName('crateT3') === 'caja',
+      `t2=${g.getBulkUnitName('crateT2')} t3=${g.getBulkUnitName('crateT3')}`);
+
+    // **EL CONTADOR DE LA TARJETA, QUE ES DONDE LA REGLA SE PUEDE ROMPER OTRA
+    // VEZ.** Cuenta por TIER y no por `type === 'crate'`: si contara todas las
+    // cajas del almacén, la tarjeta de la T2 enseñaría el número de la T3.
+    const g2 = await boot(baseSave([], {
+      nanites: t2 * 3 + t3 * 5,
+      warehouseCapacity: 40,
+      nodeLevels: { ...licencias }
+    }));
+    check('K1: la T2 se compra sin gastar el saldo de la T3',
+      g2.buyStoreItem('crateT2', 3) !== false && g2.buyStoreItem('crateT3', 5) !== false,
+      `saldo=${nanites(g2)}`);
+    check('K1: y el contador de la tarjeta T2 cuenta solo las T2',
+      g2.getOwnedCount('crateT2') === 3 && g2.getOwnedCount('crateT3') === 5,
+      `t2=${g2.getOwnedCount('crateT2')} t3=${g2.getOwnedCount('crateT3')}`);
+  }
+
+  // -------------------------------------------------------------------------
   //  2. EL TOPE DE APERTURA, Y POR QUÉ ESTÁ ATADO AL DE LA PILA
   // -------------------------------------------------------------------------
   {

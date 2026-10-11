@@ -28,12 +28,20 @@
 // ==========================================================================
 
 import { boot, reload, check, resumen, wh, baseSave, collector, companion, conRoll } from './kit';
-import { attemptForge, attemptForgeCompanion } from '../src/data/crafting';
 import { sellPrice, valuationConCifras, affixValueMult } from '../src/data/valuation';
 import {
   efectoDeAfijos, valorGuardadoDeAfijo, textoDeAfijo, heredaValoresDeAfijo,
-  afijosParaRareza, AFFIXES,
-  VALOR_AFIJO_MIN, VALOR_AFIJO_MAX, pesoDeAfijo
+  afijosParaRareza, cabePorRareza, AFIX_MIN_POR_RARIDAD, AFFIXES,
+  VALOR_AFIJO_MIN, VALOR_AFIJO_MAX, pesoDeAfijo,
+  // **UN SOLO IMPORT POR MODULO, Y NO POR ESTETICA.** Este fichero tenia dos
+  // lineas importando de `data/crafting`: una para la forja y otra para el resto.
+  // Al empaquetar UN banco suelto (`vite.one.config.ts`), el bundler perdia los
+  // enlaces de la segunda y el banco reventaba con `AFFIXES is not defined` —
+  // sin que `tsc` dijera nada, porque para TypeScript las dos importaciones eran
+  // correctas. Con `vite.config.ts`, que es como corre la suite entera, no pasa;
+  // pero un banco que solo funciona en la suite completa no se puede depurar
+  // solo, y un banco que no se puede depurar solo no se puede developing.
+  attemptForge, attemptForgeCompanion
 } from '../src/data/crafting';
 
 /** Los cuatro Raros del catálogo, para la prueba de distribución. */
@@ -635,6 +643,94 @@ async function main() {
     check('precio: el desglose del diálogo enseña el multiplicador real',
       !!filaAlto && !!filaUno && filaAlto.mult > filaUno.mult,
       `con 1,3 → ×${filaAlto?.mult?.toFixed(3)}; con 1 → ×${filaUno?.mult?.toFixed(3)}`);
+  }
+
+  // =========================================================================
+  // 15 · EL TECHO POR RAREZA: LO BUENO NO CAE EN CUALQUIER ITEM (F98).
+  //
+  //     Se intentó dos veces y las dos fallaron en silencio: la primera filtraba la
+  //     lista YA sorteada y no la usaba para nada; la segunda "arreglaba" los huecos
+  //     re-sorteando con `pickAffixes(...)[0]`, que regeneraba la lista **entera** y
+  //     podía devolver un afijo **ya presente** —duplicados en el item—.
+  //
+  //     Por eso lo que se mide aquí no es `cabePorRareza()`, sino **lo que sale**.
+  // =========================================================================
+  {
+    // 1 · **EL INVARIANTE QUE DE VERDAD SOSTIENE LA PROSA**, y que salió de mirar
+    //     lo que fallaba: no es que los dos multiplicadores vayan juntos, porque
+    //     la mayoría solo tiene uno —Afilado es de click, Rendimiento es de
+    //     pasivo, y esa es la diferencia entre ellos—. Es que **cuando un afijo
+    //     trae los dos, valen lo mismo**, porque "a todos los multiplicadores" es
+    //     una bonificación aplicada a dos cosas y no dos bonificaciones. Si
+    //     alguno tuviera los dos distintos, el texto contaría el mismo número
+    //     para los dos y mentiría por la mitad.
+    const desiguales = (AFFIXES as any[])
+      .filter(a => a.effect.clickMult != null && a.effect.passiveMult != null
+        && a.effect.clickMult !== a.effect.passiveMult)
+      .map(a => `${a.id}(click=${a.effect.clickMult} pasivo=${a.effect.passiveMult})`);
+    check('techo: si un afijo trae los dos multiplicadores, valen lo mismo',
+      desiguales.length === 0, `distintos: ${desiguales.join(' ')}`);
+
+    // 2 · Mil tiradas por rareza, mirando el resultado.
+    const RAREZAS = ['Raro', 'Épico', 'Legendario', 'Mítico', 'Divino'] as const;
+    for (const rareza of RAREZAS) {
+      const cuantos = AFIX_MIN_POR_RARIDAD[rareza] ?? 0;
+      let malas = 0, repetidos = 0, cortos = 0;
+      for (let i = 0; i < 1000; i++) {
+        const afijos = afijosParaRareza(rareza);
+        if (afijos.length !== cuantos) cortos++;
+        if (new Set(afijos).size !== afijos.length) repetidos++;
+        for (const id of afijos) {
+          const r = (AFFIXES as any[]).find(a => a.id === id)?.rarity;
+          if (!cabePorRareza(rareza, r as string)) malas++;
+        }
+      }
+      check(`techo: un ${rareza} nunca saca por azar un afijo de más de un escalón`,
+        malas === 0, `${malas} afijos se passam en 1000 tiradas`);
+      check(`techo: un ${rareza} sale SIEMPRE con sus ${cuantos} afijos`,
+        cortos === 0, `${cortos} de 1000 tiradas salieron con menos`);
+      check(`techo: y un ${rareza} nunca sale con afijos repetidos`,
+        repetidos === 0, `${repetidos} tiradas con duplicados`);
+    }
+
+    // 3 · **LA HERENCIA IGNORA EL TECHO, Y ESTO ES LO QUE HACE LA REGLA JUSTA.**
+    //     Dos materiales con un Vacío forjan algo que puede salir de rarerza
+    //     baja, y el Vacío entra igual. Si no pasara, buscar buenos materiales
+    //     sería tirar el trabajo, y la forma más rápida de "arreglar" el techo
+    //     sería arruinar la forja.
+    const pares = ['aff_void', 'aff_bulwark'];
+    const r: any = conRoll(0, () => attemptForge(
+      [collector('h1', 3, { rarity: 'Épico', affixes: pares, affixVals: { aff_void: 1.2, aff_bulwark: 1.1 } }),
+       collector('h2', 3, { rarity: 'Épico', affixes: pares, affixVals: { aff_void: 1.2, aff_bulwark: 1.1 } })],
+      3, 'X', { craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, eterUsed: 0 }));
+    check('techo: la herencia IGNORA el techo (dos Vacíos entran igual)',
+      !!r?.collector?.affixes?.includes('aff_void'),
+      `afijos: ${JSON.stringify(r?.collector?.affixes)} rareza=${r?.collector?.rarity}`);
+
+    // Y la forja nunca duplica, que era el otro fallo del intento anterior.
+    let repetidas = 0;
+    for (let i = 0; i < 300; i++) {
+      const x: any = conRoll(0.001, () => attemptForge(
+        [collector(`d1-${i}`, 3, { rarity: 'Épico', affixes: pares, affixVals: { aff_void: 1.2, aff_bulwark: 1.1 } }),
+         collector(`d2-${i}`, 3, { rarity: 'Épico', affixes: pares, affixVals: { aff_void: 1.2, aff_bulwark: 1.1 } })],
+        3, 'X', { craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, eterUsed: 0 }));
+      const ids = x?.collector?.affixes ?? [];
+      if (new Set(ids).size !== ids.length) repetidas++;
+    }
+    check('techo: la forja nunca duplica afijos',
+      repetidas === 0, `${repetidas} de 300 forjas con duplicados`);
+
+    // 4 · El techo deja pool de sobra en todos los escalones: si un Raro se
+    //     quedara sin afijos posibles, "un Raro lleva 1 afijo" sería falso.
+    check('techo: hay afijos de sobra para cada rareza que lleva afijos',
+      RAREZAS.every(r =>
+        (AFFIXES as any[]).filter(a => cabePorRareza(r, a.rarity)).length >= (AFIX_MIN_POR_RARIDAD[r] ?? 0)),
+      'algún escalón no tiene pool suficiente');
+
+    // 5 · Una rareza desconocida no recorta nada: no se inventa una regla para un
+    //     dato que no se sabe leer.
+    check('techo: una rareza desconocida deja pasar el afijo',
+      cabePorRareza('Rarísimo', 'Divino'));
   }
 
   resumen('el valor de cada afijo');
