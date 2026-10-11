@@ -827,13 +827,25 @@ async function main() {
           comoCompanion.current >= comoCompanion.target, `${comoCompanion.current}/${comoCompanion.target}`);
       }
 
-      // Y que el más caro tenga el premio más grande: si el T20 pagara menos que el
-      // T15, el segundo sería una equivocación y no un peldaño.
+      // **Y QUE NO PAGUEN NÚMERO, PORQUE EL MOTOR LOS SUMA.** Este es el invariante y
+      // es el que hace que se pueda añadir un hito sin tocar el equilibrio. La partida
+      // ya suma un 199 % de bonificación con los logros cortos; un hito por cada uno de
+      // los diez tiers nuevos serían diez sumandos más sobre ese total, y una suma
+      // que no se puede medir contra nada. Los dos son cosméticos, como los doce
+      // difíciles, y el juego reconoce el progreso sin que el número se mueva.
       const quince = ACHIEVEMENT_REWARDS.tier_15;
       const veinte = ACHIEVEMENT_REWARDS.tier_20;
-      check('logros: y llegar al final paga más que llegar a la mitad',
-        veinte.clickBonus > quince.clickBonus && veinte.passiveBonus > quince.passiveBonus,
+      check('logros: los hitos de tier no pagan número, que el motor los suma',
+        quince.clickBonus === 0 && quince.passiveBonus === 0
+          && veinte.clickBonus === 0 && veinte.passiveBonus === 0,
         `T15=${quince.clickBonus}/${quince.passiveBonus} T20=${veinte.clickBonus}/${veinte.passiveBonus}`);
+
+      // Y que su premio sea un cosmético de verdad, no una promesa en un texto: un
+      // logro que dice "banner X" tiene que abrir ese banner.
+      const cosmeticoDe = (id: string) => COSMETICS.find(c => (c.unlock as any)?.kind === 'achievement' && (c.unlock as any)?.value === id);
+      check('logros: y cada hito abre el cosmético que promete',
+        !!cosmeticoDe('tier_15') && !!cosmeticoDe('tier_20'),
+        [cosmeticoDe('tier_15')?.name ?? '?', cosmeticoDe('tier_20')?.name ?? '?'].join(' · '));
     }
 
     // **Y CADA COSMÉTICO DE LOS DOCE LO ABRE UNO DE ELLOS, DE VERDAD.** La vía del logro

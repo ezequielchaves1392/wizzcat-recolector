@@ -296,17 +296,20 @@ export const ACHIEVEMENTS: Achievement[] = [
   //  los items, que es donde vive de verdad, y con `Math.max(0, ...)` para que un
   //  almacén vacío dé 0 y no `-Infinity`.
   //
-  //  **EL T15 Y EL T20, Y NO UNO POR TRAMO.** Diez tramos serían diez logros con
-  //  bonificación acumulativa, y el balance de esa suma es tuyo. Con dos, la suma es
-  //  una línea y el segundo es claramente "llegar al final sin reciclar".
+  //  **UNO EN LA MITAD Y UNO EN EL FINAL, Y NADA NUMÉRICO.** El motor **acumula** las
+  //  bonificaciones de los logros ganados, así que un logro por cada tier nuevo serían
+  //  diez sumandos sobre una partida que ya suma un 199 %. Esa suma no se puede medir
+  //  contra nada —no hay con qué compararla— y por eso los dos son **solo cosmético**,
+  //  como los doce difíciles, que es la regla del proyecto para contenido frecuente.
+  //  Reconocen el progreso sin tocar el equilibrio.
   // =========================================================================
   {
     id: 'tier_15',
     title: 'Mitad del Cielo',
     description: 'Consigue un objeto del T15',
     icon: 'crown',
-    rewardText: '+25% recolección por click y +25% recolección por segundo · Título "Mitad del Cielo"',
-    reward: { clickBonus: 0.25, passiveBonus: 0.25 },
+    rewardText: 'Título "Mitad del Cielo"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
     progress: (s) => ({ current: tierMasAltoDe(s), target: 15 })
   },
   {
@@ -314,8 +317,8 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'El Final',
     description: 'Consigue un objeto del T20',
     icon: 'core',
-    rewardText: '+50% recolección por click y +50% recolección por segundo · Banner "El Final"',
-    reward: { clickBonus: 0.50, passiveBonus: 0.50 },
+    rewardText: 'Banner "El Final"',
+    reward: { clickBonus: 0, passiveBonus: 0 },
     progress: (s) => ({ current: tierMasAltoDe(s), target: 20 })
   },
 // =========================================================================

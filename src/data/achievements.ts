@@ -37,10 +37,16 @@ export type AchievementId =
   | 'first_forge'
   | 'smith_25'
   | 'ascendant'
-  // F105 · Los dos de "llegar lejos". Antes no había **ningún** logro que mirara el
-  // tier: los veintidós medían producción, forja, cajas y prestigio, y con veinte
-  // tiers no había forma de ganarse "llegar al T15". El contenido nuevo hace ese
-  // hueco más visible, porque ahora hay un camino largo y sin nada que lo reconozca.
+  // F105 · Los hitos de tier, uno por tramo. Antes no había **ningún** logro que
+  // mirara el tier: los de arriba medían producción, forja, cajas y prestigio, y con
+  // veinte tiers no había forma de ganarse "llegar al T15". El contenido nuevo hace
+  // ese hueco más visible, porque ahora hay un camino largo y sin nada que lo reconozca.
+  //
+  // **UNO POR TRAMO Y NO UNO EN CADA TIER.** Diez logros escalonados serían diez
+  // bonificaciones que se suman entre sí —el motor las acumula, `rebuildAchievementBonuses`
+  // las va sumando una a una—, y la suma de todas es un número que hay que decidir sin
+  // poder medirlo contra nada. Por eso van por tramos, como los difíciles: reconocer
+  // el progreso sin tocar el equilibrio.
   | 'tier_15'
   | 'tier_20'
   // F97 · Los cinco del árbol nuevo: un keystone, una rama llena, una firma,
@@ -113,11 +119,19 @@ export const ACHIEVEMENT_REWARDS: Record<AchievementId, { clickBonus: number; pa
   first_forge: { clickBonus: 0.05, passiveBonus: 0 },
   smith_25: { clickBonus: 0.10, passiveBonus: 0.10 },
   ascendant: { clickBonus: 0.20, passiveBonus: 0.20 },
-  // F105 · "Llegar lejos" paga más que cualquier otro corto, y es a propósito: llegar
-  // al T15 es lo más caro que se puede hacer en una partida sin reciclar, así que el
-  // logro tiene que estar a la altura de lo que costó. El T20 es todavía más.
-  tier_15: { clickBonus: 0.25, passiveBonus: 0.25 },
-  tier_20: { clickBonus: 0.50, passiveBonus: 0.50 },
+  // F105 · Los hitos de tier. **UNO POR TRAMO, Y NO UNO EN CADA TIER.**
+  //
+  // El motor **acumula** las bonificaciones de los logros ganados
+  // (`rebuildAchievementBonuses` las va sumando una a una), así que un logro por cada
+  // uno de los diez tiers nuevos serían diez sumandos, y la suma es un número que hay
+  // que decidir sin poder medirlo contra nada: si cada uno paga 25 %, añadir ocho
+  // hitos sube el total de la partida un 200 % sin que nadie pueda decir si está bien.
+  //
+  // Por eso van **por tramos** —uno al entrar en la mitad final, otro en el final— y
+  // no por tier. La progresión se reconoce en tres momentos y el equilibrio se queda
+  // como estaba. Un logro por cada tier sería más contenido y peor juego.
+  tier_15: { clickBonus: 0, passiveBonus: 0 },
+  tier_20: { clickBonus: 0, passiveBonus: 0 },
   // F97 · Cortos del árbol nuevo: bono pequeño, el premio gordo es el banner.
   primera_maestria: { clickBonus: 0, passiveBonus: 0.03 },
   rama_completa: { clickBonus: 0.05, passiveBonus: 0 },
