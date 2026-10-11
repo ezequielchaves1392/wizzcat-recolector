@@ -32,6 +32,8 @@ import {
   basePorPosicion, baseAleatoria, baseAleatoriaSegura, posicionFusionada,
   posicionDeBase, ladoDeBase
 } from '../src/data/bases';
+import { generateCollectorByTier } from '../src/data/generators';
+import { crearCompanioDeTier } from '../src/data/crafting';
 
 const LADDER = [0.92, 0.93, 0.94, 0.96, 0.98, 1.00, 1.02, 1.04, 1.07, 1.10];
 
@@ -269,7 +271,102 @@ async function main() {
       'pot mueve y base mueve');
   }
 
-  resumen('bases ocultas: contenido, sorteo, forja y migración');
+  // -------------------------------------------------------------------------
+  //  6. EL NOMBRE ES EL DE LA BASE, Y ESO ES LO QUE ARREGLA B10
+  //
+  //  Este banco, hasta ahora, daba todo por bueno: las bases existen, se sortean
+  //  con sus pesos, entran en el daño y la forja las promedia. Lo que **no**
+  //  comprobaba es que el jugador las viera. Y no las veía: el item sortaba su
+  //  nombre en `collectorNames`/`companionNames` —tres nombres por tier— con un
+  //  sorteo aparte del de la base. De las diez bases de un tier se veían tres, y
+  //  dos T1 con el mismo nombre podían pegar 6 y 8.
+  //
+  //  Lo que se fija aquí es el invariante entero, y en las tres capas donde puede
+  //  romperse: generar, migrar y forjar.
+  // -------------------------------------------------------------------------
+  {
+    // --- GENERAR: el nombre es el de la base que se acaba de sortear ---
+    // Se genera con `rng` clavadísimo para que la base sea la que se pide, y se
+    // comprueba que el item se llame como ella. Si el nombre volviera a salir de
+    // una lista aparte, esta es la línea que lo caza.
+    let fallaGenera = '';
+    for (const lado of ['recolector', 'companero'] as const) {
+      for (let t = 1; t <= 10; t++) {
+        for (let intento = 0; intento < 12; intento++) {
+          const base = baseAleatoria(t, lado, () => 0.5);
+          const hecho = lado === 'recolector'
+            ? generateCollectorByTier(t, () => 0.5)
+            : crearCompanioDeTier(t, 3, () => 0.5);
+          // El generador sortea su propia base, así que se compara contra la que
+          // EL GENERADOR chose, no contra la de arriba: se lee su `baseId`.
+          const suya = basePorId((hecho as any).baseId);
+          if (!suya || (hecho as any).name !== suya.nombre) {
+            fallaGenera += `${lado} T${t}: ${(hecho as any).name} != ${suya?.nombre} `;
+          }
+          void base;
+        }
+      }
+    }
+    check('nombre: el item que nace se llama como la base que se le sortió',
+      fallaGenera === '', fallaGenera || 'los dos lados, T1..T10, 12 tiradas cada uno');
+
+    // **Y QUE NO SEAN EL MISMO NOMBRE, QUE ES EL BUG ENTERO.** Si dos bases
+    // distintas de un tier tuvieran el mismo nombre, el jugador vería veinte T1 y
+    // no podría distinguirlos, que es exactamente lo que se complained.
+    let colision = '';
+    for (const lado of ['recolector', 'companero'] as const) {
+      for (let t = 1; t <= 10; t++) {
+        const nombres = (tablaDe(lado)[t] ?? []).map(b => b.nombre);
+        if (new Set(nombres).size !== nombres.length) colision += `${lado} T${t} `;
+      }
+    }
+    check('nombre: dos bases distintas del mismo tier no se llaman igual',
+      colision === '', colision || 'las 200 bases tienen nombre propio');
+
+    // --- MIGRAR: un item viejo se renombra al de SU base, no al de otra ---
+    // La partida vieja es la que trae `baseId` bueno y nombre de la lista de tres.
+    // Si la migración renombrara con la base que le toque en vez de con la suya,
+    // el item mudaría de nombre en cada carga sin que nadie tocase nada.
+    const viejo = { id: 'v1', name: 'Blaster Láser', type: 'collector', tier: 4, level: 0, damage: danioDeRango(4, 3), potential: 3, baseId: 'base_rec_t4_7' };
+    const m1 = migraPotenciales([viejo]);
+    const suBase = basePorId('base_rec_t4_7');
+    check('migración: un item viejo se renombra con el de SU base',
+      m1.items[0]?.name === suBase?.nombre && m1.items[0]?.baseId === 'base_rec_t4_7',
+      `${viejo.name} -> ${m1.items[0]?.name} (base ${suBase?.nombre})`);
+
+    // Y es idempotente: migrar dos veces no cambia el nombre otra vez. Sin esto la
+    // partida se marca de sucia en cada carga, que es como se nota una migración
+    // que no lo es.
+    const m2 = migraPotenciales(m1.items);
+    check('migración: y es idempotente, que no se renombra dos veces',
+      m2.changed === false && m2.items[0].name === m1.items[0].name,
+      `${m1.items[0].name} -> ${m2.items[0].name} (changed=${m2.changed})`);
+
+    // Y la firma de obra sobrevive al renombrado: es lo único del nombre viejo que
+    // no se puede recuperar de otro sitio, y el buscador mira el nombre.
+    const obra = { id: 'v2', name: 'Forja de Vórtice·Obra Maestra', type: 'collector', tier: 4, level: 0, damage: danioDeRango(4, 3), potential: 3, baseId: 'base_rec_t4_7' };
+    const mObra = migraPotenciales([obra]);
+    check('migración: la firma de obra sobrevive al renombrado',
+      mObra.items[0]?.name === `${suBase?.nombre}·Obra Maestra`, mObra.items[0]?.name);
+
+    // --- FORJAR: el nombre sigue a la base, que es la media de los dos padres ---
+    // Dos bases 10 dan una 5: el item forjado tiene que llamarse como la 5, no
+    // como la 10. Antes llevaba un nombre generado aparte, que no decía nada del
+    // stat, y el jugador tenía un item que **afirmaba** ser mejor de lo que era.
+    const mat10 = (id: string) => ({
+      id, tier: 5, rarity: 'Común', potential: 3, affixes: [] as string[], baseId: 'base_rec_t5_10'
+    });
+    const rf = conSec(0, 1, () => attemptForge(
+      [mat10('f1'), mat10('f2')], 5, 'X',
+      { craftLuck: 0, consolationBonus: 0, stonesUsed: 0, nanoUsed: 0, eterUsed: 0 }));
+    const esperada = basePorPosicion(6, 10, 'recolector')?.nombre;
+    check('forja: el forjado se llama como la base que le toca, la media de los padres',
+      (rf as any).success === true && (rf as any).collector?.tier === 6
+        && (rf as any).collector?.name === esperada,
+      `success=${(rf as any).success} err=${(rf as any).error} nombre=${(rf as any).collector?.name} esperado=${esperada}`);
+  }
+
+  resumen('bases ocultas: contenido, sorteo, forja, migración y el nombre');
 }
 
 export default main();

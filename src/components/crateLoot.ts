@@ -13,7 +13,8 @@
 
 import { TIER_SYSTEM } from '../data/tiers';
 import { rollPotentialFrom, poderDeCompanero, valorDeUnCristal, techoDeNivel, afijosParaCompanero } from '../data/crafting';
-import { baseAleatoriaSegura } from '../data/bases';
+import { baseAleatoriaSegura, type BaseOculta } from '../data/bases';
+import { nombreDe } from '../data/nombres';
 import { generateCollectorByTier } from '../data/generators';
 import { CRATE_TIERS, CRATE_TYPES, MAX_CRATE_TIER, CONSUMABLES, costeDeCaja, textoDeExpansor, expansorDeCaja } from '../data/store';
 import type { CrateType } from '../data/store';
@@ -745,18 +746,20 @@ export function tocaElSalto(crateType: CrateType): boolean {
 }
 
 /**
- * Un nombre del tier pedido, elegido al azar entre los del catálogo.
+ * EL NOMBRE DE UN COMPAÑERO DE CAJA, Y SALE DE SU BASE.
  *
- * El `as Record<number, string[]>` está porque `companionNames` está tipado con
- * las claves literales 1..10 y aquí el índice llega como `number`. El índice es
- * correcto: `Math.min(10, ...)` lo deja siempre en rango.
+ * Estaba `nombreDeArriba()`: sorteaba entre los tres nombres del tier
+ * (`companionNames`), una tabla que ya no existe. Y era la cuarta puerta del
+ * mismo bug: el nombre no tenía nada que ver con la base, así que una caja podía
+ * dar tres "Dron Explorador" distintos y el jugador no tenía forma de saber que
+ * uno llevaba ×1,10 y otro ×0,92.
+ *
+ * **LA BASE VIENE EN EL ARGUMENTO Y NO SE SORTEA AQUÍ.** La sortea
+ * `baseAleatoriaSegura` y pesa en el poder de este mismo item; si el nombre
+ * saliera de otra base, el almacén volvería a mentir sobre lo que pega.
  */
-function nombreDeArriba(origen: 'companion' | 'collector', tier: number): string {
-  const tablas = TIER_SYSTEM.companionNames as Record<number, string[]>;
-  const lista = origen === 'companion'
-    ? tablas[tier]
-    : (TIER_SYSTEM.collectorNames as Record<number, string[]>)[tier];
-  return lista[rand(0, lista.length - 1)];
+function nombreDeCaja(base: BaseOculta | null | undefined): string {
+  return nombreDe('companion', base);
 }
 
 /**
@@ -796,7 +799,7 @@ export function makeCrateCompanion(
   // F74 · Base sorteada de su tabla y poder con base, como todo lo demás.
   const baseSalto = baseAleatoriaSegura(tier, 'companero', rng);
   const p = poderDeCompanero(tier, potential, baseSalto);
-  const nombre = nombreDeArriba('companion', tier);
+  const nombre = nombreDeCaja(baseSalto);
   const detalles = `Recolección por segundo: +${p}/s`;
   return {
     kind: 'companion', amount: 1, name: nombre, label: nombre,
@@ -1101,7 +1104,7 @@ function botinDeCaja(tier: CrateType): LootEntry[] {
       // F74 · También trae base, igual que el salto.
       const baseCaja = baseAleatoriaSegura(tier, 'companero');
       const p = poderDeCompanero(tier, potential, baseCaja);
-      const nombre = nombreDeArriba('companion', tier);
+      const nombre = nombreDeCaja(baseCaja);
       const detalles = `Recolección por segundo: +${p}/s`;
       return {
         kind: 'companion', amount: 1, name: nombre, label: nombre,

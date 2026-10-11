@@ -669,9 +669,23 @@ async function main() {
   //  banco no tiene DOM, pero la regla es lo que puede estar mal.
   // =========================================================================
   {
-    const ak = ficha('ak7', 5, { name: 'Ak-7 Valioso', type: 'collector', tier: 3, rarity: 'Épico' });
-    const ak10 = ficha('ak10', 5, { name: 'Ak-10 Roto', type: 'collector', tier: 10, rarity: 'Legendario' });
-    const dron = ficha('d1', 5, { name: 'Dron Explorador', type: 'companion', tier: 2, rarity: 'Raro' });
+    //  **LOS NOMBRES SON DE BASE, Y NO ES UN DETALLE.** Antes eran "Ak-7 Valioso" y
+  //  "Dron Explorador", inventados para el banco. Con el nombre saliendo de la
+  //  base, la migración renombra cualquier item cuyo nombre no sea el suyo, así que
+  //  un fixture con nombres falsos midió otra cosa: buscaba "ak", la migración le
+  //  ponía su base y el buscador no encontraba nada. El fallo era del fixture —pero
+  //  un banco que depende de nombres inventados mide lo que quiere.
+  //
+  //  Ahora los nombres son de base de verdad, y **cada fixture lleva el `baseId`
+  //  que le toca**: sin él la migración le sortea una base y le cambia el nombre por
+  //  el de esa base, y el nombre escrito aquí dejaría de ser el del item.
+  //
+  //  El T3 es `base_rec_t3_7` y el T10 es `base_rec_t10_10`. No comparten palabra, y
+  //  está bien: lo que se comprueba abajo es que **texto y filtro se componen**, y
+  //  eso se mide buscando el término de uno y exigiendo que el otro no salga.
+  const ak = ficha('ak7', 5, { name: 'Colapso Dorado', type: 'collector', tier: 3, rarity: 'Épico', baseId: 'base_rec_t3_7' });
+    const ak10 = ficha('ak10', 5, { name: 'Alfa y Omega', type: 'collector', tier: 10, rarity: 'Legendario', baseId: 'base_rec_t10_10' });
+    const dron = ficha('d1', 5, { name: 'Rastro Frío', type: 'companion', tier: 2, rarity: 'Raro', baseId: 'base_com_t2_1' });
     const caja = crate('c1', 4);
     const lista = [ak, ak10, dron, caja];
 
@@ -680,10 +694,10 @@ async function main() {
 
     // --- El nombre, y sin tildes ni mayúsculas ---
     check('buscador: por el nombre, en cualquier caja',
-      busca('ak-7').join() === 'ak7', busca('ak-7').join());
+      busca('colapso dorado').join() === 'ak7', busca('colapso dorado').join());
     check('buscador: sin tildes y sin mayúsculas',
-      busca('ak').length === 2 && busca('AK-7').join() === 'ak7',
-      `${busca('ak').join('|')} / ${busca('AK-7').join('|')}`);
+      busca('COLAPSO').join() === 'ak7' && busca('alfa').join() === 'ak10',
+      `${busca('COLAPSO').join('|')} / ${busca('alfa').join('|')}`);
 
     // **Y POR TILDE, QUE ES LA RAZÓN DE NORMALIZAR.** El teclado del móvil no
     //  siempre la pone, y un buscador que solo encuentra lo que está bien escrito
@@ -707,22 +721,22 @@ async function main() {
     check('buscador: y el T10 sí aparece con su propio término',
       busca('t10').join() === 'ak10', busca('t10').join('|'));
 
-    // **Y VARIAS PALABRAS SON "Y", NO "O".** "ak 7" son dos términos: un jugador
-    //  que escribe eso quiere los AK-7, no los AK y los que tienen un 7.
+    // **Y VARIAS PALABRAS SON "Y", NO "O".** "colapso dorado" son dos términos: un
+    //  jugador que escribe eso quiere ese nombre, no los dos que tienen "colapso".
     check('buscador: dos términos son "y", no "o"',
-      busca('ak 7').join() === 'ak7', busca('ak 7').join('|'));
+      busca('colapso dorado').join() === 'ak7', busca('colapso dorado').join('|'));
     check('buscador: y dos términos imposibles no devuelven nada, sin error',
-      busca('ak 99').length === 0, busca('ak 99').join('|'));
-    check('buscador: y "ak 10" si encuentra el Ak-10, que el 10 es su tier',
-      busca('ak 10').join() === 'ak10', busca('ak 10').join('|'));
+      busca('colapso 99').length === 0, busca('colapso 99').join('|'));
+    check('buscador: y "colapso 10" no encuentra el T10, porque no lleva "colapso"',
+      busca('colapso 10').length === 0, busca('colapso 10').join('|'));
 
     // --- El filtro sigue mandando ---
     check('buscador: se compone con el filtro de tipo',
       busca('t3', 'collector').join() === 'ak7' && busca('t3', 'companion').length === 0,
       `${busca('t3', 'collector').join('|')} / ${busca('t3', 'companion').join('|')}`);
     check('buscador: buscar en "Todo" encuentra un compañero que en su filtro no está',
-      busca('dron').join() === 'd1' && busca('dron', 'collector').length === 0,
-      `${busca('dron').join('|')} / ${busca('dron', 'collector').join('|')}`);
+      busca('rastro').join() === 'd1' && busca('rastro', 'collector').length === 0,
+      `${busca('rastro').join('|')} / ${busca('rastro', 'collector').join('|')}`);
 
     // --- Lo vacío NO FILTRA NADA ---
     // Un buscador que se queda sin resultados porque el campo quedó con un espacio
@@ -738,17 +752,17 @@ async function main() {
     const rejilla = (buscar: string, filtro = 'all', sort = 'default') =>
       visibleStacksFor(g, g.getState(), filtro, sort, buscar).map((c: any) => c.item.id).join('|');
     check('buscador: la rejilla filtra por el texto que le pasan',
-      rejilla('dron') === 'd1', rejilla('dron'));
+      rejilla('rastro') === 'd1', rejilla('rastro'));
     check('buscador: y por texto y tipo a la vez, que es la prueba de que no se separan',
-      rejilla('t3', 'collector') === 'ak7' && rejilla('ak', 'collector') === 'ak7|ak10',
-      `${rejilla('t3', 'collector')} / ${rejilla('ak', 'collector')}`);
+      rejilla('t3', 'collector') === 'ak7' && rejilla('colapso', 'collector') === 'ak7',
+      `${rejilla('t3', 'collector')} / ${rejilla('colapso', 'collector')}`);
     check('buscador: sin texto la rejilla no cambia, que es lo que tiene que pasar',
       rejilla('') === rejilla('   '), `${rejilla('')} vs ${rejilla('   ')}`);
     check('buscador: el orden sigue mandando sobre la búsqueda, no al revés',
-      rejilla('ak', 'all', 'value') === rejilla('ak', 'all', 'rarity').split('|').length
-        ? rejilla('ak', 'all', 'value')
+      rejilla('alfa', 'all', 'value') === rejilla('alfa', 'all', 'rarity').split('|').length
+        ? rejilla('alfa', 'all', 'value')
         : 'x',
-      'orden=' + rejilla('ak', 'all', 'value'));
+      'orden=' + rejilla('alfa', 'all', 'value'));
   }
 
   // =========================================================================

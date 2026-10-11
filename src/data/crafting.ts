@@ -692,13 +692,36 @@ export function migraPotenciales(items: any[], rng: () => number = Math.random):
     const damage = danioDeRango(tier, potential, base);
     const maxLevel = techoDeNivel(potential, base?.posicion ?? 6);
 
-    if (potencialYaVa && w.potential === potential && w.damage === damage && w.baseId === baseId && w.maxLevel === maxLevel) return w;
+    // F74 · EL NOMBRE PASA A SER EL DE LA BASE, Y AQUÍ SE ARREGLA EL QUE YA TIENES.
+    //
+    // Un item guardado trae `baseId` correcto desde F74, pero `name` con uno de los
+    // tres nombres viejos del tier: son dos sorteos que venían de sitios distintos.
+    // Sin esto, lo que tienes en el almacén se llamaría "Blaster Láser" y llevaría
+    // detrás una base ×1,10 —y el jugador no podría ni buscarlo por su nombre ni
+    // distinguirlo de los otros dos "Blaster Láser" que sí llevan ×0,92.
+    //
+    // **POR QUÉ AQUÍ Y NO AL GENERAR.** Un item guardado ya no pasa por ningún
+    // generador: se genera una vez y vive en el almacén. Cambiar el generador solo
+    // arregla lo que nazca mañana, y este bloque ya está escrito para recorrer y
+    // reparar los items viejos.
+    //
+    // **Y ES IDEMPOTENTE, QUE ES LA REGLA DE ESTE BLOQUE.** El nombre se compara
+    // con el que le tocaría: si ya es ese, no se toca nada, y una segunda carga no
+    // reescribe el almacén ni marca la partida de sucia otra vez. Y los sufijos de
+    // forja se conservan: `"Estrella Naciente·Obra Maestra"` se queda con su firma.
+    const nombreBase = nombreDe('collector', base);
+    const sufijo = sufijoDeObraDe(w.name);
+    const name = nombreBase + sufijo;
+
+    if (potencialYaVa && w.potential === potential && w.damage === damage && w.baseId === baseId
+        && w.maxLevel === maxLevel && w.name === name) return w;
 
     changed = true;
     // El `details` se rehace porque es lo que se pinta, y un item cuyo texto dice
     // "+5" mientras su daño es 6 es exactamente el bug que se está arreglando.
     return {
       ...w,
+      name,
       potential,
       damage,
       baseId,
@@ -843,11 +866,18 @@ export function migraPotencialesDeCompaneros(
     const { baseId, pos } = basePara(c);
     const power = poderDeCompanero(tier, potential, baseId ? basePorId(baseId) ?? null : null);
     const maxLevel = techoDeNivel(potential, pos);
+    // F74 · EL NOMBRE PASA A SER EL DE LA BASE, Y AQUÍ SE ARREGLA EL QUE YA TIENES.
+    // Mismo caso que el recolector: el `baseId` venía bien desde F74 y el nombre
+    // venía de otra lista, así que sin esto tus T1 se seguirían llamando "Dron
+    // Explorador" los tres. Idempotente por la misma razón: se compara antes de
+    // tocar, y la firma de obra se conserva porque solo vive en el nombre.
+    const name = nombreDe('companion', baseId ? basePorId(baseId) ?? null : null)
+      + sufijoDeObraDe(c.name);
     if (tiene) reparados.set(c.id, potential); else { changed = true; reparados.set(c.id, 3); }
     bases.set(c.id, baseId);
-    if (tiene && c.power === power && c.baseId === baseId && c.maxLevel === maxLevel) return c;
+    if (tiene && c.power === power && c.baseId === baseId && c.maxLevel === maxLevel && c.name === name) return c;
     changed = true;
-    return { ...c, potential, power, baseId, maxLevel };
+    return { ...c, name, potential, power, baseId, maxLevel };
   });
 
   // Los ids de multiplicadores, cuyas fichas tampoco se tocan: poder fijo.
@@ -874,6 +904,10 @@ export function migraPotencialesDeCompaneros(
     }
     const posF = baseId ? (basePorId(baseId)?.posicion ?? 6) : 6;
     const maxLevel = techoDeNivel(potential, posF);
+    // El nombre del compañero se renombra en el recorrido de arriba, no aquí: la
+    // ficha y el compañero son el mismo objeto, y renombrarlo en los dos sitios
+    // abriría la puerta a que uno se renombre y el otro no. Aquí solo se trae la
+    // base, que es lo que la ficha no tiene.
     if (tiene && f.baseId === baseId && f.maxLevel === maxLevel) return f;
     changed = true;
     return { ...f, potential, baseId, maxLevel };
@@ -1149,23 +1183,57 @@ export function valorGuardadoDeAfijo(
 }
 
 // --------------------------------------------------------------------------
-// Nombres de recolectores crafteadas
+//  EL SUFIJO DE LO FORJADO, Y POR QUÉ EL NOMBRE YA NO SE GENERA AQUÍ
 // --------------------------------------------------------------------------
-
-const FORGE_PREFIX = ['Forja de', 'Espuela de', 'Nucleo de', 'Herencia de', 'Sello de', 'Yunque de'];
-const FORGE_NOUN = ['Vórtice', 'Éclipsis', 'Confín', 'Ceniza', 'Éter', 'Nébula', 'Duna', 'Ónix', 'Zafiro', 'Cobalto'];
-
-/** Nombre generado: "Forja de Ceniza" + sufijo de linaje. */
-export function forgeCollectorName(potential: number, tier: number, rng = Math.random, obra = false): string {
-  const p = FORGE_PREFIX[Math.floor(rng() * FORGE_PREFIX.length)];
-  const n = FORGE_NOUN[Math.floor(rng() * FORGE_NOUN.length)];
-  const tierSuffix = tier >= 11 ? ' PRIMIGENIA' : tier >= 9 ? ' SINGULAR' : '';
-  // La obra firma en el nombre para que se pueda buscar en el almacén: es el
-  // mismo sufijo donde ya van `·Absoluta` y `·Prima`, no un campo aparte que
-  // solo vería quien abriera la ficha.
-  const potSuffix = obra ? '·Obra Maestra' : potential >= 5 ? '·Absoluta' : potential >= 4 ? '·Prima' : '';
-  return `${p} ${n}${tierSuffix}${potSuffix}`;
+//
+//  Aquí hubo un segundo generador de nombres, con sus propias piezas: `Forja de`
+//  + `Vórtice`, más un sufijo de tier (`PRIMIGENIA`, `SINGULAR`) y otro de
+//  potencial (`·Absoluta`, `·Prima`, `·Obra Maestra`). Sesenta nombres posibles
+//  por tier, y **ninguno tenía lore**: `loreCheck` no los miraba porque no
+//  aparecen en ninguna tabla, así que se colaban encima de los de las cajas.
+//
+//  Lo que hacía era lo contrario de lo que debía. Un recolector forjado es el
+//  **promedio de la posición de sus dos materiales** (`posicionFusionada`): dos
+//  bases 10 dan una 5. Con un nombre generado aparte, el resultado se podía
+//  llamar `Forja de Éter PRIMIGENIA` y llevar detrás una base 3 —es decir, el
+//  nombre prometía rareza y no significaba nada sobre lo que el item pegaba. Es
+//  la mitad de B10 en su forma peor: no solo dos objetos iguales con nombres
+//  distintos, sino un nombre que **afirma** algo falso.
+//
+//  Ahora el nombre forjado es el de su base, y por lo tanto describe el stat
+//  que de verdad tiene.
+//
+//  **QUÉ PASA CON LOS SUFIJOS, Y POR QUÉ NO ES TODO O NADA.** Los tres marcaban
+//  cosas que el jugador busca en el almacén y que **no mienten**: el potencial
+//  (`·Absoluta` es ★5, `·Prima` es ★4) y la firma (`·Obra Maestra`). Se quedan.
+//  Lo que se va es el `PRIMIGENIA`/`SINGULAR`, que describía el **tier**, y el
+//  par prefijo+sustantivo, que no describía nada: eran adornos sobre un stat que
+//  novariaban. El tier ya se pinta en la tarjeta, y la base ya va en el nombre.
+//
+//  Un nombre con sufijo **no tiene lore**, y es lo correcto: `lorePara` busca la
+//  base por nombre entero, `"Forja de Vórtice·Absoluta"` no es ninguna base, y
+//  así un item forjado se queda sin historia en vez de heredar la de un objeto
+//  que no es. Eso lo vigila `loreCheck`.
+export function sufijoDeForja(potential: number, obra: boolean): string {
+  return obra ? '·Obra Maestra' : potential >= 5 ? '·Absoluta' : potential >= 4 ? '·Prima' : '';
 }
+
+/**
+ * EL SUFIJO QUE YA TENÍA UN NOMBRE, PARA QUE EL RENOMBRADO NO LO PISE.
+ *
+ * La migración cambia el nombre de un item por el de su base, y el sufijo de
+ * obra es lo único del nombre viejo que **no se puede recuperar de otro sitio**:
+ * la firma vive también en `obraMaestra`, pero el texto buscable solo está aquí,
+ * y el buscador de `warehouse.ts` mira el nombre.
+ *
+ * Se separa, se nombra y se vuelve a pegar. Cualquier otra cosa sería perder una
+ * marca que el jugador puede haber estado usando para encontrar sus obras.
+ */
+export function sufijoDeObraDe(nombre: string | undefined): string {
+  if (!nombre) return '';
+  return nombre.includes('·Obra Maestra') ? '·Obra Maestra' : '';
+}
+
 
 /**
  * SI UN FORJADO ES OBRA MAESTRA, Y POR QUÉ SON TRES CONDICIONES Y NO UNA.
@@ -1323,7 +1391,11 @@ export function crearCompanioDeTier(
   const posFinal = baseFinal?.posicion ?? 6;
   return {
     id: `comp_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
-    name: nombreDe('companion', tier, rng),
+    // F74 · EL NOMBRE ES EL DE SU BASE, como el del recolector. El mismo bug
+    // exacto: tres nombres por tier, diez bases, y el jugador viendo tres de
+    // diez. Y el `baseFinal` es el que ya está resuelto arriba, para que el
+    // nombre y el `baseId` no puedan salir de bases distintas.
+    name: nombreDe('companion', baseFinal),
     type: 'click',
     power: poderDeCompanero(tier, p, baseFinal),
     // **LA RAREZA LA PONE EL TIER, Y LA PONE ESTA FUNCIÓN.** Estaba escrita a mano
@@ -2189,7 +2261,6 @@ export function attemptForge(
   }
   const newTier = tier + 1;
   const obra = esObraMaestra(materials, potential, (options.obraMaestra ?? 0) > 0);
-  const name = forgeCollectorName(potential, newTier, rng, obra);
 
   // F74 · LA BASE FORJADA ES LA MEDIA DE LAS POSICIONES. Dos bases 10 dan un 10
   // y dos 5 dan un 5: promediar nunca sube, igual que el potencial. Si el tier
@@ -2199,6 +2270,16 @@ export function attemptForge(
     posicionDeBase(materials[1]?.baseId)
   );
   const baseNueva = basePorPosicion(newTier, posNueva, 'recolector') ?? null;
+
+  // **EL NOMBRE SE CALCULA DESPUÉS DE LA BASE, PORQUE ES EL DE LA BASE.** Se
+  // calculaba antes, con un generador aparte, y eso rompía la mitad de B10: la
+  // base forjada es la **media** de los materiales —dos bases 10 dan una 5—, así
+  // que el nombre tenía que cambiar con ella. Si se deja antes, el item se llama
+  // "Estrella Naciente" y pega como una 5, que es la peor forma de mentir: no
+  // solo dice un número que no es, dice que lo que teaches es lo mejor.
+  //
+  // Sin base (T11+) cae al nombre de reserva de `nombres.ts`, que no lanza.
+  const name = nombreDe('collector', baseNueva) + sufijoDeForja(potential, obra);
 
   // El daño sale del potencial, de la base del tier nuevo y de la base forjada.
   // Una sola función, y la misma que usa la tienda, así que potencial, base y
@@ -2338,8 +2419,7 @@ export function attemptForgeCompanion(
   if (esObraMaestra(materials, potential, (options.obraMaestra ?? 0) > 0)) {
     forjado.obraMaestra = true;
     forjado.name = `${forjado.name}·Obra Maestra`;
-  }
-  return { success: true, companion: forjado, chanceUsed: tira.chance };
+  }  return { success: true, companion: forjado, chanceUsed: tira.chance };
 }
 
 function collectorRarity(tier: number, potential: number): Rarity {

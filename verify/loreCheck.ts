@@ -14,7 +14,8 @@
 //  Eso necesita DOM de verdad y es `preview.html` con viewport real.
 // ==========================================================================
 
-import { TIER_SYSTEM, LORE, lorePara, lineaTipoCompanion } from '../src/data/tiers';
+import { LORE, lorePara, lineaTipoCompanion } from '../src/data/tiers';
+import { TODAS_LAS_BASES } from '../src/data/bases';
 import {
   CONSUMABLES_SIN_EXPANSOR, EXPANSOR_TIERS, COMPANION_SLOT_BUY, CRATE_TYPES, CRATE_TIERS, type CrateType
 } from '../src/data/store';
@@ -23,12 +24,7 @@ import { CRATE_ONLY_COMPANIONS } from '../src/components/crateLoot';
 import { check, resumen } from './kit';
 
 async function main() {
-  const deTier = (tabla: Record<number, readonly string[]>) =>
-    Object.values(tabla).flat();
-  const nombresTier = [
-    ...deTier(TIER_SYSTEM.companionNames as any),
-    ...deTier(TIER_SYSTEM.collectorNames as any),
-  ];
+  const nombresTier = TODAS_LAS_BASES.map(b => b.nombre);
   const nombresCaja = CRATE_ONLY_COMPANIONS.map(c => c.name);
   const extra = ['Artillero Táctico'];
 
@@ -66,12 +62,22 @@ async function main() {
 
   // -----------------------------------------------------------------------
   //  1. TODO NOMBRE TIENE LORE.
+  //
+  //  **LA LISTA DE NOMBRES DE TIER SON LAS 200 BASES, NO SESENTA NOMBRES.** Antes
+  //  medía `companionNames` y `collectorNames`, tres nombres por tier y por lado.
+  //  Con el nombre saliendo de la base, esos nombres ya no los lleva ningún item y
+  //  el banco habría pasado en verde midiendo contenido inalcanzable: el fallo
+  //  exacto que este banco existe para cazar, con la lista antigua puesta.
   // -----------------------------------------------------------------------
   {
     const sinLore = todos.filter(n => lorePara(n) === null);
-    check('lore: los 60 nombres de tier tienen lore',
-      deTier(TIER_SYSTEM.companionNames as any).every(n => lorePara(n) !== null) &&
-      deTier(TIER_SYSTEM.collectorNames as any).every(n => lorePara(n) !== null),
+    check('lore: las 200 bases tienen lore',
+      TODAS_LAS_BASES.every(b => lorePara(b.nombre) !== null),
+      TODAS_LAS_BASES.filter(b => lorePara(b.nombre) === null).map(b => b.nombre).join(','));
+    check('lore: el nombre del item ES el de su base, y ese trae lore',
+      // La cadena entera: si el nombre sale de la base, buscarlo tiene que dar
+      // una frase. Esta es la prueba que ata el nombre al stat.
+      nombresTier.every(n => lorePara(n) !== null && lorePara(n)!.length > 20),
       `nombres=${nombresTier.length}`);
     check('lore: los 6 exclusivos de caja tienen lore',
       nombresCaja.every(n => lorePara(n) !== null),
@@ -101,17 +107,18 @@ async function main() {
   //  3. EL LORE AGUANTA LO RARO.
   // -----------------------------------------------------------------------
   {
-    // **UN NOMBRE ES SU LORE O NO LO ES.** Antes esta función hacía un `replace()`
-    // para quitarle el sufijo "SOBRECARGADO" al nombre y buscar el lore del de
-    // verdad, porque el item sobrecargado llevaba el nombre de su base más ese
-    // sufijo. Como el sobrecargado ya no existe, el `replace()` se va con él: lo
-    // que se comprueba ahora es que **un nombre con sufijo no tiene lore**, que
-    // es lo que hace un item mal escrito: que se muestre sin historia en vez de
-    // con la de otro.
+    // **UN NOMBRE ES SU LORE O NO LO ES.** Esta función no hace `replace()` para
+    // quitarle un sufijo al nombre y buscar el lore del de verdad: si lo hiciera,
+    // "Colapso Dorado·Obra Maestra" —que es un item real, forjado y firmado— se
+    // quedaría **sin** lore, que es la mitad de lo que se comprueba aquí.
+    //
+    // Lo que se comprueba ahora es lo contrario de lo de antes: un nombre con
+    // sufijo **no tiene** lore, y la base de la que viene **sí**. Un item forjado
+    // se queda sin historia en vez de heredar la de un objeto que no es.
     check('lore: un nombre con sufijo no se inventa el lore de otro',
-      lorePara('Desintegrador Táctico SOBRECARGADO') === null &&
-      lorePara('Desintegrador Táctico') !== null,
-      `${String(lorePara('Desintegrador Táctico SOBRECARGADO'))} / base=${String(lorePara('Desintegrador Táctico'))}`);
+      lorePara('Colapso Dorado·Obra Maestra') === null &&
+      lorePara('Colapso Dorado') !== null,
+      `${String(lorePara('Colapso Dorado·Obra Maestra'))} / base=${String(lorePara('Colapso Dorado'))}`);
     check('lore: un nombre inventado no tiene lore, no un texto roto',
       lorePara('Cosa Que No Existe') === null,
       String(lorePara('Cosa Que No Existe')));

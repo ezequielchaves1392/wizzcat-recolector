@@ -277,6 +277,10 @@ export const ficha = (id: string, tier = 3, over: any = {}) => ({
   power: 10,
   rarity: RAREZA_NEUTRA,
   tier,
+  // Misma razón que `collector` y `companion`, más abajo: sin `baseId` fijo la
+  // migración renombra el item con lo que salga del dado, y una prueba que busca
+  // por nombre deja de encontrar lo que buscaba según la tirada.
+  baseId: tier >= 1 && tier <= 10 ? 'base_com_t3_6' : undefined,
   ...over
 });
 
@@ -296,7 +300,22 @@ export const ranuras = (g: any): number => countOccupiedSlots(wh(g));
 //  Los items se construyen a mano y no con los generadores del juego, porque una
 //  prueba tiene que poder afirmar sobre un item exacto: si el generador cambia el
 //  daño o el nombre, la prueba mide otra cosa sin avisar.
+//
+//  **EL `baseId` POR DEFECTO NO ES COSA MÍA, Y ES LO QUE MANTIENE ESTOS
+//  FIXTURES ESTABLES.** Con el nombre saliendo de la base, un item guardado sin
+//  `baseId` entra en la migración, la migración le **sortea** una base y le
+//  renombra. Entonces `collector('r2', 1, { name: 'Alfa' })` dejaba de llamarse
+//  "Alfa" y se llamaba lo que saliera del dado —y un test que ordena por nombre
+//  empezaba a fallar según la tirada, sin que nadie hubiera tocado ese test.
+//  Tres bancos dejaron de medir lo que dicen medir por esto.
+//
+//  Con `baseId` puesto, el nombre es el que le toca a esa base y el fixture dice
+//  lo que dice. El que quiera otra base la pasa en `over`, que va después.
 // --------------------------------------------------------------------------
+
+/** La base que llevan los fixtures por defecto: la del medio del tier, ×1,00. */
+export const BASE_NEUTRA = 'base_rec_t3_6';
+export const BASE_NEUTRA_COM = 'base_com_t3_6';
 
 export const collector = (id: string, tier = 3, over: any = {}) => ({
   id,
@@ -308,6 +327,7 @@ export const collector = (id: string, tier = 3, over: any = {}) => ({
   level: 0,
   damage: 20 * tier,
   sellPrice: 500,
+  baseId: tier >= 1 && tier <= 10 ? BASE_NEUTRA : undefined,
   ...over
 });
 
@@ -319,6 +339,7 @@ export const companion = (id: string, tier = 3, over: any = {}) => ({
   rarity: RAREZA_NEUTRA,
   tier,
   sellPrice: 2000,
+  baseId: tier >= 1 && tier <= 10 ? BASE_NEUTRA_COM : undefined,
   ...over
 });
 

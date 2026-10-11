@@ -201,8 +201,13 @@ function items(): EntradaWiki[] {
     { seccion: 'items', ancla: ANCLA.itemsAfijos, titulo: 'Afijos: los pone la rareza', texto: 'afijo afijos forja rareza tienda caja linaje' }
   ];
   for (let t = 1; t <= 10; t++) {
-    const nombres = (TIER_SYSTEM.collectorNames as Record<number, string[]>)[t] ?? [];
-    const compas = (TIER_SYSTEM.companionNames as Record<number, string[]>)[t] ?? [];
+    // F74 · EL ÍNDICE BUSCA LOS NOMBRES DE LAS BASES, NO LOS TRES DEL TIER. Antes
+    // indexaba `collectorNames`/`companionNames`, así que buscar "Núcleo
+    // Defectuoso" —que es como se llama la mitad de las T1 que puedes tener— no
+    // encontraba nada, y buscar "Blaster Láser" encontraba un nombre que ya no
+    // lleva ningún item.
+    const nombres = (BASES_RECOLECTOR[t] ?? []).map(b => b.nombre);
+    const compas = (BASES_COMPANERO[t] ?? []).map(b => b.nombre);
     entradas.push({
       seccion: 'items', ancla: anclaTier(t), titulo: `Tier ${t}`,
       texto: `tier ${t} ${rarezaDeTier(t)} ${nombres.join(' ')} ${compas.join(' ')}`

@@ -57,6 +57,19 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.18.0',
+    fecha: '11 de octubre de 2026',
+    titulo: 'Cada recolector y cada compañero ya tiene su propio nombre',
+    lineas: [
+      'Dentro de un tier ahora hay diez armas y diez compañeros distintos, cada uno con su nombre y su poder: dos T1 ya no son el mismo objeto con dos nombres.',
+      'El nombre dice lo que el objeto es. Antes un T1 podía llamarse "Blaster Láser" y pegar 6, y otro llamarse igual y pegar 8.',
+      'La mejor base de un tier es la más rara de salir, así que hay algo que cazar dentro del tier y no solo subir de tier.',
+      'Lo que forjas se llama por la base que le toca, que es la media de las dos que usaste. Dos mejores dan una buena, nunca una mejor de las dos.',
+      'Lo que ya tenías en el almacén se renombra solo al entrar, y tus obras maestras conservan la firma.',
+      'La wiki lista las diez bases de cada tier con su poder, y buscar por cualquiera de sus nombres las encuentra.'
+    ]
+  },
+  {
     version: '1.17.1',
     fecha: '11 de octubre de 2026',
     titulo: 'Los multiplicadores no llevan afijos, y es a propósito',

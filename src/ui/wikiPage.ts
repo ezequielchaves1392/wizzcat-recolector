@@ -367,8 +367,15 @@ function seccionBases(): string {
 function seccionItems(): string {
   const filasTier = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(t => {
     const [min, max] = rangoDePoder(t);
-    const nombres = (TIER_SYSTEM.collectorNames as Record<number, string[]>)[t] ?? [];
-    const compas = (TIER_SYSTEM.companionNames as Record<number, string[]>)[t] ?? [];
+    // F74 · LO QUE SALÍA AQUÍ ERAN TRES NOMBRES POR TIER, Y NO ERAN LOS DEL JUEGO.
+    // La línea decía "Armas: Blaster Láser · Pistola de Plasma · Rifle de Pulso" y
+    // era media verdad: esas sí son nombres, pero de una lista vieja de la que
+    // **ningún item ha sacado el nombre desde que el nombre es el de su base**.
+    // Ahora son las diez bases del tier, que es lo que el jugador de verdad puede
+    // encontrarse en el almacén, con su multiplicador al lado para que se lea que
+    // son diez objetos distintos y no diez maneras de escribir el mismo.
+    const nombres = (BASES_RECOLECTOR[t] ?? []).map(b => `${b.nombre} ×${b.pesoStat.toFixed(2).replace('.', ',')}`);
+    const compas = (BASES_COMPANERO[t] ?? []).map(b => `${b.nombre} ×${b.pesoStat.toFixed(2).replace('.', ',')}`);
     return `
       <div class="py-2 border-b border-[var(--border-color)] last:border-0" id="${anclaTier(t)}">
         <div class="flex items-center justify-between gap-2">

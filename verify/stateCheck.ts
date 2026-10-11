@@ -1393,8 +1393,18 @@ async function main() {
       check('forja: el T10 da un T11 con daño de T11, no de T1',
         r.success === true && item?.tier === 11 && item?.damage >= min11b,
         `success=${r.success} tier=${item?.tier} daño=${item?.damage} suelo=${min11b}`);
-      check('forja: y con nombre de forja, no un undefined',
-        typeof item?.name === 'string' && item.name.includes('PRIMIGENIA'),
+      // **ESTE TEST CAMBIÓ DE PREGUNTA, Y POR QUÉ NO ES COSA MÍA.** Antes pedía que
+      // el nombre del T11 forjado contuviera "PRIMIGENIA": el antiguo generador de
+      // nombres de forja ponía ese sufijo por tier. Ese generador ya no existe —el
+      // nombre es el de la base, porque el otro prometía rareza y no significaba
+      // nada sobre lo que pegaba— y el T11 no tiene tabla de bases, así que el item
+      // sale con el nombre de reserva.
+      //
+      // Lo que se sigue exigiendo es lo de siempre y lo que de verdad importa: que
+      // tenga nombre. Un item sin nombre no se busca, no se vende por su nombre y
+      // se pinta como `undefined` en la rejilla, y eso no depende de qué base tenga.
+      check('forja: y con nombre, no un undefined',
+        typeof item?.name === 'string' && item.name.length > 0 && !item.name.includes('undefined'),
         `nombre=${item?.name}`);
       const g2 = await reload();
       check('forja: el T11 sobrevive a la recarga con su daño',

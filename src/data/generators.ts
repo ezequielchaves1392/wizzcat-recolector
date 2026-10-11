@@ -76,7 +76,13 @@ export function generateCollectorByTier(
   const rarity = TIER_SYSTEM.rarityByTier[tier as keyof typeof TIER_SYSTEM.rarityByTier] || 'Común';
   return {
     id: `collector_t${tier}_${Date.now()}_${Math.floor(rng() * 1e9).toString(36).substring(2, 7)}`,
-    name: nombreDe('collector', tier, rng),
+    // F74 · EL NOMBRE ES EL DE SU BASE. Antes sortea entre tres nombres del tier
+    // que no tenían nada que ver con el daño: dos T1 con el mismo nombre podían
+    // pegar 6 y 8, y de las diez bases de un tier el jugador solo veía tres.
+    // El `base` es el que ya se sorteó arriba, no uno nuevo: si el nombre y el
+    // `baseId` salieran de bases distintas, el item volvería a mentir sobre lo
+    // que pega.
+    name: nombreDe('collector', base),
     type: 'collector',
     details: `Recolección por click: +${power}`,
     rarity,

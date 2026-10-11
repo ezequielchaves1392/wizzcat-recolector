@@ -38,33 +38,19 @@ export const TIER_SYSTEM = {
     9: [230, 346],
     10: [373, 559]
   } as Record<number, [number, number]>,
-  // Nombres de compañeros por tier (de base a imponente)
-  companionNames: {
-    1: ['Dron Explorador', 'Dron Centinela', 'Dron Mensajero'],
-    2: ['Cazador Nocturno', 'Rastreador Fantasma', 'Explorador Estelar'],
-    3: ['Guerrero Mecánico', 'Titán de Acero', 'Coloso de Batalla'],
-    4: ['Señor de la Guerra', 'Destruyente Imperial', 'Aniquilador Prime'],
-    5: ['Avatar del Caos', 'Heraldo del Vacío', 'Portador del Trueno'],
-    6: ['Supremo Estratega', 'Maestro de Batallas', 'General Supremo'],
-    7: ['Forjador de Mundos', 'Creador de Imperios', 'Arquitecto Cósmico'],
-    8: ['Devorador de Estrellas', 'Señor del Tiempo', 'Amo del Espacio'],
-    9: ['Entidad Primordial', 'Ser Trascendente', 'Conciencia Universal'],
-    10: ['Dios de la Guerra', 'El Omnipotente', 'El Infinito']
-  },
-  // Nombres de recolectores por tier
-  collectorNames: {
-    1: ['Blaster Láser', 'Pistola de Plasma', 'Rifle de Pulso'],
-    2: ['Cañón de Partículas', 'Lanzador de Energía', 'Desintegrador Táctico'],
-    3: ['Aniquilador Cuántico', 'Devorador de Materia', 'Coloso de Fuego'],
-    4: ['Guadaña del Vacío', 'Maldición Estelar', 'Juicio Final'],
-    5: ['Apocalipsis', 'Armagedón', 'Ragnarök'],
-    6: ['Excalibur', 'Mjolnir', 'Gungnir'],
-    7: ['Lanza del Destino', 'Espada del Crepúsculo', 'Hacha del Caos'],
-    8: ['Corte del Tiempo', 'Filo del Infinito', 'Navaja Cósmica'],
-    9: ['Recolector del Apocalipsis', 'Instrumento de la Muerte', 'Herencia de los Dioses'],
-    10: ['El Principio y El Fin', 'La Última Palabra', 'El Todo y La Nada']
-  },
   // Rareza por tier
+  //
+  // **NO HAY TABLAS DE NOMBRES AQUÍ, Y ANTES SÍ HABÍA DOS.** Cada tier tenía tres
+  // nombres escritos a mano (`companionNames` y `collectorNames`), y el item
+  // sorteaba entre ellos. Era media partida del bug de B10: la base oculta —que
+  // es lo que de verdad decide el daño— se sorteaba **aparte**, así que veinte
+  // T1 con diez bases distintas se llamaban todos con tres nombres, y dos T1 con
+  // el mismo nombre podían pegar 6 y 8.
+  //
+  // El nombre sale ahora de la base, en `nombres.ts`, y el lore de cada una vive
+  // junto a ella, en `bases.ts`. Diez bases por tier y por lado, todas con
+  // nombre, todas con lore y todas con su propio multiplicador.
+  //
   rarityByTier: {
     1: 'Común',
     2: 'Común',
@@ -123,92 +109,34 @@ export function rarezaDeTier(tier: number): string {
 // el jugador necesita para decidir si lo equipa.
 // ==========================================================================
 
+// ==========================================================================
+//  F74 · EL LORE DE LOS COMPAÑEROS Y LOS RECOLECTORES, Y POR QUÉ NO ESTÁ AQUÍ
+//
+//  Antes ocupaba casi cien líneas de este bloque: tres nombres por tier y por
+//  lado, cada uno con su frase. Ese contenido es el de `bases.ts` ahora, junto a
+//  la base a la que pertenece —**diez bases por tier y por lado, no tres nombres**—
+//  y cada una con su lore al lado, que es donde se revisa.
+//
+//  `lorePara()` de aquí abajo **cae a la base** cuando el nombre no está en esta
+//  tabla, así que la ficha enseña el lore de la base sin que el almacén, la forja
+//  ni la wiki tengan que saber nada nuevo. Y como el nombre de un item **es** el
+//  de su base, el nombre y la frase salen de la misma línea de código: es la
+//  única forma de que no puedan separarse.
+//
+//  `bases.ts` no importa nada de este fichero, así que esta flecha no es un
+//  ciclo. Si algún día `bases.ts` necesitara un rango de aquí, esta importación
+//  pasa a ser un `import type` o la función se mueve: el ciclo lo delata el
+//  type-check, no el navegador.
+// ==========================================================================
+
+import { TODAS_LAS_BASES } from './bases';
+
 export const LORE: Record<string, string> = {
-  // ---------------------------------------------------------- COMPAÑEROS T1
-  'Dron Explorador': 'Cartografía cada rincón de la base antes de que amanezca.',
   // F97 Lote 2d · Los tres buffers de compañero.
   'Buffer Pasivo': 'Un rato de más para los que trabajan solos.',
   'Buffer Click': 'Los golpes se repiten mejor cuando alguien marca el ritmo.',
   'Buffer Global': 'Un empujón que llega a todos, aunque no todos lo agradezcan.',
-  'Dron Centinela': 'No parpadea. No duerme. Vigila tu producción.',
-  'Dron Mensajero': 'Lleva tus nanitas de un nodo a otro sin perder ni una.',
-  // ---------------------------------------------------------- COMPAÑEROS T2
-  'Cazador Nocturno': 'Caza vetas de nanitas dormidas bajo la Cyber Base.',
-  'Rastreador Fantasma': 'Sigue rastros de energía que nadie más puede ver.',
-  'Explorador Estelar': 'Trae polvo de estrellas para fundir en tu reserva.',
-  // ---------------------------------------------------------- COMPAÑEROS T3
-  'Guerrero Mecánico': 'Un veterano de cien batallas de chatarra.',
-  'Titán de Acero': 'Su sola presencia ordena la línea de extracción.',
-  'Coloso de Batalla': 'Donde pisa, la tierra entrega lo que esconde.',
   'Artillero Táctico': 'Calcula cada salva para no desperdiciar ni un gramo.',
-  // ---------------------------------------------------------- COMPAÑEROS T4
-  'Señor de la Guerra': 'Conquistó tres sectores y los puso a producir.',
-  'Destruyente Imperial': 'Desmonta defensas rivales y se queda el botín.',
-  'Aniquilador Prime': 'El primero de su serie. Los demás son copias.',
-  // ---------------------------------------------------------- COMPAÑEROS T5
-  'Avatar del Caos': 'Siembra desorden y cosecha lo que cae al suelo.',
-  'Heraldo del Vacío': 'Anuncia la nada, y la nada paga bien.',
-  'Portador del Trueno': 'Cada tormenta deja un reguero de nanitas.',
-  // ---------------------------------------------------------- COMPAÑEROS T6
-  'Supremo Estratega': 'Gana la partida antes de que empiece el turno.',
-  'Maestro de Batallas': 'Convierte cada escaramuza en materia prima.',
-  'General Supremo': 'Sus tropas extraen incluso dormidas.',
-  // ---------------------------------------------------------- COMPAÑEROS T7
-  'Forjador de Mundos': 'Su poder de extracción no se había visto nunca: la tierra se quiebra a su paso.',
-  'Creador de Imperios': 'Levanta fundiciones donde otros ven desierto.',
-  'Arquitecto Cósmico': 'Dibuja la base en las estrellas y la base obedece.',
-  // ---------------------------------------------------------- COMPAÑEROS T8
-  'Devorador de Estrellas': 'Se alimenta de soles y devuelve nanitas.',
-  'Señor del Tiempo': 'Recoge hoy lo que producirás mañana.',
-  'Amo del Espacio': 'Dobla la distancia entre la veta y tu almacén.',
-  // ---------------------------------------------------------- COMPAÑEROS T9
-  'Entidad Primordial': 'Existía antes que la primera nanita.',
-  'Ser Trascendente': 'Opera en un plano donde todo ya es tuyo.',
-  'Conciencia Universal': 'Piensa en tu producción y la producción ocurre.',
-  // ---------------------------------------------------------- COMPAÑEROS T10
-  'Dios de la Guerra': 'La batalla es su culto y el botín su ofrenda.',
-  'El Omnipotente': 'No necesita razones. Solo resultados.',
-  'El Infinito': 'Su turno no termina nunca. Tu recolección por segundo tampoco.',
-  // --------------------------------------------------------- RECOLECTORES T1
-  'Blaster Láser': 'El primer click de todo operativo.',
-  'Pistola de Plasma': 'Calienta la veta antes de partirla.',
-  'Rifle de Pulso': 'Dispara al ritmo de tu dedo.',
-  // --------------------------------------------------------- RECOLECTORES T2
-  'Cañón de Partículas': 'Acelera lo pequeño hasta romper lo grande.',
-  'Lanzador de Energía': 'Cada descarga abre una grieta nueva.',
-  'Desintegrador Táctico': 'Desarma la materia pieza por pieza.',
-  // --------------------------------------------------------- RECOLECTORES T3
-  'Aniquilador Cuántico': 'Borra la distancia entre tu mano y la veta.',
-  'Devorador de Materia': 'Mastica roca y escupe nanitas.',
-  'Coloso de Fuego': 'Funde la montaña y recoge lo que brilla.',
-  // --------------------------------------------------------- RECOLECTORES T4
-  'Guadaña del Vacío': 'Siega lo que el vacío deja atrás.',
-  'Maldición Estelar': 'Una estrella apagada con rencor productivo.',
-  'Juicio Final': 'Dicta sentencia sobre cada veta.',
-  // --------------------------------------------------------- RECOLECTORES T5
-  'Apocalipsis': 'El fin del mundo, en tu mano.',
-  'Armagedón': 'La última batalla se libra en cada click.',
-  'Ragnarök': 'Los dioses cayeron. Sus restos rinden.',
-  // --------------------------------------------------------- RECOLECTORES T6
-  'Excalibur': 'Solo un digno la empuña. Eres tú.',
-  'Mjolnir': 'El trueno obedece a quien la levanta.',
-  'Gungnir': 'El mango recuerda todas las manos que no lo volvieron a agarrar.',
-  // --------------------------------------------------------- RECOLECTORES T7
-  'Lanza del Destino': 'Apunta al futuro y el futuro paga.',
-  'Espada del Crepúsculo': 'Corta entre el día y la noche de la veta.',
-  'Hacha del Caos': 'El desorden, bien dirigido, produce.',
-  // --------------------------------------------------------- RECOLECTORES T8
-  'Corte del Tiempo': 'Extrae del ayer para gastar hoy.',
-  'Filo del Infinito': 'No tiene borde. Tiene propósito.',
-  'Navaja Cósmica': 'Afeita nebulosas enteras.',
-  // --------------------------------------------------------- RECOLECTORES T9
-  'Recolector del Apocalipsis': 'Cosecha el fin de los tiempos.',
-  'Instrumento de la Muerte': 'Toca la melodía que abre la roca.',
-  'Herencia de los Dioses': 'Lo que dejaron atrás, ahora es tuyo.',
-  // -------------------------------------------------------- RECOLECTORES T10
-  'El Principio y El Fin': 'Todo empieza y termina en tu click.',
-  'La Última Palabra': 'Después de ella no hay más veta.',
-  'El Todo y La Nada': 'Extrae del todo. Guarda la nada.',
   // ------------------------------------------------- EXCLUSIVOS DE CAJA
   'Fantasma Cuántico': 'Existe y no existe, y en los dos estados se queda.',
   'Oráculo Tribal': 'Los ancianos predijeron tu riqueza.',
@@ -288,10 +216,26 @@ export const LORE: Record<string, string> = {
  *
  * Cualquier nombre sin entrada no tiene lore, y eso es lo que el banco
  * `loreCheck` vigila: un nombre sin lore es contenido a medias (D4).
+ *
+ * **Y SI NO ESTÁ EN LA TABLA, SE MIRA EN LA BASE.** El nombre de un compañero o
+ * un recolector **es** el de su base, y su lore vive con ella, en `bases.ts`.
+ * Antes eran dos tablas y podía desincronizarse: hoy el nombre y la frase salen
+ * de la misma línea de código, que es la única forma de que no puedan separarse.
+ *
+ * El orden importa: primero esta tabla, y solo si no está, la base. Así un
+ * consumible o un exclusivo de caja —que sí viven aquí— no pierde su lore por
+ * tener un nombre parecido al de una base.
+ *
+ * **Y LO QUE NO HACE.** No adivina: un nombre que no es de esta tabla ni el de
+ * ninguna base devuelve `null`, no un texto vacío ni el de otro. Un item mal
+ * escrito se queda **sin historia a la vista**, que es justo lo que hay que ver,
+ * en vez de enseñar la de un objeto que no es.
  */
 export function lorePara(nombre: string): string | null {
   if (!nombre) return null;
-  return LORE[nombre] ?? null;
+  const propio = LORE[nombre];
+  if (propio) return propio;
+  return TODAS_LAS_BASES.find(b => b.nombre === nombre)?.lore ?? null;
 }
 
 /**

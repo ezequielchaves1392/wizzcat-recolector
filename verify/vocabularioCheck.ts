@@ -30,6 +30,7 @@ import { check, resumen } from './kit';
 import { TREE_NODES } from '../src/data/tree';
 import { AFFIXES } from '../src/data/crafting';
 import { LORE, lineaTipoCompanion } from '../src/data/tiers';
+import { TODAS_LAS_BASES } from '../src/data/bases';
 import { CONSUMABLES_SIN_EXPANSOR, CRATE_TYPES, STORE_ITEMS, EXPANSOR_TIERS } from '../src/data/store';
 import { DESCRIPTIONS as TIENDA } from '../src/components/store';
 import { BUFF_LABELS, type BuffKey } from '../src/data/buffs';
@@ -158,6 +159,13 @@ function corpusDe(): { textos: Texto[]; porFuente: Record<string, number> } {
   // el nombre de un tier o el de un buff, así que `recoger` los descartaría: aquí
   // el valor entero es el texto y se entra sabiéndolo.
   anadir('lore', Object.entries(LORE).map(([k, v]) => ({ donde: `lore.${k}`, dice: v })));
+  // **EL LORE DE LAS BASES ENTRA COMO FUENTE SUYA, Y POR QUÉ HACE FALTA.** Desde
+  // F74 el nombre de un recolector o un compañero es el de su base, y su lore
+  // vive en `bases.ts` — doscientas frases, las que más se leen del juego—. Si el
+  // corpus no las recoge, el banco vigila treinta y cuatro textos y dice que
+  // vigila todo: el fallo justo que este banco existe para cazar, y además
+  // silencioso, porque el mínimo por fuente se cumplía igual con las bases fuera.
+  anadir('loreBases', TODAS_LAS_BASES.map(b => ({ donde: `base.${b.id}`, dice: b.lore })));
   anadir('buffs', Object.entries(BUFF_LABELS).map(([k, v]) => ({ donde: `buffs.${k}`, dice: v })));
 
   // **LOS TEXTOS QUE NO SON DATOS SINO QUE SALEN DE UNA FUNCIÓN.** La línea del
@@ -202,7 +210,12 @@ function corpusDe(): { textos: Texto[]; porFuente: Record<string, number> } {
  */
 const MINIMOS: Record<string, number> = {
   arbol: 100, afijos: 20, consumibles: 15, cajas: 20, tienda: 10, fichasTienda: 25,
-  expansores: 3, cosmeticos: 60, notas: 200, logros: 60, logrosDificiles: 10, lore: 50,
+  expansores: 3, cosmeticos: 60, notas: 200, logros: 60, logrosDificiles: 10, lore: 30,
+  // F74 · Las doscientas frases de `bases.ts`. Antes el mínimo de `lore` era 50 y
+  // lo cumplían los nombres de tier que ahora están en otro fichero; con el
+  // nombre saliendo de la base, ese mínimo se cumple con treinta y cuatro y el
+  // banco sigue en verde sin haber mirado una sola de las doscientas.
+  loreBases: 200,
   buffs: 8, lineaCompanion: 3, bonos: 20, simuladorBase: 1, simuladorArbol: 1
 };
 
