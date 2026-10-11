@@ -33,7 +33,8 @@ import {
   efectoDeAfijos, valorGuardadoDeAfijo, textoDeAfijo, heredaValoresDeAfijo,
   afijosParaRareza, cabePorRareza, AFIX_MIN_POR_RARIDAD, AFFIXES, POOL_AFIJOS_COMPANERO,
   AFIJOS_SOLO_CRITICO,
-  efectoDeAfijosDeCompanero,
+  efectoDeAfijosDeCompanero, migraAfijosDeCompaneros, llevaAfijosDeCompanero,
+  crearCompanioDeTier,
   VALOR_AFIJO_MIN, VALOR_AFIJO_MAX, pesoDeAfijo,
   // **UN SOLO IMPORT POR MODULO, Y NO POR ESTETICA.** Este fichero tenia dos
   // lineas importando de `data/crafting`: una para la forja y otra para el resto.
@@ -956,7 +957,131 @@ async function main() {
       masFuerte?.id === 'aff_prime', `el más fuerte es ${masFuerte?.id}`);
   }
 
-  resumen('el valor de cada afijo');
+  // =========================================================================
+// 18 · EL MULTIPLICADOR NO LLEVA AFIJOS, Y ESO ES UNA DECISIÓN CON NOMBRE.
+//
+//     El resto del banco vigila que los afijos **hagan** algo. Esta fila vigila lo
+//     contrario: que un tipo de compañero **no pueda llevar afijos que no cobraría**.
+//
+//     **POR QUÉ IMPORTA SI HOY NO HAY BUG.** La invariante se sostenía con tres
+//     saltadores implícitos y ninguna prueba: la migración se saltaba por
+//     `companionType`, las cajas no ponían afijos, y la forja no podía hacer un
+//     multiplicador porque `crearCompanioDeTier()` devuelve `type: 'click'` fijo.
+//     Los tres se rompen por su cuenta —que alguien añada un exclusivo de caja con
+//     tier, o que la forja aprenda a hacer multiplicadores— y el resultado es un
+//     afijo fantasma **en la stat más cara del juego**, sin que nada salga rojo.
+//
+//     Y esto no es hipótesis: hace dos commits pasó exactamente eso con el filtro
+//     de crítico, que era una lista de ids y no alcanzó al afijo nuevo.
+// =========================================================================
+{
+  // 1 · La regla, en los dos sentidos y con los casos que la pueden romper.
+  check('multiplicador: un multiplier NUNCA lleva afijos, tenga el tier que tenga',
+    ![1, 5, 10].some(t => llevaAfijosDeCompanero('multiplier', t)),
+    'algún tier lo deja pasar');
+
+  // **Y QUE UN ITEM SIN TIPO TAMPOCO ES UN MULTIPLICADOR.** El item con el que se
+  // compra un compañero en la tienda **no trae `companionType`** —el tipo vive en
+  // `state.companions` y el item solo lleva el id—, y una versión de esta regla
+  // exigía un tipo conocido. Con eso, de golpe, **ningún compañero comprado en
+  // la tienda migraba sus afijos**, que es justo lo que la migración existe para
+  // curar. Lo dijeron los bancos, no el jugador.
+  //
+  // La diferencia entre las dos reglas es de fondo, no de este caso: **"lo que
+  // no sé, no lo pago" no es lo mismo que "a lo que no conozco, no lo toco"**, y
+  // solo la segunda es segura cuando el dato puede faltar de verdad. Aquí
+  // falta, porque el juego nunca lo escribió en el item.
+  check('multiplicador: sin companionType NO es un multiplicador (y sí lleva afijos)',
+    llevaAfijosDeCompanero(undefined, 5)
+    && llevaAfijosDeCompanero(null, 5)
+    && llevaAfijosDeCompanero('', 5),
+    'un item de tienda sin companionType dejaría de migrar sus afijos');
+
+  check('multiplicador: y click y pasivo CON tier sí los llevan',
+    llevaAfijosDeCompanero('click', 5) && llevaAfijosDeCompanero('passive', 5));
+
+  // **EL CONTROL NEGATIVO, QUE ES LA PARTE QUE HACE VALER LAS OTRAS.** Sin esta
+  // fila, la de arriba pasa igual con la función devolviendo `false` siempre —que
+  // es un arreglo de efecto contrario y dejaría a los 400 compañeros del juego
+  // sin un solo afijo sin que nadie se entere—. Por eso comprueba el camino
+  // completo: una migración real, con un click de tier, tiene que SÍ rellenar.
+  const migra = migraAfijosDeCompaneros(
+    [{ id: 'mc', type: 'companion', companionType: 'multiplier', tier: 5, rarity: 'Legendario', affixes: [] },
+      { id: 'cp', type: 'companion', companionType: 'passive', tier: 5, rarity: 'Legendario', affixes: [] },
+      { id: 'cd', type: 'companion', companionType: 'click', tier: 3, rarity: 'Épico', affixes: [] }],
+    () => 0.5);
+  check('multiplicador: la migración NO le pone afijos…',
+    (migra.fichas[0].affixes ?? []).length === 0,
+    `salió con ${JSON.stringify(migra.fichas[0].affixes)}`);
+
+  check('…pero sí se los pone al pasivo de al lado (si no, la fila de arriba no dice nada)',
+    (migra.fichas[1].affixes ?? []).length === AFIX_MIN_POR_RARIDAD['Legendario'],
+    `pasivo: ${JSON.stringify(migra.fichas[1].affixes)}`);
+  check('…y al click Épico lleva 2, como todo el mundo',
+    (migra.fichas[2].affixes ?? []).length === 2,
+    `click: ${JSON.stringify(migra.fichas[2].affixes)}`);
+
+  // 2 · Que laSkip sea IDEMPOTENTE también con los que ya traen afijos: si una
+  //     partida guardada tuviera un multiplicador con afijos —y puede, porque
+  //     hasta hace nada el filtro era una lista de ids—, la migración tiene que
+  //     quitarlos. Si se los deja, son fantasma garantizados.
+  const conAfijosPrevios = migraAfijosDeCompaneros(
+    [{ id: 'mc', type: 'companion', companionType: 'multiplier', tier: 5, rarity: 'Legendario',
+       affixes: ['aff_sharp', 'aff_rapid'] }], () => 0.5);
+  check('multiplicador: y le QUITA los que una partida guardada ya trajera',
+    (conAfijosPrevios.fichas[0].affixes ?? []).length === 0,
+    `siguen ahí: ${JSON.stringify(conAfijosPrevios.fichas[0].affixes)}`);
+
+  // 3 · Y que la función de efecto no les pague nada, que es lo que hace que
+  //     quitar los afijos de arriba sea correcto y no arbitrario.
+  check('multiplicador: su función de efecto devuelve 0, sea cual sea el afijo',
+    AFFIXES.every(a => efectoDeAfijosDeCompanero([a.id], 10, 5, 'multiplier') === 0));
+
+  // 4 · **Y QUE LA FORJA NO PUEDA HACER UNO.** Es el segundo saltador implícito,
+  //     y es el que nadie miraría: si algún día `crearCompanioDeTier()` aprende a
+  //     devolver multiplicadores, un compañero forjado nace con afijos y no los
+  //     cobra. Esta fila lo dice en el sitio donde se rompería.
+  const forjado = crearCompanioDeTier(8, 4, () => 0.5);
+  check('multiplicador: la forja no fabrica multiplicadores',
+    forjado.type !== 'multiplier',
+    `la forja devolvió type=${forjado.type}`);
+
+  // **Y EL CONTROL POSITIVO DE ESA MISMA FILA**, porque sola no dice nada: si
+  // `crearCompanioDeTier()` devolviera 'multiplier' siempre, la fila de arriba
+  // pasaría y la forja entero habría dejado de dar afijos.(forja sí los lleva:
+  // es lo que se hizo en F97 para que la forja no fuera la única vía sin afijos.)
+  check('multiplicador: …pero los click y pasivo de forja sí los llevan',
+    llevaAfijosDeCompanero(forjado.type, forjado.tier));
+
+  // 5 · **Y LA CIFRA QUE EXPLICA LA DECISIÓN, CON LOS NÚMEROS DE VERDAD.**
+  //
+  //     Esta fila reemplazó a una que decía que el multiplicador Mítico "ganaría"
+  //     al Legendario si llevara afijos. **Era falso y lo comprobé antes de
+  //     dejarlo escrito**: con tres afijos de los fuertes contra cuatro, el Oráculo
+  //     sale 7,53 y el Fantasma 7,29 — el Legendario sigue ganando, por poco. La
+  //     cuenta no daba la inversión, y ponerla ahí habría sido escribir una
+  //     justificación inventada para una decisión que sí tiene motivo: el motivo
+  //     son los absolutos, no el orden.
+  //
+  //     Un multiplicador lee **las dos mitades** del afijo —multiplica todo—, así
+  //     que el afijo más fuerte del catálogo le vale el doble que a un click o a un
+  //     pasivo. Con cuatro de esos, el aura pasa de ×1,35 a **×7,3**. Eso no es una
+  //     inversión de la escalera: es **el número más fuerte del juego multiplicado
+  //     por cuatro**, en un compañero que sale de una bolsa del 2,5 % de la caja
+  //     legendaria y del que no hay ni una prueba.
+  const masFuerteDelCatalogo = Math.max(...(AFFIXES as any[])
+    .map(a => (a.effect.clickMult || 0) + (a.effect.passiveMult || 0)));
+  const conAura = (power: number, rarity: string) =>
+    Math.round((1 + power) * (1 + masFuerteDelCatalogo * (AFIX_MIN_POR_RARIDAD[rarity] ?? 0)) * 100) / 100;
+  const base = 1 + 0.75;
+  check('multiplicador: por eso NO lleva afijos (el aura se iría a ×' +
+    String(conAura(0.75, 'Legendario')).replace('.', ',') + ' con los afijos más fuertes)',
+    conAura(0.75, 'Legendario') > base * 3
+    && base < 2,
+    `aura sola ×${base}, con afijos ×${conAura(0.75, 'Legendario')}`);
+}
+
+resumen('el valor de cada afijo');
 }
 
 export default main();

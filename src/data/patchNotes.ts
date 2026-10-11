@@ -57,6 +57,16 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.17.1',
+    fecha: '11 de octubre de 2026',
+    titulo: 'Los multiplicadores no llevan afijos, y es a propósito',
+    lineas: [
+      'Un compañero multiplicador nunca lleva afijos: su poder no es "produce tanto", es "cuántas veces se cuenta lo de los demás".',
+      'Se quitaron los que una partida muy vieja hubiera podido dejarle, que se veían en su ficha y no le pagaban nada.',
+      'Los compañeros comprados en la tienda siguen migrando sus afijos como siempre.'
+    ]
+  },
+  {
     version: '1.17.0',
     fecha: '10 de octubre de 2026',
     titulo: 'Tres afijos nuevos y ningún afijo de mentira',

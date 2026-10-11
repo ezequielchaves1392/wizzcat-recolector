@@ -2988,11 +2988,72 @@ export function efectoDeAfijosDeCompanero(
  * lo único que hacía era dejar escrito que los forjados eran distintos. Ahora
  * la forja les da afijos con la misma tabla, y esta migración es idempotente:
  * los que ya los traen se conservan y lo único que cura es el compañero
- * forjado de antes del cambio, que salió sin ninguno. Se salta los
- * `multiplier` —su aura es fija y no lee afijos— y los sin tier (los
- * exclusivos de caja, de poder fijo y hechos a mano). Lo demás sigue la tabla
- * universal: si es Épico lleva 2.
+ * forjado de antes del cambio, que salió sin ninguno. **A quién le tocan afijos
+ * decide `llevaAfijosDeCompanero()`, no esta función**: aquí solo estaba el skip,
+ * y skip no es lo mismo que regla.
  */
+/**
+ * LOS COMPAÑEROS QUE NO LLEVAN AFIJOS, Y POR QUÉ (F99).
+ *
+ * **ES UNA DECISIÓN, NO UN HUECO, Y ESTÁ ESCRITA AQUÍ PARA QUE NO SE LEA COMO
+ * UN HUECO.** Un `multiplier` no lleva afijos porque su poder **ya es un
+ * multiplicador**: no produce nada, cambia cuántas veces se cuenta lo de los
+ * demás. Un afijo que suma un porcentaje a "lo que produce" no tiene a qué
+ * agarrarse, y la forma que se ocurre sola —que el afijo multiplicara el aura—
+ * **revienta los absolutos**:
+ *
+ * - El aura es **el número más fuerte que existe** (×1,35 y ×1,75), y sale de
+ *   una bolsa del 2,5 % de la caja legendaria.
+ * - Y un multiplicador leería **las dos mitades** de cada afijo, porque
+ *   multiplica todo: el más fuerte del catálogo le valdría el doble que a un
+ *   click. El Oráculo con sus tres afijos se iría de ×1,75 a **×7,5**.
+ *
+ * **LO QUE NO ES EL MOTIVO, Y SE ESCRIBIÓ EN EL BORRADOR.** La primera versión
+ * de este comentario decía que el multiplicador Mítico "superaría" al Legendario
+ * por llevar cuatro afijos contra tres. **Se comprobó y es falso**: ×7,29 contra
+ * ×7,53 —el Legendario sigue ganando, por poco—. Poner ahí una justificación
+ * inventada es peor que no poner motivo: el día que alguien la compruebe y no
+ * cuadre, deja de fiarse de todo lo demás que dice este archivo. El motivo son los
+ * absolutos, y basta.
+ *
+ * La otra mitad —darle un eje propio, fuerza de aura o ranuras— **no se ha
+ * hecho**, y está anotada en `docs/PENDIENTES.md`. Es una feature, no un arreglo,
+ * y necesita su propia decisión.
+ *
+ * **POR QUÉ ESTA FUNCIÓN EXISTE.** La invariante se sostenía con **tres saltadores
+ * implícitos** y ninguna prueba: la migración se saltaba por `companionType`, la
+ * forja no podía producir un multiplicador porque `crearCompanioDeTier()`
+ * devuelve `type: 'click'` fijo, y las cajas no ponían afijos. Los tres se
+ * rompen por su cuenta —que alguien añada un exclusivo con tier, o que la forja
+ * aprenda a hacer multiplicadores— y el resultado es un afijo fantasma en la
+ * stat más cara del juego, sin que nada salga rojo. Con esta función hay **un
+ * sitio** que decide, y `afijoValorCheck` lo vigila en las dos direcciones.
+ *
+ * **Y LA REGLA ES "SE QUITA AL MULTIPLICADOR", NO "HAY QUE SABER EL TIPO".**
+ * Una versión de aquí exigía que el tipo fuera `click` o `passive` y rechazaba
+ * cualquier otra cosa, con la idea de que un desconocido no puede cobrar afijos.
+ * Eso rompe el juego entero y lo dice un banco, no el jugador: el item con el
+ * que se compra un compañero en la tienda —`gameLoop.ts`, la rama de
+ * `companionCardT`— se guarda en el almacén **sin `companionType`**, porque el
+ * tipo vive en `state.companions` y el item solo lleva id. Con la regla estricta,
+ * **ningún compañero comprado en la tienda migraba sus afijos**, que es
+ * justo lo que la migración existe para curar.
+ *
+ * La lección es de fondo y no es de este juego: **"lo que no sé, no lo Pago" es
+ * una regla distinta de "a lo que no conozco, no lo toco", y solo la segunda es
+ * segura cuando el dato puede faltar de verdad.** Aquí el dato falta, porque el
+ * juego nunca lo escribió en el item.
+ */
+export function llevaAfijosDeCompanero(
+  tipo: string | undefined | null, tier: unknown
+): boolean {
+  if (tipo === 'multiplier') return false;
+  // Sin tier no hay ni base ni potencial de rango. Esto incluye a los
+  // exclusivos de caja, de poder fijo y hechos a mano.
+  const t = Number(tier);
+  return Number.isFinite(t) && t >= 1;
+}
+
 export function migraAfijosDeCompaneros(
   fichas: any[],
   rng: () => number = Math.random
@@ -3001,9 +3062,25 @@ export function migraAfijosDeCompaneros(
   const pool = POOL_AFIJOS_COMPANERO;
   const salida = (fichas ?? []).map((f) => {
     if (f?.type !== 'companion') return f;
-    if ((f as any).companionType === 'multiplier') return f;
+    // **LA REGLA, EN UN SITIO.** Antes el skip escribía `companionType` a mano y
+    // se apoyaba además en que el multiplicador no tuviera tier —una casualidad
+    // que el próximo exclusivo con tier deshace—. Ahora decide `llevaAfijosDeCompanero()`.
+    //
+    // **Y EL MULTIPLICADOR NO SE SALTA: SE LIMPIA.** Antes volvía intacto, y eso
+    // era un agujero: si una partida guardada tuviera un multiplicador con afijos —
+    //y el filtro de crítico, durante un rato, pudo dejar pasar exactamente eso—, la
+    // migración lo dejaba con ellos para siempre, y serían fantasma garantizados:
+    // la ficha los enseña y la cuenta no los cobra. Saltar es "no hacer nada";
+    // limpiar es "dejar el inventario decente" —que es lo que hace el resto de la
+    // función con los afijos que sobran o no se reconocen.
+    if ((f as any).companionType === 'multiplier') {
+      const lista = Array.isArray((f as any).affixes) ? (f as any).affixes : [];
+      if (lista.length === 0) return f;
+      changed = true;
+      return { ...f, affixes: [] };
+    }
     const tier = Number((f as any).tier);
-    if (!Number.isFinite(tier) || tier < 1) return f;
+    if (!llevaAfijosDeCompanero((f as any).companionType, tier)) return f;
     const objetivo = AFIX_MIN_POR_RARIDAD[(f as any).rarity];
     if (objetivo === undefined) return f;
     const tope = Math.max(0, Math.min(objetivo, AFIX_MAX));

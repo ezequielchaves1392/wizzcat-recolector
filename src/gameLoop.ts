@@ -20,7 +20,7 @@ import { TIER_SYSTEM, TIER_POWER } from './data/tiers';
 import { aggregateBonuses, canBuyNode, pendingCores, nextCores, fotoInicial, TOPE_CRITICO, TOPE_DESCUENTO, TOPE_COMP_DESCUENTO } from './data/prestige';
 
 import { TREE_BY_ID, nodeCost, coresGastadosEnArbol } from './data/tree';
-import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraAfijosDeCompaneros, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, efectoDeAfijosDeCompanero, danoFinalDeRecolector, techoDeNivel } from './data/crafting';
+import { attemptForge, attemptForgeCompanion, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, piedrasParaObjetivo, successChance as chanceDeFusion, collectorMaxLevel, potencialDeDanio, danioDeRango, migraPotenciales, migraAfijosPorRareza, migraAfijosDeCompaneros, migraPotencialesDeCompaneros, migraNivelesDeCompaneros, poderDeCompanero, nivelMaximoDeCompanio, costeDeNivelDeCompanio, multiplicadorDeNivel, poderEfectivoDeCompanio, multiplicadorDeRarezaDeCompanero, multiplicadorPorPotencialDeCompanero, potencialNormalizado, desgloseDeStat, DANIO_MINIMO_SIN_RECOLECTOR, efectoDeAfijos, efectoDeAfijosDeCompanero, danoFinalDeRecolector, techoDeNivel, llevaAfijosDeCompanero } from './data/crafting';
 import { basePorPosicion } from './data/bases';
 import { sellPrice, collectorValue } from './data/valuation';
 import { countOccupiedSlots, isStackable, partirPilas, stackUnits, topeDePila, pilasNecesarias, stackKey } from './data/stacking';
@@ -5158,8 +5158,13 @@ function sePuedeGuardar(): boolean {
         const multArbolC = esMult ? 1 : tipo === 'passive'
           ? 1 + (state.bonus.compPasivo || 0)
           : 1 + (state.bonus.compClick || 0);
-        const multAfijosC = esMult ? 1 : 1 + efectoDeAfijosDeCompanero(
-          w.affixes, nivel, (w as any).tier ?? comp?.tier, tipo);
+        const multAfijosC = llevaAfijosDeCompanero(tipo, (w as any).tier ?? comp?.tier)
+          ? 1 + efectoDeAfijosDeCompanero(
+            w.affixes, nivel, (w as any).tier ?? comp?.tier, tipo)
+          // Un multiplicador no lleva afijos: su poder ya ES un multiplicador y no
+          // hay magnitud a la que sumarle un porcentaje. Ver `llevaAfijosDeCompanero()`
+          // para el porqué, que está escrito y no es "porque no me ha dado la gana".
+          : 1;
         const valor = esMult
           // El multiplicador **no lleva nivel**: multiplicar el ingreso el doble y
           // además por un 1,3 sería una regla nueva que nadie pidió. Sale de aquí y no

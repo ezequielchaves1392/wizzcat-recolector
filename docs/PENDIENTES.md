@@ -4608,10 +4608,8 @@ de núcleos va en el parche grande y es una sola vez.*
 
 **Lo que queda sin hacer:**
 
-- [x] **F99 · Los afijos nuevos y los pools separados.** Hecho en v1.17.0, **a medias y a
-  sabiendas**. De la mitad decidir del jugador —los compañeros `multiplier` no tienen afijos,
-  y hay que elegir si su afijo multiplica el aura o si es un eje nuevo— solo se hizo la
-  parte que no necesitaba esa decisión: **tres afijos nuevos** y **el pool separado de verdad**.
+- [x] **F99 · Los afijos nuevos y los pools separados.** Hecho en v1.17.0 y cerrado en
+  v1.17.1.
   - **Los tres llenan huecos que existían, y no suben la potencia de los viejos.** El
     catálogo tenía la escalera del crítico rota (el primer crítico era Épico, y un Raro —que
     lleva un solo afijo— no tenía ninguno propio), el pasivo sin nada entre Épico y Mítico, y
@@ -4630,10 +4628,39 @@ de núcleos va en el parche grande y es una sola vez.*
     añadir un afijo a un catálogo que ya tenía el filtro "bien". Ahora el criterio vive en
     `AFIJOS_SOLO_CRITICO` y lo beben el filtro, la wiki y el banco: **"solo crítico" quiere
     decir que no trae nada más**, no que tenga crítico —el Vacío trae los tres y sí entra—.
-  - **Lo que falta, y sigue bloqueado por una decisión del jugador:** los compañeros
-    `multiplier` siguen sin afijos y `efectoDeAfijosDeCompanero()` les devuelve 0. La pregunta
-    sigue abierta: ¿su afijo multiplica el aura que suelta, o es un eje nuevo (fuerza de aura,
-    ranuras)? Ese camino no tiene ni una prueba hoy, y por eso no se tocó.
+  - **Lo del multiplicador quedó decidido en v1.17.1, y la decisión es que NO lleva afijos.**
+    No era una preferencia: se midió lo que costaba hacerlo. Un multiplicador leería **las
+    dos mitades** de cada afijo —multiplica todo, no "produce"— así que el afijo más fuerte
+    del catálogo le valdría el doble que a un click. El Oráculo Tribal (×1,75, Legendario,
+    3 afijos) se iría a **×7,5**, y eso es **el número más fuerte del juego multiplicado por
+    cuatro**, en un compañero que sale de una bolsa del 2,5 % de la caja legendaria y del que
+    no había ni una prueba. El eje propio —fuerza de aura, ranuras— sigue siendo una feature
+    sin hacer, y es lo único de F99 que queda abierto.
+    - **LA INVARIANTE ESTABA EN PIE POR TRES SALTADORES IMPLÍCITOS Y CERO PRUEBAS**: la
+      migración se saltaba por `companionType`, las cajas no ponían afijos, y la forja no podía
+      hacer un multiplicador porque `crearCompanioDeTier()` devuelve `type: 'click'` fijo. Los
+      tres se rompen por su cuenta. Ahora decide `llevaAfijosDeCompanero()`, en un sitio, y hay
+      **ocho filas** que lo vigilan en las dos direcciones.
+    - **Y EL MULTIPLICADOR YA NO SE SALTA: SE LIMPIA.** Antes volvía intacto, y un multiplicador
+      con afijos de una partida vieja se los quedaba para siempre —fantasma garantizado, porque
+      la ficha los enseña y la cuenta no los cobra—. Saltar es "no hacer nada"; limpiar es lo que
+      ya hacía el resto de la función con los afijos que sobran.
+    - **UNA REGLA DEMASIADO INTELIGENTE ROMPIÓ EL JUEGO ENTERO, Y LO DIJO UN BANCO.** La
+      primera versión pedía un tipo conocido (`click` o `passive`) y rechazaba lo demás, con la
+      idea de que un desconocido no puede cobrar. **El item con el que se compra un compañero en
+      la tienda no lleva `companionType`** —el tipo vive en `state.companions`—, así que de
+      golpe **ningún compañero de tienda migraba sus afijos**, que es justo lo que la migración
+      existe para curar. Lo cazó `companionCheck`, no el jugador. La regla correcta es "se quita
+      al multiplicador", no "hay que saber el tipo": **"lo que no sé, no lo pago" no es lo mismo
+      que "a lo que no conozco, no lo toco"**, y solo la segunda es segura cuando el dato puede
+      faltar de verdad. Aquí faltaba, porque el juego nunca lo escribió.
+    - **Y UNA JUSTIFICACIÓN QUE RESULTÓ SER FALSA.** El comentario del código y una fila del
+      banco decían que el multiplicador Mítico "superaría" al Legendario por llevar 4 afijos
+      contra 3. **Se comprobó y es falso**: ×7,29 contra ×7,53 —el Legendario sigue ganando, por
+      poco—. Se quitó de los dos sitios y se dejó escrito por qué se quitó. El motivo de verdad
+      son los absolutos, no el orden; y una justificación inventada es peor que ningún motivo,
+      porque el día que alguien la compruebe y no cuadre deja de fiarse de todo lo demás que dice
+      el archivo.
 - [x] **La prueba que habría cazado a `aff_luck`, y que es lo mejor de este lote.**
   `afijoValorCheck` ahora **mide los números, no las funciones**: pone el afijo en un item, lo
   equipa y mira el daño y el ingreso. Un afijo que no mueva ninguno de los dos es fantasma, por

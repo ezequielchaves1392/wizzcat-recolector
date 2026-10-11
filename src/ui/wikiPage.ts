@@ -505,6 +505,10 @@ function seccionItems(): string {
       <p class="wiki-p">Un <strong>compañero no lleva afijos de crítico</strong>: se quedan fuera los
       ${AFIJOS_SOLO_CRITICO.length} que solo dan crítico, porque no podría cobrarlos. El resto
       de la lista sí vale, y son ${POOL_AFIJOS_COMPANERO.length} de ${AFFIXES.length}.</p>
+      <p class="wiki-p">Y los <strong>multiplicadores no llevan ninguno</strong>, ni siquiera los
+      que les sirven a los otros. Su poder no es "produce tanto": es "cuántas veces se cuenta lo
+      de los demás", así que un "+40 % a la recolección por segundo" no tiene a qué agarrarse.
+      Sus dos cifras de aura son las de arriba y no se mueven con afijos.</p>
       <div class="wiki-box">${afijos}</div>
     `, ANCLA.itemsAfijos)}
   `;
