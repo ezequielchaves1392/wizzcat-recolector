@@ -201,7 +201,17 @@ export const LORE: Record<string, string> = {
   'Caja T7': 'Hay que llevarla en dos manos y no basta.',
   'Caja T8': 'La etiqueta dice que no, en un idioma que ya no se habla.',
   'Caja T9': 'Lo que hay dentro pesa más de lo que debería pesar.',
-  'Caja T10': 'La última. La que se abre una vez y se recuerda siempre.',
+  'Caja T10': 'La última que se sabe pensar. La de al lado ya no se.',
+  'Caja T11': 'Nadie la pidió. Apareció junto a la otra, como si siempre hubiera estado.',
+  'Caja T12': 'El precinto no es un cierre: es un aviso, y se saltó igualmente.',
+  'Caja T13': 'Dentro hay algo que lleva dentro la marca de otra caja más alta.',
+  'Caja T14': 'Pesa lo mismo que la anterior y jura que no.',
+  'Caja T15': 'El número ya no es una etiqueta: es una dirección.',
+  'Caja T16': 'La abren dos personas y solo cabe una. Se abre igual.',
+  'Caja T17': 'Lo que prometía no ser la última, mintiendo en un idioma antiguo.',
+  'Caja T18': 'Rinde más que cualquier caja anterior, y lo admite.',
+  'Caja T19': 'Pesa poco. Todo lo que tiene dentro, pesa mucho.',
+  'Caja T20': 'La última. La que se abre una vez y se recuerda siempre.',
 };
 
 /**

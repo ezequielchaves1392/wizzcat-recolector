@@ -138,43 +138,75 @@ export const CONSUMABLES_SIN_EXPANSOR = {
  * "llave" en ninguna forma que la búsqueda entendería: se lee bien y no dice nada
  * raro. Un banco pregunta por lo que el juego **hace**, y por eso lo pilla.
  */
-const DETALLES_DE_CAJA = 'Se abre sola.';
-export const CRATE_TYPES: Record<CrateType, { name: string; rarity: string; details: string }> = {
-  1: { name: 'Caja T1', rarity: 'Común',     details: DETALLES_DE_CAJA },
-  2: { name: 'Caja T2', rarity: 'Común',     details: DETALLES_DE_CAJA },
-  3: { name: 'Caja T3', rarity: 'Raro',      details: DETALLES_DE_CAJA },
-  4: { name: 'Caja T4', rarity: 'Raro',      details: DETALLES_DE_CAJA },
-  5: { name: 'Caja T5', rarity: 'Épico',     details: DETALLES_DE_CAJA },
-  6: { name: 'Caja T6', rarity: 'Épico',     details: DETALLES_DE_CAJA },
-  7: { name: 'Caja T7', rarity: 'Legendario', details: DETALLES_DE_CAJA },
-  8: { name: 'Caja T8', rarity: 'Legendario', details: DETALLES_DE_CAJA },
-  9: { name: 'Caja T9', rarity: 'Mítico',    details: DETALLES_DE_CAJA },
-  10: { name: 'Caja T10', rarity: 'Divino',  details: DETALLES_DE_CAJA }
-};
+/**
+ * El tipo de caja es su número de tier.
+ *
+ * **UN `number`, NO LA UNIÓN `1 | 2 | ... | 20`.** La unión obligaba a reescribirla
+ * cada vez que se añadía una caja, y es el motivo de que añadir el T11–T20 fuera un
+ * cambio invasivo en veinte ficheros: cada uno tenía su copia del tipo. Con `number`
+ * no hay lista que mantener, y lo que obliga a que un tier sea legal es la
+ * comprobación de rango (`MAX_CRATE_TIER`), que ya existe donde importa.
+ *
+ * Antes de esto era `'common' | 'rare' | ...` y el nivel del botín viajaba aparte
+ * en `TIER_PROPIO`: una quinta copia de una regla que se deduce del propio tipo.
+ */
+export type CrateType = number;
 
 /**
- * Los diez niveles de caja, de menor a mayor.
+ * Los veinte niveles de caja, de menor a mayor.
  *
- * Lo leen el Component, el almacén y el costeo, y sale de aquí para que no
- * puedan discrepar sobre cuántas cajas hay. El tipo es el número, que es la
- * decisión de F31: hace que "el tier de la caja" no sea un dato aparte del
- * "nivel", y por eso no hay forma de que los dos se contradigan.
+ * Lo leen el componente, el almacén y el costeo, y sale de aquí para que no puedan
+ * discrepar sobre cuántas cajas hay. El tipo es el número, que es la decisión de F31:
+ * hace que "el tier de la caja" no sea un dato aparte del "nivel", y por eso no hay
+ * forma de que los dos se contradigan.
+ *
+ * **SON VEINTE, Y LA LISTA NO ESTÁ ESCRITA A MANO.** No es `[1..20]` para que
+ * añadir un tier sea añadir un número: sale del rango. Lo que la limita es el
+ * contenido —una caja sin bases no tiene nada que repartir—, y eso lo vigila
+ * `basesCheck`, no esta línea.
+ *
+ * **ESTÁ ANTES DE `CRATE_TYPES` PORQUE LO USA.** Las dos cosas se leen en el mismo
+ * módulo, y un `const` declarado después se leería como `undefined` al construir la
+ * tabla: no da error, da una tabla vacía que se nota en la tienda.
  */
-export const CRATE_TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export const CRATE_TIERS: readonly number[] = Array.from({ length: 20 }, (_, i) => i + 1);
 
 /** El nivel más alto de caja que existe. */
-export const MAX_CRATE_TIER = 10;
+export const MAX_CRATE_TIER = CRATE_TIERS[CRATE_TIERS.length - 1];
+
+const DETALLES_DE_CAJA = 'Se abre sola.';
 
 /**
- * El tipo de caja ES su nivel.
+ * La rareza de cada caja, y por qué las de arriba del T10 son todas Divino.
  *
- * Antes era `'common' | 'rare' | 'epic' | 'legendary'`, y el nivel del botín
- * viajaba aparte en `TIER_PROPIO` (`crateLoot.ts`): una quinta copia de una
- * regla que se puede deducir del propio tipo. Numerándolo, la regla del botín
- * se escribe una vez y no puede quedar anticuada.
+ * **NO ES UNA DECISIÓN DE CONTENIDO, ES LA CONSECUENCIA DE `rarityByTier`.**
+ * Aquella ya devolvía 'Divino' para todo lo que pasara del T10, porque no hay una
+ * rareza por encima y el juego ya tenía la máxima. Escribirla aquí a mano sería una
+ * segunda tabla con la misma regla, y las dos se separarían el día que alguien
+ * añadiese una rareza nueva.
+ *
+ * La escalera de dos en dos es la que tenía el contenido viejo, y no se cambia: el
+ * jugador ya sabe que la T9 es Mítica. Lo que cambia es que ahora hay diez cajas
+ * Divino en vez de una, y eso es consecuencia de que haya diez tiers más y no una
+ * decisión nueva sobre el botín.
  */
-export type CrateType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+function rarezaDeCaja(tier: number): string {
+  if (tier <= 2) return 'Común';
+  if (tier <= 4) return 'Raro';
+  if (tier <= 6) return 'Épico';
+  if (tier <= 8) return 'Legendario';
+  if (tier <= 10) return 'Mítico';
+  return 'Divino';
+}
 
+export const CRATE_TYPES: Record<CrateType, { name: string; rarity: string; details: string }> =
+  Object.fromEntries(
+    CRATE_TIERS.map(t => [t, {
+      name: `Caja T${t}`,
+      rarity: rarezaDeCaja(t),
+      details: DETALLES_DE_CAJA
+    }])
+  ) as Record<CrateType, { name: string; rarity: string; details: string }>;
 // ==========================================================================
 //  Precios
 // ==========================================================================

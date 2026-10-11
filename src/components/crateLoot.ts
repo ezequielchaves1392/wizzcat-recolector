@@ -142,12 +142,38 @@ export const RARITY_RANK: Record<string, number> = {
  * añadir una fila, y el banco ata que no haya dos caras iguales ni un icono
  * que no exista en el set.
  */
+/**
+ * LA CARA DE CADA CAJA: ICONO Y ACENTO.
+ *
+ * **EL ICONO VA DE DOS EN DOS Y EL ACENTO DE UNO EN UNO, Y NO ES DECORACIÓN: es
+ * la escalera de rareza leída sin leer un número.** Seis iconos para diez cajas era
+ * lo que había, y ahora hay veinte: veinte iconos distintos no se distinguen entre
+ * sí —a los tres ya no sabes cuál es cuál—, mientras que diez iconos con veinte
+ * colores sí se leen de un vistazo, y además el icono **repite** justo donde la
+ * rareza se repite.
+ *
+ * Por eso las cajas nuevas siguen el patrón viejo: la T11 y la T12 son Divino, la
+ * T13 y la T14 Divino, y así. Lo que cambia es el color, que es lo único que hay que ver
+ * para distinguir una T11 de una T20 de un vistazo en la lista de la tienda.
+ *
+ * **LOS ACENTOS SON UNA RAMPA, NO UNA LISTA DE COLORES SUELTOS.** Diez clases de
+ * Tailwind para los diez primeros, otras diez para los diez nuevos, y las veinte
+ * distintas entre sí. Una rampa se lee de arriba abajo como una progresión, que es
+ * justo lo que son: la caja más cara se ve más "llama" que la más barata. Y
+ * `cajasCheck` mide que las veinte parejas icon+acento sean distintas, así que una
+ * caja repetida no puede colarse sin que salga en rojo.
+ */
 const ICONO_POR_TIER: Record<CrateType, string> = {
   1: 'crate', 2: 'crate',
   3: 'crystal', 4: 'crystal',
   5: 'gem', 6: 'gem',
   7: 'trophy', 8: 'trophy',
-  9: 'crown', 10: 'medal'
+  9: 'crown', 10: 'medal',
+  11: 'atom', 12: 'atom',
+  13: 'prism', 14: 'prism',
+  15: 'sparkle', 16: 'sparkle',
+  17: 'flame', 18: 'flame',
+  19: 'star', 20: 'core'
 };
 
 const ACENTO_POR_TIER: Record<CrateType, string> = {
@@ -155,7 +181,14 @@ const ACENTO_POR_TIER: Record<CrateType, string> = {
   3: 'text-blue-400', 4: 'text-cyan-300',
   5: 'text-violet-400', 6: 'text-purple-300',
   7: 'text-amber-400', 8: 'text-red-400',
-  9: 'text-fuchsia-400', 10: 'text-rose-400'
+  9: 'text-fuchsia-400', 10: 'text-rose-400',
+  // Los diez nuevos: la rampa continúa hacia el naranja y el blanco, que es donde
+  // el ojo lee "lo más caro" sin que haya que decirlo.
+  11: 'text-orange-300', 12: 'text-orange-400',
+  13: 'text-lime-300', 14: 'text-emerald-300',
+  15: 'text-teal-200', 16: 'text-cyan-200',
+  17: 'text-yellow-200', 18: 'text-amber-200',
+  19: 'text-orange-200', 20: 'text-white'
 };
 
 export const CRATE_META: Record<CrateType, { name: string; icon: string; accent: string; cost: number }> =

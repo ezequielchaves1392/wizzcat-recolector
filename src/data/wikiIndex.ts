@@ -171,7 +171,12 @@ function bases(): EntradaWiki[] {
   const entradas: EntradaWiki[] = [intro];
   for (const [lado, tabla] of lados) {
     const quien = lado === 'rec' ? 'recolector recolectores arma armas' : 'compañero compañeros escuadron';
-    for (let tier = 1; tier <= 10; tier++) {
+    // **LOS TIERS SALEN DE LA TABLA, NO DEL RANGO 1..10.** Estaba escrito, así que
+    // al añadir el T11 el índice dejó de tener entradas para sus veinte bases: el
+    // T11 salía en la página —que recorre las claves— pero no se podía buscar por
+    // ninguno de sus nombres, ni llegar a su grupo con el buscador. Una fila que no
+    // está en el índice no se nota: el índice es lo que hace que exista.
+    for (const tier of Object.keys(tabla).map(Number).filter(Number.isFinite).sort((a, b) => a - b)) {
       const lista = tabla[tier] ?? [];
       entradas.push({
         seccion: 'bases',
@@ -200,7 +205,12 @@ function items(): EntradaWiki[] {
     { seccion: 'items', ancla: ANCLA.itemsExpansores, titulo: 'Expansores y cristal', texto: 'expansor expansores ranura capacidad cristal recurso' },
     { seccion: 'items', ancla: ANCLA.itemsAfijos, titulo: 'Afijos: los pone la rareza', texto: 'afijo afijos forja rareza tienda caja linaje' }
   ];
-  for (let t = 1; t <= 10; t++) {
+  // **Y LOS TIERS SALEN DE LA TABLA.** Con `t <= 10` escrito, el buscador no
+  // encontraba ningún base del T11 en adelante por su nombre: el índice era corto
+  // y el fallo no se veía, porque un nombre que no está en el índice es un nombre
+  // que no aparece en la lista de sugerencias. El índice tiene que cubrir
+  // exactamente el contenido que hay.
+  for (const t of Object.keys(BASES_RECOLECTOR).map(Number).filter(Number.isFinite).sort((a, b) => a - b)) {
     // F74 · EL ÍNDICE BUSCA LOS NOMBRES DE LAS BASES, NO LOS TRES DEL TIER. Antes
     // indexaba `collectorNames`/`companionNames`, así que buscar "Núcleo
     // Defectuoso" —que es como se llama la mitad de las T1 que puedes tener— no

@@ -32,7 +32,7 @@ import {
   pickLoot, RARITY_RANK, rarezaDeTabla
 } from '../src/components/crateLoot';
 import { TIER_SYSTEM } from '../src/data/tiers';
-import { CRATE_TYPES, type CrateType } from '../src/data/store';
+import { CRATE_TYPES, CRATE_TIERS, MAX_CRATE_TIER, type CrateType } from '../src/data/store';
 
 /**
  * F31 · LAS CAJAS SON NIVELES, Y LA T10 NO TIENE SALTO.
@@ -43,8 +43,19 @@ import { CRATE_TYPES, type CrateType } from '../src/data/store';
  * del final**, así que su tabla no incluye la entrada `up`. Eso es una regla
  * nueva, y por eso el banco no la da por buena: si alguien la añadiera igual, el
  * salto de la T10 daría un T10 y sería un premio garantizado disfrazado.
+ *
+ * **AHORA LA LISTA SALE DE `CRATE_TIERS` Y QUITA LA ÚLTIMA.** Estaba escrita como
+ * `[1..9]` con un comentario que explica que el 10 es el final; con veinte cajas,
+ * el final pasó a ser el veinte y la lista seguía acabando en el nueve. Entonces el
+ * banco solo miraba nueve de las veinte tablas, y la del 20 —que es la que no debe
+ * tener salto— no se comprobaba. Se deriva de la lista real menos la última, así
+ * que la regla y el banco dicen lo mismo sin que haya dos versiones.
  */
-const CAJAS: CrateType[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const CAJAS: CrateType[] = CRATE_TIERS
+  .map(Number)
+  .filter(Number.isFinite)
+  .sort((a, b) => a - b)
+  .slice(0, -1);
 
 /** La caja donde están los compañeros exclusivos. */
 const CAJA_EXCLUSIVA: CrateType = 9;
@@ -186,12 +197,26 @@ async function main() {
         maxTier === 2, `tier maximo=${maxTier}`);
     }
 
-    // Y LA T10 NO SALTA. Es lo único que no encaja en el patrón, y por eso es
-    // una comprobación y no una excepción: una caja final sin peldaño por encima
+    // Y LA CAJA MÁS ALTA NO SALTA. Es lo único que no encaja en el patrón, y por eso
+    // es una comprobación y no una excepción: una caja final sin peldaño por encima
     // no puede tener una entrada de salto que siempre devuelva lo mismo.
-    check('salto: la caja T10 no tiene entrada de salto',
-      CRATE_LOOT[10].find(e => e.id === 'up') === undefined,
-      `entradas=${CRATE_LOOT[10].map(e => e.id).join(',')}`);
+    //
+    // **EL NÚMERO SALE DE `MAX_CRATE_TIER`, NO ESTÁ ESCRITO.** Estaba en 10 y con
+    // veinte cajas la caja más alta pasó a ser la veinte: la comprobación miraba la
+    // T10, que ya no es la final, y exigía que la T20 tuviera peldaño de salto —que
+    // es imposible, porque no hay T21 con contenido—. Lo que falla no es el banco:
+    // es que la caja final de verdad se quedó con su entrada de salto puesta y
+    // saldría un objeto sin base.
+    check(`salto: la caja T${MAX_CRATE_TIER} no tiene entrada de salto`,
+      CRATE_LOOT[MAX_CRATE_TIER].find(e => e.id === 'up') === undefined,
+      `entradas=${CRATE_LOOT[MAX_CRATE_TIER].map(e => e.id).join(',')}`);
+
+    // Y que las de abajo sí la tengan: la escalera tiene que llegar hasta arriba, o
+    // el T20 no se puede obtener de una caja sino comprándolo entero.
+    const sinSalto = CAJAS.filter(t => t !== MAX_CRATE_TIER
+      && CRATE_LOOT[t].find(e => e.id === 'up') === undefined);
+    check(`salto: y todas las demás sí la tienen, para poder llegar a T${MAX_CRATE_TIER}`,
+      sinSalto.length === 0, sinSalto.map(t => `T${t}`).join(',') || 'las 19 restantes');
   }
 
   // -----------------------------------------------------------------------
@@ -455,17 +480,25 @@ async function main() {
     check('suerte: sin nodo el reparto es el de siempre, sin mover un decimal',
       identicas, 'difiere en alguna caja');
 
-    // Con el nodo al máximo (+50%), el salto sube en las nueve cajas que lo
-    // tienen, y la T10 —que no salta a nada— sigue en cero.
-    const sube = CAJAS.filter(c => c !== 10).every(c =>
+    // Con el nodo al máximo (+50%), el salto sube en todas las cajas que lo
+    // tienen, y la última —que no salta a nada— sigue en cero.
+    //
+    // **EL FINAL ES `MAX_CRATE_TIER`, NO EL 10 ESCRITO.** Con veinte cajas el 10
+    // pasó a ser una caja normal: tiene peldaño de salto y su probabilidad subió con
+    // el nodo, así que la comprobación exigía que fuera cero y fallaba con una cifra
+    // que era la correcta. El banco distinguía mal "la que no salta" de "el número
+    // que era el final cuando se escribió".
+    const finales = MAX_CRATE_TIER;
+    const conSalto = CAJAS.filter(c => c !== finales);
+    const sube = conSalto.every(c =>
       probabilidadDeSalto(c, 0.5) > probabilidadDeSalto(c, 0));
-    check('suerte: con el nodo al máximo el salto sube en las nueve cajas',
-      sube, CAJAS.filter(c => c !== 10)
+    check(`suerte: con el nodo al máximo el salto sube en las ${conSalto.length} cajas`,
+      sube, conSalto
         .map(c => `T${c}=${(probabilidadDeSalto(c, 0) * 100).toFixed(2)}→${(probabilidadDeSalto(c, 0.5) * 100).toFixed(2)}`)
         .join(' '));
-    check('suerte: y la T10 sigue sin saltar, con nodo o sin él',
-      probabilidadDeSalto(10, 0.5) === 0 && probabilidadDeSalto(10, 0) === 0,
-      `con=${probabilidadDeSalto(10, 0.5)} sin=${probabilidadDeSalto(10, 0)}`);
+    check(`suerte: y la T${finales} sigue sin saltar, con nodo o sin él`,
+      probabilidadDeSalto(finales, 0.5) === 0 && probabilidadDeSalto(finales, 0) === 0,
+      `con=${probabilidadDeSalto(finales, 0.5)} sin=${probabilidadDeSalto(finales, 0)}`);
   }
   {
     // Y EL BONUS LLEGA AL SORTEO DE VERDAD, no solo a la tabla. Se busca una

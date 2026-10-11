@@ -123,14 +123,90 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  //  1b. LO QUE SALE TIENE BASE Y NOMBRE, EN LAS VEINTE CAJAS.
+  // -----------------------------------------------------------------------
+  //
+  //  Abrir una caja es que aparezca algo. Con el contenido hasta el T10, abrir la
+  //  caja T5 y que salga un item T5 sin base ni nombre propio era posible, porque el
+  //  botín se construía a mano y no pasaba por el generador. **Con veinte cajas eso
+  //  deja de ser un detalle del contenido nuevo**: es la misma línea ejecutada
+  //  veinte veces, y si un tier no sabe tirar base, sale un item llamado
+  //  "Prototipo de Recolector" —que es exactamente lo que pasa cuando una tabla de
+  //  bases no cubre ese tier.
+  //
+  //  Por eso no se mira el almacén sino **la caja**: el botín se sortea antes de
+  //  colocarse, y ese es el punto en que el item existe por primera vez. Si el
+  //  generador no trae base, el almacén tampoco la puede enseñar.
+  {
+    let salidas = 0;
+    for (const c of CAJAS) {
+      const g = await boot(baseSave([crate('c1', c)], { nanites: 0 }));
+      const r: any = g.openCrateBox('c1');
+      const p = r?.reward as any;
+      if (p?.kind !== 'collector' && p?.kind !== 'companion') continue;
+      salidas++;
+      const sinBase = !p.item?.baseId || !p.item?.name;
+      check(`abrir: lo que sale de la T${c} trae base y nombre, no un prototipo`,
+        !sinBase, `${p.kind}: ${p.item?.name} (base ${p.item?.baseId})`);
+    }
+
+    // **LA COBERTURA SE MIDE ABRIENDO VARIAS VECES, NO UNA.** Una caja reparte por
+    // pesos y el objeto no siempre sale: en una apertura sale un objeto en nueve de
+    // las veinte cajas, y eso es la ruleta funcionando, no un fallo. La pregunta que
+    // importa es otra —"de las veinte cajas, ¿cuál es la que no sabe tirar base?"—,
+    // y para contestarla hay que abrir hasta que cada caja haya dado un objeto al
+    // menos una vez.
+    //
+    // **DIEZ APERTURAS POR CAJA** sale de la rarerza del objeto dentro de la caja: el
+    // compañero pesa 58 contra 62 del recolector pero las dos son entradas del mismo
+    // sorteo, y con diez aperturas la probabilidad de no ver ninguna vez un objeto es
+    // bajísima. No es un número mágico: es "lo suficiente para que el fallo sea real".
+    const sinVerificar: number[] = [];
+    for (const c of CAJAS) {
+      let conObjeto = 0;
+      let conFallo = 0;
+      // **HASTA QUE SALGA UN OBJETO, PERO SIN UN TECHO DE UN SOLO INTENTO.** Con diez
+      // aperturas y objeto en la mayoría de las veces, es normal que alguna caja
+      // sortease nanitas las diez veces seguidas por azar —sobre todo con la misma
+      // semilla del banco—. Treinta intentos es suficiente para que la probabilidad de
+      // fallar sea despreciable sin que el banco tarde una eternidad.
+      for (let intento = 0; intento < 30 && conObjeto === 0; intento++) {
+        const g = await boot(baseSave([crate('c1', c)], { nanites: 0 }));
+        const r: any = g.openCrateBox('c1');
+        const p = r?.reward as any;
+        if (p?.kind === 'collector' || p?.kind === 'companion') {
+          conObjeto++;
+          if (!p.item?.baseId || !p.item?.name) conFallo++;
+        }
+      }
+      if (conObjeto === 0 || conFallo > 0) sinVerificar.push(c);
+    }
+    check('abrir: todas las cajas dan un objeto con base y nombre, en alguna apertura',
+      sinVerificar.length === 0,
+      sinVerificar.length ? `cajas problematicas: ${sinVerificar.join(',')}` : 'las 20 verificadas');
+  }
+  // -----------------------------------------------------------------------
   //  2. LA ECONOMÍA NO SE HA MOVIDO. Y ESTO SE COMPRUEBA DIEZ VECES.
   // -----------------------------------------------------------------------
   //
   // El jugador pagaba la caja más su llave. Ahora paga la caja. Si el precio de
   // la caja no es exactamente la suma de los dos, **se le ha roto algo**: o le
   // se le ha regalado una tercera parte de cada caja, o le hemos encarecido todo.
+  //
+  // **Y SOLO PARA LOS DIEZ NIVELES QUE EXISTÍAN.** `PRECIOS` es una foto
+  // congelada de los diez niveles anteriores al cambio, y es la foto lo que hace
+  // valuable la comparación: si saliera de la misma cuenta que el juego, el banco
+  // estaría comparando una función consigo misma. Pero una foto no tiene filas para
+  // los niveles que aún no existían, así que `precioDeLaCajaAntes(11)` salía del
+  // último número de la foto y la comprobación pedía que la caja T11 costara lo
+  // mismo que la T10.
+  //
+  // Los niveles nuevos no tienen un "antes" que comparar, y no lo necesitan: que la
+  // caja T20 no cueste lo mismo que la T10 lo vigila `balanceCheck`, que mide la
+  // curva sobre el precio real. Aquí lo que se protege es que **los diez primeros no
+  // se hayan movido**, y para eso sí hay foto.
   {
-    for (const c of CAJAS) {
+    for (const c of PRECIOS.map((_, i) => i + 1)) {
       const parViejo = precioDeLaCajaAntes(c) + precioDeLaLlaveAntes(c);
       check(`precio: la ${c} cuesta lo mismo que antes la caja mas la llave`,
         costeDeCaja(c) === parViejo,
@@ -138,13 +214,20 @@ async function main() {
     }
 
     // Y el precio de una caja alta es más que el de una baja. Sin esto, el
-    // "cuesta lo mismo" podría cumplirse con las diez al mismo precio.
+    // "cuesta lo mismo" podría cumplirse con todas al mismo precio.
+    //
+    // **RECORRE `CRATE_TIERS`, NO `costeDeCaja.length`.** Ese `.length` era la
+    // aridad de la función —uno— porque `costeDeCaja` dejó de ser una lista cuando
+    // pasó a ser una función. El bucle no entraba y la comprobación pasaba siempre,
+    // sin comprobar nada: un banco que da verde porque su bucle no se ejecuta es
+    // peor que un banco que no existe, porque ocupa su sitio.
     let sube = true;
-    for (let i = 1; i < costeDeCaja.length; i++) {
-      if (costeDeCaja(i) <= costeDeCaja(i - 1)) sube = false;
+    const niveles = CRATE_TIERS.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    for (let i = 1; i < niveles.length; i++) {
+      if (costeDeCaja(niveles[i]) <= costeDeCaja(niveles[i - 1])) sube = false;
     }
     check('precio: y el precio sigue subiendo con el nivel',
-      sube, PRECIOS.join(' -> '));
+      sube, niveles.map(t => costeDeCaja(t)).join(' -> '));
   }
 
   // -----------------------------------------------------------------------

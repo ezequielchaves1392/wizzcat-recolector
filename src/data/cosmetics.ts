@@ -52,8 +52,14 @@ import type { Cosmetic, UnlockKind } from '../types/domain';
  *
  * Ahora es el número, y el reparto de los cosméticos por caja es una decisión de
  * balance en una línea por cosmético, no una lista de tipos que sincronizar.
+ *
+ * **Y DE UN `number`, NO DE LA UNIÓN `1 | ... | 20`.** Es la misma copia que
+ * `CrateType`, con la misma trampa: cuando se añadió el T11–T20, esta unión pedía
+ * reescribirse y el type-check la señalaba como error en el punto de uso, veinte
+ * ficheros más allá de donde está la decisión. Es un alias de `CrateType`, que es la
+ * misma idea escrita una vez.
  */
-export type CrateCosmeticSource = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type CrateCosmeticSource = number;
 
 export const COSMETICS: Cosmetic[] = [
   // ---------------------------------------------------------------- TÍTULOS

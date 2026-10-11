@@ -13,6 +13,7 @@
 import { boot, recargar, check, resumen, s, baseSave, collector, conRoll } from './kit';
 import { attemptForge, attemptForgeCompanion, esObraMaestra, danioDeRango } from '../src/data/crafting';
 import { aplicarJackpot } from '../src/components/crateLoot';
+import { MAX_CRATE_TIER } from '../src/data/store';
 import { AFIX_MIN_POR_RARIDAD } from '../src/data/crafting';
 
 const opts = (extra: any = {}) => ({
@@ -157,9 +158,13 @@ async function main() {
     check('jackpot: y el compañero también sube',
       comp.tier === 6 && comp.item.tier === 6 && comp.jackpot === true,
       `tier=${comp.tier}`);
-    const techo = aplicarJackpot(10 as any, rec(10) as any, 1, () => 0) as any;
-    check('jackpot: en T10 no hay tier por encima y no hace nada',
-      techo.item.tier === 10 && !techo.jackpot, `tier=${techo.item.tier}`);
+    // **LA ÚLTIMA CAJA ES EL TECHO, Y AHORA ES OTRA.** Estaba en 10; con veinte
+    // cajas, un jackpot de la T10 debe subir a T11 (y lo hace), así que la
+    // comprobación exigía que no subiera y fallaba. Lo que se mide es la regla: la
+    // caja más alta no tiene peldaño, igual que el salto.
+    const techo = aplicarJackpot(MAX_CRATE_TIER as any, rec(MAX_CRATE_TIER) as any, 1, () => 0) as any;
+    check(`jackpot: en T${MAX_CRATE_TIER} no hay tier por encima y no hace nada`,
+      techo.item.tier === MAX_CRATE_TIER && !techo.jackpot, `tier=${techo.item.tier}`);
     const excl2 = aplicarJackpot(1 as any, { ...rec(5), exclusive: true } as any, 1, () => 0) as any;
     check('jackpot: un exclusivo no se convierte en generico',
       excl2.item.tier === 5 && !excl2.jackpot, `tier=${excl2.item.tier}`);

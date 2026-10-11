@@ -806,8 +806,16 @@ export async function createGameLoop(
      * Empieza vacía a propósito: las ranuras las llena el jugador, no el juego.
      */
     barraConsumibles: [null, null, null] as (string | null)[],
-    // F31 · Diez niveles, todos a cero menos el T1, que es la caja de arranque.
-    crates: { ...contadorDeCajasVacio(), 1: 2 },
+    // F31 · Todos los niveles a cero menos el T1, que es la caja de arranque.
+    //
+    // **EL TIPO VA ESCRITO, Y ES POR EL `1: 2` DE AL LADO.** Sin la anotación,
+    // TypeScript infiere el tipo de este objeto como `{ 1: number }` —literal, una
+    // sola clave—, porque el `1: 2` que se añade al final hace que el objeto se
+    // tipifique por su propiedad explícita y el spread no lo ensancha. Entonces
+    // `state.crates` parecía un registro de una sola caja, y `state.crates[6]` daba
+    // error de tipo en cinco sitios, veinte líneas más allá de este literal. El
+    // error no señalaba esta línea, que es donde estaba la causa.
+    crates: { ...contadorDeCajasVacio(), 1: 2 } as Record<CrateType, number>,
     // El cristal ya no tiene contadores derivados: **es un número**, como las
     // nanitas. Antes eran tres cosas —`crystalsByTier` (diez cubos), `crystalTotal` y
     // `upgradeCrystals`— y los tres los recalculaba `syncMaterialCounters()` a partir

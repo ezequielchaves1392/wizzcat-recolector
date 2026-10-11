@@ -146,7 +146,11 @@ function seccionMecanicas(): string {
         <span class="text-[11px] font-mono font-bold accent-text">+${pendingCores(p)} núcleos</span>
       </div>`).join('');
 
-  const filaForja = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  // **LOS TIERS DE LA TABLA DE FORJA SALEN DE LAS CAJAS QUE HAY.** La fila es
+  // "T{n} → T{n+1}", así que recorre las cajas que existen; si mañana hay veinte,
+  // salen veinte filas sin tocar esta línea. Con la lista escrita a mano, la wiki
+  // habría seguido enseñando diez mientras el juego tenía veinte.
+  const filaForja = CRATE_TIERS.slice(0, -1)
     .map(t => `
       <div class="flex items-center justify-between gap-2 py-1 border-b border-[var(--border-color)] last:border-0">
         <span class="text-[11px] font-mono text-[var(--text-muted)]">T${t} → T${t + 1}</span>
@@ -320,7 +324,7 @@ function seccionBases(): string {
     <h3 class="label-caps mt-4 mb-2 flex items-center gap-1.5">
       <span class="accent-text [&>span>svg]:w-3.5 [&>span>svg]:h-3.5">${ic(ladoIcono as any)}</span>${titulo}
     </h3>
-    ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(tier => {
+    ${Object.keys(tabla).map(Number).filter(Number.isFinite).sort((a, b) => a - b).map(tier => {
       const lista = tabla[tier] ?? [];
       // La mejor es la de mayor stat: sale de los datos, no está escrita a mano.
       const tope = lista.reduce((m, b) => Math.max(m, b.pesoStat), 0);
@@ -367,7 +371,13 @@ function seccionBases(): string {
 // --------------------------------------------------------------------------
 
 function seccionItems(): string {
-  const filasTier = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(t => {
+  // **LOS TIERS SALEN DE LA TABLA DE BASES, NO DE UNA LISTA DE DIEZ.** La wiki
+  // tiene que enseñar el contenido que existe: si la lista está escrita y el
+  // contenido crece, la wiki deja de mostrar el T11 sin que nadie lo note, porque
+  // una fila que falta no se ve. Sale de `BASES_RECOLECTOR`, que es el sitio donde
+  // el contenido vive de verdad.
+  const tiersDeContenido = Object.keys(BASES_RECOLECTOR).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  const filasTier = tiersDeContenido.map(t => {
     const [min, max] = rangoDePoder(t);
     // F74 · LO QUE SALÍA AQUÍ ERAN TRES NOMBRES POR TIER, Y NO ERAN LOS DEL JUEGO.
     // La línea decía "Armas: Blaster Láser · Pistola de Plasma · Rifle de Pulso" y

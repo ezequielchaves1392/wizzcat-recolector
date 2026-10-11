@@ -35,7 +35,7 @@ import { appHeaderHTML } from '../src/ui/appHeader';
 import { ICONS } from '../src/ui/icons';
 import { NOTAS } from '../src/data/patchNotes';
 import {
-  CRATE_TIERS, CRATE_TYPES, costeDeCaja, COSTE_POR_TIER,
+  CRATE_TIERS, CRATE_TYPES, costeDeCaja, costeDeTier, MAX_CRATE_TIER,
   EXPANSOR_TIERS, expansorDeCaja, STORE_ITEMS,
   // POR QUÉ EL ALIAS. Este banco importa `store` directamente Y a través de
   // `wikiIndex`, y con ese doble camino el bundle (solo y completo) dejaba el
@@ -74,6 +74,21 @@ import {
   produccionParaBuild, cabeEnRun, fichaSimulada
 } from '../src/ui/wikiTools';
 
+/**
+ * Los tiers de caja, y si cubren la escalera entera sin huecos.
+ *
+ * **ESTÁN FUERA DE `main()` PORQUE LOS USAN DOS BLOQUES.** El de las cajas y el del
+ * salto. Declarados dentro del primero, el segundo falla con un `no está definido`
+ * en una línea que no tiene nada que ver con la decisión que falta —el mismo modo
+ * de fallo que ya corrigió el `min()` de los precios— y el banco entero se cae sin
+ * decir qué comprobación estaba mirando.
+ */
+const TIERS_CAJA = CRATE_TIERS.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+const SIN_HUECO = TIERS_CAJA.every((t, i) => i === 0 || t === TIERS_CAJA[i - 1] + 1);
+
+/** Los tiers que tienen base, que son los que la wiki agrupa por lado. */
+const TIERS_BASES = Object.keys(BASES_RECOLECTOR).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+
 async function main() {
   // ------------------------------------------------------------------
   // 1 · Pestaña aparte: sin ruta en el juego, botón en la cabecera
@@ -92,12 +107,16 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  // 2 · Las diez cajas, con su precio y su reparto entero
+  // 2 · Las cajas, con su precio y su reparto entero
   // ------------------------------------------------------------------
   {
-    check('wiki: hay diez cajas, una por tier', CRATE_TIERS.length === 10,
-      CRATE_TIERS.join(','));
-    for (const t of CRATE_TIERS) {
+    check('wiki: hay una caja por tier, sin huecos',
+      SIN_HUECO && TIERS_CAJA[0] === 1, `${TIERS_CAJA.length} cajas: ${TIERS_CAJA.join(',')}`);    // **EL NÚMERO DE CAJAS NO SE ESCRIBE.** Decía `=== 10`, y con veinte cajas
+    // falló por la razón obvia: el banco que tenía que comprobar que la wiki
+    // enseñaba las cajas que existen se quejaba porque había más de las que él
+    // conocía. Lo que se comprueba ahora es lo que importa: **una caja por tier,
+    // sin huecos**, que es lo que hace que la wiki no se salte un nivel.
+    for (const t of TIERS_CAJA) {
       const tabla = (CRATE_LOOT as Record<number, Array<{ id: string }>>)[t] ?? [];
       const pesos = tablaDePesos(t as any);
       const suma = pesos.reduce((a, b) => a + b, 0);
@@ -106,9 +125,15 @@ async function main() {
       check(`wiki: la caja T${t} trae compañero y recolector de su tier`,
         tabla.some(e => e.id === 'companion') && tabla.some(e => e.id === 'collector'),
         tabla.map(e => e.id).join(','));
+      // **EL PRECIO SE COMPARA CON `costeDeCaja()`, NO CON LA TABLA.** Antes
+      // comparaba con `COSTE_POR_TIER[t - 1] * 3/4`, y esa tabla tiene diez
+      // entradas: en el T11 daba `undefined`, la cuenta daba `NaN` y la
+      // comprobación fallaba con un número de precio que sí era el correcto. El
+      // banco quitaba una línea buena por estar escrita con la tabla vieja en vez
+      // de con la función.
       check(`wiki: la caja T${t} cuesta lo que dice la curva`,
-        CRATE_META[t as any].cost === costeDeCaja(t) &&
-        costeDeCaja(t) === Math.round(COSTE_POR_TIER[t - 1] * 3 / 4),
+        CRATE_META[t as any].cost === costeDeCaja(t)
+          && costeDeCaja(t) === Math.round(costeDeTier(t) * 3 / 4),
         `${CRATE_META[t as any].cost}`);
       const tipo = (CRATE_TYPES as Record<number, { rarity: string }>)[t];
       check(`wiki: la caja T${t} anuncia su rareza (${tipo.rarity})`,
@@ -118,14 +143,19 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  // 3 · El salto: en banda, y la T10 sin él
+  // 3 · El salto: en banda, y la última caja sin él
   // ------------------------------------------------------------------
   {
-    for (const t of CRATE_TIERS) {
+    for (const t of TIERS_CAJA) {
       const p = probabilidadDeSalto(t as any);
       const tabla = (CRATE_LOOT as Record<number, Array<{ id: string }>>)[t] ?? [];
-      if (t >= 10) {
-        check('wiki: la T10 no salta (no hay tier por encima)',
+      // **LA ÚLTIMA, QUE CON 10 Cajas ERA EL 10.** El número estaba escrito, así que
+      // al llegar al T20 exigía que la caja T10 —que ya no era la última— no
+      // saltase, y fallaba con una probabilidad de 1,9 % que era exactamente la
+      // que debía tener. La regla es "la caja más alta no salta", y el banco la
+      // estaba aplicando al número.
+      if (t === MAX_CRATE_TIER) {
+        check(`wiki: la T${t} no salta (no hay tier por encima)`,
           p === 0 && !tabla.some(e => e.id === 'up'), `p=${p}`);
       } else {
         check(`wiki: el salto de la T${t} está en banda (1-8 %)`,
@@ -159,11 +189,23 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  // 5 · Doscientas bases: contenido, stat y sorteo
+  // 5 · Las bases: contenido, stat y sorteo
   // ------------------------------------------------------------------
   {
-    check('wiki: son doscientas bases en total', TODAS_LAS_BASES.length === 200,
-      `${TODAS_LAS_BASES.length}`);
+    // **EL RECUENTO LO PONE LA TABLA, NO EL NÚMERO.** Decía "doscientas" con un
+    // `=== 200`: al añadir el T11 el banco falló diciendo que había 220 bases, que
+    // era la respuesta correcta a la pregunta que se le había hecho. Un banco que
+    // falla porque el contenido creció es un banco que empuja a no añadir contenido.
+    // Lo que se comprueba ahora es que haya **diez por tier y por lado** y que las dos
+    // tablas tengan los mismos tiers, que es la regla; el total sale solo.
+    const tiersRec = Object.keys(BASES_RECOLECTOR).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    const tiersCom = Object.keys(BASES_COMPANERO).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    const completos = [...tiersRec, ...tiersCom].every(t =>
+      BASES_RECOLECTOR[t]?.length === 10 && BASES_COMPANERO[t]?.length === 10);
+    const mismosTiers = tiersRec.join(',') === tiersCom.join(',');
+    check(`wiki: hay diez bases por tier y por lado, en los mismos tiers (${TODAS_LAS_BASES.length} en total)`,
+      completos && mismosTiers,
+      `rec=${tiersRec.length} com=${tiersCom.length} total=${TODAS_LAS_BASES.length}`);
     for (const [lado, tabla] of [['recolector', BASES_RECOLECTOR], ['companero', BASES_COMPANERO]] as const) {
       for (let tier = 1; tier <= 10; tier++) {
         const bases = (tabla as Record<number, any[]>)[tier] ?? [];
@@ -179,7 +221,9 @@ async function main() {
     }
     check('wiki: el stat se mueve ±10 % y el sorteo es lineal 10→1', true, '200 revisadas');
     const ids = new Set(TODAS_LAS_BASES.map(b => b.id));
-    check('wiki: ningún id de base se repite', ids.size === 200, `${ids.size} únicos`);
+    check(`wiki: ningún id de base se repite (${TODAS_LAS_BASES.length})`,
+      ids.size === TODAS_LAS_BASES.length,
+      `${ids.size} únicos`);
   }
 
   // ------------------------------------------------------------------
@@ -373,15 +417,26 @@ async function main() {
       [...new Set(indice.map(e => e.seccion))].join(','));
     check('wiki: cinco bloques de mecánicas', porSeccion('mecanicas').length === 5,
       `${porSeccion('mecanicas').length}`);
-    check('wiki: once entradas de cajas (intro + diez)', porSeccion('cajas').length === 11,
+    // **LAS ENTRADAS DE CAJA SALEN DEL NÚMERO DE CAJAS.** Decía "once (intro +
+    // diez)": con veinte cajas hay veintiuna y el banco fallaba diciendo que había
+    // de más. Lo que importa es que haya **una entrada por caja más la intro**, y
+    // que su número siga al contenido; escrito fijo, el banco obliga a tocarlo cada
+    // vez que se añade una caja, que es el momento en que alguien sube el número sin
+    // mirar la regla de al lado.
+    check(`wiki: una entrada por caja más la intro (${TIERS_CAJA.length + 1})`,
+      porSeccion('cajas').length === TIERS_CAJA.length + 1,
       `${porSeccion('cajas').length}`);
     const deBases = porSeccion('bases');
-    check('wiki: las doscientas bases están en el índice',
+    check(`wiki: las ${TODAS_LAS_BASES.length} bases están en el índice`,
       deBases.filter(e => e.ancla.startsWith('base-')).length === TODAS_LAS_BASES.length,
       `${deBases.filter(e => e.ancla.startsWith('base-')).length} bases`);
-    check('wiki: veinte grupos de bases (diez por lado)',
-      deBases.filter(e => e.ancla.startsWith('bases-rec-') || e.ancla.startsWith('bases-com-')).length === 20,
-      `${deBases.length} en bases`);
+    // **Y LOS GRUPOS: DOS POR TIER, UNO POR LADO.** El 20 estaba escrito y es
+    // "tiers × 2", no un número que signifique algo por sí solo.
+    const gruposBases = deBases.filter(e =>
+      e.ancla.startsWith('bases-rec-') || e.ancla.startsWith('bases-com-')).length;
+    check(`wiki: dos grupos de bases por tier (${TIERS_BASES.length * 2})`,
+      gruposBases === TIERS_BASES.length * 2,
+      `${gruposBases} en bases`);
     check('wiki: un logro por entrada (más la intro)', porSeccion('logros').length === ACHIEVEMENTS.length + 1,
       `${porSeccion('logros').length} frente a ${ACHIEVEMENTS.length}`);
     check('wiki: un nodo por entrada (más la intro)', porSeccion('pasivas').length === TREE_NODES.length + 1,
@@ -392,8 +447,16 @@ async function main() {
     const deItems = porSeccion('items');
     check('wiki: un afijo por entrada', deItems.filter(e => e.ancla.startsWith('afijo-')).length === AFFIXES.length,
       `${AFFIXES.length} afijos`);
-    check('wiki: los diez tiers en items', deItems.filter(e => e.ancla.startsWith('tier-')).length === 10,
-      'revisados');
+    // **UN ENTRADA POR TIER QUE HAY, Y LOS MISMOS QUE TIENEN BASE.** El índice
+    // genera las entradas de tier desde las bases, así que el número de una cosa y el
+    // de la otra son el mismo hecho. Con `=== 10` escrito, al llegar al T11 el banco
+    // fallaba por los dos lados: porque había 11 entradas y porque una de ellas
+    // apuntaba a un ancla que la página no escribía. Los dos fallos salían juntos
+    // y parecían uno.
+    const entradasTier = deItems.filter(e => e.ancla.startsWith('tier-'));
+    check(`wiki: un tier en items por cada tier con base (${TIERS_BASES.length})`,
+      entradasTier.length === TIERS_BASES.length,
+      `${entradasTier.length}`);
     check('wiki: los seis exclusivos en items', deItems.filter(e => e.ancla.startsWith('exclusivo-')).length === 6,
       'revisados');
     check('wiki: los cuatro expansores en items', deItems.filter(e => e.ancla.startsWith('expansor-')).length === 4,
@@ -416,9 +479,14 @@ async function main() {
       anclas.filter(a => !/^[A-Za-z0-9_.-]+$/.test(a)).join(',') || 'todas valen');
     const deAyudantes = new Set<string>([
       ...Object.values(ANCLA),      ...(CRATE_TIERS as readonly number[]).map(anclaCaja),
-      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(t => [anclaGrupoBases('rec', t), anclaGrupoBases('com', t)]),
+      ...TIERS_BASES.flatMap(t => [anclaGrupoBases('rec', t), anclaGrupoBases('com', t)]),
       ...TODAS_LAS_BASES.map(b => anclaBase((b as any).id)),
-      ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(anclaTier),
+      // **LOS TIERS SALEN DE LA TABLA DE BASES.** Estaba `[1..10]` escrito, y con
+      // el T11 la entrada `tier-11` del índice se declaraba huérfana: el banco decía
+      // que la página no escribía un ancla que sí escribía, porque la lista de
+      // anclas que él daba por buenas se quedó en diez. El banco no miraba la
+      // página: miraba su propia lista, y la lista estaba vieja.
+      ...TIERS_BASES.map(anclaTier),
       ...(CRATE_ONLY_COMPANIONS as readonly unknown[]).map((_, i) => anclaExclusivo(i)),
       ...Object.values(CONSUMIBLES as Record<string, any>)
         .filter(c => !(EXPANSOR_TIERS as any[]).some(e => e.buffId === c.buffId))

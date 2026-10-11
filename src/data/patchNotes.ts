@@ -57,6 +57,19 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.19.0',
+    fecha: '11 de octubre de 2026',
+    titulo: 'La forja llega hasta el T20',
+    lineas: [
+      'Diez tiers más, del 11 al 20, con sus diez armas y sus diez compañeros cada uno.',
+      'Hay doscientas bases nuevas. Todas con nombre propio y todas con su poder: la mejor de un tier es la más rara de salir.',
+      'Una caja nueva por tier, y el precio sigue subiendo de verdad hasta arriba.',
+      'A partir del T11 los objetos tienen más recorrido de niveles, porque a ese altura invertir en niveles volvía a importar.',
+      'La wiki enseña las bases y el precio de las veinte cajas, y el buscador las encuentra por su nombre.',
+      'El guardado se arregla solo al entrar: lo que ya tenías se renombra con el de su base.'
+    ]
+  },
+  {
     version: '1.18.0',
     fecha: '11 de octubre de 2026',
     titulo: 'Cada recolector y cada compañero ya tiene su propio nombre',

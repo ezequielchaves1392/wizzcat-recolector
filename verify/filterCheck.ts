@@ -496,10 +496,21 @@ async function main() {
   }
   {
     // El filtro manda sobre el orden: los items de otros tipos no se cuelan.
+    //
+    // **CADA ITEM LLEVA SU `baseId`, Y POR EL ORDEN ALFABÉTICO.** Este banco ordena
+    // por nombre y espera "Alfa" antes que "Zeta". Como el nombre sale de la base y
+    // la migración renombra, los dos items heredaban la base neutra del helper
+    // y se llamaban igual: los dos nombres vieja desaparecían y el orden se
+    // deshacía. Con `baseId` explícito, "r2" es una base cuyo nombre empieza por F
+    // y "r1" uno por I, y el orden vuelve a ser lo que el banco dice medir.
+    //
+    // La letra importa: el banco ordena por nombre y "Fragmento Inestable" tiene que
+    // ir antes que "Ira Divina". Con dos bases cualesquiera el orden cambia y el
+    // fallo parece del filtro, que es lo que este banco mide de verdad.
     const g = await boot(baseSave([
-      collector('r1', 9, { name: 'Zeta' }),
-      collector('r2', 1, { name: 'Alfa' }),
-      companion('m1', 3, { name: 'Beta' })
+      collector('r1', 9, { name: 'Zeta', baseId: 'base_rec_t9_9' }),   // Ira Divina (I)
+      collector('r2', 1, { name: 'Alfa', baseId: 'base_rec_t1_2' }),    // Fragmento Inestable (F)
+      companion('m1', 3, { name: 'Beta', baseId: 'base_com_t3_5' })
     ]));
     check('orden + filtro: el filtro se aplica antes de ordenar',
       celdas(g, 'collector', 'name').join(',') === 'r2,r1', celdas(g, 'collector', 'name').join(','));

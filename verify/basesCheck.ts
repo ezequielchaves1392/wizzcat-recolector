@@ -37,15 +37,42 @@ import { crearCompanioDeTier } from '../src/data/crafting';
 
 const LADDER = [0.92, 0.93, 0.94, 0.96, 0.98, 1.00, 1.02, 1.04, 1.07, 1.10];
 
+/**
+ * Los tiers que existen, salen de la tabla, y el último.
+ *
+ * **POR QUÉ ESTÁN FUERA DE `main()`.** Los usan tres bloques distintos —el del
+ * contenido y los dos del nombre— y dentro del primero no se veían desde el
+ * último. Con veinte tiers van a aparecer en más sitios, y repetir el
+ * `Object.keys(...)` en cada uno es la forma de que dos bloques miren contenido
+ * distinto el día que una tabla y la otra no coincidan.
+ */
+const TIERS = Object.keys(tablaDe('recolector')).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+const TMAX = TIERS[TIERS.length - 1];
+
 async function main() {
   // -------------------------------------------------------------------------
   //  1. EL CONTENIDO ESTÁ ENTERO
+  //
+  //  **LOS RECUENTOS SALEN DE LAS TABLAS, NO DE NÚMEROS ESCRITOS.** Antes el
+  //  banco pedía `200` y el rango `1..10` en cuatro sitios, y añadir el T11 los
+  //  dejó mintiendo: el chequeo de ids pedía 200 bases cuando ya había 220, y el
+  //  del patrón de id solo aceptaba `t([1-9]|10)`, así que un T11 bien escrito
+  //  fallaba. Un banco que tiene el número del contenido escrito dentro es un banco
+  //  que hay que tocar cada vez que crece el contenido, y ese es el momento en que
+  //  alguien sube el número sin revisar la regla de al lado.
+  //
+  //  Ahora los dos números salen de las tablas. Si mañana se llega al T20, este
+  //  bloque pasa sin editarse.
   // -------------------------------------------------------------------------
   {
+    const TOTAL = Object.values(tablaDe('recolector')).flat().length
+      + Object.values(tablaDe('companero')).flat().length;
+    const patron = new RegExp(`^base_(rec|com)_t([1-9]|[1-9]\\d)_([1-9]|10)$`);
+
     let fallos: string[] = [];
     for (const lado of ['recolector', 'companero'] as const) {
       const tabla = tablaDe(lado);
-      for (let t = 1; t <= 10; t++) {
+      for (const t of TIERS) {
         const lista = tabla[t] ?? [];
         if (lista.length !== 10) { fallos.push(`${lado} T${t}: ${lista.length} bases`); continue; }
         lista.forEach((b, i) => {
@@ -56,17 +83,17 @@ async function main() {
         });
       }
     }
-    check('bases: dos lados, diez tiers, diez posiciones con su escalera y su drop',
-      fallos.length === 0, fallos.slice(0, 3).join(' | ') || '200 bases en regla');
+    check(`bases: dos lados, ${TMAX} tiers, diez posiciones con su escalera y su drop`,
+      fallos.length === 0, fallos.slice(0, 3).join(' | ') || `${TOTAL} bases en regla`);
 
     const ids = TODAS_LAS_BASES.map(b => b.id);
     const nombres = TODAS_LAS_BASES.map(b => b.nombre);
-    check('bases: 200 ids únicos con patrón por lado',
-      TODAS_LAS_BASES.length === 200 && new Set(ids).size === 200
-        && ids.every(id => /^base_(rec|com)_t([1-9]|10)_([1-9]|10)$/.test(id)),
+    check(`bases: ${TOTAL} ids únicos con patrón por lado`,
+      TODAS_LAS_BASES.length === TOTAL && new Set(ids).size === TOTAL
+        && ids.every(id => patron.test(id)),
       `bases=${TODAS_LAS_BASES.length} ids=${new Set(ids).size}`);
-    check('bases: y 200 nombres únicos, ninguno vacío',
-      new Set(nombres).size === 200 && nombres.every(n => n.trim().length > 0),
+    check(`bases: y ${TOTAL} nombres únicos, ninguno vacío`,
+      new Set(nombres).size === TOTAL && nombres.every(n => n.trim().length > 0),
       `nombres=${new Set(nombres).size}`);
 
     // Los getters resuelven lo que la tabla dice, y lo que no existe no existe.
@@ -77,7 +104,7 @@ async function main() {
     check('bases: el lado sale del tipo de item',
       ladoDeBase('collector') === 'recolector' && ladoDeBase('companion') === 'companero',
       'collector/companion');
-    check('bases: basePorId devuelve cada una de las 200',
+    check(`bases: basePorId devuelve cada una de las ${TODAS_LAS_BASES.length}`,
       mal === '', mal.slice(0, 60) || 'todas');
     check('bases: basePorPosicion acota y lo desconocido es undefined',
       basePorPosicion(4, 7, 'recolector')?.id === 'base_rec_t4_7'
@@ -86,10 +113,15 @@ async function main() {
         && basePorPosicion(99, 5, 'recolector') === undefined
         && basePorId('invento') === undefined,
       'pos 7 T4 rec + bordes');
+    // **Y FUERA DE TABLA NO SE SORTEA.** El tier 11 ya tiene contenido, así que la
+    // pregunta ya no es "el 11" sino "el siguiente al último que existe": el banco
+    // lo calcula desde la tabla en vez de tener el número escrito, porque cuando
+    // llegue el T20 esta línea tiene que seguir preguntando lo mismo.
+    const tmaxTabla = Math.max(...Object.keys(tablaDe('recolector')).map(Number));
     check('bases: fuera de tabla no se sortea, se devuelve null',
-      baseAleatoriaSegura(11, 'recolector') === null
+      baseAleatoriaSegura(tmaxTabla + 1, 'recolector') === null
         && baseAleatoriaSegura(0, 'companero') === null,
-      'T11 y T0 dan null');
+      `T${tmaxTabla + 1} y T0 dan null`);
     check('bases: el lado sale del tipo de item',
       ladoDeBase('collector') === 'recolector' && ladoDeBase('companion') === 'companero'
         && ladoDeBase('loquesea') === 'companero',
@@ -291,7 +323,7 @@ async function main() {
     // una lista aparte, esta es la línea que lo caza.
     let fallaGenera = '';
     for (const lado of ['recolector', 'companero'] as const) {
-      for (let t = 1; t <= 10; t++) {
+      for (const t of TIERS) {
         for (let intento = 0; intento < 12; intento++) {
           const base = baseAleatoria(t, lado, () => 0.5);
           const hecho = lado === 'recolector'
@@ -308,20 +340,20 @@ async function main() {
       }
     }
     check('nombre: el item que nace se llama como la base que se le sortió',
-      fallaGenera === '', fallaGenera || 'los dos lados, T1..T10, 12 tiradas cada uno');
+      fallaGenera === '', fallaGenera || `los dos lados, T1..T${TMAX}, 12 tiradas cada uno`);
 
     // **Y QUE NO SEAN EL MISMO NOMBRE, QUE ES EL BUG ENTERO.** Si dos bases
     // distintas de un tier tuvieran el mismo nombre, el jugador vería veinte T1 y
-    // no podría distinguirlos, que es exactamente lo que se complained.
+    // no podría distinguirlos, que es exactamente lo que se quejaba.
     let colision = '';
     for (const lado of ['recolector', 'companero'] as const) {
-      for (let t = 1; t <= 10; t++) {
+      for (const t of TIERS) {
         const nombres = (tablaDe(lado)[t] ?? []).map(b => b.nombre);
         if (new Set(nombres).size !== nombres.length) colision += `${lado} T${t} `;
       }
     }
     check('nombre: dos bases distintas del mismo tier no se llaman igual',
-      colision === '', colision || 'las 200 bases tienen nombre propio');
+      colision === '', colision || `las ${TODAS_LAS_BASES.length} bases tienen nombre propio`);
 
     // --- MIGRAR: un item viejo se renombra al de SU base, no al de otra ---
     // La partida vieja es la que trae `baseId` bueno y nombre de la lista de tres.
