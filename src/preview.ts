@@ -29,7 +29,7 @@ import { renderBuffHudForPreview } from './ui/buffHud';
 import { renderWarehouseTab, pintarBarraDeConsumibles } from './components/warehouse';
 import { cambiaDePestana } from './ui/fichas';
 import { renderStoreTab } from './components/store';
-import { renderForgePage } from './ui/forgePage';
+import { renderForgePage, preseleccionarMateriales } from './ui/forgePage';
 import { showPatchNotes } from './ui/patchNotes';
 import { renderProfilePage } from './ui/profilePage';
 import { renderPrestigePage } from './ui/prestigePage';
@@ -52,11 +52,17 @@ if (width && height && !params.get('embedded')) {
   // breakpoints dejarían de evaluarse bien. Para escritorio grande se permite
   // reducir la escala del iframe: el layout se calcula al ancho real y luego se
   // encoge visualmente, que es justo lo que se quiere ver.
+  //
+  // **`sel` también pasa al iframe, Y POR QUÉ:** cada parámetro de fuera hay
+  // que reenviarlo a mano. Se olvidó una vez y el síntoma fue desconcertante: la URL
+  // pedía materiales, el preview los aceptaba, y dentro del iframe la forja salía
+  // vacía sin decir por qué —porque el `?sel=` se había quedado en la página de
+  // fuera. Un parámetro que no llega no falla: simplemente no hace nada.
   const scale = Number(params.get('scale') || '1');
   document.body.innerHTML = `
     <div style="display:flex;align-items:flex-start;justify-content:center;padding:16px;background:#0b0d12;min-height:100vh;overflow:auto">
       <div style="transform:scale(${scale});transform-origin:top center;flex-shrink:0">
-        <iframe src="${location.pathname}?embedded=1&vista=${vista}&tema=${params.get('tema') || 'cyber-dark'}"
+        <iframe src="${location.pathname}?embedded=1&vista=${vista}&tema=${params.get('tema') || 'cyber-dark'}${params.get('sel') ? `&sel=${encodeURIComponent(params.get('sel')!)}` : ''}"
           width="${width}" height="${height}"
           style="border:1px solid #2a2f3a;border-radius:16px;background:#000;display:block;box-shadow:0 24px 70px -24px #000"></iframe>
       </div>
@@ -169,7 +175,14 @@ const MOCK: any = {
     }),
     collector(8, { id: 'a', name: 'Colapso Controlado', baseId: 'base_rec_t8_4', level: 18, damage: 62 }),
     collector(7, { id: 'b', name: 'Guadaña del Vacío', baseId: 'base_rec_t7_1', level: 9, damage: 44, potential: 2, affixes: ['aff_sharp'] }),
-    collector(7, { id: 'c', name: 'Riel de Iones', baseId: 'base_rec_t7_5', level: 12, damage: 51 }),
+    collector(7, { id: 'c', name: 'Riel de Iones', baseId: 'base_rec_t7_5', level: 12, damage: 51, affixes: ['aff_focus'] }),
+    // F106 · **OTRO T7 CON AFIJOS, Y ES PARA PODER REVISAR LA LÍNEA DE COMPARTIDOS.**
+    // El T7 de arriba lleva `aff_sharp` y el otro no lleva nada, así que con los dos
+    // únicos T7 la mezcla sale siempre con "ningún afijo compartido" y la otra rama del
+    // bloque —la que dice qué afijos entran primero— **no se puede ver en ninguna
+    // combinación del almacén de ejemplo**. Con estos dos comparten `aff_focus` y
+    // `aff_prime`, que es lo que un jugador real ve en la primera partida.
+    collector(7, { id: 'h', name: 'Anzuelo de Fase', baseId: 'base_rec_t7_8', level: 7, damage: 39, potential: 3, affixes: ['aff_focus', 'aff_prime'] }),
     collector(7, { id: 'g', name: 'Martillo de Fase', baseId: 'base_rec_t7_2', level: 3, damage: 30 }),
     collector(6, { id: 'd', name: 'Pulso Nebula', baseId: 'base_rec_t6_3', level: 6, damage: 35 }),
     collector(5, { id: 'e', name: 'Cincel Orbital', baseId: 'base_rec_t5_8', level: 20, damage: 28, maxLevel: 20 }),
@@ -189,6 +202,18 @@ const MOCK: any = {
     { id: 'c3', name: 'Guardián de la Última Veta', type: 'companion', potential: 3, details: 'Recolección por segundo: +160/s', rarity: 'Divino', tier: 11, power: 160, baseId: 'base_com_t11_8', level: 4, affixes: ['aff_eternal'] },
     { id: 'c4', name: 'Chispa Perdida', type: 'companion', potential: 3, details: 'Recolección por segundo: +6/s', rarity: 'Común', tier: 1, power: 6, baseId: 'base_com_t1_1' },
     { id: 'c5', name: 'Fénix de Datos', type: 'companion', potential: 3, details: 'Recolección por segundo: +40/s', rarity: 'Mítico', tier: 9, power: 40, baseId: 'base_com_t9_7' },
+    // F106 · **DOS COMPAÑEROS DEL MISMO TIER, Y ES PARA PODER REVISAR SU YUNQUE.**
+    //
+    // Los ocho compañeros del mock eran de ocho tiers distintos, así que **la mitad de la
+    // pantalla de compañeros no se pintaba nunca**: sin dos del mismo tier no hay
+    // mezcla posible, y sin mezcla no salen ni la probabilidad, ni el potencial, ni la
+    // rareza, ni el bloque de qué sale. Un banco visual donde la mitad del producto no
+    // existe aprueba cualquier cosa que se le ponga delante.
+    //
+    // Llevan afijos a propósito y uno compartido, porque la línea que dice qué afijos
+    // entran primero solo se ve cuando los dos tienen alguno en común.
+    { id: 'c6', name: 'Custodio de la Rebaba', type: 'companion', potential: 2, details: 'Recolección por segundo: +22/s', rarity: 'Épico', tier: 7, power: 22, baseId: 'base_com_t7_3', level: 5, affixes: ['aff_focus'] },
+    { id: 'c7', name: 'Espectro de Sodium', type: 'companion', potential: 3, details: 'Recolección por segundo: +30/s', rarity: 'Legendario', tier: 7, power: 30, baseId: 'base_com_t7_9', level: 8, affixes: ['aff_focus', 'aff_sharp'] },
     // F52 · EL MOCK USA LOS NOMBRES DE VERDAD, Y ANTES NO.
     //
     // Decía "Caja Legendaria", que fue el nombre que tenían las cajas antes de F31:
@@ -773,6 +798,27 @@ switch (vista) {
     renderStoreTab(app, fakeGame, ir);
     break;
   case 'forja':
+    // F106 · `?sel=id1,id2` PONE MATERIALES EN LA MESA.
+    //
+    // **SIN ESTO LA FORJA NO SE PUEDE REVISAR.** Arranca sin nada seleccionado, así
+    // que la mitad de la pantalla —la probabilidad, el potencial, la rareza, los afijos
+    // y todo el bloque que dice qué va a salir de la mezcla— **no se pinta nunca**. Un
+    // preview donde la parte que quieres mirar no aparece no es un preview: es un sitio
+    // donde no mirar.
+    //
+    // **EL FILTRO DE TIER SE QUITA, NO SE PIDE.** Los ids son de los que hay en el
+    // almacén de ejemplo, y si fueran de dos tiers distintos la mezcla sería imposible
+    // de montar; con el filtro a cero la rejilla los enseña a los dos y lo que se ve
+    // es una mezcla que el jugador podría hacer de verdad.
+    if (params.get('sel')) {
+      const pedidos = params.get('sel')!.split(',').map(s => s.trim()).filter(Boolean);
+      const almacen = [
+        ...(fakeGame.getState().warehouse || []),
+        ...(fakeGame.getState().companions || []),
+      ];
+      const encontrados = pedidos.map(id => almacen.find((w: any) => w?.id === id)).filter(Boolean) as any[];
+      if (encontrados.length > 0) preseleccionarMateriales(encontrados.map(w => w.id));
+    }
     renderForgePage(app, fakeGame, ir);
     break;
   case 'perfil':

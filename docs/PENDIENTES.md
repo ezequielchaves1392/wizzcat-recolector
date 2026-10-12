@@ -39,7 +39,54 @@ invariant** sin el cual lo demas queda raro, despues las features y al final la 
 
 ---
 
-### Lote 1 · BUGS QUE MIENTEN O SE PIERDEN
+### Lote 0 · LO QUE VIENE ANTES DE TODO
+
+- [x] **F107 · La forja no dice qué item va a salir de la mezcla.** *(Pedido del jugador
+      el 11 de octubre de 2026, en sus palabras: "al poner dos bases abajo me describa
+      el item que va a salir de esa mezcla, la probabilidad de salir, base, rareza etc,
+      que se pueda hacer ese sector de probabilidad bien informativo, simple, descriptivo,
+      bien indentado y con colores".)*
+      **Lo que ya se dice y está bien:** la probabilidad grande, la base del tier, las
+      piedras, la rareza calculada, el potencial promedio y los afijos compartidos.
+      **Lo que no se dice, y es lo que más importa desde que el nombre es el de la
+      base: la base del resultado.** El jugador pone dos T5 ★3 y no tiene forma de
+      saber si le va a salir la posición 4 o la 6 —que es la media de los dos, y por lo
+      tanto ya sabe si lo sabe mirando su propia regla y no el juego—. Con el nombre
+      saliendo de la base, el nombre del resultado es literalmente la respuesta, y no
+      está en pantalla.
+      **Lo que sale es determinista salvo tres dados**, que es la misma forma que
+      usa ya la rareza calculada: la base es la media de las posiciones (fija), el
+      potencial es la media (fija, con la tirada de subida encima) y la rareza es el
+      suelo honesto (conservar, subir la ★ o subir con la Nanopartícula). Se enseña
+      el suelo y se dice que los tres dados solo pueden mejorar.
+      **Y CON COLORES POR RAZA Y POR ESTRELLA**, que es lo que se pide y lo que ya
+      tienen las etiquetas de rareza del almacén: `rarityClass()` es el mismo helper
+      que usa el almacén, así que un número con color de rareza es el mismo número con
+      el mismo color en las dos pantallas.
+      **POR QUÉ NO ES UNA PESTAÑA NI UNA PANTALLA NUEVA:** el jugador tiene los dos
+      items en la mano y está decidiendo en ese momento. Lo que falta es el dato, no
+      un sitio donde ir a buscarlo.
+      **HECHO.** El bloque dice el nombre, el tier y la posición de base con su
+      multiplicador, la recolección, el potencial promedio, la rareza mínima **con su
+      color de rareza**, los afijos que salen y los que se comparten. Encima de todo el
+      desglose, no como una línea más del final.
+      **LO QUE SALIÓ MAL Y QUEDÓ ESCRITO, PORQUE ES EL TIPO DE ERROR QUE VUELVE:**
+      primero se metió cada palabra del bloque en la tabla de nombres —"de", "las",
+      "media"—, para que un renombrado no dejara el texto viejo. El resultado fue
+      "3de 3 como máximo" y "El nombre Sale sale seguro": una tabla de piezas sueltas
+      sigue siendo una tabla de piezas sueltas. **La tabla se quedó solo con lo que de
+      verdad cambia con el tipo —la unidad, click o segundo— y el resto va escrito.**
+      **Y EL PREVIEW NO PODÍA REVISAR NADA DE ESTO:** arrancaba sin materiales, así que
+      media pantalla no se pintaba nunca. Ahora acepta `?sel=id1,id2` —y el parámetro
+      tuvo que pasarse también al iframe, que se lo comía— y el almacén de ejemplo tiene
+      dos T7 de más y dos compañeros del mismo tier, porque sin ellos la línea de
+      afijos compartidos no se veía en ninguna combinación posible.
+      **COMPROBADO CON 76 PRUEBAS NUEVAS** que, para los 19 pares de tiers y en los dos
+      lados, fuerzan un acierto y comparan **lo que la pantalla enseñaría con lo que el
+      motor fabrica**, nombre y daño. Las dos cuentas salen de las mismas tres funciones,
+      así que el banco pasa mientras sigan siendo las mismas; si algún día dejan de
+      serlo, dice qué base —enseñada y salida— en el nombre del fallo.
+
 
 - [x] **G1 · "Sin guardar en el servidor" aparecía sin motivo.** El aviso se encendía con
       **cualquier** fallo de guardado, y `saveToFirebase()` hace **dos** escrituras: el

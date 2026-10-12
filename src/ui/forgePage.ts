@@ -29,7 +29,12 @@
 
 import { ic } from './icons';
 import { pageShell, mountInto, wireNav, statStrip, emptyState, sectionHead } from './pageShell';
-import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado, POOL_AFIJOS_COMPANERO } from '../data/crafting';
+import { successChance, baseSuccessChance, MAX_PIEDRAS_POR_FUSION, PIEDRA_APORTA, AFFIX_BY_ID, estrellasDe, MATERIALES_POR_FUSION, explicacionDeAfijos, PROB_CONSERVA_RAREZA, afijosCompartidos, potencialFusionado, potencialDe, rarezaCalculadaDeForja, rarezaDeCompanionForjado, POOL_AFIJOS_COMPANERO, danioDeRango, AFIX_MIN_POR_RARIDAD, AFIX_MAX } from '../data/crafting';
+// F106 · La predicción de la forja usa **las mismas dos funciones que el motor**// —`posicionFusionada()` promedia las posiciones y `basePorPosicion()` busca la base
+// de esa posición—, y no una cuenta escrita en la vista. Si la pantalla dijera una
+// posición y el motor fabricara otra, el jugador vería el nombre de un item que no le
+// va a salir.
+import { posicionFusionada, posicionDeBase, basePorPosicion } from '../data/bases';
 import { pctDe, PROB_SUBE_POTENCIAL, BONO_ETTER } from '../data/constants';
 import { formatNumber } from '../utils/format';
 import { sfx } from '../utils/audio';
@@ -115,11 +120,25 @@ const ui: ForgeUIState = {
 const NOMBRES = {
   collector: {
     uno: 'recolector', muchos: 'recolectores', icono: 'collector',
-    verbo: 'forjada', participio: 'forjadas', vacio: 'recolectores'
+    verbo: 'forjada', participio: 'forjadas', vacio: 'recolectores',
+    // F106 · LA UNIDAD DE LA RECOLECCIÓN, Y POR QUÉ ES LO ÚNICO QUE ESTÁ AQUÍ.
+    //
+    // Lo primero que se probó fue meter en esta tabla **cada palabra** del bloque de
+    // predicción —"de", "las", "media", "pueden", "subir"— con la idea de que si el
+    // tipo se renombrara un día, el bloque no se quedara viejo. El resultado fue texto
+    // gramaticalmente roto: "3de 3 como máximo", "El nombre Sale sale seguro",
+    // "(1y 2)". Una tabla de piezas sueltas sigue siendo una tabla de piezas sueltas:
+    // el español no se arma concatenando, y cada frase tiene su propia concordancia.
+    //
+    // Lo que sí sobrevive a un renombrado es lo que **cambia de verdad** con el tipo, y
+    // eso es la unidad: un recolector da por click y un compañero por segundo. El resto
+    // va escrito en el bloque, donde se lee entero y de una vez.
+    unidad: 'click'
   },
   companion: {
     uno: 'compañero', muchos: 'compañeros', icono: 'companion',
-    verbo: 'forjado', participio: 'forjados', vacio: 'compañeros'
+    verbo: 'forjado', participio: 'forjados', vacio: 'compañeros',
+    unidad: 'segundo'
   }
 } as const;
 
@@ -129,9 +148,36 @@ export function renderForgePage(container: HTMLElement, game: any, go?: (r: any)
 }
 
 /**
+ * Pone ids en la mesa de la forja, sin filtros y sin más historia.
+ *
+ * **SOLO LA USA EL PREVIEW, Y POR ESO VIVE AQUÍ Y NO EN `preview.ts`.** La selección
+ * es estado de módulo (`ui.selected`), y un archivo de fuera no puede tocarlo: la
+ * única forma de meter ids sería inventing una segunda lista de seleccionados, que
+ * es exactamente la clase de copia que este repo no admite —dos sitios donde vive la
+ * verdad sobre qué está en la mesa, y el que se equivoca es el que se ve.
+ *
+ * **Y POR QUÉ HACE FALTA.** La forja arranca vacía, así que media pantalla no se
+ * pinta nunca en el preview: la probabilidad, el potencial, la rareza, los afijos y
+ * el bloque "qué va a salir de esta mezcla". Una pantalla que solo se puede revisar
+ * en su estado vacío es una pantalla sin revisar.
+ *
+ * **NO LIMPIA LOS FILTROS.** Si el preview llega con `?tier=8`, los ids de un T7 no
+ * salen en la rejilla pero siguen seleccionados, y el bloque calcula con ellos: sería
+ * una mezcla que el jugador nunca podría montar. Por eso el preview pone el filtro
+ * por su cuenta antes de llamar.
+ */
+export function preseleccionarMateriales(ids: string[]): void {
+  ui.selected = ids.slice(0, MATERIALES_POR_FUSION);
+  ui.tier = 0;
+  ui.stones = 0;
+  ui.nano = false;
+  ui.eter = false;
+}
+
+/**
  * Los materiales de un tipo, en el orden en el que los enseña la rejilla.
  *
- * **ESTÁ FUERA DE `draw()` PORQUE MIENTE SI NO, Y PORQUE ASÍ LA COMPRUEBA UN BANCO.**
+ * **ESTÁ FUERA DE `draw()` PORQUE MIENTE SI NO, Y POR QUE ASÍ LA COMPRUEBA UN BANCO.**
  * `visibleStacksFor()` del almacén se extrajo por el mismo motivo: una regla de orden
  * que vive dentro de una función que pinta no la puede comprobar nadie, porque para
  * llamarla hay que tener un DOM. Aquí el orden es una regla —qué va antes que qué— y las
@@ -333,6 +379,81 @@ function draw(container: HTMLElement, game: any, go?: (r: any) => void) {
     ? successChance(matTier, info.craftLuck, ui.stones, affixLuck)
     : 0;
   const ready = elegidos.length === MATERIALES_POR_FUSION;
+
+  // =========================================================================
+  //  F106 · LA BASE DEL RESULTADO, QUE ANTES NO SE DECÍA EN NINGÚN SITIO
+  // =========================================================================
+  //
+  //  **LO QUE VA A SALIR ES EL NOMBRE DE ESA BASE, Y NO ES UNA ADIVINANZA.** Con el
+  //  nombre del item saliendo de su base, el nombre del resultado *es* la respuesta a
+  //  "qué me va a salir", y la respuesta es determinista: la base forjada es la
+  //  **media de las posiciones de los dos materiales**, redondeada. Poner dos bases 10
+  //  sale una 5, y eso se puede leer antes de tirar.
+  //
+  //  **LAS MISMAS DOS FUNCIONES QUE USA EL MOTOR** —`posicionFusionada()` y
+  //  `basePorPosicion()`—, no una cuenta escrita aquí. Si esta pantalla dijera una
+  //  posición y el motor fabricara otra, el jugador vería el nombre de un item que no
+  //  le va a salir, que es peor que no decir nada (R2/R3).
+  //
+  //  **Y LO QUE NO SE DICE, POR QUÉ.** Hay tres dados: conservar la rareza, subir la
+  //  ★ y la Nanopartícula. **Ninguno baja la base** —la base es la media y punto—, así
+  //  que el nombre que sale es el de esa base siempre. La rareza y el potencial sí
+  //  pueden mejorar, y por eso la línea de la rareza sigue diciendo "calculada".
+  const baseResultante = ready && matTier
+    ? basePorPosicion(
+        matTier + 1,
+        posicionFusionada(posicionDeBase(elegidos[0]?.baseId), posicionDeBase(elegidos[1]?.baseId)),
+        ui.tipo === 'collector' ? 'recolector' : 'companero')
+    : undefined;
+  /** El daño que pegaría, para que el número grande se pueda comparar con el del item. */
+  const danoResultante = baseResultante
+    ? danioDeRango(matTier + 1, potMedio, baseResultante)
+    : 0;
+
+  // **LA RAREZA Y LA CANTIDAD DE AFIJOS, CON SU NÚMERO EN UNA VARIABLE.**
+  //
+  // La rareza se calcula una vez aquí y se usa en la etiqueta **y** en el recuento de
+  // afijos, porque los dos salen del mismo número: un forjado lleva exactamente los
+  // afijos de su rareza. Si se calculara dos veces, el rótulo podría decir "Épico" y
+  // el número "2 afijos" cuando uno de los dos se quedara viejo —y aquí no puede ser
+  // una copia: sale de `rarezaCalculadaDeForja()`, la misma función que estampa el
+  // resultado al forjar (R2/R3).
+  //
+  // **EL RECUENTO ES EL SUELO, Y DICE "MÍNIMA".** Los tres dados de la forja —conservar
+  // la rareza, subir la ★ y la Nanopartícula— solo pueden mejorar la rareza, nunca
+  // bajarla. Enseñar "2 afijos" como un hecho sería mentir cuando la Nanopartícula
+  // suba la rareza y salgan seis. Por eso la línea dice **"Afijos (mín.)"**: es el
+  // número que puede salir sí o sí, y el de arriba puede ser más.
+  const rarezaSuelo = ready && matTier
+    ? (ui.tipo === 'collector'
+        ? rarezaCalculadaDeForja(matTier + 1, potMedio)
+        : rarezaDeCompanionForjado(matTier + 1))
+    : '';
+  const cantidadAfijos = ready && rarezaSuelo ? (AFIX_MIN_POR_RARIDAD[rarezaSuelo] ?? 0) : 0;
+
+  // =========================================================================
+  //  F106 · EL BLOQUE "QUÉ VA A SALIR DE ESTA MEZCLA"
+  // =========================================================================
+  //
+  //  Va **encima de todo el desglose**, no como una línea más del final, porque es la
+  //  respuesta a la pregunta que el jugador se hace al poner los dos items: "qué me va
+  //  a salir". Abajo hay seis líneas explicando cómo se llega al 73 %; esto es qué se
+  //  lleva el 73 %.
+  //
+  //  **LO QUE DICE, Y POR QUÉ NO DICE MÁS.** El nombre, el tier, la posición de base y
+  //  su multiplicador, y la recolección por click o por segundo. **No dice el potencial
+  //  ni la rareza como hechos**, porque los dos tienen un dado encima: el nombre es
+  //  seguro —la base es la media y ningún dado la toca—, el daño es el del potencial
+  //  medio, y la rareza se enseña abajo como "calculada" con su suelo. Enseñar la
+  //  rareza como un hecho aquí sería el mismo error que el nombre de forja viejo, el
+  //  que decía PRIMIGENIA: un número que promete y luego sale otro.
+  //
+  //  **LA ETIQUETA DE RARAZA ES LA DEL ALMACÉN**, con el mismo helper y el mismo
+  //  color: una "Épico" aquí es la misma palabra con el mismo color que en la rejilla.
+  //  Y las estrellas usan la misma función que pinta el potencial en todas partes.
+  //
+  //  **EL TEXTO SALE DE `NOMBRES`, NO DEL PLANTILLA.** Si el tipo se renombra, el
+  //  bloque dice una cosa y el título de la página otra, y el mismo bug vuelve.
 
   // **LO QUE HACE FALTA PARA LLEGAR AL OBJETIVO, Y LO PIDE EL MOTOR.**
   //
@@ -610,6 +731,45 @@ function nivelDe(w: any): number {
               ? `Rareza calculada: ${rarezaCalculadaDeForja(matTier + 1, potMedio)}${potMedio < 5 ? ' · puede subir si sube la ★' : ''}${ui.nano ? ' · con Nano un escalón más, 50 %' : ''}`
               : `Rareza del resultado: ${rarezaDeCompanionForjado(matTier + 1)} (la pone el tier)`}
           </p>
+        ` : ''}
+        ${ready && baseResultante ? `
+          <div class="mt-3 rounded-lg border border-[var(--border-color)] bg-[var(--bg-inset)] px-3 py-2.5">
+            <p class="label-caps mb-1.5">Sale de esta mezcla</p>
+            <div class="flex items-center justify-between gap-2 mb-1.5">
+              <span class="text-[11px] font-mono font-bold text-[var(--text-main)] truncate">
+                ${baseResultante.nombre}
+              </span>
+              <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[var(--border-color)] text-[var(--text-muted)] flex-shrink-0">
+                T${matTier + 1} · base ${baseResultante.posicion}/10 · ×${baseResultante.pesoStat.toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[10px] font-mono">
+              <span class="text-[var(--text-muted)]">Recolección por ${N.unidad}</span>
+              <span class="font-bold text-[var(--text-main)]">+${formatNumber(danoResultante)}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[10px] font-mono mt-0.5">
+              <span class="text-[var(--text-muted)]">Potencial promedio</span>
+              <span class="text-amber-300">${estrellasDe(potMedio)}${potMedio < 5 ? ' <span class="text-[var(--text-muted)]">puede +1</span>' : ''}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[10px] font-mono mt-0.5">
+              <span class="text-[var(--text-muted)]">Rareza mínima</span>
+              <span class="${rarityClass(rarezaSuelo)}">${rarezaSuelo}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 text-[10px] font-mono mt-0.5">
+              <span class="text-[var(--text-muted)]">Afijos (mín. de ${AFIX_MAX})</span>
+              <span class="font-bold text-[var(--text-main)]">${cantidadAfijos}</span>
+            </div>
+            <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1.5 leading-relaxed">
+              ${nombresCompartidos.length > 0
+                ? `Tus dos materiales comparten: ${nombresCompartidos.join(' · ')}. Esos entran primero.`
+                : 'Ningún afijo compartido: los que falten se sacan del catálogo.'}
+            </p>
+            <p class="text-[9px] font-mono text-[var(--text-muted)] mt-1 leading-relaxed">
+              El nombre sale seguro: la base es la media de las dos
+              (${posicionDeBase(elegidos[0]?.baseId)} y ${posicionDeBase(elegidos[1]?.baseId)}).
+              La rareza y la ★ pueden subir.
+            </p>
+          </div>
         ` : ''}
       </div>
 

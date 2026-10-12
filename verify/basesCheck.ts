@@ -197,6 +197,70 @@ async function main() {
       posicionDeBase(undefined) === 6 && posicionDeBase('invento') === 6
         && posicionDeBase('base_rec_t4_7') === 7,
       'undefined/invento/T4-7');
+
+    // -----------------------------------------------------------------------
+    //  F106 · LO QUE LA FORJA PROMETE Y LO QUE EL MOTOR FABRICA, EN TODOS LOS
+    //  TIERS Y EN LOS DOS LADOS.
+    //
+    //  **POR QUÉ ESTO ES UN BANCO Y NO UNA MIRADA.** La pantalla de la forja
+    //  enseña un nombre y un daño antes de tirar, y los dos salen de funciones sueltas
+    //  en la vista: `posicionFusionada()` + `basePorPosicion()` + `danioDeRango()`.
+    //  El motor, por su parte, fabrica el item con las suyas. **Si las dos listas de
+    //  funciones se separan un día —porque alguien copia la cuenta en la vista, o
+    //  porque la vista se queda atrás al cambiar una firma—, la pantalla promete el
+    //  nombre de un item que no le va a salir.** Y eso no es un descuadre: es la
+    //  pantalla diciendo una cosa y el juego haciendo otra, que es exactamente lo que
+    //  este banco existe para cazar.
+    //
+    //  **POR QUÉ TODOS LOS TIERS Y NO UNO.** Con un solo tier el banco pasa aunque la
+    //  regla se rompa a partir del T15. Y con los 20 hace 40 mezclas, que es el
+    //  contenido entero de una partida tardía.
+    //
+    //  **CÓMO SE COMPRUEBA, Y POR QUÉ NO BASTA CON MIRAR EL NOMBRE.** Se fuerza el
+    //  acierto con `conSec()` y se compara lo que se enseñaría con lo que sale. El
+    //  nombre es lo que el jugador lee, así que es el que tiene que cuadrar; y el daño
+    //  se compara aparte porque es el número que puede meaningfully mentir sin que el
+    //  nombre se note.
+    for (const tier of TIERS) {
+      for (const lado of ['recolector', 'companero'] as const) {
+        const tierF = tier - 1; // los materiales son del tier de abajo
+        if (tierF < 1) continue;
+        // Dos bases del mismo material, a propósito en las esquinas: 1 y 10.
+        const bA = basePorPosicion(tierF, 1, lado)!;
+        const bB = basePorPosicion(tierF, 10, lado)!;
+        // **LO QUE LA PANTALLA ENSEÑA:** misma cuenta, mismas funciones.
+        const posEnsenyada = posicionFusionada(bA.posicion, bB.posicion);
+        const baseEnsenyada = basePorPosicion(tierF + 1, posEnsenyada, lado)!;
+        // **LO QUE EL MOTOR FABRICA:** el item de verdad, con el acierto forzado.
+        //
+        // **EL SEGUNDO ARGUMENTO ES EL TIER DE LOS MATERIALES, NO EL DEL RESULTADO.**
+        // `attemptForge(mats, 3, …)` con materiales de tier 3 fabrica un item de tier
+        // **4**, que es la regla del juego —por eso en la pantalla la base del
+        // resultado se busca en `matTier + 1`—. Pasarle el tier ya incrementado
+        // fabricaba un item dos tiers más arriba y el banco comparaba una cosa con
+        // otra sin que ninguna de las dos estuviera mal por su cuenta.
+        const mats = [
+          { id: 'x', tier: tierF, rarity: 'Común', potential: 3, affixes: [] as string[], baseId: bA.id },
+          { id: 'y', tier: tierF, rarity: 'Común', potential: 3, affixes: [] as string[], baseId: bB.id },
+        ];
+        const r = conSec(0, 1, () => (lado === 'recolector'
+          ? attemptForge(mats, tierF, 'X', opts())
+          : attemptForgeCompanion(mats as any, tierF, opts()))) as any;
+        const item = lado === 'recolector' ? r.collector : r.companion;
+        check(`F106: T${tierF} ${lado} — el nombre anunciado es el que sale`,
+          item?.baseId === baseEnsenyada.id,
+          `enseñado=${baseEnsenyada.id} salido=${item?.baseId}`);
+        // El daño, con la misma cuenta. En compañero el poder es la otra magnitud,
+        // pero sale de `poderDeCompanero()` con la misma base, que es lo que importa.
+        const danoEsperado = lado === 'recolector'
+          ? danioDeRango(tierF + 1, 3, baseEnsenyada)
+          : poderDeCompanero(tierF + 1, 3, baseEnsenyada);
+        const danoSalido = lado === 'recolector' ? item?.damage : item?.power;
+        check(`F106: T${tierF} ${lado} — y el daño anunciado es el que sale`,
+          danoSalido === danoEsperado,
+          `enseñado=${danoEsperado} salido=${danoSalido}`);
+      }
+    }
   }
 
   // -------------------------------------------------------------------------

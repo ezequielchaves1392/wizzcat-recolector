@@ -57,6 +57,17 @@ export interface NotaDeParche {
  */
 export const NOTAS: NotaDeParche[] = [
   {
+    version: '1.21.0',
+    fecha: '11 de octubre de 2026',
+    titulo: 'La forja te dice qué va a salir antes de tirar',
+    lineas: [
+      'Cuando pones dos items en el yunque, ahora sabes qué te va a salir: el nombre, el tier, la base con su multiplicador, cuánto recolecta, el potencial y la rareza.',
+      'El nombre es seguro. La base es la media de las dos de tus materiales, así que no hay sorpresa: lo único que puede subir es la rareza y las estrellas.',
+      'También verás cuántos afijos lleva como mínimo, y cuáles comparten tus dos materiales —esos entran primero—.',
+      'La rareza sale con su color, el mismo que en el almacén.'
+    ]
+  },
+  {
     version: '1.20.0',
     fecha: '11 de octubre de 2026',
     titulo: 'La caja más cara del juego ya tiene algo propio',
